@@ -13,8 +13,10 @@
    - 一切进入场景的资源登记 `DisposeBag`,卸载零泄漏。
    - 禁止场景树重复 `traverse`:建立运行期索引,按 id 直查。
 4. **单实例约束**:`react` / `react-dom` / `three` / `@react-three/*` / `mobx*` 全部 peerDependencies,禁止打包进产物(`vite.config.ts` EXTERNALS 已锁)。
-5. **禁止引入 UI 组件库**(@bedrock/* 等);样式一律 Tailwind 工具类。
-6. **许可纪律**:可参考 `xiaozangao/3d-director-desk`(MIT)的思路,禁止整段搬运代码;awplanet(非商用)/ CozyClay(AGPL)/ shotblock(无许可)的代码一行都不许进本仓。
+5. **实例化纪律**:stores / SceneManager / TimeTransport 一律每 `DirectorDesk` 实例一套(`createDirectorDeskStores`),**禁止全局单例**——Monet 画布可同时挂多个导演台节点。
+6. **可序列化纪律(阶段四地基)**:一切进入场景的状态必须是纯数据实体(可 JSON 往返),three 运行时引用只允许在 `SceneManager.runtimes` 等普通 Map;新增实体字段前自问「这个字段 JSON 序列化后还能还原吗」。
+7. **禁止引入 UI 组件库**(@bedrock/* 等);样式一律 Tailwind 工具类。
+8. **许可纪律**:可参考 `xiaozangao/3d-director-desk`(MIT)的思路,禁止整段搬运代码;awplanet(非商用)/ CozyClay(AGPL)/ shotblock(无许可)的代码一行都不许进本仓。
 
 ## 兼容矩阵(不可单方面升级)
 

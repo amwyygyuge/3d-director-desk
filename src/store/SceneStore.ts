@@ -7,6 +7,9 @@ import type { Transform } from "../core/SceneObject";
 /**
  * 场景 Store(MobX 类):只放可观察的纯数据实体。
  * three 运行时对象永远在 SceneManager 的普通 Map 里,不进本 store(性能铁律)。
+ *
+ * 实例化纪律:不导出单例——Monet 画布可同时存在多个导演台节点,
+ * 每个 DirectorDesk 实例持有一套自己的 stores(见 ui/DirectorDeskContext)。
  */
 export class SceneStore {
     readonly manager = new SceneManager();
@@ -40,5 +43,3 @@ export class SceneStore {
         return this.manager.list().length;
     }
 }
-
-export const sceneStore = new SceneStore();

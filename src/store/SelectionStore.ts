@@ -16,5 +16,3 @@ export class SelectionStore {
         return this.selectedId === id;
     }
 }
-
-export const selectionStore = new SelectionStore();

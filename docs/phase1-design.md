@@ -1,4 +1,25 @@
 # 阶段一·基础实现 — 任务拆分与类设计
+## 扩展性审计(对阶段二~四)
+
+| 未来需求 | 结构结论 |
+|---|---|
+| 二·运镜轨迹 | `CameraShot` 保持静态值对象;运镜引入 `CameraMotionPath` 兄弟类型,不动现有 API |
+| 二·时间轴编排 | **已预埋 `TimeTransport`**:统一 playhead,播放 `tick(delta)` / 定位 `seek(t)`;`AnimationBinder.setTime` 已就位 |
+| 二·多机位 | `CameraDirector` 多机位 Map + 激活切换,已满足 |
+| 二·姿态精修 | `SceneObject` 加 pose 字段,兼容变更 |
+| 二·灯光 | `SceneObjectKind` 加 `"light"` 成员,兼容变更 |
+| 三·喂 AI / 风格化 | `CaptureService` → `HostBridge` 链路已通,AI 渲染在 Monet 侧 |
+| 三·游戏音频 | 挂 `TimeTransport`,吃统一时钟红利 |
+| 四·引擎/DCC 导出 | **已立纪律**:场景状态全纯数据、可 JSON 往返;届时补 `DirectorDocument` 版本化 schema + Serializer |
+| 四·协作 | 同上,以文档模型为前提 |
+| 画布多导演台节点 | **已修**:stores 每实例一套(`createDirectorDeskStores`),禁全局单例 |
+
+### 预埋清单(阶段一已落地)
+
+1. `TimeTransport` 统一时钟 —— 阶段二时间轴的地基;
+2. store 实例化 + `DirectorDeskContext` —— 画布多节点的前提;
+3. `PROTOCOL_VERSION` + ready 握手带版本 —— 主仓与本包独立发版的兼容判定;
+4. 可序列化纪律(AGENTS.md 红线 #6)—— 阶段四导出/协作的地基。
 
 > 范围对齐调研文档第七章「阶段一」:3D 场景画布 / 对象放置(游戏模型)/ 摆位操作 / 游戏动作挂载 / 基础虚拟摄像机 / 预演画面输出 / 无限画布接入。
 > 不做:运镜轨迹、时间轴、多机位一致性、姿态精修、灯光(均为阶段二+)。

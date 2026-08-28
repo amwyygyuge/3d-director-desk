@@ -26,5 +26,3 @@ export class CameraStore {
         return this.director.activeShot;
     }
 }
-
-export const cameraStore = new CameraStore();

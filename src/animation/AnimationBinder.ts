@@ -31,6 +31,10 @@ export class AnimationBinder {
     update(deltaSeconds: number): void {
         for (const mixer of this.mixers.values()) mixer.update(deltaSeconds);
     }
+    /** 时间轴定位(阶段二 scrub 入口):把所有已挂载动作钉到绝对时间 */
+    setTime(timeSeconds: number): void {
+        for (const mixer of this.mixers.values()) mixer.setTime(timeSeconds);
+    }
 
     has(objectId: string): boolean {
         return this.mixers.has(objectId);
