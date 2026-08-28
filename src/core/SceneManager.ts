@@ -1,0 +1,58 @@
+import type { Object3D } from "three";
+
+import { DisposeBag } from "./DisposeBag";
+import { type SceneObject } from "./SceneObject";
+
+/**
+ * 场景管理器:场景对象的身份注册、查询与生命周期编排。
+ *
+ * 双注册表设计(性能铁律):
+ * - entities:纯数据实体,可进 MobX;
+ * - runtimes:three Object3D 运行时引用,普通 Map,永不进 observable。
+ */
+export class SceneManager {
+    private readonly entities = new Map<string, SceneObject>();
+    private readonly runtimes = new Map<string, Object3D>();
+    private readonly disposeBag = new DisposeBag();
+
+    register(entity: SceneObject): void {
+        if (this.entities.has(entity.id)) {
+            throw new Error(`SceneManager: duplicate object id "${entity.id}"`);
+        }
+        this.entities.set(entity.id, entity);
+    }
+
+    bindRuntime(id: string, object3d: Object3D): void {
+        if (!this.entities.has(id)) {
+            throw new Error(`SceneManager: bindRuntime for unknown id "${id}"`);
+        }
+        this.runtimes.set(id, object3d);
+    }
+
+    getEntity(id: string): SceneObject | undefined {
+        return this.entities.get(id);
+    }
+
+    getRuntime(id: string): Object3D | undefined {
+        return this.runtimes.get(id);
+    }
+
+    list(): readonly SceneObject[] {
+        return [...this.entities.values()];
+    }
+
+    unregister(id: string): void {
+        const runtime = this.runtimes.get(id);
+        if (runtime) {
+            runtime.removeFromParent();
+            this.runtimes.delete(id);
+        }
+        this.entities.delete(id);
+    }
+
+    dispose(): void {
+        for (const id of [...this.runtimes.keys()]) this.unregister(id);
+        this.entities.clear();
+        this.disposeBag.dispose();
+    }
+}

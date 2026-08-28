@@ -1,0 +1,77 @@
+{
+    "name": "@dm/3d-director-desk",
+    "version": "0.1.0",
+    "description": "3D 导演台:游戏模型摆放、动作挂载、机位与预演输出(阶段一·基础实现)",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./style.css": "./dist/style.css"
+    },
+    "files": [
+        "dist"
+    ],
+    "sideEffects": [
+        "**/*.css"
+    ],
+    "publishConfig": {
+        "registry": "https://npm.nie.netease.com",
+        "access": "public"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build && tsc -p tsconfig.build.json",
+        "clean": "rm -rf dist",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint src playground",
+        "format": "prettier --write .",
+        "storybook": "storybook dev -p 6087",
+        "build-storybook": "storybook build",
+        "prepublishOnly": "pnpm run clean && pnpm run build",
+        "pa": "npm version patch && npm publish",
+        "mi": "npm version minor && npm publish",
+        "ma": "npm version major && npm publish"
+    },
+    "peerDependencies": {
+        "@react-three/drei": "^9.122.0",
+        "@react-three/fiber": "^8.18.0",
+        "mobx": "^7.0.0",
+        "mobx-react": "^10.0.0",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "three": ">=0.184.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@react-three/drei": "9.122.0",
+        "@react-three/fiber": "8.18.0",
+        "@storybook/react-vite": "10.5.10",
+        "@tailwindcss/vite": "4.3.3",
+        "@types/node": "26.4.0",
+        "@types/react": "18.3.31",
+        "@types/react-dom": "^18.3.7",
+        "@types/three": "0.185.4",
+        "@vitejs/plugin-react": "6.1.1",
+        "eslint": "10.9.1",
+        "eslint-config-prettier": "10.1.8",
+        "eslint-plugin-react-hooks": "7.1.1",
+        "eslint-plugin-react-refresh": "0.5.5",
+        "mobx": "7.0.3",
+        "mobx-react": "10.0.2",
+        "prettier": "3.9.6",
+        "react": "18.3.1",
+        "react-dom": "18.3.1",
+        "storybook": "10.5.10",
+        "tailwindcss": "4.3.3",
+        "three": "0.185.1",
+        "typescript": "npm:@typescript/typescript6@6.0.2",
+        "@typescript/native": "npm:typescript@7.0.2",
+        "typescript-eslint": "8.68.0",
+        "vite": "8.2.2"
+    }
+}

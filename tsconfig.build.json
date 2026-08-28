@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": false,
+        "rootDir": "src",
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "declarationMap": false,
+        "outDir": "dist",
+        "stripInternal": true
+    },
+    "include": ["src"],
+    "exclude": ["src/**/*.stories.tsx", "src/playground"]
+}
