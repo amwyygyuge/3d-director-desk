@@ -8,6 +8,8 @@ const EXTERNALS = [
     /^react-dom($|\/)/,
     /^three($|\/)/,
     /^@react-three\//,
+    /^@mui\//,
+    /^@emotion\//,
     /^mobx($|-)/,
 ];
 

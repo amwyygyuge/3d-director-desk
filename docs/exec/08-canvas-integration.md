@@ -17,7 +17,6 @@ classDiagram
         <<interface>>
         +importModel(url, name)
         +onCaptureProduced(blob)
-        +getThemeMapping(): Record~string,string~
     }
     class PostMessageAdapter {
         iframe 形态, 走 HostBridge
@@ -32,7 +31,7 @@ classDiagram
 
 - `DirectorDesk` 组件接受 `host?: HostAdapter` prop;iframe 形态才用 postMessage(基建 HostBridge),**Monet 组件直嵌走 props 回调,不绕 postMessage**。
 - Monet 侧:`monet-plugins/nodes/` 新建导演台节点(薄壳),`React.lazy` 加载本包;节点规范遵循主仓 plugin-guide(node.meta.json 等)。
-- 主题换装:MonetNodeAdapter 注入 `--dd-*` 映射(主题契约兑现)。
+- 主题:已决策不做 Monet 视觉一致;宿主确需调整经 `DirectorDesk` 的 `theme` prop 传 MUI theme。
 - 版本握手:`PROTOCOL_VERSION` 已备。
 
 ## 实现步骤
@@ -47,6 +46,6 @@ classDiagram
 - [ ] Monet 画布可创建导演台节点,打开正常渲染
 - [ ] Monet 生成的 GLB 模型可导入导演台场景
 - [ ] 导演台截图回传成为节点 outputs(连线可用)
-- [ ] 主题:节点内 UI 与 Monet 画布视觉一致(--dd-* 映射生效)
+- [ ] 主题:默认暗色主题在节点内正常;宿主经 theme prop 可覆盖
 - [ ] 包体积:导演台代码不进 Monet 主包(动态 import 验证 network 面板)
 - [ ] 主仓规范:`pnpm check:plugins` 通过;节点壳无 `@/` 深路径违规

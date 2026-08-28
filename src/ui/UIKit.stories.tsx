@@ -1,16 +1,27 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import IconButton from "@mui/material/IconButton";
+import Input from "@mui/material/Input";
+import Popover from "@mui/material/Popover";
+import Slider from "@mui/material/Slider";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 
-/** UI 套件走查:shadcn 组件在主题契约下的默认观感 */
+import { directorDeskTheme } from "./theme";
+import { ThemeProvider } from "@mui/material/styles";
+import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
+
+/** UI 套件走查:MUI 组件在默认暗色主题下的观感 */
 const meta: Meta = {
     title: "DirectorDesk/UIKit",
 };
@@ -21,61 +32,48 @@ type Story = StoryObj;
 
 export const Panel: Story = {
     render: function UIKitPanel() {
-        const [fov, setFov] = useState([45]);
-        const [enabled, setEnabled] = useState(true);
-        const handleFovChange = (value: number | readonly number[]) => {
-            setFov(Array.isArray(value) ? [...value] : [value]);
-        };
+        const [fov, setFov] = useState(45);
+        const [gridOn, setGridOn] = useState(true);
+        const [tab, setTab] = useState(0);
+        const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
         return (
-            <TooltipProvider>
-                <div className="flex w-80 flex-col gap-4 bg-background p-4 text-foreground">
-                    <div className="flex items-center gap-2">
-                        <Button size="sm">截图</Button>
-                        <Button size="sm" variant="secondary">
-                            重置机位
-                        </Button>
-                        <Tooltip>
-                            <TooltipTrigger
-                                render={
-                                    <Button size="sm" variant="outline">
-                                        机位
-                                    </Button>
-                                }
-                            />
-                            <TooltipContent>添加机位</TooltipContent>
-                        </Tooltip>
-                    </div>
-                    <Separator />
-                    <label className="flex items-center justify-between text-sm">
-                        <span>显示网格</span>
-                        <Switch checked={enabled} onCheckedChange={setEnabled} />
-                    </label>
-                    <label className="flex flex-col gap-2 text-sm">
-                        <span>FOV: {fov[0]}°</span>
-                        <Slider value={fov} onValueChange={handleFovChange} min={10} max={120} />
-                    </label>
-                    <Input placeholder="机位名称" />
-                    <Tabs defaultValue="scene">
-                        <TabsList>
-                            <TabsTrigger value="scene">场景</TabsTrigger>
-                            <TabsTrigger value="camera">机位</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="scene">场景对象面板</TabsContent>
-                        <TabsContent value="camera">机位面板</TabsContent>
-                    </Tabs>
-                    <Popover>
-                        <PopoverTrigger
-                            render={
-                                <Button size="sm" variant="ghost">
-                                    更多
-                                </Button>
-                            }
+            <ThemeProvider theme={directorDeskTheme}>
+                <ScopedCssBaseline>
+                    <Box sx={{ width: 320, p: 2, bgcolor: "background.default" }}>
+                        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                            <Button variant="contained">截图</Button>
+                            <Button variant="outlined">重置机位</Button>
+                            <Tooltip title="添加机位">
+                                <IconButton size="small">
+                                    <AddPhotoAlternateIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Stack>
+                        <Divider sx={{ my: 2 }} />
+                        <FormControlLabel
+                            control={<Switch checked={gridOn} onChange={(_, v) => setGridOn(v)} />}
+                            label="显示网格"
                         />
-                        <PopoverContent>浮层内容</PopoverContent>
-                    </Popover>
-                </div>
-            </TooltipProvider>
+                        <Typography variant="body2">FOV: {fov}°</Typography>
+                        <Slider value={fov} onChange={(_, v) => setFov(v as number)} min={10} max={120} />
+                        <Input placeholder="机位名称" fullWidth size="small" />
+                        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mt: 1 }}>
+                            <Tab label="场景" />
+                            <Tab label="机位" />
+                        </Tabs>
+                        <Typography variant="body2" sx={{ p: 1 }}>
+                            {tab === 0 ? "场景对象面板" : "机位面板"}
+                        </Typography>
+                        <Button variant="text" onClick={(e) => setAnchor(e.currentTarget)}>
+                            更多
+                        </Button>
+                        <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}>
+                            <Box sx={{ p: 2 }}>浮层内容</Box>
+                        </Popover>
+                    </Box>
+                </ScopedCssBaseline>
+            </ThemeProvider>
         );
     },
 };
