@@ -15,7 +15,7 @@
 4. **单实例约束**:`react` / `react-dom` / `three` / `@react-three/*` / `mobx*` 全部 peerDependencies,禁止打包进产物(`vite.config.ts` EXTERNALS 已锁)。
 5. **实例化纪律**:stores / SceneManager / TimeTransport 一律每 `DirectorDesk` 实例一套(`createDirectorDeskStores`),**禁止全局单例**——Monet 画布可同时挂多个导演台节点。
 6. **可序列化纪律(阶段四地基)**:一切进入场景的状态必须是纯数据实体(可 JSON 往返),three 运行时引用只允许在 `SceneManager.runtimes` 等普通 Map;新增实体字段前自问「这个字段 JSON 序列化后还能还原吗」。
-7. **禁止引入 UI 组件库**(@bedrock/* 等);样式一律 Tailwind 工具类。
+7. **UI 组件纪律**:一切 UI **优先找现成组件**——先查 `src/components/ui/`(shadcn copy-in 已有),没有再 `npx shadcn@latest add`,shadcn 也没有才手写。**禁止成品 UI 依赖库**(@bedrock/* 等);shadcn 生成物源码自有不算依赖,原语后端固定 Base UI。生成物内部禁止就地魔改,定制走 className 覆盖或主题变量层。样式一律 Tailwind 工具类,颜色只消费 shadcn 语义类,其值经 `--dd-*` 主题契约由 Monet 宿主换装。
 8. **命令层收口(AI 地基)**:一切改变场景/机位状态的写操作——UI 交互、HostBridge 消息、未来 AI 工具调用——必须收敛为 `DirectorCommand` 经 `CommandDispatcher` 分发;**禁止组件/适配器直写 store**。命令 payload 必须纯数据可序列化。
 9. **禁止裸数值入口**:来自 AI/宿主的坐标、fov 等数值必须经命令 `validate()` 的有限性/范围检查(空间幻觉围栏),LLM 输出不直接触达领域类。
 10. **许可纪律**:可参考 `xiaozangao/3d-director-desk`(MIT)的思路,禁止整段搬运代码;awplanet(非商用)/ CozyClay(AGPL)/ shotblock(无许可)的代码一行都不许进本仓。
