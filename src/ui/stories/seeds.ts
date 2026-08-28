@@ -1,7 +1,7 @@
 import type { DirectorDeskStores } from "../DirectorDeskContext";
 import { importActionFile, placementFor } from "../importFiles";
 
-/** 测试资产(public/test-assets,gitignored)的统一入口 */
+/** 测试资产(public/test-assets,已入库,来源见该目录 README)的统一入口 */
 export const TEST_ASSETS = {
     fox: "/test-assets/fox.glb",
     helmet: "/test-assets/desk-test.glb",

@@ -42,7 +42,7 @@ flowchart TB
 | 06   | `验收/06 基础虚拟摄像机`(Camera Shots)            | 狐狸 + 两个预置机位                                |
 | 07   | `验收/07 预演画面输出`(Capture Output)            | 狐狸 + 两个预置机位                                |
 
-每个 story 页内嵌「验收走查」清单面板;测试资产经 `/test-assets/`(public,gitignored)提供。
+每个 story 页内嵌「验收走查」清单面板;测试资产经 `/test-assets/`(public,已入库,来源见目录 README)提供。
 
 ## 验收通则(每个任务必查)
 

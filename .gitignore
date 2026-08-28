@@ -3,4 +3,3 @@ dist
 storybook-static
 *.log
 .DS_Store
-public/test-assets/
