@@ -19,9 +19,19 @@ export class CameraStore {
     revision = 0;
     /** 最近一次导演视角 pose(轨道交互结束时由 ShotCameraRig 记录);高频写,排除 observable */
     lastDirectorPose: DirectorPose | null = null;
+    /** 取景请求序号:rig 锚定它在非机位视角应用 directorPoseTarget */
+    directorPoseNonce = 0;
+    /** 取景目标 pose(纯数据请求,由 rig 消费);排除 observable */
+    directorPoseTarget: DirectorPose | null = null;
 
     constructor() {
-        makeAutoObservable(this, { director: false, lastDirectorPose: false });
+        makeAutoObservable(this, { director: false, lastDirectorPose: false, directorPoseTarget: false });
+    }
+
+    /** 请求导演视角跳到指定 pose(取景命令的落地口;机位视角下 rig 忽略) */
+    requestDirectorPose(pose: DirectorPose): void {
+        this.directorPoseTarget = pose;
+        this.directorPoseNonce += 1;
     }
 
     addShot(id: string, shot: CameraShot): void {

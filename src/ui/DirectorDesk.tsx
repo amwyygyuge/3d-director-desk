@@ -14,9 +14,12 @@ import { TransformGizmoController } from "../transform/TransformGizmoController"
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { CapturePreview } from "./CapturePreview";
+import { HelpOverlay } from "./HelpOverlay";
 import { Hotkeys } from "./Hotkeys";
 import { placementFor } from "./importFiles";
 import { Inspector } from "./Inspector";
+import { LoadingChip } from "./LoadingChip";
+import { OutlinerPanel } from "./OutlinerPanel";
 import { directorDeskTheme } from "./theme";
 import { SceneRoot } from "./scene/SceneRoot";
 import { PlaybackDriver } from "./scene/PlaybackDriver";
@@ -66,7 +69,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
     }, [stores]);
     // 宿主入站:import-model → 命令层;ready 握手(adapter 内部决定是否有意义)
     useEffect(() => {
-        const detachImport = stores.host.onImportModel(({ url }) => {
+        const detachImport = stores.host.onImportModel(({ url, name }) => {
             stores.dispatcher.dispatch(
                 {
                     type: "object.place",
@@ -75,6 +78,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
                         kind: "model",
                         sourceUrl: url,
                         format: formatFromUrl(url) ?? undefined,
+                        name,
                         transform: {
                             position: placementFor(stores.scene.objectCount),
                             rotation: [0, 0, 0],
@@ -135,6 +139,9 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
                         <Inspector />
                         <ShotPanel />
                         <CapturePreview />
+                        <OutlinerPanel />
+                        <HelpOverlay />
+                        <LoadingChip />
                     </div>
                 </DirectorDeskProvider>
             </ScopedCssBaseline>

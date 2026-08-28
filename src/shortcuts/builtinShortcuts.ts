@@ -1,3 +1,4 @@
+import { FrameViewCommand } from "../command/navigationCommands";
 import { GIZMO_MODE } from "../store/UiStore";
 import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
 import { ShortcutChord } from "./ShortcutChord";
@@ -13,6 +14,11 @@ export const SHORTCUT_ID = {
     AXIS_Z: "gizmo.axis.z",
     REMOVE_SELECTION: "selection.remove",
     CLEAR_SELECTION: "selection.clear",
+    FRAME_SELECTED: "view.frame-selected",
+    FRAME_ALL: "view.frame-all",
+    EDIT_UNDO: "edit.undo",
+    EDIT_REDO: "edit.redo",
+    HELP_TOGGLE: "help.toggle",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
@@ -35,6 +41,11 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
     { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
     { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
+    { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "gizmo", label: "聚焦选中对象" },
+    { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
+    { id: SHORTCUT_ID.EDIT_UNDO, chords: ["mod+z"], scope: "global", label: "撤销" },
+    { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
+    { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
 ];
 
 function removeSelection(stores: DirectorDeskStores): void {
@@ -53,6 +64,12 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
     [SHORTCUT_ID.CLEAR_SELECTION]: (s) => s.selection.clear(),
+    [SHORTCUT_ID.FRAME_SELECTED]: (s) =>
+        s.dispatcher.dispatch({ type: FrameViewCommand.TYPE, payload: { ids: [...s.selection.selectedIds] } }, s),
+    [SHORTCUT_ID.FRAME_ALL]: (s) => s.dispatcher.dispatch({ type: FrameViewCommand.TYPE, payload: {} }, s),
+    [SHORTCUT_ID.EDIT_UNDO]: (s) => s.history.undo(s),
+    [SHORTCUT_ID.EDIT_REDO]: (s) => s.history.redo(s),
+    [SHORTCUT_ID.HELP_TOGGLE]: (s) => s.ui.toggleHelp(),
 };
 
 /** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */

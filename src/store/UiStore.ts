@@ -27,6 +27,10 @@ export class UiStore {
     gizmoAxes: Record<GizmoAxis, boolean> = ALL_AXES_FREE;
     /** 最近一次截图预览;替换时回收旧 objectURL(内存纪律) */
     lastCaptureUrl: string | null = null;
+    /** 快捷键速查浮层开关 */
+    helpOpen = false;
+    /** 加载中资源:label → 进度 0~1(反馈体系;Map 字段自动可观察) */
+    readonly loading = new Map<string, number>();
 
     constructor() {
         makeAutoObservable(this, { lastGizmoInteractionAt: false });
@@ -47,5 +51,16 @@ export class UiStore {
     setLastCaptureUrl(url: string): void {
         if (this.lastCaptureUrl) URL.revokeObjectURL(this.lastCaptureUrl);
         this.lastCaptureUrl = url;
+    }
+    toggleHelp(): void {
+        this.helpOpen = !this.helpOpen;
+    }
+
+    reportLoading(label: string, progress: number): void {
+        this.loading.set(label, progress);
+    }
+
+    clearLoading(label: string): void {
+        this.loading.delete(label);
     }
 }

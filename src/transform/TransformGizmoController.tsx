@@ -1,10 +1,14 @@
 import { TransformControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
+import { Vector3 } from "three";
 import { observer } from "mobx-react";
 import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
 
 import { useDirectorDeskStores } from "../ui/DirectorDeskContext";
+
+const GIZMO_SIZE_SCREEN_FRACTION = 0.18;
+const gizmoTargetWorldPosition = new Vector3();
 
 /**
  * gizmo 控制器:封装 drei TransformControls,挂主选对象的运行时。
@@ -18,10 +22,15 @@ export const TransformGizmoController = observer(function TransformGizmoControll
     const stores = useDirectorDeskStores();
     const { scene, selection, ui, dispatcher } = stores;
     const invalidate = useThree((state) => state.invalidate);
+    const camera = useThree((state) => state.camera);
     const controlsRef = useRef<ComponentRef<typeof TransformControls> | null>(null);
 
     const primaryId = selection.primaryId;
     const target = primaryId ? scene.manager.getRuntime(primaryId) : undefined;
+    // TransformControls 的 size 是世界单位；按距离同比例缩放才会保持稳定的屏幕占比。
+    const gizmoSize = target
+        ? camera.position.distanceTo(target.getWorldPosition(gizmoTargetWorldPosition)) * GIZMO_SIZE_SCREEN_FRACTION
+        : undefined;
 
     // gizmo 整体打 helper 标记:截图时摘除(07 帧内取样)
     useEffect(() => {
@@ -34,7 +43,7 @@ export const TransformGizmoController = observer(function TransformGizmoControll
         invalidate();
     }, [selectionKey, invalidate]);
 
-    if (!target || !primaryId) return null;
+    if (!target || !primaryId || gizmoSize === undefined) return null;
 
     const commitDrag = () => {
         ui.noteGizmoInteraction();
@@ -62,6 +71,7 @@ export const TransformGizmoController = observer(function TransformGizmoControll
             showX={ui.gizmoAxes.x}
             showY={ui.gizmoAxes.y}
             showZ={ui.gizmoAxes.z}
+            size={gizmoSize}
             onMouseDown={() => ui.noteGizmoInteraction()}
             onObjectChange={() => invalidate()}
             onMouseUp={commitDrag}

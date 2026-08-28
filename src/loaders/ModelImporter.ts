@@ -14,17 +14,35 @@ interface ParsedModel {
     animations: readonly AnimationClip[];
 }
 
+type ProgressCallback = (progress01: number) => void;
+
+interface ModelAcquireOptions {
+    onProgress?: ProgressCallback;
+}
+
+type FormatLoader = (url: string, onProgress?: ProgressCallback) => Promise<ParsedModel>;
+
+const EMPTY_PROGRESS = 0;
+
+function createProgressReporter(onProgress: ProgressCallback | undefined): ((event: ProgressEvent) => void) | undefined {
+    if (onProgress === undefined) return undefined;
+    return (event) => onProgress(event.total > EMPTY_PROGRESS ? event.loaded / event.total : EMPTY_PROGRESS);
+}
+
 /** 格式 → 加载器查表(纪律:禁 if 链);每格式一个新实例,规避 loader 内部 path 状态的并发竞争 */
-const FORMAT_LOADERS: Record<ModelFormat, (url: string) => Promise<ParsedModel>> = {
-    [MODEL_FORMAT.GLTF]: async (url) => {
-        const gltf = await new GLTFLoader().loadAsync(url);
+const FORMAT_LOADERS: Record<ModelFormat, FormatLoader> = {
+    [MODEL_FORMAT.GLTF]: async (url, onProgress) => {
+        const gltf = await new GLTFLoader().loadAsync(url, createProgressReporter(onProgress));
         return { source: gltf.scene, animations: gltf.animations };
     },
-    [MODEL_FORMAT.FBX]: async (url) => {
-        const object = await new FBXLoader().loadAsync(url);
+    [MODEL_FORMAT.FBX]: async (url, onProgress) => {
+        const object = await new FBXLoader().loadAsync(url, createProgressReporter(onProgress));
         return { source: object, animations: object.animations };
     },
-    [MODEL_FORMAT.OBJ]: async (url) => ({ source: await new OBJLoader().loadAsync(url), animations: [] }),
+    [MODEL_FORMAT.OBJ]: async (url, onProgress) => ({
+        source: await new OBJLoader().loadAsync(url, createProgressReporter(onProgress)),
+        animations: [],
+    }),
 };
 
 /** 缓存条目:同 URL 只解析一次;refs 归零才释放 GL 资源 */
@@ -58,8 +76,8 @@ export class ModelImporter {
     private readonly cache = new Map<string, CacheEntry>();
     private readonly inflight = new Map<string, Promise<CacheEntry>>();
 
-    async acquire(url: string, format: ModelFormat): Promise<ModelHandle> {
-        const entry = await this.entryFor(url, format);
+    async acquire(url: string, format: ModelFormat, options?: ModelAcquireOptions): Promise<ModelHandle> {
+        const entry = await this.entryFor(url, format, options?.onProgress);
         entry.refs += 1;
         return {
             object3d: cloneSkeleton(entry.source),
@@ -75,18 +93,18 @@ export class ModelImporter {
         }
     }
 
-    private entryFor(url: string, format: ModelFormat): Promise<CacheEntry> {
+    private entryFor(url: string, format: ModelFormat, onProgress: ProgressCallback | undefined): Promise<CacheEntry> {
         const cached = this.cache.get(url);
         if (cached) return Promise.resolve(cached);
 
-        const pending = this.inflight.get(url) ?? this.load(url, format);
+        const pending = this.inflight.get(url) ?? this.load(url, format, onProgress);
         this.inflight.set(url, pending);
         return pending;
     }
 
-    private async load(url: string, format: ModelFormat): Promise<CacheEntry> {
+    private async load(url: string, format: ModelFormat, onProgress: ProgressCallback | undefined): Promise<CacheEntry> {
         try {
-            const parsed = await FORMAT_LOADERS[format](url);
+            const parsed = await FORMAT_LOADERS[format](url, onProgress);
             const entry: CacheEntry = { ...parsed, refs: 0 };
             this.cache.set(url, entry);
             return entry;

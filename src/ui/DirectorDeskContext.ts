@@ -9,6 +9,7 @@ import type { HostAdapter } from "../host/HostAdapter";
 import { CaptureService } from "../capture/CaptureService";
 import { CommandDispatcher } from "../command/CommandDispatcher";
 import { registerBuiltinCommands } from "../command/commands";
+import { CommandHistory } from "../command/CommandHistory";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
 import { CameraStore } from "../store/CameraStore";
@@ -39,6 +40,8 @@ export interface DirectorDeskStores {
     shortcuts: ShortcutRegistry<DirectorDeskStores>;
     /** 宿主适配器:缺省 iframe 形态(PostMessageAdapter);Monet 直嵌注入 MonetNodeAdapter */
     host: HostAdapter;
+    /** 撤销/重做历史(命令层红利;回放经 dispatcher record:false) */
+    history: CommandHistory;
     /** 动作库(纯数据表 + clip 运行时表) */
     animations: AnimationLibrary;
     /** 动作挂载协调器;创建时即接入统一时钟 */
@@ -48,6 +51,9 @@ export interface DirectorDeskStores {
 export function createDirectorDeskStores(options?: { host?: HostAdapter | undefined }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
+    const history = new CommandHistory();
+    history.bindDispatcher(dispatcher);
+    dispatcher.attachHistory(history);
     // 缺省落 iframe 形态;直嵌形态由宿主经 host 注入,不建桥不留监听器
     const host = options?.host ?? new PostMessageAdapter(new HostBridge());
     const clock = new TimeTransport();
@@ -65,6 +71,7 @@ export function createDirectorDeskStores(options?: { host?: HostAdapter | undefi
         ui: new UiStore(),
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,
+        history,
         animations: new AnimationLibrary(),
         binder,
     };

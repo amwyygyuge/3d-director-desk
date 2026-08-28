@@ -20,10 +20,14 @@ const KEY_LABELS: Record<string, string> = IS_MAC
     ? { delete: "⌫", backspace: "⌫", escape: "Esc", space: "Space", enter: "↩" }
     : { delete: "Del", backspace: "⌫", escape: "Esc", space: "Space", enter: "Enter" };
 
-/** KeyboardEvent.key → 规范化主键名(小写;空格归一为 space) */
+/** Shift 上档符号 → 主键位(event.key 给的是上档字符,规范到底层键,让 spec 写 "shift+/") */
+const SHIFT_SYMBOL_ALIASES: Record<string, string> = { "?": "/" };
+
+/** KeyboardEvent.key → 规范化主键名(小写;空格归一为 space;上档符号归一到底层键) */
 function normalizeKey(key: string): string {
     const lower = key.toLowerCase();
-    return lower === " " ? "space" : lower;
+    if (lower === " ") return "space";
+    return SHIFT_SYMBOL_ALIASES[lower] ?? lower;
 }
 
 export class ShortcutChord {

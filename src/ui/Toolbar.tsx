@@ -5,6 +5,7 @@ import OpenWithIcon from "@mui/icons-material/OpenWith";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
@@ -13,6 +14,7 @@ import Stack from "@mui/material/Stack";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react";
 import { useRef, useState } from "react";
 
@@ -31,6 +33,10 @@ const GIZMO_MODE_META: Record<GizmoMode, { label: string; icon: typeof OpenWithI
 };
 
 const MODEL_FILE_ACCEPT = ".glb,.gltf,.fbx,.obj";
+const PLAY_INDICATOR_COLOR = "success.main";
+const PLAY_INDICATOR_SIZE = 8;
+const PLAY_INDICATOR_GAP = 0.5;
+
 const ACTION_FILE_ACCEPT = ".glb,.gltf,.fbx";
 
 /**
@@ -125,6 +131,24 @@ export const Toolbar = observer(function Toolbar() {
                             </ToggleButton>
                         ))}
                     </ToggleButtonGroup>
+                    {stores.clock.isPlaying && (
+                        <>
+                            <Divider orientation="vertical" flexItem />
+                            <Box className="flex items-center" sx={{ gap: PLAY_INDICATOR_GAP }}>
+                                <Box
+                                    sx={{
+                                        width: PLAY_INDICATOR_SIZE,
+                                        height: PLAY_INDICATOR_SIZE,
+                                        borderRadius: "50%",
+                                        bgcolor: PLAY_INDICATOR_COLOR,
+                                    }}
+                                />
+                                <Typography variant="caption" color={PLAY_INDICATOR_COLOR}>
+                                    播放中
+                                </Typography>
+                            </Box>
+                        </>
+                    )}
                 </Stack>
             </Paper>
             <input

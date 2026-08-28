@@ -17,45 +17,38 @@ import { useEffect, useState } from "react";
 
 import type { CommandResult } from "../command/DirectorCommand";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
+import { TransformFields } from "./TransformFields";
 
-/**
- * 对象面板(右侧):选中模型 → 动作库列表(挂载/卸载)+ 播放控制条。
- * 播放头是高频非 observable 值,经 transport.subscribe 同步进本地 state——
- * 仅播放期产生重渲,暂停即静止(性能纪律)。
- */
-export const Inspector = observer(function Inspector() {
+type ReportCommandResult = (result: CommandResult) => void;
+
+interface ModelActionControlsProps {
+    objectId: string;
+    report: ReportCommandResult;
+}
+
+interface ActionLibraryProps {
+    actionId: string | null;
+    objectId: string;
+    report: ReportCommandResult;
+}
+
+interface PlaybackControlsProps {
+    actionId: string | null;
+    report: ReportCommandResult;
+}
+
+const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, report }: ActionLibraryProps) {
     const stores = useDirectorDeskStores();
-    const { selection, scene, animations, clock, dispatcher } = stores;
-    const [notice, setNotice] = useState<string | null>(null);
-    const [playhead, setPlayhead] = useState(clock.time);
-
-    useEffect(() => clock.subscribe((t) => setPlayhead(t)), [clock]);
-
-    // 实体字段(actionId 等)非 observable;锚定 revision,命令提交后驱动本面板重渲
-    void scene.revision;
-    const primaryId = selection.primaryId;
-    const entity = primaryId ? scene.manager.getEntity(primaryId) : undefined;
-    if (!entity || entity.kind !== "model") return null;
-
-    const report = (result: CommandResult) => {
-        if (!result.ok) setNotice(result.issues?.join(";") ?? result.error);
-    };
-
-    const mountedAction = entity.actionId ? animations.actions.find((a) => a.id === entity.actionId) : undefined;
-    const duration = mountedAction?.duration ?? 0;
+    const { animations, dispatcher } = stores;
 
     return (
-        <Paper elevation={2} sx={{ position: "absolute", top: 12, right: 12, width: 260, p: 1.5, zIndex: 1 }}>
-            <Typography variant="subtitle2" noWrap>
-                {entity.id}
-            </Typography>
-            <Divider sx={{ my: 1 }} />
+        <>
             <Typography variant="caption" color="text.secondary">
                 动作库({animations.actions.length})
             </Typography>
             <List dense disablePadding>
                 {animations.actions.map((action) => {
-                    const mounted = entity.actionId === action.id;
+                    const mounted = actionId === action.id;
                     return (
                         <ListItem
                             key={action.id}
@@ -69,7 +62,7 @@ export const Inspector = observer(function Inspector() {
                                             dispatcher.dispatch(
                                                 {
                                                     type: mounted ? "action.unmount" : "action.mount",
-                                                    payload: { objectId: entity.id, actionId: action.id },
+                                                    payload: { objectId, actionId: action.id },
                                                 },
                                                 stores,
                                             ),
@@ -90,44 +83,96 @@ export const Inspector = observer(function Inspector() {
                     先经工具条「导入动作」入库
                 </Typography>
             )}
-            <Divider sx={{ my: 1 }} />
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <IconButton
+        </>
+    );
+});
+
+const PlaybackControls = observer(function PlaybackControls({ actionId, report }: PlaybackControlsProps) {
+    const stores = useDirectorDeskStores();
+    const { animations, clock, dispatcher } = stores;
+    const [playhead, setPlayhead] = useState(clock.time);
+    const mountedAction = actionId ? animations.actions.find((action) => action.id === actionId) : undefined;
+    const duration = mountedAction?.duration ?? 0;
+
+    useEffect(() => clock.subscribe((time) => setPlayhead(time)), [clock]);
+
+    return (
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <IconButton
+                size="small"
+                disabled={!mountedAction}
+                onClick={() =>
+                    report(
+                        dispatcher.dispatch(
+                            { type: clock.isPlaying ? "transport.pause" : "transport.play", payload: {} },
+                            stores,
+                        ),
+                    )
+                }
+            >
+                {clock.isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+            </IconButton>
+            <Box sx={{ flex: 1 }}>
+                <Slider
                     size="small"
+                    min={0}
+                    max={duration}
+                    step={0.01}
+                    value={Math.min(playhead, duration)}
                     disabled={!mountedAction}
-                    onClick={() =>
+                    onChange={(_, value) =>
                         report(
-                            dispatcher.dispatch(
-                                { type: clock.isPlaying ? "transport.pause" : "transport.play", payload: {} },
-                                stores,
-                            ),
+                            dispatcher.dispatch({ type: "transport.seek", payload: { time: value as number } }, stores),
                         )
                     }
-                >
-                    {clock.isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-                </IconButton>
-                <Box sx={{ flex: 1 }}>
-                    <Slider
-                        size="small"
-                        min={0}
-                        max={duration}
-                        step={0.01}
-                        value={Math.min(playhead, duration)}
-                        disabled={!mountedAction}
-                        onChange={(_, value) =>
-                            report(
-                                dispatcher.dispatch(
-                                    { type: "transport.seek", payload: { time: value as number } },
-                                    stores,
-                                ),
-                            )
-                        }
-                    />
-                </Box>
-                <Typography variant="caption" sx={{ minWidth: 64, textAlign: "right" }}>
-                    {playhead.toFixed(2)}s
-                </Typography>
-            </Stack>
+                />
+            </Box>
+            <Typography variant="caption" sx={{ minWidth: 64, textAlign: "right" }}>
+                {playhead.toFixed(2)}s
+            </Typography>
+        </Stack>
+    );
+});
+
+const ModelActionControls = observer(function ModelActionControls({ objectId, report }: ModelActionControlsProps) {
+    const { scene } = useDirectorDeskStores();
+    const entity = scene.manager.getEntity(objectId);
+    if (!entity || entity.kind !== "model") return null;
+
+    return (
+        <>
+            <Divider sx={{ my: 1 }} />
+            <ActionLibrary actionId={entity.actionId} objectId={objectId} report={report} />
+            <Divider sx={{ my: 1 }} />
+            <PlaybackControls actionId={entity.actionId} report={report} />
+        </>
+    );
+});
+
+/** 对象面板(右侧):所有选中对象显示数值变换，模型额外显示动作库与播放控制。 */
+export const Inspector = observer(function Inspector() {
+    const stores = useDirectorDeskStores();
+    const { scene, selection } = stores;
+    const [notice, setNotice] = useState<string | null>(null);
+
+    // 实体字段(actionId 等)非 observable;锚定 revision,命令提交后驱动本面板重渲
+    void scene.revision;
+    const primaryId = selection.primaryId;
+    const entity = primaryId ? scene.manager.getEntity(primaryId) : undefined;
+    if (!entity) return null;
+
+    const report = (result: CommandResult) => {
+        if (!result.ok) setNotice(result.issues?.join(";") ?? result.error);
+    };
+
+    return (
+        <Paper elevation={2} sx={{ position: "absolute", top: 12, right: 12, width: 260, p: 1.5, zIndex: 1 }}>
+            <Typography variant="subtitle2" noWrap>
+                {entity.name}
+            </Typography>
+            <Divider sx={{ my: 1 }} />
+            <TransformFields objectId={entity.id} />
+            {entity.kind === "model" && <ModelActionControls objectId={entity.id} report={report} />}
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={4000}

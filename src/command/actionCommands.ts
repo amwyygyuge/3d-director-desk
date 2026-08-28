@@ -1,6 +1,6 @@
 import { BoneCompatibilityChecker, BONE_MATCH_THRESHOLD } from "../animation/BoneCompatibilityChecker";
 import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext } from "./DirectorCommand";
+import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 import type { CommandDispatcher } from "./CommandDispatcher";
 
 const boneChecker = new BoneCompatibilityChecker();
@@ -50,6 +50,10 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         ctx.binder.mount(this.payload.objectId, runtime, clip);
         ctx.scene.setObjectAction(this.payload.objectId, this.payload.actionId);
     }
+
+    override invert(): readonly SerializedCommand[] {
+        return [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
+    }
 }
 
 interface UnmountActionPayload {
@@ -73,6 +77,13 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
         ctx.scene.setObjectAction(this.payload.objectId, null);
         // 最后一个动作卸下后仍空转 always 渲染是浪费——回收时钟
         if (ctx.binder.isEmpty) ctx.clock.pause();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const actionId = ctx.scene.manager.getEntity(this.payload.objectId)?.actionId;
+        return actionId
+            ? [{ type: MountActionCommand.TYPE, payload: { objectId: this.payload.objectId, actionId } }]
+            : null;
     }
 }
 

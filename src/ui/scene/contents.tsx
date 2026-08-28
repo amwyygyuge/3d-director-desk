@@ -51,41 +51,44 @@ export function PrimitiveContent({ entity }: { entity: SceneObject }) {
  * 卸载纪律:effect cleanup 调 handle.release(),引用计数归零后 GL 资源由 ModelImporter 统一释放。
  */
 export function ModelContent({ entity }: { entity: SceneObject }) {
-    const { models } = useDirectorDeskStores();
+    const { models, ui } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
     const sourceUrl = entity.sourceUrl;
     const format = entity.format;
+    const label = entity.name;
     const [handle, setHandle] = useState<ModelHandle | null>(null);
     const [loadFailed, setLoadFailed] = useState(false);
     const failed = sourceUrl === null || format === null || loadFailed;
 
     useEffect(() => {
         if (sourceUrl === null || format === null) return;
-        let cancelled = false;
-        let acquired: ModelHandle | null = null;
+        const request = { cancelled: false, acquired: null as ModelHandle | null };
         models
-            .acquire(sourceUrl, format)
-            .then((h) => {
-                if (cancelled) {
-                    h.release();
+            .acquire(sourceUrl, format, { onProgress: (progress01) => ui.reportLoading(label, progress01) })
+            .then((loadedHandle) => {
+                if (request.cancelled) {
+                    loadedHandle.release();
                     return;
                 }
-                acquired = h;
-                setHandle(h);
+                ui.clearLoading(label);
+                request.acquired = loadedHandle;
+                setHandle(loadedHandle);
                 invalidate();
             })
             .catch((error: unknown) => {
+                if (request.cancelled) return;
+                ui.clearLoading(label);
                 console.warn(`[ModelContent] 加载失败 ${sourceUrl}`, error);
-                if (cancelled) return;
                 setLoadFailed(true);
                 invalidate();
             });
         return () => {
-            cancelled = true;
-            acquired?.release();
+            request.cancelled = true;
+            ui.clearLoading(label);
+            request.acquired?.release();
         };
-    }, [models, sourceUrl, format, invalidate]);
+    }, [models, ui, sourceUrl, format, label, invalidate]);
 
     // 归一化壳按 handle 钉住:渲染期重复构造会导致 <primitive> 反复重挂载
     const shell = useMemo(() => (handle ? normalizedShell(handle.object3d) : null), [handle]);

@@ -1,5 +1,6 @@
 import type { DirectorCommand, DirectorContext, SerializedCommand } from "./DirectorCommand";
 import type { CommandResult } from "./DirectorCommand";
+import type { CommandHistory } from "./CommandHistory";
 
 type CommandFactory = (payload: never) => DirectorCommand;
 
@@ -9,6 +10,12 @@ type CommandFactory = (payload: never) => DirectorCommand;
  */
 export class CommandDispatcher {
     private readonly factories = new Map<string, CommandFactory>();
+    private history: CommandHistory | null = null;
+
+    /** 历史栈后绑定(工厂期 CommandHistory 先建、再回绑),undo 回放用 record:false 防自递归 */
+    attachHistory(history: CommandHistory): void {
+        this.history = history;
+    }
 
     register(commandType: string, factory: CommandFactory): void {
         if (this.factories.has(commandType)) {
@@ -17,7 +24,7 @@ export class CommandDispatcher {
         this.factories.set(commandType, factory);
     }
 
-    dispatch(raw: SerializedCommand, ctx: DirectorContext): CommandResult {
+    dispatch(raw: SerializedCommand, ctx: DirectorContext, options?: { record?: boolean }): CommandResult {
         const factory = this.factories.get(raw.type);
         if (!factory) return { ok: false, error: `unknown-command: ${raw.type}` };
 
@@ -25,7 +32,12 @@ export class CommandDispatcher {
         const issues = command.validate(ctx);
         if (issues.length > 0) return { ok: false, error: "validation-failed", issues };
 
+        // invert 必须在 execute 前以 pre-state 求逆(move 的旧 transform、remove 的实体快照)
+        const inverse = options?.record === false ? null : (command.invert?.(ctx) ?? null);
         command.execute(ctx);
+        if (inverse && inverse.length > 0) {
+            this.history?.record({ label: raw.type, undo: inverse, redo: [raw] });
+        }
         return { ok: true };
     }
 

@@ -4,10 +4,11 @@ import type { ModelFormat } from "../assets/ModelAsset";
 import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
 import type { CommandDispatcher } from "./CommandDispatcher";
 import { registerActionCommands } from "./actionCommands";
-import { registerCameraCommands } from "./cameraCommands";
+import { registerCameraCommands, RemoveShotCommand } from "./cameraCommands";
 import { registerCaptureCommands } from "./captureCommands";
+import { registerNavigationCommands } from "./navigationCommands";
 import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext } from "./DirectorCommand";
+import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 
 /** 空间幻觉围栏:一切来自外部(AI/宿主)的数值先过有限性检查 */
 function finiteVec3(value: unknown): value is Vec3 {
@@ -32,6 +33,8 @@ interface PlaceObjectPayload {
     transform?: Transform;
     /** kind="model" 时的显式格式;缺省从 sourceUrl 扩展名解析(blob URL 必须显式携带) */
     format?: ModelFormat;
+    /** 显示名(Outliner/Inspector);缺省由实体按 kind+id 派生 */
+    name?: string;
 }
 /** 校验与执行共用的格式解析(Rule of Two) */
 function resolveModelFormat(payload: PlaceObjectPayload): ModelFormat | null {
@@ -63,6 +66,10 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
     execute(ctx: DirectorContext): void {
         ctx.scene.addObject({ ...this.payload, format: resolveModelFormat(this.payload) });
     }
+
+    override invert(): readonly SerializedCommand[] {
+        return [{ type: RemoveObjectCommand.TYPE, payload: { id: this.payload.id } }];
+    }
 }
 
 interface MoveObjectPayload {
@@ -88,6 +95,11 @@ export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
     execute(ctx: DirectorContext): void {
         ctx.scene.updateTransform(this.payload.id, this.payload.transform);
     }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const prev = ctx.scene.manager.getEntity(this.payload.id)?.transform;
+        return prev ? [{ type: MoveObjectCommand.TYPE, payload: { id: this.payload.id, transform: prev } }] : null;
+    }
 }
 
 interface RemoveObjectPayload {
@@ -108,6 +120,25 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
 
     execute(ctx: DirectorContext): void {
         ctx.scene.removeObject(this.payload.id);
+    }
+
+    /** 实体快照回放;已知限制:不恢复动作挂载(运行时异步,模型就绪时序不可控) */
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const entity = ctx.scene.manager.getEntity(this.payload.id);
+        if (!entity) return null;
+        return [
+            {
+                type: PlaceObjectCommand.TYPE,
+                payload: {
+                    id: entity.id,
+                    kind: entity.kind,
+                    sourceUrl: entity.sourceUrl ?? undefined,
+                    format: entity.format ?? undefined,
+                    name: entity.name,
+                    transform: entity.transform,
+                },
+            },
+        ];
     }
 }
 
@@ -137,6 +168,14 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
     execute(ctx: DirectorContext): void {
         ctx.camera.addShot(this.payload.id, new CameraShot(this.payload.shot));
     }
+
+    /** 覆盖已有机位 → 回滚旧参数;新建 → 撤销即删除 */
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const prev = ctx.camera.director.getShot(this.payload.id);
+        return prev
+            ? [{ type: SetCameraShotCommand.TYPE, payload: { id: this.payload.id, shot: prev.toJSON() } }]
+            : [{ type: RemoveShotCommand.TYPE, payload: { id: this.payload.id } }];
+    }
 }
 
 /** 内置命令注册:Dispatcher 实例化后调一次,AI 工具 schema 由此派生 */
@@ -148,4 +187,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerActionCommands(dispatcher);
     registerCameraCommands(dispatcher);
     registerCaptureCommands(dispatcher);
+    registerNavigationCommands(dispatcher);
 }

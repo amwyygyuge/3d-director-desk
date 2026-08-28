@@ -16,9 +16,14 @@ export { CameraDirector } from "./camera/CameraDirector";
 export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
 export { ShotSizePresets } from "./camera/ShotSizePresets";
+export { FramingService } from "./camera/FramingService";
+export type { DirectorPose } from "./store/CameraStore";
 export { CaptureService } from "./capture/CaptureService";
 export type { RenderHandles } from "./capture/CaptureService";
 export { CaptureFrameCommand, registerCaptureCommands } from "./command/captureCommands";
+export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
+export { CommandHistory } from "./command/CommandHistory";
+export type { HistoryEntry } from "./command/CommandHistory";
 export { CommandDispatcher } from "./command/CommandDispatcher";
 export {
     MoveObjectCommand,

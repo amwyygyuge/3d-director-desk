@@ -48,6 +48,7 @@ export function importModelFile(stores: DirectorDeskStores, file: File, notify: 
                 kind: "model",
                 sourceUrl: asset.url,
                 format: asset.format,
+                name: asset.name,
                 transform: { position: placementFor(stores.scene.objectCount), rotation: [0, 0, 0], scale: [1, 1, 1] },
             },
         },

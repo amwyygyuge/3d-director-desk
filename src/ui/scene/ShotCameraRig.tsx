@@ -36,9 +36,13 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
     const controls = useThree((state) => state.controls) as unknown as OrbitLike | null;
     const invalidate = useThree((state) => state.invalidate);
     const savedDirectorPose = useRef<DirectorPose | null>(null);
+    const consumedDirectorPoseNonce = useRef<number | null>(null);
 
     void cameraStore.revision;
-    const shot = cameraStore.activeShotId ? cameraStore.activeShot : null;
+    const activeShotId = cameraStore.activeShotId;
+    const directorPoseNonce = cameraStore.directorPoseNonce;
+    const directorPoseTarget = cameraStore.directorPoseTarget;
+    const shot = activeShotId ? cameraStore.activeShot : null;
 
     // 导演视角的 pose 记录:初始一次 + 每次轨道交互结束
     useEffect(() => {
@@ -81,6 +85,28 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
         savedDirectorPose.current = null;
         invalidate();
     }, [shot, camera, controls, invalidate, cameraStore]);
+
+    // 取景请求只作用于导演相机；机位激活时消费并丢弃，避免退出机位后回放陈旧请求。
+    useEffect(() => {
+        if (consumedDirectorPoseNonce.current === directorPoseNonce) return;
+        consumedDirectorPoseNonce.current = directorPoseNonce;
+        if (!directorPoseTarget || activeShotId !== null || !controls || !(camera instanceof PerspectiveCamera)) return;
+        camera.position.set(
+            directorPoseTarget.position[0],
+            directorPoseTarget.position[1],
+            directorPoseTarget.position[2],
+        );
+        camera.fov = directorPoseTarget.fov;
+        camera.updateProjectionMatrix();
+        controls.target.set(
+            directorPoseTarget.target[0],
+            directorPoseTarget.target[1],
+            directorPoseTarget.target[2],
+        );
+        controls.update();
+        cameraStore.rememberDirectorPose(directorPoseTarget);
+        invalidate();
+    }, [activeShotId, camera, cameraStore, controls, directorPoseNonce, directorPoseTarget, invalidate]);
 
     return null;
 });

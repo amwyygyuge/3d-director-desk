@@ -16,6 +16,8 @@ export const IDENTITY_TRANSFORM: Transform = {
 
 export type SceneObjectKind = "model" | "primitive" | "camera";
 
+const KIND_LABEL: Record<SceneObjectKind, string> = { model: "模型", primitive: "几何体", camera: "机位对象" };
+
 /**
  * 场景对象实体:稳定身份 + 受保护的可变变换。
  * three 运行时对象(Object3D)不进本实体,由 SceneManager 的运行时注册表持有,
@@ -28,6 +30,8 @@ export class SceneObject {
     readonly sourceUrl: string | null;
     /** 模型格式(blob URL 无扩展名,必须显式携带);非 model 为 null */
     readonly format: ModelFormat | null;
+    /** 显示名(Outliner/Inspector);缺省按 kind + id 尾缀派生(确定性,undo/redo 回放不漂移) */
+    readonly name: string;
     private currentTransform: Transform;
     private mountedActionId: string | null = null;
 
@@ -36,12 +40,14 @@ export class SceneObject {
         kind: SceneObjectKind;
         sourceUrl?: string | null;
         format?: ModelFormat | null;
+        name?: string;
         transform?: Transform;
     }) {
         this.id = init.id;
         this.kind = init.kind;
         this.sourceUrl = init.sourceUrl ?? null;
         this.format = init.format ?? null;
+        this.name = init.name ?? `${KIND_LABEL[init.kind]} ${init.id.slice(-4)}`;
         this.currentTransform = init.transform ?? IDENTITY_TRANSFORM;
     }
 

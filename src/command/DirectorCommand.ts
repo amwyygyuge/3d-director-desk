@@ -52,4 +52,11 @@ export abstract class DirectorCommand<P = unknown> {
     abstract validate(ctx: DirectorContext): string[];
 
     abstract execute(ctx: DirectorContext): void;
+
+    /**
+     * 求逆(撤销体系挂点,可选):返回能撤销本命令的命令序列;
+     * 以 execute 前的 pre-state 调用(Dispatcher 保证时序)。
+     * 返回 null = 不可撤销(瞬态命令如 transport.play、capture.frame)。
+     */
+    invert?(ctx: DirectorContext): readonly SerializedCommand[] | null;
 }
