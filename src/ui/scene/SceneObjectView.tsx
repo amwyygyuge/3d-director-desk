@@ -6,7 +6,7 @@ import { BoxHelper } from "three";
 
 import type { ComponentType } from "react";
 
-import type { SceneObject, SceneObjectKind } from "../../core/SceneObject";
+import type { SceneObject, SceneObjectKind, Transform } from "../../core/SceneObject";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 import { ModelContent, PrimitiveContent } from "./contents";
 
@@ -26,7 +26,13 @@ const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject 
  * - 渲染体内禁止写场景 store;点选写 SelectionStore(纯 UI 态,不走命令层);
  * - 选中高亮走 BoxHelper(全 kind 通用):transform 提交后重建,拖拽 transient 期逐帧 update。
  */
-export const SceneObjectView = observer(function SceneObjectView({ entity }: { entity: SceneObject }) {
+export const SceneObjectView = observer(function SceneObjectView({
+    entity,
+    transform,
+}: {
+    entity: SceneObject;
+    transform: Transform;
+}) {
     const { scene, selection } = useDirectorDeskStores();
     const scene3 = useThree((state) => state.scene);
     const invalidate = useThree((state) => state.invalidate);
@@ -46,7 +52,6 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
     );
 
     const selected = selection.isSelected(entity.id);
-    const { transform } = entity;
     useEffect(() => {
         const object = groupRef.current;
         if (!selected || !object) return;
@@ -70,7 +75,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
     });
 
     const Content = KIND_CONTENT[entity.kind];
-    const { position, rotation, scale } = entity.transform;
+    const { position, rotation, scale } = transform;
     return (
         <group
             ref={bindRuntime}

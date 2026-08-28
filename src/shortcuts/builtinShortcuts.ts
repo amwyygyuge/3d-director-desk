@@ -95,10 +95,10 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         ? new Set<ShortcutScope>(["global", "gizmo"])
         : new Set<ShortcutScope>(["global"]);
 }
-
-/** UI 提示:同 id 多 chord 用 / 连接(如 Delete/⌫) */
+/** UI 提示:同 id 多 chord 用 / 连接;平台格式化后同形的去重(Mac 上 Delete 与 Backspace 都是 ⌫) */
 export function formatShortcutHint(id: ShortcutId): string {
     const spec = SHORTCUT_SPECS.find((s) => s.id === id);
     if (!spec) return "";
-    return spec.chords.map((chord) => ShortcutChord.parse(chord).format()).join("/");
+    const formatted = spec.chords.map((chord) => ShortcutChord.parse(chord).format());
+    return [...new Set(formatted)].join("/");
 }

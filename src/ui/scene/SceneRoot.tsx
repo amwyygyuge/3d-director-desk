@@ -22,7 +22,8 @@ export const SceneRoot = observer(function SceneRoot() {
     return (
         <>
             {scene.manager.list().map((entity) => (
-                <SceneObjectView key={entity.id} entity={entity} />
+                // transform 必须作 prop 传入:entity 引用稳定,observer 的 props 浅比较会跳过非 observable 字段变更
+                <SceneObjectView key={entity.id} entity={entity} transform={entity.transform} />
             ))}
         </>
     );

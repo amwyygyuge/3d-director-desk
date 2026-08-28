@@ -1,4 +1,6 @@
 import AddBoxIcon from "@mui/icons-material/AddBox";
+import UndoIcon from "@mui/icons-material/Undo";
+import RedoIcon from "@mui/icons-material/Redo";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
@@ -12,6 +14,7 @@ import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import ToggleButton from "@mui/material/ToggleButton";
+import IconButton from "@mui/material/IconButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -114,6 +117,31 @@ export const Toolbar = observer(function Toolbar() {
                     >
                         清空({scene.objectCount})
                     </Button>
+                    <Divider orientation="vertical" flexItem />
+                    <Tooltip title={`撤销(${formatShortcutHint(SHORTCUT_ID.EDIT_UNDO)})`}>
+                        <span>
+                            <IconButton
+                                size="small"
+                                disabled={!stores.history.canUndo}
+                                onClick={() => stores.history.undo(stores)}
+                                aria-label="撤销"
+                            >
+                                <UndoIcon fontSize="small" />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                    <Tooltip title={`重做(${formatShortcutHint(SHORTCUT_ID.EDIT_REDO)})`}>
+                        <span>
+                            <IconButton
+                                size="small"
+                                disabled={!stores.history.canRedo}
+                                onClick={() => stores.history.redo(stores)}
+                                aria-label="重做"
+                            >
+                                <RedoIcon fontSize="small" />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
                     <Divider orientation="vertical" flexItem />
                     <ToggleButtonGroup
                         exclusive

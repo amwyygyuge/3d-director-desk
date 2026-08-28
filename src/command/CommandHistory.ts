@@ -56,7 +56,7 @@ export class CommandHistory {
     private replay(from: HistoryEntry[], to: HistoryEntry[], ctx: DirectorContext): void {
         const entry = from.pop();
         if (!entry || !this.dispatcher) return;
-        for (const command of (from === this.undoStack ? entry.undo : entry.redo)) {
+        for (const command of from === this.undoStack ? entry.undo : entry.redo) {
             this.dispatcher.dispatch(command, ctx, { record: false });
         }
         to.push(entry);

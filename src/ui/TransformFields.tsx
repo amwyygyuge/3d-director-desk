@@ -109,8 +109,14 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
     const commitAxis = (key: TransformKey, axis: AxisIndex, displayedValue: number) => {
         const storedValue = key === "rotation" ? displayedValue * DEG_TO_RAD : displayedValue;
         const transform: Transform = {
-            position: key === "position" ? replaceAxis(entity.transform.position, axis, storedValue) : entity.transform.position,
-            rotation: key === "rotation" ? replaceAxis(entity.transform.rotation, axis, storedValue) : entity.transform.rotation,
+            position:
+                key === "position"
+                    ? replaceAxis(entity.transform.position, axis, storedValue)
+                    : entity.transform.position,
+            rotation:
+                key === "rotation"
+                    ? replaceAxis(entity.transform.rotation, axis, storedValue)
+                    : entity.transform.rotation,
             scale: key === "scale" ? replaceAxis(entity.transform.scale, axis, storedValue) : entity.transform.scale,
         };
         dispatcher.dispatch({ type: "object.move", payload: { id: objectId, transform } }, stores);
@@ -119,7 +125,15 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
     return (
         <Box sx={{ display: "grid", gap: FIELD_GROUP_GAP }}>
             {TRANSFORM_GROUPS.map((group) => (
-                <Box key={group.key} sx={{ display: "grid", gridTemplateColumns: FIELD_GRID_TEMPLATE, gap: FIELD_COLUMN_GAP, alignItems: "center" }}>
+                <Box
+                    key={group.key}
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: FIELD_GRID_TEMPLATE,
+                        gap: FIELD_COLUMN_GAP,
+                        alignItems: "center",
+                    }}
+                >
                     <Typography variant="caption" color="text.secondary">
                         {group.label}
                     </Typography>

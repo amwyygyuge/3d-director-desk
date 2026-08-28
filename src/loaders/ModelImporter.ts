@@ -24,7 +24,9 @@ type FormatLoader = (url: string, onProgress?: ProgressCallback) => Promise<Pars
 
 const EMPTY_PROGRESS = 0;
 
-function createProgressReporter(onProgress: ProgressCallback | undefined): ((event: ProgressEvent) => void) | undefined {
+function createProgressReporter(
+    onProgress: ProgressCallback | undefined,
+): ((event: ProgressEvent) => void) | undefined {
     if (onProgress === undefined) return undefined;
     return (event) => onProgress(event.total > EMPTY_PROGRESS ? event.loaded / event.total : EMPTY_PROGRESS);
 }
@@ -102,7 +104,11 @@ export class ModelImporter {
         return pending;
     }
 
-    private async load(url: string, format: ModelFormat, onProgress: ProgressCallback | undefined): Promise<CacheEntry> {
+    private async load(
+        url: string,
+        format: ModelFormat,
+        onProgress: ProgressCallback | undefined,
+    ): Promise<CacheEntry> {
         try {
             const parsed = await FORMAT_LOADERS[format](url, onProgress);
             const entry: CacheEntry = { ...parsed, refs: 0 };

@@ -25,7 +25,11 @@ export class FramingService {
         // 恰好容纳包围球的距离:radius / sin(半视场角),再加留边
         const distance = (Math.max(radius, 0.1) / Math.sin((fov / 2) * DEG_TO_RAD)) * FRAME_PADDING;
         return {
-            position: [center[0] + direction[0] * distance, center[1] + direction[1] * distance, center[2] + direction[2] * distance],
+            position: [
+                center[0] + direction[0] * distance,
+                center[1] + direction[1] * distance,
+                center[2] + direction[2] * distance,
+            ],
             target: center,
             fov,
         };

@@ -98,11 +98,7 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
         );
         camera.fov = directorPoseTarget.fov;
         camera.updateProjectionMatrix();
-        controls.target.set(
-            directorPoseTarget.target[0],
-            directorPoseTarget.target[1],
-            directorPoseTarget.target[2],
-        );
+        controls.target.set(directorPoseTarget.target[0], directorPoseTarget.target[1], directorPoseTarget.target[2]);
         controls.update();
         cameraStore.rememberDirectorPose(directorPoseTarget);
         invalidate();

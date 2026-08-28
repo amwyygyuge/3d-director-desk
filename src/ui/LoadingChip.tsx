@@ -12,7 +12,6 @@ const LOADING_CHIP_ELEVATION = 2;
 const LOADING_ITEM_SPACING = 1;
 const PROGRESS_PERCENT_SCALE = 100;
 
-
 /** 底部加载反馈:由 UiStore 的资源标签和进度驱动。 */
 export const LoadingChip = observer(function LoadingChip() {
     const { ui } = useDirectorDeskStores();
