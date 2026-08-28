@@ -3,6 +3,7 @@ import "./styles/index.css";
 
 export { AnimationBinder } from "./animation/AnimationBinder";
 export { HostBridge } from "./bridge/HostBridge";
+export { connectBridgeCommands } from "./bridge/connectBridgeCommands";
 export { isDirectorDeskMessage } from "./bridge/protocol";
 export type { HostInboundMessage, HostOutboundMessage } from "./bridge/protocol";
 export { CameraDirector } from "./camera/CameraDirector";

@@ -1,4 +1,5 @@
 import type { CameraStore } from "../store/CameraStore";
+import type { CaptureService } from "../capture/CaptureService";
 import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
 
@@ -10,6 +11,7 @@ export interface DirectorContext {
     readonly scene: SceneStore;
     readonly camera: CameraStore;
     readonly clock: TimeTransport;
+    readonly capture: CaptureService;
 }
 
 export type CommandResult = { ok: true } | { ok: false; error: string; issues?: string[] };

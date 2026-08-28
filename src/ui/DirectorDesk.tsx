@@ -19,7 +19,10 @@ export const DirectorDesk = observer(function DirectorDesk() {
     const [stores] = useState<DirectorDeskStores>(createDirectorDeskStores);
 
     useEffect(() => {
-        return () => stores.scene.manager.dispose();
+        return () => {
+            stores.capture.detach();
+            stores.scene.manager.dispose();
+        };
     }, [stores]);
 
     return (
@@ -29,6 +32,7 @@ export const DirectorDesk = observer(function DirectorDesk() {
                     frameloop="demand"
                     camera={{ position: [6, 4, 8], fov: 45 }}
                     gl={{ antialias: true, preserveDrawingBuffer: false }}
+                    onCreated={(state) => stores.capture.attach(state.gl.domElement)}
                 >
                     <color attach="background" args={["#171717"]} />
                     <Grid args={[40, 40]} cellColor="#333333" sectionColor="#555555" infiniteGrid />

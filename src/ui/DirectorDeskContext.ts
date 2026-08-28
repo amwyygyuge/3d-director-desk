@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 
+import { CaptureService } from "../capture/CaptureService";
 import { CameraStore } from "../store/CameraStore";
 import { SceneStore } from "../store/SceneStore";
 import { SelectionStore } from "../store/SelectionStore";
@@ -14,6 +15,7 @@ export interface DirectorDeskStores {
     camera: CameraStore;
     selection: SelectionStore;
     clock: TimeTransport;
+    capture: CaptureService;
 }
 
 export function createDirectorDeskStores(): DirectorDeskStores {
@@ -22,6 +24,7 @@ export function createDirectorDeskStores(): DirectorDeskStores {
         camera: new CameraStore(),
         selection: new SelectionStore(),
         clock: new TimeTransport(),
+        capture: new CaptureService(),
     };
 }
 
