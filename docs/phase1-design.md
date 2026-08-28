@@ -1,18 +1,19 @@
 # 阶段一·基础实现 — 任务拆分与类设计
+
 ## 扩展性审计(对阶段二~四)
 
-| 未来需求 | 结构结论 |
-|---|---|
-| 二·运镜轨迹 | `CameraShot` 保持静态值对象;运镜引入 `CameraMotionPath` 兄弟类型,不动现有 API |
-| 二·时间轴编排 | **已预埋 `TimeTransport`**:统一 playhead,播放 `tick(delta)` / 定位 `seek(t)`;`AnimationBinder.setTime` 已就位 |
-| 二·多机位 | `CameraDirector` 多机位 Map + 激活切换,已满足 |
-| 二·姿态精修 | `SceneObject` 加 pose 字段,兼容变更 |
-| 二·灯光 | `SceneObjectKind` 加 `"light"` 成员,兼容变更 |
-| 三·喂 AI / 风格化 | `CaptureService` → `HostBridge` 链路已通,AI 渲染在 Monet 侧 |
-| 三·游戏音频 | 挂 `TimeTransport`,吃统一时钟红利 |
-| 四·引擎/DCC 导出 | **已立纪律**:场景状态全纯数据、可 JSON 往返;届时补 `DirectorDocument` 版本化 schema + Serializer |
-| 四·协作 | 同上,以文档模型为前提 |
-| 画布多导演台节点 | **已修**:stores 每实例一套(`createDirectorDeskStores`),禁全局单例 |
+| 未来需求          | 结构结论                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| 二·运镜轨迹       | `CameraShot` 保持静态值对象;运镜引入 `CameraMotionPath` 兄弟类型,不动现有 API                                 |
+| 二·时间轴编排     | **已预埋 `TimeTransport`**:统一 playhead,播放 `tick(delta)` / 定位 `seek(t)`;`AnimationBinder.setTime` 已就位 |
+| 二·多机位         | `CameraDirector` 多机位 Map + 激活切换,已满足                                                                 |
+| 二·姿态精修       | `SceneObject` 加 pose 字段,兼容变更                                                                           |
+| 二·灯光           | `SceneObjectKind` 加 `"light"` 成员,兼容变更                                                                  |
+| 三·喂 AI / 风格化 | `CaptureService` → `HostBridge` 链路已通,AI 渲染在 Monet 侧                                                   |
+| 三·游戏音频       | 挂 `TimeTransport`,吃统一时钟红利                                                                             |
+| 四·引擎/DCC 导出  | **已立纪律**:场景状态全纯数据、可 JSON 往返;届时补 `DirectorDocument` 版本化 schema + Serializer              |
+| 四·协作           | 同上,以文档模型为前提                                                                                         |
+| 画布多导演台节点  | **已修**:stores 每实例一套(`createDirectorDeskStores`),禁全局单例                                             |
 
 ### 预埋清单(阶段一已落地)
 
@@ -83,16 +84,16 @@ classDiagram
 
 ## 模块 × 任务拆分(阶段一)
 
-| # | 任务 | 承载类/模块 | 验收 |
-|---|---|---|---|
-| 1 | 工程基建 | eslint/ts/prettier/vite/storybook | ✅ 已完成(typecheck/lint/build/storybook 全绿) |
-| 2 | 3D 场景画布 | `ui/DirectorDesk` + `SceneManager` | 网格/灯光/轨道相机;frameloop=demand;卸载零泄漏 |
-| 3 | 对象放置(游戏模型) | `loaders/ModelImporter`(新)+ `SceneObject` | FBX/GLB/OBJ 导入入库;blob URL,禁 base64;大模型走 @dm/3d-viewer 快照缓存 |
-| 4 | 摆位操作 | `transform/TransformGizmoController`(新) | 移动/旋转/缩放 gizmo;拖拽结束才写实体;多选站位 |
-| 5 | 游戏动作挂载 | `AnimationBinder` + `animation/AnimationLibrary`(新) | GLB 动作 clip 挂到同构骨骼模型;播放/停止;Mixer 走渲染循环 |
-| 6 | 基础虚拟摄像机 | `CameraDirector` + `CameraShot` | 机位增删、角度/景别参数、导演/机位双视角切换 |
-| 7 | 预演画面输出 | `CaptureService` | 截图导出 PNG(帧内取样);录屏属增强,可后置 |
-| 8 | 无限画布接入 | `bridge/HostBridge` + Monet 插件壳节点 | 协议握手 ready/import-model/capture-produced;Monet 侧建薄壳节点 |
+| #   | 任务               | 承载类/模块                                          | 验收                                                                    |
+| --- | ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1   | 工程基建           | eslint/ts/prettier/vite/storybook                    | ✅ 已完成(typecheck/lint/build/storybook 全绿)                          |
+| 2   | 3D 场景画布        | `ui/DirectorDesk` + `SceneManager`                   | 网格/灯光/轨道相机;frameloop=demand;卸载零泄漏                          |
+| 3   | 对象放置(游戏模型) | `loaders/ModelImporter`(新)+ `SceneObject`           | FBX/GLB/OBJ 导入入库;blob URL,禁 base64;大模型走 @dm/3d-viewer 快照缓存 |
+| 4   | 摆位操作           | `transform/TransformGizmoController`(新)             | 移动/旋转/缩放 gizmo;拖拽结束才写实体;多选站位                          |
+| 5   | 游戏动作挂载       | `AnimationBinder` + `animation/AnimationLibrary`(新) | GLB 动作 clip 挂到同构骨骼模型;播放/停止;Mixer 走渲染循环               |
+| 6   | 基础虚拟摄像机     | `CameraDirector` + `CameraShot`                      | 机位增删、角度/景别参数、导演/机位双视角切换                            |
+| 7   | 预演画面输出       | `CaptureService`                                     | 截图导出 PNG(帧内取样);录屏属增强,可后置                                |
+| 8   | 无限画布接入       | `bridge/HostBridge` + Monet 插件壳节点               | 协议握手 ready/import-model/capture-produced;Monet 侧建薄壳节点         |
 
 ## 依赖规则
 

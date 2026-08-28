@@ -9,6 +9,16 @@ export { CameraDirector } from "./camera/CameraDirector";
 export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
 export { CaptureService } from "./capture/CaptureService";
+export { CommandDispatcher } from "./command/CommandDispatcher";
+export {
+    MoveObjectCommand,
+    PlaceObjectCommand,
+    registerBuiltinCommands,
+    RemoveObjectCommand,
+    SetCameraShotCommand,
+} from "./command/commands";
+export { DirectorCommand } from "./command/DirectorCommand";
+export type { CommandResult, DirectorContext, SerializedCommand } from "./command/DirectorCommand";
 export { DisposeBag } from "./core/DisposeBag";
 export { SceneManager } from "./core/SceneManager";
 export { IDENTITY_TRANSFORM, SceneObject } from "./core/SceneObject";

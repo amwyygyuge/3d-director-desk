@@ -1,0 +1,127 @@
+import { CameraShot } from "../camera/CameraShot";
+import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
+import type { CommandDispatcher } from "./CommandDispatcher";
+import { DirectorCommand } from "./DirectorCommand";
+import type { DirectorContext } from "./DirectorCommand";
+
+/** 空间幻觉围栏:一切来自外部(AI/宿主)的数值先过有限性检查 */
+function finiteVec3(value: unknown): value is Vec3 {
+    return Array.isArray(value) && value.length === 3 && value.every((v) => Number.isFinite(v));
+}
+
+function finiteTransform(value: unknown): value is Transform {
+    if (typeof value !== "object" || value === null) return false;
+    if (!("position" in value) || !("rotation" in value) || !("scale" in value)) return false;
+    return finiteVec3(value.position) && finiteVec3(value.rotation) && finiteVec3(value.scale);
+}
+
+const FOV_MIN = 1;
+const FOV_MAX = 179;
+
+interface PlaceObjectPayload {
+    id: string;
+    kind: SceneObjectKind;
+    sourceUrl?: string;
+}
+
+export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
+    static readonly TYPE = "object.place";
+    readonly type = PlaceObjectCommand.TYPE;
+
+    constructor(readonly payload: PlaceObjectPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        const issues: string[] = [];
+        if (!this.payload.id) issues.push("id 不能为空");
+        if (ctx.scene.manager.getEntity(this.payload.id)) issues.push(`id "${this.payload.id}" 已存在`);
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.scene.addObject(this.payload);
+    }
+}
+
+interface MoveObjectPayload {
+    id: string;
+    transform: Transform;
+}
+
+export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
+    static readonly TYPE = "object.move";
+    readonly type = MoveObjectCommand.TYPE;
+
+    constructor(readonly payload: MoveObjectPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        const issues: string[] = [];
+        if (!ctx.scene.manager.getEntity(this.payload.id)) issues.push(`对象 "${this.payload.id}" 不存在`);
+        if (!finiteTransform(this.payload.transform)) issues.push("transform 含非法数值");
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.scene.updateTransform(this.payload.id, this.payload.transform);
+    }
+}
+
+interface RemoveObjectPayload {
+    id: string;
+}
+
+export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
+    static readonly TYPE = "object.remove";
+    readonly type = RemoveObjectCommand.TYPE;
+
+    constructor(readonly payload: RemoveObjectPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return ctx.scene.manager.getEntity(this.payload.id) ? [] : [`对象 "${this.payload.id}" 不存在`];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.scene.removeObject(this.payload.id);
+    }
+}
+
+interface SetCameraShotPayload {
+    id: string;
+    shot: { position: Vec3; target: Vec3; fov?: number };
+}
+
+export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> {
+    static readonly TYPE = "camera.set-shot";
+    readonly type = SetCameraShotCommand.TYPE;
+
+    constructor(readonly payload: SetCameraShotPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        const { shot } = this.payload;
+        const issues: string[] = [];
+        if (!this.payload.id) issues.push("机位 id 不能为空");
+        if (!finiteVec3(shot.position) || !finiteVec3(shot.target)) issues.push("机位坐标含非法数值");
+        const fov = shot.fov ?? 45;
+        if (fov < FOV_MIN || fov > FOV_MAX) issues.push(`fov 须在 ${FOV_MIN}~${FOV_MAX} 之间`);
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.camera.director.addShot(this.payload.id, new CameraShot(this.payload.shot));
+    }
+}
+
+/** 内置命令注册:Dispatcher 实例化后调一次,AI 工具 schema 由此派生 */
+export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
+    dispatcher.register(PlaceObjectCommand.TYPE, (payload) => new PlaceObjectCommand(payload));
+    dispatcher.register(MoveObjectCommand.TYPE, (payload) => new MoveObjectCommand(payload));
+    dispatcher.register(RemoveObjectCommand.TYPE, (payload) => new RemoveObjectCommand(payload));
+    dispatcher.register(SetCameraShotCommand.TYPE, (payload) => new SetCameraShotCommand(payload));
+}
