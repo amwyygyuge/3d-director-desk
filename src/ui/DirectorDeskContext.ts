@@ -45,7 +45,7 @@ export interface DirectorDeskStores {
     binder: AnimationBinder;
 }
 
-export function createDirectorDeskStores(options?: { host?: HostAdapter }): DirectorDeskStores {
+export function createDirectorDeskStores(options?: { host?: HostAdapter | undefined }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
     // 缺省落 iframe 形态;直嵌形态由宿主经 host 注入,不建桥不留监听器

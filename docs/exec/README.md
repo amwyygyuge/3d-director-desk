@@ -29,7 +29,7 @@ flowchart TB
 | 05  | [游戏动作挂载](./05-action-mount.md)       | ✅ 完成(待验收人签字) |        |
 | 06  | [基础虚拟摄像机](./06-camera-shots.md)     | ✅ 完成(待验收人签字) |        |
 | 07  | [预演画面输出](./07-capture-output.md)     | ✅ 完成(待验收人签字) |        |
-| 08  | [无限画布接入](./08-canvas-integration.md) | ⬜ 待执行 |        |
+| 08  | [无限画布接入](./08-canvas-integration.md) | ◐ 本仓侧完成(HostAdapter/PostMessageAdapter);Monet 节点壳暂缓(用户决策) |        |
 
 ## 验收通则(每个任务必查)
 
