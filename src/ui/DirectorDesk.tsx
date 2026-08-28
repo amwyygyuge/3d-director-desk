@@ -30,6 +30,8 @@ interface DirectorDeskProps {
     theme?: Theme;
     /** 宿主适配器:Monet 直嵌注入 MonetNodeAdapter;缺省 iframe 形态自动落 PostMessageAdapter */
     host?: HostAdapter;
+    /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
+    onReady?: (stores: DirectorDeskStores) => void;
 }
 
 /**
@@ -42,8 +44,14 @@ interface DirectorDeskProps {
  * - three 对象经 ref 注册进 SceneManager 运行时表,不进 observable;
  * - 面板订阅走 MobX 细粒度 observer,Canvas 树不随 UI state 重渲染。
  */
-export const DirectorDesk = observer(function DirectorDesk({ theme, host }: DirectorDeskProps) {
+export const DirectorDesk = observer(function DirectorDesk({ theme, host, onReady }: DirectorDeskProps) {
     const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host }));
+
+    // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
+    useEffect(() => {
+        onReady?.(stores);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stores]);
 
     useEffect(() => {
         return () => {
@@ -67,7 +75,11 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host }: Dire
                         kind: "model",
                         sourceUrl: url,
                         format: formatFromUrl(url) ?? undefined,
-                        transform: { position: placementFor(stores.scene.objectCount), rotation: [0, 0, 0], scale: [1, 1, 1] },
+                        transform: {
+                            position: placementFor(stores.scene.objectCount),
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1],
+                        },
                     },
                 },
                 stores,
@@ -86,7 +98,14 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host }: Dire
                             frameloop={stores.clock.isPlaying ? "always" : "demand"}
                             camera={{ position: [6, 4, 8], fov: 45 }}
                             gl={{ antialias: true, preserveDrawingBuffer: false }}
-                            onCreated={(state) => stores.capture.attach({ gl: state.gl, scene: state.scene, camera: state.camera, invalidate: state.invalidate })}
+                            onCreated={(state) =>
+                                stores.capture.attach({
+                                    gl: state.gl,
+                                    scene: state.scene,
+                                    camera: state.camera,
+                                    invalidate: state.invalidate,
+                                })
+                            }
                             onPointerMissed={() => {
                                 // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
                                 if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
@@ -95,7 +114,13 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host }: Dire
                             }}
                         >
                             <color attach="background" args={["#171717"]} />
-                            <Grid args={[40, 40]} cellColor="#333333" sectionColor="#555555" infiniteGrid userData={{ helper: true }} />
+                            <Grid
+                                args={[40, 40]}
+                                cellColor="#333333"
+                                sectionColor="#555555"
+                                infiniteGrid
+                                userData={{ helper: true }}
+                            />
                             <ambientLight intensity={0.6} />
                             <directionalLight position={[5, 10, 4]} intensity={1.2} />
                             <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />

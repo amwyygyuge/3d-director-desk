@@ -96,7 +96,12 @@ export const Inspector = observer(function Inspector() {
                     size="small"
                     disabled={!mountedAction}
                     onClick={() =>
-                        report(dispatcher.dispatch({ type: clock.isPlaying ? "transport.pause" : "transport.play", payload: {} }, stores))
+                        report(
+                            dispatcher.dispatch(
+                                { type: clock.isPlaying ? "transport.pause" : "transport.play", payload: {} },
+                                stores,
+                            ),
+                        )
                     }
                 >
                     {clock.isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
@@ -110,7 +115,12 @@ export const Inspector = observer(function Inspector() {
                         value={Math.min(playhead, duration)}
                         disabled={!mountedAction}
                         onChange={(_, value) =>
-                            report(dispatcher.dispatch({ type: "transport.seek", payload: { time: value as number } }, stores))
+                            report(
+                                dispatcher.dispatch(
+                                    { type: "transport.seek", payload: { time: value as number } },
+                                    stores,
+                                ),
+                            )
                         }
                     />
                 </Box>

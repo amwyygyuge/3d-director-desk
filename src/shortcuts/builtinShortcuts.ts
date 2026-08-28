@@ -74,7 +74,9 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
 
 /** 当前激活作用域:global 常驻;有选中(已进入摆位交互)激活 gizmo 域 */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
-    return stores.selection.primaryId ? new Set<ShortcutScope>(["global", "gizmo"]) : new Set<ShortcutScope>(["global"]);
+    return stores.selection.primaryId
+        ? new Set<ShortcutScope>(["global", "gizmo"])
+        : new Set<ShortcutScope>(["global"]);
 }
 
 /** UI 提示:同 id 多 chord 用 / 连接(如 Delete/⌫) */

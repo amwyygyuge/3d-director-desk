@@ -28,7 +28,12 @@ export {
     SetCameraShotCommand,
 } from "./command/commands";
 export { DirectorCommand } from "./command/DirectorCommand";
-export { ActivateShotCommand, DeactivateShotCommand, registerCameraCommands, RemoveShotCommand } from "./command/cameraCommands";
+export {
+    ActivateShotCommand,
+    DeactivateShotCommand,
+    registerCameraCommands,
+    RemoveShotCommand,
+} from "./command/cameraCommands";
 export {
     MountActionCommand,
     registerActionCommands,

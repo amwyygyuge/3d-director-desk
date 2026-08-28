@@ -76,10 +76,18 @@ export const Toolbar = observer(function Toolbar() {
                     <Button variant="contained" startIcon={<AddBoxIcon />} onClick={placePrimitive}>
                         添加几何体
                     </Button>
-                    <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileInputRef.current?.click()}>
+                    <Button
+                        variant="outlined"
+                        startIcon={<UploadFileIcon />}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
                         导入模型
                     </Button>
-                    <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => actionInputRef.current?.click()}>
+                    <Button
+                        variant="outlined"
+                        startIcon={<UploadFileIcon />}
+                        onClick={() => actionInputRef.current?.click()}
+                    >
                         导入动作
                     </Button>
                     <Button

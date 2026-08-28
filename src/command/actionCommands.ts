@@ -134,8 +134,14 @@ export class TransportSeekCommand extends DirectorCommand<TransportSeekPayload> 
 
 export function registerActionCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(MountActionCommand.TYPE, (payload: MountActionPayload) => new MountActionCommand(payload));
-    dispatcher.register(UnmountActionCommand.TYPE, (payload: UnmountActionPayload) => new UnmountActionCommand(payload));
+    dispatcher.register(
+        UnmountActionCommand.TYPE,
+        (payload: UnmountActionPayload) => new UnmountActionCommand(payload),
+    );
     dispatcher.register(TransportPlayCommand.TYPE, () => new TransportPlayCommand());
     dispatcher.register(TransportPauseCommand.TYPE, () => new TransportPauseCommand());
-    dispatcher.register(TransportSeekCommand.TYPE, (payload: TransportSeekPayload) => new TransportSeekCommand(payload));
+    dispatcher.register(
+        TransportSeekCommand.TYPE,
+        (payload: TransportSeekPayload) => new TransportSeekCommand(payload),
+    );
 }

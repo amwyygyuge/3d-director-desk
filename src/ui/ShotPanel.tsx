@@ -54,7 +54,10 @@ export const ShotPanel = observer(function ShotPanel() {
         const pose = camera.lastDirectorPose;
         if (!pose) return;
         dispatcher.dispatch(
-            { type: "camera.set-shot", payload: { id: nextShotId(), shot: { position: pose.position, target: pose.target, fov: pose.fov } } },
+            {
+                type: "camera.set-shot",
+                payload: { id: nextShotId(), shot: { position: pose.position, target: pose.target, fov: pose.fov } },
+            },
             stores,
         );
     };
@@ -84,7 +87,10 @@ export const ShotPanel = observer(function ShotPanel() {
         dispatcher.dispatch(
             {
                 type: "camera.set-shot",
-                payload: { id: camera.activeShotId, shot: { position: activeShot.position, target: activeShot.target, fov } },
+                payload: {
+                    id: camera.activeShotId,
+                    shot: { position: activeShot.position, target: activeShot.target, fov },
+                },
             },
             stores,
         );
@@ -105,7 +111,9 @@ export const ShotPanel = observer(function ShotPanel() {
                                     size="small"
                                     edge="end"
                                     aria-label={`删除 ${id}`}
-                                    onClick={() => dispatcher.dispatch({ type: "camera.remove-shot", payload: { id } }, stores)}
+                                    onClick={() =>
+                                        dispatcher.dispatch({ type: "camera.remove-shot", payload: { id } }, stores)
+                                    }
                                 >
                                     <DeleteIcon fontSize="small" />
                                 </IconButton>
@@ -116,7 +124,10 @@ export const ShotPanel = observer(function ShotPanel() {
                                 variant={active ? "contained" : "text"}
                                 startIcon={<VideocamIcon />}
                                 onClick={() =>
-                                    dispatcher.dispatch({ type: active ? "camera.deactivate" : "camera.activate", payload: { id } }, stores)
+                                    dispatcher.dispatch(
+                                        { type: active ? "camera.deactivate" : "camera.activate", payload: { id } },
+                                        stores,
+                                    )
                                 }
                             >
                                 {id}

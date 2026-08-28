@@ -21,7 +21,13 @@ export class SceneStore {
         makeAutoObservable(this, { manager: false });
     }
 
-    addObject(init: { id: string; kind: SceneObject["kind"]; sourceUrl?: string; format?: ModelFormat | null; transform?: Transform }): SceneObject {
+    addObject(init: {
+        id: string;
+        kind: SceneObject["kind"];
+        sourceUrl?: string;
+        format?: ModelFormat | null;
+        transform?: Transform;
+    }): SceneObject {
         const object = new SceneObject(init);
         this.manager.register(object);
         this.revision += 1;

@@ -19,7 +19,11 @@ const OBJECT_BASE_HEIGHT = 0.5;
 
 export function placementFor(index: number): [number, number, number] {
     const radius = PLACEMENT_SPREAD * Math.sqrt(index);
-    return [Math.cos(index * GOLDEN_ANGLE_RAD) * radius, OBJECT_BASE_HEIGHT, Math.sin(index * GOLDEN_ANGLE_RAD) * radius];
+    return [
+        Math.cos(index * GOLDEN_ANGLE_RAD) * radius,
+        OBJECT_BASE_HEIGHT,
+        Math.sin(index * GOLDEN_ANGLE_RAD) * radius,
+    ];
 }
 
 /** 模型文件导入:资产注册(去重)→ object.place 命令 */

@@ -16,7 +16,15 @@ export const CapturePreview = observer(function CapturePreview() {
             href={ui.lastCaptureUrl}
             target="_blank"
             rel="noreferrer"
-            sx={{ position: "absolute", right: 12, bottom: 12, p: 0.5, zIndex: 1, display: "block", textDecoration: "none" }}
+            sx={{
+                position: "absolute",
+                right: 12,
+                bottom: 12,
+                p: 0.5,
+                zIndex: 1,
+                display: "block",
+                textDecoration: "none",
+            }}
         >
             <img src={ui.lastCaptureUrl} alt="最近截图" style={{ display: "block", width: 160, borderRadius: 4 }} />
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center" }}>

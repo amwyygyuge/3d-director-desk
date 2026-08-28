@@ -31,7 +31,13 @@ export class SceneObject {
     private currentTransform: Transform;
     private mountedActionId: string | null = null;
 
-    constructor(init: { id: string; kind: SceneObjectKind; sourceUrl?: string | null; format?: ModelFormat | null; transform?: Transform }) {
+    constructor(init: {
+        id: string;
+        kind: SceneObjectKind;
+        sourceUrl?: string | null;
+        format?: ModelFormat | null;
+        transform?: Transform;
+    }) {
         this.id = init.id;
         this.kind = init.kind;
         this.sourceUrl = init.sourceUrl ?? null;
