@@ -36,6 +36,10 @@ export class SceneManager {
     getRuntime(id: string): Object3D | undefined {
         return this.runtimes.get(id);
     }
+    /** 仅解除运行时绑定(React 卸载 ref 回调用);实体仍保留,与 unregister 区分 */
+    unbindRuntime(id: string): void {
+        this.runtimes.delete(id);
+    }
 
     list(): readonly SceneObject[] {
         return [...this.entities.values()];

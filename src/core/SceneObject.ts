@@ -1,3 +1,5 @@
+import type { ModelFormat } from "../assets/ModelAsset";
+
 export type Vec3 = readonly [number, number, number];
 
 export interface Transform {
@@ -24,12 +26,16 @@ export class SceneObject {
     readonly kind: SceneObjectKind;
     /** 模型来源 URL;primitive 为 null */
     readonly sourceUrl: string | null;
+    /** 模型格式(blob URL 无扩展名,必须显式携带);非 model 为 null */
+    readonly format: ModelFormat | null;
     private currentTransform: Transform;
+    private mountedActionId: string | null = null;
 
-    constructor(init: { id: string; kind: SceneObjectKind; sourceUrl?: string | null; transform?: Transform }) {
+    constructor(init: { id: string; kind: SceneObjectKind; sourceUrl?: string | null; format?: ModelFormat | null; transform?: Transform }) {
         this.id = init.id;
         this.kind = init.kind;
         this.sourceUrl = init.sourceUrl ?? null;
+        this.format = init.format ?? null;
         this.currentTransform = init.transform ?? IDENTITY_TRANSFORM;
     }
 
@@ -39,5 +45,13 @@ export class SceneObject {
 
     applyTransform(next: Transform): void {
         this.currentTransform = next;
+    }
+    /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
+    get actionId(): string | null {
+        return this.mountedActionId;
+    }
+
+    applyAction(actionId: string | null): void {
+        this.mountedActionId = actionId;
     }
 }

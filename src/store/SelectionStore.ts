@@ -1,18 +1,33 @@
 import { makeAutoObservable } from "mobx";
 
-/** 选中 Store:只存 id 集合;选中态判定走细粒度计算,避免整树订阅 */
+/** 选中 Store(纯 UI 态,不进命令层):只存 id 列表;主选 = 最后点选者,gizmo 只挂主选 */
 export class SelectionStore {
-    selectedId: string | null = null;
+    selectedIds: string[] = [];
 
     constructor() {
         makeAutoObservable(this);
     }
 
-    select(id: string | null): void {
-        this.selectedId = id;
+    /** additive(cmd/ctrl 点选)切换成员;否则替换为单选 */
+    select(id: string, options?: { additive?: boolean }): void {
+        if (!options?.additive) {
+            this.selectedIds = [id];
+            return;
+        }
+        this.selectedIds = this.selectedIds.includes(id)
+            ? this.selectedIds.filter((existing) => existing !== id)
+            : [...this.selectedIds, id];
+    }
+
+    clear(): void {
+        this.selectedIds = [];
     }
 
     isSelected(id: string): boolean {
-        return this.selectedId === id;
+        return this.selectedIds.includes(id);
+    }
+
+    get primaryId(): string | null {
+        return this.selectedIds.at(-1) ?? null;
     }
 }

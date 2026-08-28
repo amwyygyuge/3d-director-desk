@@ -1,7 +1,11 @@
+import type { AnimationBinder } from "../animation/AnimationBinder";
+import type { AnimationLibrary } from "../assets/AnimationLibrary";
+import type { HostAdapter } from "../host/HostAdapter";
 import type { CameraStore } from "../store/CameraStore";
 import type { CaptureService } from "../capture/CaptureService";
 import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
+import type { UiStore } from "../store/UiStore";
 
 /**
  * 命令执行上下文:命令可触达的状态面。
@@ -12,6 +16,12 @@ export interface DirectorContext {
     readonly camera: CameraStore;
     readonly clock: TimeTransport;
     readonly capture: CaptureService;
+    readonly binder: AnimationBinder;
+    readonly animations: AnimationLibrary;
+    /** 宿主适配器(截图回传/模型导入;iframe 与直嵌两形态一契约) */
+    readonly host: HostAdapter;
+    /** 截图预览等界面态 */
+    readonly ui: UiStore;
 }
 
 export type CommandResult = { ok: true } | { ok: false; error: string; issues?: string[] };

@@ -1,0 +1,85 @@
+import { GIZMO_MODE } from "../store/UiStore";
+import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
+import { ShortcutChord } from "./ShortcutChord";
+import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
+
+/** 快捷键动作 id:AI 工具描述/文档/冲突检测的引用键 */
+export const SHORTCUT_ID = {
+    GIZMO_TRANSLATE: "gizmo.translate",
+    GIZMO_ROTATE: "gizmo.rotate",
+    GIZMO_SCALE: "gizmo.scale",
+    AXIS_X: "gizmo.axis.x",
+    AXIS_Y: "gizmo.axis.y",
+    AXIS_Z: "gizmo.axis.z",
+    REMOVE_SELECTION: "selection.remove",
+    CLEAR_SELECTION: "selection.clear",
+} as const;
+export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
+
+/**
+ * 快捷键 SPECS(纯数据表,单一真相源):
+ * - 行为在下方 ACTIONS,按 id 对齐(Record 全键约束,漏配编译期报错);
+ * - UI 提示经 formatShortcutHint 从本表格式化,按钮提示与真实生效键永不分叉。
+ */
+export const SHORTCUT_SPECS: readonly {
+    id: ShortcutId;
+    chords: readonly string[];
+    scope: ShortcutScope;
+    label: string;
+}[] = [
+    { id: SHORTCUT_ID.GIZMO_TRANSLATE, chords: ["w"], scope: "global", label: "移动模式" },
+    { id: SHORTCUT_ID.GIZMO_ROTATE, chords: ["e"], scope: "global", label: "旋转模式" },
+    { id: SHORTCUT_ID.GIZMO_SCALE, chords: ["r"], scope: "global", label: "缩放模式" },
+    { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
+    { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
+    { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
+    { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
+    { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
+];
+
+function removeSelection(stores: DirectorDeskStores): void {
+    for (const id of stores.selection.selectedIds) {
+        stores.dispatcher.dispatch({ type: "object.remove", payload: { id } }, stores);
+    }
+    stores.selection.clear();
+}
+
+const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void> = {
+    [SHORTCUT_ID.GIZMO_TRANSLATE]: (s) => s.ui.setGizmoMode(GIZMO_MODE.TRANSLATE),
+    [SHORTCUT_ID.GIZMO_ROTATE]: (s) => s.ui.setGizmoMode(GIZMO_MODE.ROTATE),
+    [SHORTCUT_ID.GIZMO_SCALE]: (s) => s.ui.setGizmoMode(GIZMO_MODE.SCALE),
+    [SHORTCUT_ID.AXIS_X]: (s) => s.ui.toggleGizmoAxis("x"),
+    [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
+    [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
+    [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
+    [SHORTCUT_ID.CLEAR_SELECTION]: (s) => s.selection.clear(),
+};
+
+/** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */
+export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDeskStores>): () => void {
+    const unregisters = SHORTCUT_SPECS.flatMap((spec) =>
+        spec.chords.map((chord) =>
+            registry.register({
+                id: spec.id,
+                chord: ShortcutChord.parse(chord),
+                scope: spec.scope,
+                run: SHORTCUT_ACTIONS[spec.id],
+            }),
+        ),
+    );
+    return () => {
+        for (const unregister of unregisters) unregister();
+    };
+}
+
+/** 当前激活作用域:global 常驻;有选中(已进入摆位交互)激活 gizmo 域 */
+export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
+    return stores.selection.primaryId ? new Set<ShortcutScope>(["global", "gizmo"]) : new Set<ShortcutScope>(["global"]);
+}
+
+/** UI 提示:同 id 多 chord 用 / 连接(如 Delete/⌫) */
+export function formatShortcutHint(id: ShortcutId): string {
+    const spec = SHORTCUT_SPECS.find((s) => s.id === id);
+    if (!spec) return "";
+    return spec.chords.map((chord) => ShortcutChord.parse(chord).format()).join("/");
+}

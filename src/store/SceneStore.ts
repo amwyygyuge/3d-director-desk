@@ -1,5 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
+import type { ModelFormat } from "../assets/ModelAsset";
 import { SceneManager } from "../core/SceneManager";
 import { SceneObject } from "../core/SceneObject";
 import type { Transform } from "../core/SceneObject";
@@ -20,7 +21,7 @@ export class SceneStore {
         makeAutoObservable(this, { manager: false });
     }
 
-    addObject(init: { id: string; kind: SceneObject["kind"]; sourceUrl?: string }): SceneObject {
+    addObject(init: { id: string; kind: SceneObject["kind"]; sourceUrl?: string; format?: ModelFormat | null; transform?: Transform }): SceneObject {
         const object = new SceneObject(init);
         this.manager.register(object);
         this.revision += 1;
@@ -38,8 +39,16 @@ export class SceneStore {
         entity.applyTransform(transform);
         this.revision += 1;
     }
+    setObjectAction(id: string, actionId: string | null): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyAction(actionId);
+        this.revision += 1;
+    }
 
     get objectCount(): number {
+        // manager 被排除出 observable,锚定 revision 让计算属性随实体增删失效
+        void this.revision;
         return this.manager.list().length;
     }
 }

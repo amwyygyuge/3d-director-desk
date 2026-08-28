@@ -1,3 +1,5 @@
+import { makeAutoObservable } from "mobx";
+
 /**
  * 统一时钟(阶段二时间轴的地基)。
  *
@@ -12,6 +14,12 @@ export class TimeTransport {
     private playheadSeconds = 0;
     private playing = false;
     private readonly listeners = new Set<(timeSeconds: number) => void>();
+
+    constructor() {
+        // playing 进 observable(UI 播放键、frameloop 切换订阅它);
+        // playheadSeconds 高频逐帧推进,排除 observable,订阅者走 subscribe 回调
+        makeAutoObservable(this, { playheadSeconds: false, listeners: false } as never);
+    }
 
     get time(): number {
         return this.playheadSeconds;

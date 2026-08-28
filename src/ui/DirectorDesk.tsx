@@ -6,13 +6,30 @@ import type { Theme } from "@mui/material/styles";
 import { observer } from "mobx-react";
 import { useEffect, useState } from "react";
 
+import { PROTOCOL_VERSION } from "../bridge/protocol";
+import { formatFromUrl } from "../assets/ModelAsset";
+import type { HostAdapter } from "../host/HostAdapter";
+import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
+import { TransformGizmoController } from "../transform/TransformGizmoController";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
+import { CapturePreview } from "./CapturePreview";
+import { Hotkeys } from "./Hotkeys";
+import { placementFor } from "./importFiles";
+import { Inspector } from "./Inspector";
 import { directorDeskTheme } from "./theme";
+import { SceneRoot } from "./scene/SceneRoot";
+import { PlaybackDriver } from "./scene/PlaybackDriver";
+import { ShotCameraRig } from "./scene/ShotCameraRig";
+import { ShotFrameOverlay } from "./ShotFrameOverlay";
+import { ShotPanel } from "./ShotPanel";
+import { Toolbar } from "./Toolbar";
 
 interface DirectorDeskProps {
     /** 宿主可传 MUI theme 覆盖默认暗色主题 */
     theme?: Theme;
+    /** 宿主适配器:Monet 直嵌注入 MonetNodeAdapter;缺省 iframe 形态自动落 PostMessageAdapter */
+    host?: HostAdapter;
 }
 
 /**
@@ -25,33 +42,74 @@ interface DirectorDeskProps {
  * - three 对象经 ref 注册进 SceneManager 运行时表,不进 observable;
  * - 面板订阅走 MobX 细粒度 observer,Canvas 树不随 UI state 重渲染。
  */
-export const DirectorDesk = observer(function DirectorDesk({ theme }: DirectorDeskProps) {
-    const [stores] = useState<DirectorDeskStores>(createDirectorDeskStores);
+export const DirectorDesk = observer(function DirectorDesk({ theme, host }: DirectorDeskProps) {
+    const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host }));
 
     useEffect(() => {
         return () => {
             stores.capture.detach();
+            stores.assets.dispose();
+            stores.animations.dispose();
+            stores.binder.dispose();
+            stores.models.dispose();
             stores.scene.manager.dispose();
+            stores.host.dispose?.();
         };
+    }, [stores]);
+    // 宿主入站:import-model → 命令层;ready 握手(adapter 内部决定是否有意义)
+    useEffect(() => {
+        const detachImport = stores.host.onImportModel(({ url }) => {
+            stores.dispatcher.dispatch(
+                {
+                    type: "object.place",
+                    payload: {
+                        id: `model-${crypto.randomUUID()}`,
+                        kind: "model",
+                        sourceUrl: url,
+                        format: formatFromUrl(url) ?? undefined,
+                        transform: { position: placementFor(stores.scene.objectCount), rotation: [0, 0, 0], scale: [1, 1, 1] },
+                    },
+                },
+                stores,
+            );
+        });
+        stores.host.reportReady(PROTOCOL_VERSION);
+        return detachImport;
     }, [stores]);
 
     return (
         <ThemeProvider theme={theme ?? directorDeskTheme}>
-            <ScopedCssBaseline>
+            <ScopedCssBaseline className="h-full">
                 <DirectorDeskProvider value={stores}>
                     <div className="relative h-full w-full overflow-hidden">
                         <Canvas
-                            frameloop="demand"
+                            frameloop={stores.clock.isPlaying ? "always" : "demand"}
                             camera={{ position: [6, 4, 8], fov: 45 }}
                             gl={{ antialias: true, preserveDrawingBuffer: false }}
-                            onCreated={(state) => stores.capture.attach(state.gl.domElement)}
+                            onCreated={(state) => stores.capture.attach({ gl: state.gl, scene: state.scene, camera: state.camera, invalidate: state.invalidate })}
+                            onPointerMissed={() => {
+                                // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
+                                if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
+                                    stores.selection.clear();
+                                }
+                            }}
                         >
                             <color attach="background" args={["#171717"]} />
-                            <Grid args={[40, 40]} cellColor="#333333" sectionColor="#555555" infiniteGrid />
+                            <Grid args={[40, 40]} cellColor="#333333" sectionColor="#555555" infiniteGrid userData={{ helper: true }} />
                             <ambientLight intensity={0.6} />
                             <directionalLight position={[5, 10, 4]} intensity={1.2} />
-                            <OrbitControls makeDefault />
+                            <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
+                            <SceneRoot />
+                            <TransformGizmoController />
+                            <PlaybackDriver />
+                            <ShotCameraRig />
                         </Canvas>
+                        <ShotFrameOverlay />
+                        <Toolbar />
+                        <Hotkeys />
+                        <Inspector />
+                        <ShotPanel />
+                        <CapturePreview />
                     </div>
                 </DirectorDeskProvider>
             </ScopedCssBaseline>

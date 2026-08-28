@@ -1,6 +1,11 @@
 import { CameraShot } from "../camera/CameraShot";
+import { formatFromUrl } from "../assets/ModelAsset";
+import type { ModelFormat } from "../assets/ModelAsset";
 import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
 import type { CommandDispatcher } from "./CommandDispatcher";
+import { registerActionCommands } from "./actionCommands";
+import { registerCameraCommands } from "./cameraCommands";
+import { registerCaptureCommands } from "./captureCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext } from "./DirectorCommand";
 
@@ -15,13 +20,22 @@ function finiteTransform(value: unknown): value is Transform {
     return finiteVec3(value.position) && finiteVec3(value.rotation) && finiteVec3(value.scale);
 }
 
-const FOV_MIN = 1;
-const FOV_MAX = 179;
+/** FOV 合法域:命令校验与 UI 滑杆共用(Rule of Two) */
+export const FOV_MIN = 1;
+export const FOV_MAX = 179;
 
 interface PlaceObjectPayload {
     id: string;
     kind: SceneObjectKind;
     sourceUrl?: string;
+    /** 可选初始摆位;缺省落原点 */
+    transform?: Transform;
+    /** kind="model" 时的显式格式;缺省从 sourceUrl 扩展名解析(blob URL 必须显式携带) */
+    format?: ModelFormat;
+}
+/** 校验与执行共用的格式解析(Rule of Two) */
+function resolveModelFormat(payload: PlaceObjectPayload): ModelFormat | null {
+    return payload.format ?? (payload.sourceUrl ? formatFromUrl(payload.sourceUrl) : null);
 }
 
 export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
@@ -36,11 +50,18 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
         const issues: string[] = [];
         if (!this.payload.id) issues.push("id 不能为空");
         if (ctx.scene.manager.getEntity(this.payload.id)) issues.push(`id "${this.payload.id}" 已存在`);
+        if (this.payload.transform !== undefined && !finiteTransform(this.payload.transform)) {
+            issues.push("transform 含非法数值");
+        }
+        if (this.payload.kind === "model") {
+            if (!this.payload.sourceUrl) issues.push("模型缺少 sourceUrl");
+            else if (!resolveModelFormat(this.payload)) issues.push("无法识别模型格式(支持 glb/gltf/fbx/obj)");
+        }
         return issues;
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.scene.addObject(this.payload);
+        ctx.scene.addObject({ ...this.payload, format: resolveModelFormat(this.payload) });
     }
 }
 
@@ -114,7 +135,7 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.camera.director.addShot(this.payload.id, new CameraShot(this.payload.shot));
+        ctx.camera.addShot(this.payload.id, new CameraShot(this.payload.shot));
     }
 }
 
@@ -124,4 +145,7 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(MoveObjectCommand.TYPE, (payload) => new MoveObjectCommand(payload));
     dispatcher.register(RemoveObjectCommand.TYPE, (payload) => new RemoveObjectCommand(payload));
     dispatcher.register(SetCameraShotCommand.TYPE, (payload) => new SetCameraShotCommand(payload));
+    registerActionCommands(dispatcher);
+    registerCameraCommands(dispatcher);
+    registerCaptureCommands(dispatcher);
 }
