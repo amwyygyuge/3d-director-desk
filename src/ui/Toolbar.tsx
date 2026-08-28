@@ -24,15 +24,14 @@ import { useRef, useState } from "react";
 import { GIZMO_MODE } from "../store/UiStore";
 import type { GizmoMode } from "../store/UiStore";
 import { formatShortcutHint, SHORTCUT_ID } from "../shortcuts/builtinShortcuts";
-import type { ShortcutId } from "../shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { importActionFile, importModelFile, placementFor } from "./importFiles";
 
-/** 模式三态查表:图标 + 文案 + 快捷键 id(提示与生效键同源,见 SHORTCUT_SPECS) */
-const GIZMO_MODE_META: Record<GizmoMode, { label: string; icon: typeof OpenWithIcon; shortcutId: ShortcutId }> = {
-    [GIZMO_MODE.TRANSLATE]: { label: "移动", icon: OpenWithIcon, shortcutId: SHORTCUT_ID.GIZMO_TRANSLATE },
-    [GIZMO_MODE.ROTATE]: { label: "旋转", icon: RotateRightIcon, shortcutId: SHORTCUT_ID.GIZMO_ROTATE },
-    [GIZMO_MODE.SCALE]: { label: "缩放", icon: ZoomOutMapIcon, shortcutId: SHORTCUT_ID.GIZMO_SCALE },
+/** 模式三态查表:图标 + 文案(模式切换只走工具条;W/E/R 已让位给 WASD 飞行,见 navigation/FlyDrive) */
+const GIZMO_MODE_META: Record<GizmoMode, { label: string; icon: typeof OpenWithIcon }> = {
+    [GIZMO_MODE.TRANSLATE]: { label: "移动", icon: OpenWithIcon },
+    [GIZMO_MODE.ROTATE]: { label: "旋转", icon: RotateRightIcon },
+    [GIZMO_MODE.SCALE]: { label: "缩放", icon: ZoomOutMapIcon },
 };
 
 const MODEL_FILE_ACCEPT = ".glb,.gltf,.fbx,.obj";
@@ -153,7 +152,7 @@ export const Toolbar = observer(function Toolbar() {
                     >
                         {Object.entries(GIZMO_MODE_META).map(([mode, meta]) => (
                             <ToggleButton key={mode} value={mode} aria-label={meta.label}>
-                                <Tooltip title={`${meta.label}(${formatShortcutHint(meta.shortcutId)})`}>
+                                <Tooltip title={meta.label}>
                                     <meta.icon fontSize="small" />
                                 </Tooltip>
                             </ToggleButton>

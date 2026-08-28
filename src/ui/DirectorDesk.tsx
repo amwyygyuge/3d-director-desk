@@ -11,6 +11,8 @@ import { formatFromUrl } from "../assets/ModelAsset";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
 import { TransformGizmoController } from "../transform/TransformGizmoController";
+import { FlyDrive } from "../navigation/FlyDrive";
+import { ShotNavigation } from "../navigation/ShotNavigation";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { CapturePreview } from "./CapturePreview";
@@ -99,7 +101,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
                 <DirectorDeskProvider value={stores}>
                     <div className="relative h-full w-full overflow-hidden">
                         <Canvas
-                            frameloop={stores.clock.isPlaying ? "always" : "demand"}
+                            frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
                             camera={{ position: [6, 4, 8], fov: 45 }}
                             gl={{ antialias: true, preserveDrawingBuffer: false }}
                             onCreated={(state) =>
@@ -132,6 +134,8 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
                             <TransformGizmoController />
                             <PlaybackDriver />
                             <ShotCameraRig />
+                            <FlyDrive />
+                            <ShotNavigation />
                         </Canvas>
                         <ShotFrameOverlay />
                         <Toolbar />

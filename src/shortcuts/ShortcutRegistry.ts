@@ -12,7 +12,7 @@ export interface ShortcutBinding<TEnv> {
 }
 
 /** 输入焦点在表单控件时,快捷键整体让位文本编辑 */
-function isEditingText(): boolean {
+export function isEditingText(): boolean {
     const active = document.activeElement;
     return (
         active instanceof HTMLInputElement ||

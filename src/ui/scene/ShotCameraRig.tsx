@@ -5,15 +5,8 @@ import { PerspectiveCamera } from "three";
 
 import type { DirectorPose } from "../../store/CameraStore";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
-
-/** OrbitControls 的最小结构接口:避免深引 three-stdlib 类型(非直接依赖) */
-interface OrbitLike {
-    target: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void };
-    enabled: boolean;
-    update: () => void;
-    addEventListener: (type: string, listener: () => void) => void;
-    removeEventListener: (type: string, listener: () => void) => void;
-}
+import { useOrbitControls } from "../../navigation/orbit";
+import type { OrbitLike } from "../../navigation/orbit";
 
 function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPose {
     return {
@@ -33,7 +26,7 @@ function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPo
 export const ShotCameraRig = observer(function ShotCameraRig() {
     const { camera: cameraStore } = useDirectorDeskStores();
     const camera = useThree((state) => state.camera);
-    const controls = useThree((state) => state.controls) as unknown as OrbitLike | null;
+    const controls = useOrbitControls();
     const invalidate = useThree((state) => state.invalidate);
     const savedDirectorPose = useRef<DirectorPose | null>(null);
     const consumedDirectorPoseNonce = useRef<number | null>(null);

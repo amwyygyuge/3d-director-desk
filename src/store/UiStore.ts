@@ -29,6 +29,8 @@ export class UiStore {
     lastCaptureUrl: string | null = null;
     /** 快捷键速查浮层开关 */
     helpOpen = false;
+    /** 飞行中(WASD 按住):DirectorDesk 据此把 frameloop 切 "always" */
+    flying = false;
     /** 加载中资源:label → 进度 0~1(反馈体系;Map 字段自动可观察) */
     readonly loading = new Map<string, number>();
 
@@ -54,6 +56,9 @@ export class UiStore {
     }
     toggleHelp(): void {
         this.helpOpen = !this.helpOpen;
+    }
+    setFlying(flying: boolean): void {
+        this.flying = flying;
     }
 
     reportLoading(label: string, progress: number): void {

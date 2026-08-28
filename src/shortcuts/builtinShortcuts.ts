@@ -1,14 +1,10 @@
 import { FrameViewCommand } from "../command/navigationCommands";
-import { GIZMO_MODE } from "../store/UiStore";
 import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
 import { ShortcutChord } from "./ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
 
 /** 快捷键动作 id:AI 工具描述/文档/冲突检测的引用键 */
 export const SHORTCUT_ID = {
-    GIZMO_TRANSLATE: "gizmo.translate",
-    GIZMO_ROTATE: "gizmo.rotate",
-    GIZMO_SCALE: "gizmo.scale",
     AXIS_X: "gizmo.axis.x",
     AXIS_Y: "gizmo.axis.y",
     AXIS_Z: "gizmo.axis.z",
@@ -33,9 +29,6 @@ export const SHORTCUT_SPECS: readonly {
     scope: ShortcutScope;
     label: string;
 }[] = [
-    { id: SHORTCUT_ID.GIZMO_TRANSLATE, chords: ["w"], scope: "global", label: "移动模式" },
-    { id: SHORTCUT_ID.GIZMO_ROTATE, chords: ["e"], scope: "global", label: "旋转模式" },
-    { id: SHORTCUT_ID.GIZMO_SCALE, chords: ["r"], scope: "global", label: "缩放模式" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
@@ -56,9 +49,6 @@ function removeSelection(stores: DirectorDeskStores): void {
 }
 
 const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void> = {
-    [SHORTCUT_ID.GIZMO_TRANSLATE]: (s) => s.ui.setGizmoMode(GIZMO_MODE.TRANSLATE),
-    [SHORTCUT_ID.GIZMO_ROTATE]: (s) => s.ui.setGizmoMode(GIZMO_MODE.ROTATE),
-    [SHORTCUT_ID.GIZMO_SCALE]: (s) => s.ui.setGizmoMode(GIZMO_MODE.SCALE),
     [SHORTCUT_ID.AXIS_X]: (s) => s.ui.toggleGizmoAxis("x"),
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
