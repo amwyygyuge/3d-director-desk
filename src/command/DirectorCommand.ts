@@ -7,6 +7,8 @@ import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
 import type { SelectionStore } from "../store/SelectionStore";
 import type { UiStore } from "../store/UiStore";
+import type { PlaybackCoordinator } from "../timeline/PlaybackCoordinator";
+import type { TimelineStore } from "../store/TimelineStore";
 
 /**
  * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。
@@ -15,6 +17,9 @@ export interface DirectorContext {
     readonly scene: SceneStore;
     readonly camera: CameraStore;
     readonly clock: TimeTransport;
+    readonly timeline: TimelineStore;
+    /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
+    readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;
     readonly binder: AnimationBinder;
     readonly animations: AnimationLibrary;
@@ -26,7 +31,20 @@ export interface DirectorContext {
     readonly selection: SelectionStore;
 }
 
-export type CommandResult = { ok: true } | { ok: false; error: string; issues?: string[] };
+export interface CommandIssue {
+    readonly code: string;
+    readonly path: string;
+    readonly message: string;
+}
+
+export type CommandResult = {
+    ok: true;
+} | {
+    ok: false;
+    error: string;
+    issues?: readonly string[];
+    issueDetails?: readonly CommandIssue[];
+};
 
 /** 线上传输形态:AI 工具调用 / HostBridge 消息 / 回放日志都是它 */
 export interface SerializedCommand {
@@ -53,6 +71,8 @@ export abstract class DirectorCommand<P = unknown> {
     /** 返回问题列表,空数组 = 校验通过 */
     abstract validate(ctx: DirectorContext): string[];
 
+    /** 可选的稳定结构化问题；保留 validate 以兼容既有命令。 */
+    validateIssues?(ctx: DirectorContext): readonly CommandIssue[];
     abstract execute(ctx: DirectorContext): void;
 
     /**

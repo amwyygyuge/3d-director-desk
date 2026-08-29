@@ -32,6 +32,7 @@ import { ShotMarkers } from "./scene/ShotMarkers";
 import { ShotFrameOverlay } from "./ShotFrameOverlay";
 import { ShotPanel } from "./ShotPanel";
 import { Toolbar } from "./Toolbar";
+import { TimelinePanel } from "./TimelinePanel";
 
 export interface DirectorDeskProps {
     /** 宿主可传 MUI theme 覆盖默认暗色主题 */
@@ -72,6 +73,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBr
                 stores.ui.dispose();
                 stores.assets.dispose();
                 stores.animations.dispose();
+                stores.playback.dispose();
                 stores.binder.dispose();
                 stores.models.dispose();
                 stores.scene.manager.dispose();
@@ -161,6 +163,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBr
                         <Hotkeys deskRef={deskRef} />
                         <ShotPanel />
                         <CapturePreview />
+                        <TimelinePanel />
                         <OutlinerPanel />
                         <HelpOverlay />
                         <LoadingChip />

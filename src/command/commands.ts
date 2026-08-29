@@ -9,6 +9,7 @@ import { registerActionCommands } from "./actionCommands";
 import { registerCameraCommands, RemoveShotCommand } from "./cameraCommands";
 import { registerCaptureCommands } from "./captureCommands";
 import { registerNavigationCommands } from "./navigationCommands";
+import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 
@@ -142,29 +143,33 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     }
 
     execute(ctx: DirectorContext): void {
+        ctx.playback.restoreObject(this.payload.id);
+        ctx.timeline.removeObjectTracks(this.payload.id);
         ctx.binder.unmount(this.payload.id);
         ctx.scene.removeObject(this.payload.id);
         ctx.selection.remove(this.payload.id);
         if (ctx.binder.isEmpty) ctx.clock.pause();
     }
 
-    /** 实体快照回放;已知限制:不恢复动作挂载(运行时异步,模型就绪时序不可控) */
+    /** 实体与时间轴轨道快照必须同次回放恢复，确保对象删除的轨道清理可撤销。 */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.id);
         if (!entity) return null;
-        return [
-            {
-                type: PlaceObjectCommand.TYPE,
-                payload: {
-                    id: entity.id,
-                    kind: entity.kind,
-                    sourceUrl: entity.sourceUrl ?? undefined,
-                    format: entity.format ?? undefined,
-                    name: entity.name,
-                    transform: toJS(entity.transform),
-                },
+        const tracks = ctx.timeline.document.tracks.filter((track) => track.targetId === entity.id).map((track) => track.toJSON());
+        const restoreObject: SerializedCommand = {
+            type: PlaceObjectCommand.TYPE,
+            payload: {
+                id: entity.id,
+                kind: entity.kind,
+                sourceUrl: entity.sourceUrl ?? undefined,
+                format: entity.format ?? undefined,
+                name: entity.name,
+                transform: toJS(entity.transform),
             },
-        ];
+        };
+        return tracks.length === 0
+            ? [restoreObject]
+            : [restoreObject, { type: RestoreTimelineTracksCommand.TYPE, payload: { tracks } }];
     }
 }
 
@@ -219,4 +224,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerCameraCommands(dispatcher);
     registerCaptureCommands(dispatcher);
     registerNavigationCommands(dispatcher);
+    registerTimelineCommands(dispatcher);
 }

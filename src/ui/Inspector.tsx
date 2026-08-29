@@ -40,6 +40,8 @@ const INSPECTOR_MAX_SIZE = "calc(100% - 24px)";
 const PANEL_PADDING = 1.5;
 const PANEL_Z_INDEX = 1;
 const SNACKBAR_DURATION_MS = 4000;
+const TIMELINE_TRACK_PREFIX = "transform-";
+const TIMELINE_KEY_PREFIX = "key-";
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type ShotVectorKey = "position" | "target";
@@ -465,6 +467,46 @@ const ModelActionControls = observer(function ModelActionControls({ objectId, re
     );
 });
 
+/** 当前选中对象的权威实体变换经 timeline.add-key 固化为关键帧。 */
+const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, report }: ModelActionControlsProps) {
+    const stores = useDirectorDeskStores();
+    const entity = stores.scene.manager.getEntity(objectId);
+    if (!entity) return null;
+
+    return (
+        <>
+            <Divider sx={{ my: 1 }} />
+            <Button
+                size="small"
+                variant="outlined"
+                fullWidth
+                onClick={() =>
+                    report(
+                        stores.dispatcher.dispatch(
+                            {
+                                type: "timeline.add-key",
+                                payload: {
+                                    trackId: `${TIMELINE_TRACK_PREFIX}${entity.id}`,
+                                    targetId: entity.id,
+                                    keyframe: {
+                                        id: `${TIMELINE_KEY_PREFIX}${crypto.randomUUID()}`,
+                                        time: stores.clock.time,
+                                        value: entity.transform,
+                                        easing: "linear",
+                                    },
+                                },
+                            },
+                            stores,
+                        ),
+                    )
+                }
+            >
+                在当前时间打关键帧
+            </Button>
+        </>
+    );
+});
+
 /** 对象面板(右侧):实体显示数值变换，机位显示镜头参数与机位控制。 */
 export const Inspector = observer(function Inspector() {
     const stores = useDirectorDeskStores();
@@ -514,6 +556,7 @@ export const Inspector = observer(function Inspector() {
             </Typography>
             <Divider sx={{ my: CONTROL_GAP }} />
             <TransformFields objectId={entity.id} />
+            <TimelineKeyControls objectId={entity.id} report={report} />
             {entity.kind === "model" && <ModelActionControls objectId={entity.id} report={report} />}
             <Snackbar
                 open={notice !== null}

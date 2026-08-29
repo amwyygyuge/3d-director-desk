@@ -164,6 +164,24 @@ export class TransportPauseCommand extends DirectorCommand<Record<string, never>
     }
 }
 
+/** 停止不同于暂停：清除时间轴运行时采样，并把对象恢复到实体权威变换。 */
+export class TransportStopCommand extends DirectorCommand<Record<string, never>> {
+    static readonly TYPE = "transport.stop";
+    readonly type = TransportStopCommand.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {
+        super();
+    }
+
+    validate(): string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.clock.stop();
+    }
+}
+
 interface TransportSeekPayload {
     time: number;
 }
@@ -197,4 +215,5 @@ export function registerActionCommands(dispatcher: CommandDispatcher): void {
         TransportSeekCommand.TYPE,
         (payload: TransportSeekPayload) => new TransportSeekCommand(payload),
     );
+    dispatcher.register(TransportStopCommand.TYPE, () => new TransportStopCommand());
 }

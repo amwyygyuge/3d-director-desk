@@ -15,6 +15,7 @@ import { makeAutoObservable } from "mobx";
 export class TimeTransport {
     private playheadSeconds = 0;
     private playing = false;
+    private stopSequence = 0;
 
     constructor() {
         makeAutoObservable(this);
@@ -28,6 +29,11 @@ export class TimeTransport {
         return this.playing;
     }
 
+    /** 停止事件与 playhead=0 区分：协调器据此恢复实体权威变换。 */
+    get stoppedAt(): number {
+        return this.stopSequence;
+    }
+
     play(): void {
         this.playing = true;
     }
@@ -39,6 +45,7 @@ export class TimeTransport {
     stop(): void {
         this.playing = false;
         this.seek(0);
+        this.stopSequence += 1;
     }
 
     seek(timeSeconds: number): void {

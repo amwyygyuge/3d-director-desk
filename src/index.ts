@@ -43,6 +43,15 @@ export {
     RemoveObjectCommand,
     SetCameraShotCommand,
 } from "./command/commands";
+export {
+    AddTimelineKeyCommand,
+    MoveTimelineKeyCommand,
+    RemoveTimelineKeyCommand,
+    RestoreTimelineTracksCommand,
+    SetTimelineDurationCommand,
+    SetTimelineKeyEasingCommand,
+    registerTimelineCommands,
+} from "./command/timelineCommands";
 export { DirectorCommand } from "./command/DirectorCommand";
 export {
     ActivateShotCommand,
@@ -57,8 +66,10 @@ export {
     TransportPlayCommand,
     TransportSeekCommand,
     UnmountActionCommand,
+    TransportStopCommand,
 } from "./command/actionCommands";
-export type { CommandResult, DirectorContext, SerializedCommand } from "./command/DirectorCommand";
+export type { CommandIssue, CommandResult, DirectorContext, SerializedCommand } from "./command/DirectorCommand";
+export type { CommandCapability, DirectorQuery, QueryResult } from "./command/CommandDispatcher";
 export { DisposeBag } from "./core/DisposeBag";
 export { SceneManager } from "./core/SceneManager";
 export { IDENTITY_TRANSFORM, SceneObject } from "./core/SceneObject";
@@ -71,6 +82,7 @@ export { CameraStore } from "./store/CameraStore";
 export { SceneStore } from "./store/SceneStore";
 export { SelectionStore } from "./store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "./store/UiStore";
+export { TimelineStore } from "./store/TimelineStore";
 export type { GizmoMode } from "./store/UiStore";
 export { ShortcutChord } from "./shortcuts/ShortcutChord";
 export { ShortcutRegistry } from "./shortcuts/ShortcutRegistry";
@@ -85,7 +97,17 @@ export {
 export type { ShortcutId } from "./shortcuts/builtinShortcuts";
 export type { GizmoAxis } from "./store/UiStore";
 export { TimeTransport } from "./time/TimeTransport";
+export { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "./timeline/TimelineDoc";
+export type { TimelineDocInit } from "./timeline/TimelineDoc";
+export { TimelineTrack, TIMELINE_TRACK_KIND } from "./timeline/TimelineTrack";
+export type { TimelineTrackInit, TimelineTrackKind } from "./timeline/TimelineTrack";
+export { TransformKeyframe, TIMELINE_EASING } from "./timeline/TransformKeyframe";
+export type { TimelineEasing, TransformKeyframeInit } from "./timeline/TransformKeyframe";
+export { TimelineSampler } from "./timeline/TimelineSampler";
+export { PlaybackCoordinator } from "./timeline/PlaybackCoordinator";
+export type { TimelineInvalidator } from "./timeline/PlaybackCoordinator";
 export { createDirectorDeskStores, DirectorDeskProvider, useDirectorDeskStores } from "./ui/DirectorDeskContext";
 export type { DirectorDeskStores } from "./ui/DirectorDeskContext";
 export { DirectorDesk } from "./ui/DirectorDesk";
 export type { DirectorDeskProps } from "./ui/DirectorDesk";
+export { TimelinePanel } from "./ui/TimelinePanel";

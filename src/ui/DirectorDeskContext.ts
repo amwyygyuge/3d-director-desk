@@ -16,6 +16,8 @@ import { CameraStore } from "../store/CameraStore";
 import { SceneStore } from "../store/SceneStore";
 import { SelectionStore } from "../store/SelectionStore";
 import { UiStore } from "../store/UiStore";
+import { TimelineStore } from "../store/TimelineStore";
+import { PlaybackCoordinator } from "../timeline/PlaybackCoordinator";
 import { TimeTransport } from "../time/TimeTransport";
 
 type DeskFinalizer = () => void;
@@ -60,6 +62,10 @@ export interface DirectorDeskStores {
     camera: CameraStore;
     selection: SelectionStore;
     clock: TimeTransport;
+    /** 可序列化 TimelineDoc 的每实例状态容器 */
+    timeline: TimelineStore;
+    /** TimelineDoc → Three 运行时的唯一回放写方 */
+    playback: PlaybackCoordinator;
     capture: CaptureService;
     /** 命令层唯一入口:UI/宿主/AI 的一切写操作经此分发 */
     dispatcher: CommandDispatcher;
@@ -96,12 +102,17 @@ export function createDirectorDeskStores(options?: {
         options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
     const clock = new TimeTransport();
     const binder = new AnimationBinder();
+    const scene = new SceneStore();
+    const timeline = new TimelineStore();
     binder.bindTransport(clock);
+    const playback = new PlaybackCoordinator(timeline, scene.manager, clock);
     return {
-        scene: new SceneStore(),
+        scene,
+        timeline,
+        playback,
         camera: new CameraStore(),
         selection: new SelectionStore(),
-        clock: clock,
+        clock,
         capture: new CaptureService(),
         dispatcher,
         assets: new AssetLibrary(),

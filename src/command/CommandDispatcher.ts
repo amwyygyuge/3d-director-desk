@@ -3,6 +3,24 @@ import type { CommandResult } from "./DirectorCommand";
 import type { CommandHistory } from "./CommandHistory";
 
 type CommandFactory = (payload: never) => DirectorCommand;
+type QueryFactory = (payload: never) => DirectorQuery;
+
+export interface CommandCapability {
+    readonly type: string;
+    readonly version: "1";
+    readonly kind: "command" | "query";
+    readonly permissions: readonly string[];
+    readonly appliesWhen: string;
+}
+
+export interface DirectorQuery<P = unknown> {
+    readonly type: string;
+    readonly payload: P;
+    validate(ctx: DirectorContext): readonly string[];
+    execute(ctx: DirectorContext): unknown;
+}
+
+export type QueryResult = CommandResult & { readonly value?: unknown };
 
 const COMMAND_ERROR = {
     MALFORMED_ENVELOPE: "malformed-command",
@@ -40,6 +58,8 @@ function readSerializedCommand(raw: unknown): SerializedCommand | null {
  */
 export class CommandDispatcher {
     private readonly factories = new Map<string, CommandFactory>();
+    private readonly queryFactories = new Map<string, QueryFactory>();
+    private readonly capabilities = new Map<string, CommandCapability>();
     private history: CommandHistory | null = null;
 
     /** 历史栈后绑定(工厂期 CommandHistory 先建、再回绑),undo 回放用 record:false 防自递归 */
@@ -47,11 +67,20 @@ export class CommandDispatcher {
         this.history = history;
     }
 
-    register(commandType: string, factory: CommandFactory): void {
-        if (this.factories.has(commandType)) {
+    register(commandType: string, factory: CommandFactory, capability?: CommandCapability): void {
+        if (this.factories.has(commandType) || this.queryFactories.has(commandType)) {
             throw new Error(`CommandDispatcher: duplicate command type "${commandType}"`);
         }
         this.factories.set(commandType, factory);
+        if (capability) this.capabilities.set(commandType, capability);
+    }
+
+    registerQuery(queryType: string, factory: QueryFactory, capability: CommandCapability): void {
+        if (this.factories.has(queryType) || this.queryFactories.has(queryType)) {
+            throw new Error(`CommandDispatcher: duplicate command type "${queryType}"`);
+        }
+        this.queryFactories.set(queryType, factory);
+        this.capabilities.set(queryType, capability);
     }
 
     dispatch(raw: unknown, ctx: DirectorContext, options?: { record?: boolean }): CommandResult {
@@ -65,8 +94,16 @@ export class CommandDispatcher {
         try {
             const command = factory(serialized.payload as never);
             try {
-                const issues = command.validate(ctx);
-                if (issues.length > 0) return { ok: false, error: COMMAND_ERROR.VALIDATION_FAILED, issues };
+                const details = command.validateIssues?.(ctx);
+                const issues = details ? details.map((issue) => issue.message) : command.validate(ctx);
+                if (issues.length > 0) {
+                    return {
+                        ok: false,
+                        error: COMMAND_ERROR.VALIDATION_FAILED,
+                        issues,
+                        ...(details ? { issueDetails: details } : {}),
+                    };
+                }
             } catch {
                 return { ok: false, error: COMMAND_ERROR.VALIDATION_FAILED, issues: [MALFORMED_PAYLOAD_ISSUE] };
             }
@@ -84,8 +121,28 @@ export class CommandDispatcher {
             return { ok: false, error: COMMAND_ERROR.CONSTRUCTION_FAILED, issues: [MALFORMED_PAYLOAD_ISSUE] };
         }
     }
+    query(raw: unknown, ctx: DirectorContext): QueryResult {
+        const serialized = readSerializedCommand(raw);
+        if (!serialized) {
+            return { ok: false, error: COMMAND_ERROR.MALFORMED_ENVELOPE, issues: [MALFORMED_ENVELOPE_ISSUE] };
+        }
+        const factory = this.queryFactories.get(serialized.type);
+        if (!factory) return { ok: false, error: `${COMMAND_ERROR.UNKNOWN}: ${serialized.type}` };
+        try {
+            const query = factory(serialized.payload as never);
+            const issues = query.validate(ctx);
+            if (issues.length > 0) return { ok: false, error: COMMAND_ERROR.VALIDATION_FAILED, issues };
+            return { ok: true, value: query.execute(ctx) };
+        } catch {
+            return { ok: false, error: COMMAND_ERROR.CONSTRUCTION_FAILED, issues: [MALFORMED_PAYLOAD_ISSUE] };
+        }
+    }
 
     listCommands(): readonly string[] {
         return [...this.factories.keys()];
+    }
+
+    listCapabilities(): readonly CommandCapability[] {
+        return [...this.capabilities.values()];
     }
 }
