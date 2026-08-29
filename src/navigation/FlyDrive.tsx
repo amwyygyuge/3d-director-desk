@@ -1,5 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 

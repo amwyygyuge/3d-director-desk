@@ -3,7 +3,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 

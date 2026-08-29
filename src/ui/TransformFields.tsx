@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { type KeyboardEvent, useState } from "react";
 
 import type { Transform, Vec3 } from "../core/SceneObject";
@@ -102,7 +102,6 @@ const TransformField = observer(function TransformField({ axisLabel, label, valu
 export const TransformFields = observer(function TransformFields({ objectId }: { objectId: string }) {
     const stores = useDirectorDeskStores();
     const { dispatcher, scene } = stores;
-    void scene.revision;
     const entity = scene.manager.getEntity(objectId);
     if (!entity) return null;
 
@@ -120,8 +119,7 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
                 key === "rotation"
                     ? replaceAxis(currentTransform.rotation, axis, storedValue)
                     : currentTransform.rotation,
-            scale:
-                key === "scale" ? replaceAxis(currentTransform.scale, axis, storedValue) : currentTransform.scale,
+            scale: key === "scale" ? replaceAxis(currentTransform.scale, axis, storedValue) : currentTransform.scale,
         };
         dispatcher.dispatch({ type: "object.move", payload: { id: objectId, transform } }, stores);
     };

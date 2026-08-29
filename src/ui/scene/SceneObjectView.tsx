@@ -1,12 +1,12 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useRef } from "react";
 import type { Group, Object3D } from "three";
 import { BoxHelper } from "three";
 
 import type { ComponentType } from "react";
 
-import type { SceneObject, SceneObjectKind, Transform } from "../../core/SceneObject";
+import type { SceneObject, SceneObjectKind } from "../../core/SceneObject";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 import { ModelContent, PrimitiveContent } from "./contents";
 
@@ -75,13 +75,7 @@ const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject 
  * - 渲染体内禁止写场景 store;点选写 SelectionStore(纯 UI 态,不走命令层);
  * - 选中高亮走 BoxHelper(全 kind 通用):仅在目标变换或内容挂载变化时更新包围盒。
  */
-export const SceneObjectView = observer(function SceneObjectView({
-    entity,
-    transform,
-}: {
-    entity: SceneObject;
-    transform: Transform;
-}) {
+export const SceneObjectView = observer(function SceneObjectView({ entity }: { entity: SceneObject }) {
     const { scene, selection } = useDirectorDeskStores();
     const scene3 = useThree((state) => state.scene);
     const invalidate = useThree((state) => state.invalidate);
@@ -102,6 +96,10 @@ export const SceneObjectView = observer(function SceneObjectView({
     );
 
     const selected = selection.isSelected(entity.id);
+    // 渲染期直读实体 transform(observer 细粒度订阅);applyTransform 整体替换,引用变化即触发
+    const transform = entity.transform;
+    // transform 引用替换 → 补帧(demand 模式立即成像)
+    useEffect(() => invalidate(), [invalidate, transform]);
     useEffect(() => {
         const object = groupRef.current;
         if (!selected || !object) return;

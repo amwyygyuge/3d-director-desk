@@ -1,3 +1,4 @@
+import { makeAutoObservable, observable, values } from "mobx";
 import type { Object3D } from "three";
 
 import { DisposeBag } from "./DisposeBag";
@@ -11,9 +12,13 @@ import { type SceneObject } from "./SceneObject";
  * - runtimes:three Object3D 运行时引用,普通 Map,永不进 observable。
  */
 export class SceneManager {
-    private readonly entities = new Map<string, SceneObject>();
+    private readonly entities = observable.map<string, SceneObject>();
     private readonly runtimes = new Map<string, Object3D>();
     private readonly disposeBag = new DisposeBag();
+    constructor() {
+        // entities 是响应式事实源(列表渲染追踪 key 集);runtimes/disposeBag 永不进 observable(性能铁律)
+        makeAutoObservable<SceneManager, "runtimes" | "disposeBag">(this, { runtimes: false, disposeBag: false });
+    }
 
     register(entity: SceneObject): void {
         if (this.entities.has(entity.id)) {
@@ -42,7 +47,7 @@ export class SceneManager {
     }
 
     list(): readonly SceneObject[] {
-        return [...this.entities.values()];
+        return values(this.entities);
     }
 
     unregister(id: string): void {

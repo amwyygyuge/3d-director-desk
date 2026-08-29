@@ -14,8 +14,8 @@ import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
-import { useEffect, useState } from "react";
+import { observer } from "mobx-react-lite";
+import { useState } from "react";
 import { Box3, Vector3 } from "three";
 
 import { SHOT_SIZE } from "../camera/CameraShot";
@@ -57,7 +57,6 @@ interface SaveCurrentViewControlProps {
 const ShotList = observer(function ShotList() {
     const stores = useDirectorDeskStores();
     const { camera, dispatcher, selection } = stores;
-    void camera.revision;
     const shots = camera.director.listShots();
 
     const removeShot = (id: string) => {
@@ -94,7 +93,12 @@ const ShotList = observer(function ShotList() {
                                     >
                                         <VideocamIcon fontSize="small" />
                                     </IconButton>
-                                    <IconButton size="small" edge="end" aria-label={`删除 ${id}`} onClick={() => removeShot(id)}>
+                                    <IconButton
+                                        size="small"
+                                        edge="end"
+                                        aria-label={`删除 ${id}`}
+                                        onClick={() => removeShot(id)}
+                                    >
                                         <DeleteIcon fontSize="small" />
                                     </IconButton>
                                 </Box>
@@ -169,7 +173,7 @@ const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSize
         const shot = shotSizePresets.resolve(size, [center.x, center.y, center.z], radius, azimuth);
         const id = camera.nextShotName();
         const result = dispatcher.dispatch({ type: "camera.set-shot", payload: { id, shot: shot.toJSON() } }, stores);
-        onNotice(result.ok ? `已生成 ${id}` : result.issues?.join(";") ?? result.error);
+        onNotice(result.ok ? `已生成 ${id}` : (result.issues?.join(";") ?? result.error));
     };
 
     return (
@@ -199,22 +203,11 @@ export const ShotPanel = observer(function ShotPanel() {
     const stores = useDirectorDeskStores();
     const { camera, dispatcher } = stores;
     const [notice, setNotice] = useState<string | null>(null);
-    const [savedDirectorPoseAvailable, setSavedDirectorPoseAvailable] = useState(
-        () => camera.lastDirectorPose !== null,
-    );
-    const canSaveCurrentView = savedDirectorPoseAvailable || camera.lastDirectorPose !== null;
-
-    useEffect(() => {
-        const frameId = window.requestAnimationFrame(() => {
-            setSavedDirectorPoseAvailable(camera.lastDirectorPose !== null);
-        });
-        return () => window.cancelAnimationFrame(frameId);
-    }, [camera, camera.activeShotId, camera.revision]);
+    const canSaveCurrentView = camera.lastDirectorPose !== null;
 
     const saveCurrentView = () => {
         const pose = camera.lastDirectorPose;
         if (!pose) {
-            setSavedDirectorPoseAvailable(false);
             return;
         }
         dispatcher.dispatch(

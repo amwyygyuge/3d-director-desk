@@ -12,12 +12,13 @@ export interface DirectorPose {
     fov: number;
 }
 
-/** 机位 Store:CameraDirector 管理器为引擎,本类只暴露可观察的激活态与版本号 */
+/** 机位 Store:CameraDirector 管理器为引擎,本类只暴露可观察的激活态与导演 pose */
 export class CameraStore {
     readonly director = new CameraDirector();
-    activeShotId: string | null = null;
-    /** 机位表版本号:shots Map 非 observable,锚定它驱动面板重渲(同 SceneStore 先例) */
-    revision = 0;
+    /** 激活机位 id:转发 director 的 observable 状态(单一事实源,不手动镜像) */
+    get activeShotId(): string | null {
+        return this.director.activeId;
+    }
     /** 最近一次导演视角 pose(轨道交互结束时由 ShotCameraRig 记录);低频写(轨道结束/飞行结束/初始),保留 observable 让面板可订阅 */
     lastDirectorPose: DirectorPose | null = null;
     /** 取景请求序号:rig 锚定它在非机位视角应用 directorPoseTarget */
@@ -57,23 +58,18 @@ export class CameraStore {
 
     addShot(id: string, shot: CameraShot): void {
         this.director.addShot(id, shot);
-        this.revision += 1;
     }
 
     removeShot(id: string): void {
         this.director.removeShot(id);
-        if (this.activeShotId === id) this.activeShotId = null;
-        this.revision += 1;
     }
 
     activateShot(id: string): void {
         this.director.activate(id);
-        this.activeShotId = id;
     }
 
     backToDirectorView(): void {
         this.director.deactivate();
-        this.activeShotId = null;
     }
 
     rememberDirectorPose(pose: DirectorPose): void {

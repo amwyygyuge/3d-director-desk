@@ -1,3 +1,4 @@
+import { reaction } from "mobx";
 import type { AnimationClip, Object3D } from "three";
 import { AnimationMixer } from "three";
 
@@ -16,13 +17,16 @@ import type { TimeTransport } from "../time/TimeTransport";
 export class AnimationBinder {
     private readonly mixers = new Map<string, AnimationMixer>();
     private transport: TimeTransport | null = null;
-    private unsubscribeTransport: (() => void) | null = null;
+    private transportDisposer: (() => void) | null = null;
 
     /** 接入统一时钟;重复调用先解旧订阅 */
     bindTransport(transport: TimeTransport): void {
-        this.unsubscribeTransport?.();
+        this.transportDisposer?.();
         this.transport = transport;
-        this.unsubscribeTransport = transport.subscribe((timeSeconds) => this.setTime(timeSeconds));
+        this.transportDisposer = reaction(
+            () => transport.time,
+            (timeSeconds) => this.setTime(timeSeconds),
+        );
     }
 
     mount(objectId: string, root: Object3D, clip: AnimationClip): void {
@@ -56,8 +60,8 @@ export class AnimationBinder {
     }
 
     dispose(): void {
-        this.unsubscribeTransport?.();
-        this.unsubscribeTransport = null;
+        this.transportDisposer?.();
+        this.transportDisposer = null;
         this.transport = null;
         for (const id of [...this.mixers.keys()]) this.unmount(id);
     }

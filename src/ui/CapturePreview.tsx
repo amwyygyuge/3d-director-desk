@@ -1,6 +1,6 @@
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 

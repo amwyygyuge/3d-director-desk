@@ -3,7 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState } from "react";
 
 import { formatFromUrl } from "../assets/ModelAsset";

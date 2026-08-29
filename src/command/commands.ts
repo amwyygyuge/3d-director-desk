@@ -1,3 +1,5 @@
+import { toJS } from "mobx";
+
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
 import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
@@ -114,7 +116,9 @@ export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const prev = ctx.scene.manager.getEntity(this.payload.id)?.transform;
-        return prev ? [{ type: MoveObjectCommand.TYPE, payload: { id: this.payload.id, transform: prev } }] : null;
+        return prev
+            ? [{ type: MoveObjectCommand.TYPE, payload: { id: this.payload.id, transform: toJS(prev) } }]
+            : null;
     }
 }
 
@@ -157,7 +161,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
                     sourceUrl: entity.sourceUrl ?? undefined,
                     format: entity.format ?? undefined,
                     name: entity.name,
-                    transform: entity.transform,
+                    transform: toJS(entity.transform),
                 },
             },
         ];

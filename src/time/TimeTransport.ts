@@ -7,18 +7,17 @@ import { makeAutoObservable } from "mobx";
  * - 播放期:渲染循环调 tick(delta),transport 推进 playhead;
  * - 拖动定位(阶段二时间轴 UI):seek(t) 直接设 playhead。
  *
- * 订阅者拿到的是绝对时间而非 delta——scrub 语义与播放语义统一,
- * 避免阶段二把时间轴嫁接到自由播放 API 上造成破坏性变更。
+ * playhead 是 observable(帧级写入),消费纪律:
+ * - 引擎/渲染循环:reaction/autorun(AnimationBinder、PlaybackDriver);
+ * - UI 显示:经 PlayheadDisplay 节流为低频值后 observer 直读;
+ * - 禁止 observer 组件渲染期直读 time(帧级写入会导致逐帧重渲)。
  */
 export class TimeTransport {
     private playheadSeconds = 0;
     private playing = false;
-    private readonly listeners = new Set<(timeSeconds: number) => void>();
 
     constructor() {
-        // playing 进 observable(UI 播放键、frameloop 切换订阅它);
-        // playheadSeconds 高频逐帧推进,排除 observable,订阅者走 subscribe 回调
-        makeAutoObservable(this, { playheadSeconds: false, listeners: false } as never);
+        makeAutoObservable(this);
     }
 
     get time(): number {
@@ -44,22 +43,11 @@ export class TimeTransport {
 
     seek(timeSeconds: number): void {
         this.playheadSeconds = Math.max(0, timeSeconds);
-        this.emit();
     }
 
     /** 渲染循环每帧调用;暂停时是空操作,零分配 */
     tick(deltaSeconds: number): void {
         if (!this.playing) return;
         this.playheadSeconds += deltaSeconds;
-        this.emit();
-    }
-
-    subscribe(listener: (timeSeconds: number) => void): () => void {
-        this.listeners.add(listener);
-        return () => this.listeners.delete(listener);
-    }
-
-    private emit(): void {
-        for (const listener of this.listeners) listener(this.playheadSeconds);
     }
 }

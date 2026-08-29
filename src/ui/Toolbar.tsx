@@ -18,7 +18,7 @@ import IconButton from "@mui/material/IconButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useRef, useState } from "react";
 
 import { GIZMO_MODE } from "../store/UiStore";

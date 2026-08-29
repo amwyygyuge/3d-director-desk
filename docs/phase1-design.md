@@ -71,7 +71,6 @@ classDiagram
         +on(type, handler)
         +post(message)
     }
-    class SceneStore { +revision: number }
     class CameraStore { +activeShotId: string | null }
     class SelectionStore { +selectedId: string | null }
 

@@ -1,5 +1,5 @@
 import { useThree } from "@react-three/fiber";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
@@ -21,7 +21,7 @@ function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPo
  * - 激活机位 → 暂存导演 pose(首次进入时),相机钉死机位参数,禁轨道;
  * - 回导演视角 → 精确还原暂存 pose,恢复轨道;
  * - 轨道交互结束(controls "end")记录导演 pose,供「当前视角存为机位」消费。
- * 激活后机位参数被改(FOV 滑杆等)会重跑 effect 重新钉参——锚 cameraStore.revision。
+ * 激活后机位参数被改(FOV 滑杆等)会重跑 effect 重新钉参——activeShot computed 锚定 shots 表该 key,替换即触发。
  */
 export const ShotCameraRig = observer(function ShotCameraRig() {
     const { camera: cameraStore } = useDirectorDeskStores();
@@ -31,7 +31,6 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
     const savedDirectorPose = useRef<DirectorPose | null>(null);
     const consumedDirectorPoseNonce = useRef<number | null>(null);
 
-    void cameraStore.revision;
     const activeShotId = cameraStore.activeShotId;
     const directorPoseNonce = cameraStore.directorPoseNonce;
     const directorPoseTarget = cameraStore.directorPoseTarget;

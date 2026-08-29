@@ -29,7 +29,7 @@ export class CommandHistory {
     private readonly redoStack: HistoryEntry[] = [];
 
     constructor() {
-        makeAutoObservable(this, { dispatcher: false } as never);
+        makeAutoObservable<CommandHistory, "dispatcher">(this, { dispatcher: false });
     }
 
     /** 工厂期注入 dispatcher;undo/redo 回放经此,但不再入栈(record:false) */
@@ -51,11 +51,23 @@ export class CommandHistory {
     }
 
     undo(ctx: DirectorContext): CommandResult {
-        return this.replay(this.undoStack, this.redoStack, ctx, (entry) => entry.undo, (entry) => entry.redo);
+        return this.replay(
+            this.undoStack,
+            this.redoStack,
+            ctx,
+            (entry) => entry.undo,
+            (entry) => entry.redo,
+        );
     }
 
     redo(ctx: DirectorContext): CommandResult {
-        return this.replay(this.redoStack, this.undoStack, ctx, (entry) => entry.redo, (entry) => entry.undo);
+        return this.replay(
+            this.redoStack,
+            this.undoStack,
+            ctx,
+            (entry) => entry.redo,
+            (entry) => entry.undo,
+        );
     }
 
     private replay(

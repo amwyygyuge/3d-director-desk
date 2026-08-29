@@ -19,6 +19,7 @@
 8. **命令层收口(AI 地基)**:一切改变场景/机位状态的写操作——UI 交互、HostBridge 消息、未来 AI 工具调用——必须收敛为 `DirectorCommand` 经 `CommandDispatcher` 分发;**禁止组件/适配器直写 store**。命令 payload 必须纯数据可序列化。
 9. **禁止裸数值入口**:来自 AI/宿主的坐标、fov 等数值必须经命令 `validate()` 的有限性/范围检查(空间幻觉围栏),LLM 输出不直接触达领域类。
 10. **许可纪律**:可参考 `xiaozangao/3d-director-desk`(MIT)的思路,禁止整段搬运代码;awplanet(非商用)/ CozyClay(AGPL)/ shotblock(无许可)的代码一行都不许进本仓。
+11. **状态管理纪律(MobX 单轨)**:一切共享/领域状态必须是 `makeAutoObservable` 类实体;React 组件一律 `observer`(具名 function,来自 `mobx-react-lite`)渲染期直读。**禁止手搓响应式**:版本号计数器与 `void x.revision` 锚定、自建 `listeners`/`subscribe`/`emit` pub/sub、`useState` 镜像 observable、`useEffect` 把 observable 同步进本地 state、渲染外快照缓存集合。`createContext` 唯一合法用途是 `DirectorDeskContext` 每实例注入(value 必须稳定引用,禁放变化状态);禁全局单例,禁 mobx-react 的 `Provider`/`inject`。`useState` 白名单仅限局部瞬时 UI 态(输入草稿、开关、Snackbar)。集合消费统一 `values`/`entries`/`get`,禁手搓展开。惰性副作用统一 `onBecomeObserved`/`onBecomeUnobserved`,disposer 进 dispose 链;观察者常驻的 observable 禁挂 lazy。渲染纪律:传引用晚解引用、列表渲染独立组件、禁 index 作 key、`observer` 已含 `memo` 勿重复包裹、非 observer 第三方组件经 function props 或 `<Observer>` 桥接。高频(帧级)observable 禁渲染期直读,经 `reaction`/`autorun`/`useFrame` 消费;UI 显示值用 lazy 低频派生(见 `ui/PlayheadDisplay`)。细则与正误对照见 `docs/state-management.md`。
 
 ## 兼容矩阵(不可单方面升级)
 

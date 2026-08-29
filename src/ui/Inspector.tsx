@@ -13,19 +13,16 @@ import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { observer } from "mobx-react-lite";
+import { type KeyboardEvent, useRef, useState } from "react";
 
 import type { CameraShot } from "../camera/CameraShot";
 import { FOV_MAX, FOV_MIN } from "../command/commands";
 import type { Vec3 } from "../core/SceneObject";
 import type { CommandResult } from "../command/DirectorCommand";
-import type { TimeTransport } from "../time/TimeTransport";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
+import { PlayheadDisplay } from "./PlayheadDisplay";
 import { TransformFields } from "./TransformFields";
-
-const PLAYHEAD_DISPLAY_RATE_HZ = 12;
-const PLAYHEAD_DISPLAY_INTERVAL_MS = 1000 / PLAYHEAD_DISPLAY_RATE_HZ;
 
 const DISPLAY_DECIMAL_PLACES = 4;
 const AXIS_X = 0;
@@ -95,7 +92,6 @@ function finiteNumber(value: string): number | null {
     const parsed = Number(value);
     return value.trim() !== "" && Number.isFinite(parsed) ? parsed : null;
 }
-
 
 function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     switch (axis) {
@@ -237,7 +233,6 @@ const ShotFovField = observer(function ShotFovField({ fov, onCommit }: ShotFovFi
 const ShotFields = observer(function ShotFields({ shotId, report }: ShotFieldsProps) {
     const stores = useDirectorDeskStores();
     const { camera, dispatcher } = stores;
-    void camera.revision;
     const shot = camera.director.getShot(shotId);
     if (!shot) return null;
 
@@ -295,7 +290,10 @@ const ShotInspector = observer(function ShotInspector({ shotId, report }: ShotIn
 
     const toggleShot = () => {
         report(
-            dispatcher.dispatch({ type: active ? "camera.deactivate" : "camera.activate", payload: active ? {} : { id: shotId } }, stores),
+            dispatcher.dispatch(
+                { type: active ? "camera.deactivate" : "camera.activate", payload: active ? {} : { id: shotId } },
+                stores,
+            ),
         );
     };
 
@@ -354,39 +352,6 @@ interface PlaybackControlsProps {
     report: ReportCommandResult;
 }
 
-function useThrottledPlayhead(clock: TimeTransport): number {
-    const [playhead, setPlayhead] = useState(clock.time);
-    const latestPlayhead = useRef(clock.time);
-    const updateTimer = useRef<number | null>(null);
-    const lastUpdateAt = useRef(0);
-
-    useEffect(() => {
-        const flush = () => {
-            updateTimer.current = null;
-            lastUpdateAt.current = performance.now();
-            setPlayhead(latestPlayhead.current);
-        };
-        const queueUpdate = (time: number) => {
-            latestPlayhead.current = time;
-            if (updateTimer.current !== null) return;
-            const elapsed = performance.now() - lastUpdateAt.current;
-            const delay = Math.max(0, PLAYHEAD_DISPLAY_INTERVAL_MS - elapsed);
-            updateTimer.current = window.setTimeout(flush, delay);
-        };
-        const unsubscribe = clock.subscribe(queueUpdate);
-        queueUpdate(clock.time);
-        return () => {
-            unsubscribe();
-            if (updateTimer.current !== null) {
-                window.clearTimeout(updateTimer.current);
-                updateTimer.current = null;
-            }
-        };
-    }, [clock]);
-
-    return playhead;
-}
-
 const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, report }: ActionLibraryProps) {
     const stores = useDirectorDeskStores();
     const { animations, dispatcher } = stores;
@@ -440,7 +405,8 @@ const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, repo
 const PlaybackControls = observer(function PlaybackControls({ actionId, report }: PlaybackControlsProps) {
     const stores = useDirectorDeskStores();
     const { animations, clock, dispatcher } = stores;
-    const playhead = useThrottledPlayhead(clock);
+    const [playheadDisplay] = useState(() => new PlayheadDisplay(clock));
+    const playhead = playheadDisplay.value;
     const mountedAction = actionId ? animations.actions.find((action) => action.id === actionId) : undefined;
     const duration = mountedAction?.duration ?? 0;
 
@@ -505,9 +471,6 @@ export const Inspector = observer(function Inspector() {
     const { camera, scene, selection } = stores;
     const [notice, setNotice] = useState<string | null>(null);
 
-    // 实体字段(actionId 等)与机位表均为非 observable 数据,以版本号驱动面板重渲。
-    void scene.revision;
-    void camera.revision;
     const primaryId = selection.primaryId;
     const entity = primaryId ? scene.manager.getEntity(primaryId) : undefined;
     const shot = primaryId && !entity ? camera.director.getShot(primaryId) : undefined;

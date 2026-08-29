@@ -1,5 +1,5 @@
 import { useThree } from "@react-three/fiber";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Group } from "three";
 import { BufferGeometry, Float32BufferAttribute, Quaternion, Vector3 } from "three";
@@ -48,14 +48,30 @@ function frameVertices(halfWidth: number, halfHeight: number, z: number): readon
     const bottomRight = [halfWidth, -halfHeight, z] as const;
     const bottomLeft = [-halfWidth, -halfHeight, z] as const;
     return [
-        0, 0, 0, ...topLeft,
-        0, 0, 0, ...topRight,
-        0, 0, 0, ...bottomRight,
-        0, 0, 0, ...bottomLeft,
-        ...topLeft, ...topRight,
-        ...topRight, ...bottomRight,
-        ...bottomRight, ...bottomLeft,
-        ...bottomLeft, ...topLeft,
+        0,
+        0,
+        0,
+        ...topLeft,
+        0,
+        0,
+        0,
+        ...topRight,
+        0,
+        0,
+        0,
+        ...bottomRight,
+        0,
+        0,
+        0,
+        ...bottomLeft,
+        ...topLeft,
+        ...topRight,
+        ...topRight,
+        ...bottomRight,
+        ...bottomRight,
+        ...bottomLeft,
+        ...bottomLeft,
+        ...topLeft,
     ];
 }
 
@@ -68,7 +84,10 @@ function frameDims(shot: CameraShot, length: number): { halfWidth: number; halfH
 function createNearFrameGeometry(shot: CameraShot): BufferGeometry {
     const { halfWidth, halfHeight } = frameDims(shot, NEAR_FRAME_LENGTH);
     const geometry = new BufferGeometry();
-    geometry.setAttribute(POSITION_ATTRIBUTE, new Float32BufferAttribute(frameVertices(halfWidth, halfHeight, -NEAR_FRAME_LENGTH), 3));
+    geometry.setAttribute(
+        POSITION_ATTRIBUTE,
+        new Float32BufferAttribute(frameVertices(halfWidth, halfHeight, -NEAR_FRAME_LENGTH), 3),
+    );
     return geometry;
 }
 
@@ -104,7 +123,9 @@ export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: strin
     const keepBodyScreenSize = useCallback(() => {
         const body = bodyRef.current;
         if (!body) return;
-        body.scale.setScalar(mainCamera.position.distanceTo(body.getWorldPosition(TMP_BODY_POS)) * BODY_SCREEN_FRACTION);
+        body.scale.setScalar(
+            mainCamera.position.distanceTo(body.getWorldPosition(TMP_BODY_POS)) * BODY_SCREEN_FRACTION,
+        );
     }, [mainCamera]);
 
     useEffect(() => {
@@ -167,7 +188,6 @@ export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: strin
 /** 场景内机位实体:可点选、双击切入，并以相机模型和视锥呈现机位构图。 */
 export const ShotMarkers = observer(function ShotMarkers() {
     const { camera: cameraStore } = useDirectorDeskStores();
-    void cameraStore.revision;
     const activeShotId = cameraStore.activeShotId;
     const shots = cameraStore.director.listShots();
 

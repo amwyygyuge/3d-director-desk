@@ -10,7 +10,7 @@ export default meta;
 const CHECKLIST = [
     "点选几何体 → 黄色包围盒 + gizmo;点空白取消",
     "工具条三态按钮切移动/旋转/缩放(W/E/R 已让位给 WASD 飞行,模式切换走工具条)",
-    "拖拽中 MobX 面板看 revision 不变,松手一次性 +1 且位置不回弹",
+    "拖拽中 Inspector 数值不刷新(零 store 写入),松手一次性提交且位置不回弹",
     "选中后 X/Y/Z 锁定单轴,再按同轴恢复三轴",
     "cmd/ctrl 点选多选(双高亮、gizmo 挂主选);Delete 一次删净;Esc 取消选中",
 ] as const;

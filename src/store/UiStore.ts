@@ -38,7 +38,7 @@ export class UiStore {
     private disposed = false;
 
     constructor() {
-        makeAutoObservable(this, { lastGizmoInteractionAt: false, disposed: false } as never);
+        makeAutoObservable<UiStore, "disposed">(this, { lastGizmoInteractionAt: false, disposed: false });
     }
 
     setGizmoMode(mode: GizmoMode): void {

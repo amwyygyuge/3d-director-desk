@@ -11,7 +11,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
 
 import { RemoveObjectCommand } from "../command/commands";
@@ -30,7 +30,6 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
     const stores = useDirectorDeskStores();
     const { dispatcher, scene, selection } = stores;
 
-    void scene.revision;
     const entities = scene.manager.list();
 
     return (

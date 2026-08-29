@@ -8,16 +8,16 @@ Embeddable React director desk for placing game models, mounting actions, compos
 - pnpm and the package peers listed below.
 - A sized parent element: `DirectorDesk` fills its container.
 
-| Peer | Supported range |
-| --- | --- |
-| `react`, `react-dom` | `^18.2.0` |
-| `three` | `>=0.184.0` |
-| `@react-three/fiber` | `^8.18.0` |
-| `@react-three/drei` | `^9.122.0` |
-| `mobx` | `^7.0.0` |
-| `mobx-react` | `^10.0.0` |
-| `@mui/material`, `@mui/icons-material` | `^9.3.1` |
-| `@emotion/react`, `@emotion/styled` | `^11.14.0` |
+| Peer                                   | Supported range |
+| -------------------------------------- | --------------- |
+| `react`, `react-dom`                   | `^18.2.0`       |
+| `three`                                | `>=0.184.0`     |
+| `@react-three/fiber`                   | `^8.18.0`       |
+| `@react-three/drei`                    | `^9.122.0`      |
+| `mobx`                                 | `^7.0.0`        |
+| `mobx-react-lite`                      | `^5.0.0`        |
+| `@mui/material`, `@mui/icons-material` | `^9.3.1`        |
+| `@emotion/react`, `@emotion/styled`    | `^11.14.0`      |
 
 ## Install and render
 
@@ -51,11 +51,7 @@ export function DirectorNode(): JSX.Element {
 Use a specific host window, a concrete URL origin, and a per-desk session. `"*"` is rejected as a target origin.
 
 ```tsx
-import {
-    DirectorDesk,
-    HostBridgeConfiguration,
-    HostBridgeSession,
-} from "@dm/3d-director-desk";
+import { DirectorDesk, HostBridgeConfiguration, HostBridgeSession } from "@dm/3d-director-desk";
 
 const hostBridge = new HostBridgeConfiguration(
     window.parent,

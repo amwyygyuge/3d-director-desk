@@ -1,3 +1,5 @@
+import { makeAutoObservable } from "mobx";
+
 import type { ModelFormat } from "../assets/ModelAsset";
 
 export type Vec3 = readonly [number, number, number];
@@ -61,10 +63,11 @@ export class SceneObject {
         this.format = init.format ?? null;
         this.name = init.name ?? `${KIND_LABEL[init.kind]} ${init.id.slice(-4)}`;
         this.currentTransform = copyTransform(init.transform ?? IDENTITY_TRANSFORM);
+        makeAutoObservable(this);
     }
 
     get transform(): Transform {
-        return copyTransform(this.currentTransform);
+        return this.currentTransform;
     }
 
     applyTransform(next: Transform): void {

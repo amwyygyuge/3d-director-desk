@@ -10,14 +10,14 @@
 
 ## 阶段一预埋兑现核对
 
-| 预埋 | 兑现点 |
-| --- | --- |
-| `TimeTransport` 统一时钟(tick/seek/subscribe) | 时间轴唯一 playhead;音频/运镜/走位共吃 |
-| `AnimationBinder.setTime` | 直接成为采样器渲染路径的一部分 |
-| `CameraShot` 静态值对象 | 运镜引入兄弟类型 `CameraMotionPath`,不动存量 API |
-| `SceneObjectKind` 可扩展 | 加 `"light"` 成员,`KIND_CONTENT` 查表天然兼容 |
-| 可序列化纪律 | `TimelineDoc`/`CameraMotionPath`/姿态快照全纯数据,阶段四文档模型直接收编 |
-| 命令层 + 逆命令撤销 | 编辑类命令(keyframe/light/pose)自动获得撤销;**回放不产生命令**(见下) |
+| 预埋                                          | 兑现点                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `TimeTransport` 统一时钟(tick/seek/subscribe) | 时间轴唯一 playhead;音频/运镜/走位共吃                                   |
+| `AnimationBinder.setTime`                     | 直接成为采样器渲染路径的一部分                                           |
+| `CameraShot` 静态值对象                       | 运镜引入兄弟类型 `CameraMotionPath`,不动存量 API                         |
+| `SceneObjectKind` 可扩展                      | 加 `"light"` 成员,`KIND_CONTENT` 查表天然兼容                            |
+| 可序列化纪律                                  | `TimelineDoc`/`CameraMotionPath`/姿态快照全纯数据,阶段四文档模型直接收编 |
+| 命令层 + 逆命令撤销                           | 编辑类命令(keyframe/light/pose)自动获得撤销;**回放不产生命令**(见下)     |
 
 ## 关键架构决策:回放不污染数据(读路径与写路径分离)
 
@@ -56,7 +56,6 @@ classDiagram
         +id, time, value, easing
     }
     class TimelineStore {
-        +revision
         +addKey / moveKey / removeKey / setDuration
     }
     class TimelineSampler {
@@ -90,13 +89,13 @@ classDiagram
 
 ## 模块 × 任务拆分(阶段二)
 
-| # | 任务 | 承载类/模块 | 验收要点 |
-| --- | --- | --- | --- |
-| 1 | 时间轴编排 | `TimelineDoc`/`TimelineStore`/`TimelineSampler` + 时间轴面板 | 关键帧 CRUD、拖动定位、播放回放不污染实体、撤销可用 |
-| 2 | 运镜与轨迹 | `CameraMotionPath` + 轨迹预览 + 运镜采样 | 机位关键帧连成轨迹;播放时相机沿轨迹推拉摇移;轨迹线截图可摘除 |
-| 3 | 灯光氛围 | `kind="light"` 实体 + 灯光面板 | 平行光/点光/聚光 CRUD;参数入命令层;灯光标记不入截图 |
-| 4 | 多机位一致性 | `ContinuityChecker` + 诊断面板 | 180° 轴线越轴检测;跨镜头对象位移突变提示;结构化 issues |
-| 5 | 姿态与动作精修 | `PoseSnapshot` + 骨骼级 gizmo | 选中骨骼微调旋转;姿态快照可存取;与动作播放可叠加(加法层) |
+| #   | 任务           | 承载类/模块                                                  | 验收要点                                                     |
+| --- | -------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 1   | 时间轴编排     | `TimelineDoc`/`TimelineStore`/`TimelineSampler` + 时间轴面板 | 关键帧 CRUD、拖动定位、播放回放不污染实体、撤销可用          |
+| 2   | 运镜与轨迹     | `CameraMotionPath` + 轨迹预览 + 运镜采样                     | 机位关键帧连成轨迹;播放时相机沿轨迹推拉摇移;轨迹线截图可摘除 |
+| 3   | 灯光氛围       | `kind="light"` 实体 + 灯光面板                               | 平行光/点光/聚光 CRUD;参数入命令层;灯光标记不入截图          |
+| 4   | 多机位一致性   | `ContinuityChecker` + 诊断面板                               | 180° 轴线越轴检测;跨镜头对象位移突变提示;结构化 issues       |
+| 5   | 姿态与动作精修 | `PoseSnapshot` + 骨骼级 gizmo                                | 选中骨骼微调旋转;姿态快照可存取;与动作播放可叠加(加法层)     |
 
 ## 依赖规则
 

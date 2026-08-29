@@ -1,6 +1,6 @@
 import { TransformControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
 
@@ -24,7 +24,7 @@ export const TransformGizmoController = observer(function TransformGizmoControll
 
     const primaryId = selection.primaryId;
     const markerTarget = primaryId ? camera.markerRuntimes.get(primaryId) : undefined;
-    const target = primaryId ? scene.manager.getRuntime(primaryId) ?? markerTarget : undefined;
+    const target = primaryId ? (scene.manager.getRuntime(primaryId) ?? markerTarget) : undefined;
 
     // gizmo 整体打 helper 标记:截图时摘除(07 帧内取样)
     useEffect(() => {

@@ -1,5 +1,5 @@
 import { useThree } from "@react-three/fiber";
-import { observer } from "mobx-react";
+import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera, Spherical, Vector3 } from "three";
 
@@ -79,7 +79,11 @@ export const ShotNavigation = observer(function ShotNavigation() {
 
         /** 原地转向:绕相机位置旋转移轴到 controls.target */
         const turn = (deltaX: number, deltaY: number) => {
-            TMP_OFFSET.set(controls.target.x - camera.position.x, controls.target.y - camera.position.y, controls.target.z - camera.position.z);
+            TMP_OFFSET.set(
+                controls.target.x - camera.position.x,
+                controls.target.y - camera.position.y,
+                controls.target.z - camera.position.z,
+            );
             TMP_SPHERICAL.setFromVector3(TMP_OFFSET);
             TMP_SPHERICAL.theta -= deltaX * TURN_SPEED_RAD_PER_PX;
             TMP_SPHERICAL.phi = Math.min(
@@ -87,7 +91,11 @@ export const ShotNavigation = observer(function ShotNavigation() {
                 Math.max(Math.PI / 2 - PITCH_LIMIT_RAD, TMP_SPHERICAL.phi - deltaY * TURN_SPEED_RAD_PER_PX),
             );
             TMP_OFFSET.setFromSpherical(TMP_SPHERICAL);
-            controls.target.set(camera.position.x + TMP_OFFSET.x, camera.position.y + TMP_OFFSET.y, camera.position.z + TMP_OFFSET.z);
+            controls.target.set(
+                camera.position.x + TMP_OFFSET.x,
+                camera.position.y + TMP_OFFSET.y,
+                camera.position.z + TMP_OFFSET.z,
+            );
             camera.lookAt(controls.target.x, controls.target.y, controls.target.z);
             invalidate();
             scheduleCommit();

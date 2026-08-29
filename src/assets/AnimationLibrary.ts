@@ -13,7 +13,7 @@ export class AnimationLibrary {
     private readonly clips = new Map<string, AnimationClip>();
 
     constructor() {
-        makeAutoObservable(this, { clips: false } as never);
+        makeAutoObservable<AnimationLibrary, "clips">(this, { clips: false });
     }
 
     register(init: { name: string; url: string; clip: AnimationClip }): { action: ActionAsset; duplicate: boolean } {
