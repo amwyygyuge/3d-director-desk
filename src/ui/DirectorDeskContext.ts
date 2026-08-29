@@ -92,7 +92,8 @@ export function createDirectorDeskStores(options?: {
     const history = new CommandHistory();
     history.bindDispatcher(dispatcher);
     dispatcher.attachHistory(history);
-    const host = options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
+    const host =
+        options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
     const clock = new TimeTransport();
     const binder = new AnimationBinder();
     binder.bindTransport(clock);

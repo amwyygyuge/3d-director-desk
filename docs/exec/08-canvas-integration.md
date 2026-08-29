@@ -25,11 +25,11 @@ const hostBridge = new HostBridgeConfiguration(
 
 `HostBridgeConfiguration` 的构造参数为：
 
-| 参数 | 类型 | 约束 |
-| --- | --- | --- |
-| `targetWindow` | `Window` | 唯一允许收发消息的宿主窗口 |
-| `targetOrigin` | `string` | 具体 URL origin；拒绝 `"*"` |
-| `session` | `HostBridgeSession` | `new HostBridgeSession(id: string)` 创建的当前导演台会话 |
+| 参数           | 类型                | 约束                                                     |
+| -------------- | ------------------- | -------------------------------------------------------- |
+| `targetWindow` | `Window`            | 唯一允许收发消息的宿主窗口                               |
+| `targetOrigin` | `string`            | 具体 URL origin；拒绝 `"*"`                              |
+| `session`      | `HostBridgeSession` | `new HostBridgeSession(id: string)` 创建的当前导演台会话 |
 
 `HostAdapter` 是直嵌宿主的唯一回调契约：
 
@@ -47,24 +47,36 @@ const hostBridge = new HostBridgeConfiguration(
 {
     type: "director-desk:import-model";
     sessionId: string;
-    payload: { url: string; name: string };
+    payload: {
+        url: string;
+        name: string;
+    }
 }
 
 // 导演台 → 宿主
 {
     type: "director-desk:ready";
     sessionId: string;
-    payload: { protocolVersion: number };
+    payload: {
+        protocolVersion: number;
+    }
 }
 {
     type: "director-desk:capture-produced";
     sessionId: string;
-    payload: { blobUrl: string; width: number; height: number };
+    payload: {
+        blobUrl: string;
+        width: number;
+        height: number;
+    }
 }
 {
     type: "director-desk:command-failed";
     sessionId: string;
-    payload: { code: "invalid-message"; message: string };
+    payload: {
+        code: "invalid-message";
+        message: string;
+    }
 }
 ```
 

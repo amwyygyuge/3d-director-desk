@@ -1,8 +1,4 @@
-import {
-    HOST_BRIDGE_FAILURE_CODE,
-    HOST_OUTBOUND_MESSAGE_TYPE,
-    isDirectorDeskMessage,
-} from "./protocol";
+import { HOST_BRIDGE_FAILURE_CODE, HOST_OUTBOUND_MESSAGE_TYPE, isDirectorDeskMessage } from "./protocol";
 import type { HostInboundMessage, HostOutboundMessage, HostOutboundRequest } from "./protocol";
 
 /** 每个导演台实例的不可变宿主会话标识。 */
@@ -71,7 +67,12 @@ export class HostBridge {
     }
 
     private handleMessage(event: MessageEvent): void {
-        if (this.disposed || event.origin !== this.configuration.targetOrigin || event.source !== this.configuration.targetWindow) return;
+        if (
+            this.disposed ||
+            event.origin !== this.configuration.targetOrigin ||
+            event.source !== this.configuration.targetWindow
+        )
+            return;
         if (!this.hasMatchingSession(event.data)) return;
         if (!isDirectorDeskMessage(event.data)) {
             this.postFailure(HOST_BRIDGE_FAILURE_CODE.INVALID_MESSAGE, "宿主消息格式无效");
@@ -87,7 +88,10 @@ export class HostBridge {
         return typeof data.sessionId === "string" && this.configuration.session.matches(data.sessionId);
     }
 
-    private postFailure(code: (typeof HOST_BRIDGE_FAILURE_CODE)[keyof typeof HOST_BRIDGE_FAILURE_CODE], message: string): void {
+    private postFailure(
+        code: (typeof HOST_BRIDGE_FAILURE_CODE)[keyof typeof HOST_BRIDGE_FAILURE_CODE],
+        message: string,
+    ): void {
         this.post({
             type: HOST_OUTBOUND_MESSAGE_TYPE.COMMAND_FAILED,
             payload: { code, message },

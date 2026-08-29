@@ -10,5 +10,12 @@
         "stripInternal": true
     },
     "include": ["src"],
-    "exclude": ["src/**/*.stories.ts", "src/**/*.stories.tsx", "src/**/stories/**", "playground", ".storybook", "public/test-assets"]
+    "exclude": [
+        "src/**/*.stories.ts",
+        "src/**/*.stories.tsx",
+        "src/**/stories/**",
+        "playground",
+        ".storybook",
+        "public/test-assets"
+    ]
 }

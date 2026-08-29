@@ -74,7 +74,10 @@ export class CaptureService {
 
         gl.render(scene, camera);
         const { promise, resolve } = Promise.withResolvers<Blob | null>();
-        gl.domElement.toBlob((blob) => resolve(this.isCurrentCapture(handles, generation) ? blob : null), PNG_MIME_TYPE);
+        gl.domElement.toBlob(
+            (blob) => resolve(this.isCurrentCapture(handles, generation) ? blob : null),
+            PNG_MIME_TYPE,
+        );
 
         for (const object of hidden) object.visible = true;
         if (hidden.length > 0) gl.render(scene, camera);

@@ -19,7 +19,6 @@ function colorOf(id: string): string {
 const MODEL_TARGET_MAX_DIM = 2;
 const LOADING_START_PROGRESS = 0;
 
-
 const TMP_BOX = new Box3();
 const TMP_SIZE = new Vector3();
 const TMP_CENTER = new Vector3();

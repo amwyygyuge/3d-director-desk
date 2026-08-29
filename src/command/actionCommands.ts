@@ -88,7 +88,12 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
         const previousActionId = ctx.scene.manager.getEntity(this.payload.objectId)?.actionId;
         return previousActionId
-            ? [{ type: MountActionCommand.TYPE, payload: { objectId: this.payload.objectId, actionId: previousActionId } }]
+            ? [
+                  {
+                      type: MountActionCommand.TYPE,
+                      payload: { objectId: this.payload.objectId, actionId: previousActionId },
+                  },
+              ]
             : [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
     }
 }

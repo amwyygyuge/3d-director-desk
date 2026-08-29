@@ -17,7 +17,12 @@ export {
     PROTOCOL_VERSION,
     isDirectorDeskMessage,
 } from "./bridge/protocol";
-export type { HostBridgeFailureCode, HostInboundMessage, HostOutboundMessage, HostOutboundRequest } from "./bridge/protocol";
+export type {
+    HostBridgeFailureCode,
+    HostInboundMessage,
+    HostOutboundMessage,
+    HostOutboundRequest,
+} from "./bridge/protocol";
 export { CameraDirector } from "./camera/CameraDirector";
 export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
