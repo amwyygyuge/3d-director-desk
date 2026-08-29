@@ -23,8 +23,9 @@ export const TransformGizmoController = observer(function TransformGizmoControll
     const controlsRef = useRef<ComponentRef<typeof TransformControls> | null>(null);
 
     const primaryId = selection.primaryId;
-    const markerTarget = primaryId ? camera.markerRuntimes.get(primaryId) : undefined;
-    const target = primaryId ? (scene.manager.getRuntime(primaryId) ?? markerTarget) : undefined;
+    const editingSelectedPose = primaryId !== null && ui.posePickingObjectId === primaryId;
+    const markerTarget = !editingSelectedPose && primaryId ? camera.markerRuntimes.get(primaryId) : undefined;
+    const target = !editingSelectedPose && primaryId ? (scene.manager.getRuntime(primaryId) ?? markerTarget) : undefined;
 
     // gizmo 整体打 helper 标记:截图时摘除(07 帧内取样)
     useEffect(() => {

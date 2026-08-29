@@ -1,5 +1,5 @@
 import { TimelineTrack } from "./TimelineTrack";
-import type { TimelineTrackInit } from "./TimelineTrack";
+import type { TimelineTrackInit, TimelineTrackKind } from "./TimelineTrack";
 
 export const DEFAULT_TIMELINE_DURATION_SECONDS = 10;
 
@@ -26,8 +26,8 @@ export class TimelineDoc {
         return this.tracks.find((track) => track.id === trackId);
     }
 
-    trackForTarget(targetId: string): TimelineTrack | undefined {
-        return this.tracks.find((track) => track.targetId === targetId);
+    trackForTarget(targetId: string, kind?: TimelineTrackKind): TimelineTrack | undefined {
+        return this.tracks.find((track) => track.targetId === targetId && (kind === undefined || track.kind === kind));
     }
 
     withTrack(track: TimelineTrack): TimelineDoc {

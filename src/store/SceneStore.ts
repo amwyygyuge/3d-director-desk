@@ -3,6 +3,7 @@ import { makeAutoObservable } from "mobx";
 import { SceneManager } from "../core/SceneManager";
 import { SceneObject } from "../core/SceneObject";
 import type { LightParams } from "../core/LightParams";
+import type { PoseSnapshot } from "../pose/PoseSnapshot";
 import type { SceneObjectInit, Transform } from "../core/SceneObject";
 
 /**
@@ -45,6 +46,18 @@ export class SceneStore {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
         entity.applyAction(actionId);
+    }
+
+    setObjectPose(id: string, pose: PoseSnapshot | null): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyPose(pose);
+    }
+
+    setObjectPoseWeight(id: string, weight: number): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyPoseWeight(weight);
     }
 
     get objectCount(): number {

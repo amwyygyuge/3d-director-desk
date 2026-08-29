@@ -11,6 +11,13 @@ export interface RenderHandles {
     invalidate: () => void;
 }
 
+/** Runtime-only observation of the most recent capture helper hide/restore transaction. */
+export interface CaptureHelperLifecycle {
+    readonly hiddenHelperCount: number;
+    readonly hiddenPoseHelperCount: number;
+    readonly helpersRestored: boolean;
+}
+
 /**
  * 预演画面输出服务(应用服务):截图与(后置)录屏。
  *
@@ -23,6 +30,7 @@ export interface RenderHandles {
  */
 export class CaptureService {
     private handles: RenderHandles | null = null;
+    private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
     private generation = 0;
 
     attach(handles: RenderHandles): void {
@@ -37,6 +45,10 @@ export class CaptureService {
 
     get isAttached(): boolean {
         return this.handles !== null;
+    }
+
+    get lastHelperLifecycle(): CaptureHelperLifecycle | null {
+        return this.currentHelperLifecycle;
     }
 
     /** 画布物理像素尺寸(协议 payload 用) */
@@ -63,11 +75,13 @@ export class CaptureService {
         }
 
         const hidden: Object3D[] = [];
+        let hiddenPoseHelperCount = 0;
         if (options?.hideHelpers !== false) {
             scene.traverse((object) => {
                 if (object.userData.helper === true && object.visible) {
                     object.visible = false;
                     hidden.push(object);
+                    if (object.userData.poseHelper === true) hiddenPoseHelperCount += 1;
                 }
             });
         }
@@ -79,7 +93,15 @@ export class CaptureService {
             PNG_MIME_TYPE,
         );
 
-        for (const object of hidden) object.visible = true;
+        for (let index = 0; index < hidden.length; index += 1) {
+            const object = hidden[index];
+            if (object) object.visible = true;
+        }
+        this.currentHelperLifecycle = Object.freeze({
+            hiddenHelperCount: hidden.length,
+            hiddenPoseHelperCount,
+            helpersRestored: hidden.every((object) => object.visible),
+        });
         if (hidden.length > 0) gl.render(scene, camera);
         return promise;
     }

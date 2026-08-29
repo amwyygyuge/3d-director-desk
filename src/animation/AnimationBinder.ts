@@ -1,4 +1,3 @@
-import { reaction } from "mobx";
 import type { AnimationClip, Object3D } from "three";
 import { AnimationMixer } from "three";
 
@@ -7,26 +6,17 @@ import type { TimeTransport } from "../time/TimeTransport";
 /**
  * 动作挂载协调器(领域服务):把动作 clip 绑定到场景对象的骨骼上。
  *
- * 时钟纪律:mixer 由统一时钟驱动——bindTransport 订阅 playhead,
- * tick(播放逐帧)与 seek(scrub)统一收敛为绝对时间 setTime,语义不分叉;
- * 不再保留 update(delta) 自由播放路径。
+ * 时钟纪律:PlaybackCoordinator 按统一时钟调用 setTime，随后再执行时间轴、机位和姿态层；
+ * bindTransport 仅为挂载时读取当前 playhead，不保留 update(delta) 自由播放路径。
  *
- * 游戏模型骨骼结构各异(人形/四足/机械),此处仅承载「同构骨骼直接挂载」;
- * 重定向配置表由 RetargetStrategy 扩展点接入(专项)。
+ * 游戏模型骨骼结构各异(人形/四足/机械)，此处只承载同构 clip 挂载。
  */
 export class AnimationBinder {
     private readonly mixers = new Map<string, AnimationMixer>();
     private transport: TimeTransport | null = null;
-    private transportDisposer: (() => void) | null = null;
-
-    /** 接入统一时钟;重复调用先解旧订阅 */
+    /** PlaybackCoordinator owns the frame pipeline; this keeps current time for mount-time alignment only. */
     bindTransport(transport: TimeTransport): void {
-        this.transportDisposer?.();
         this.transport = transport;
-        this.transportDisposer = reaction(
-            () => transport.time,
-            (timeSeconds) => this.setTime(timeSeconds),
-        );
     }
 
     mount(objectId: string, root: Object3D, clip: AnimationClip): void {
@@ -58,10 +48,7 @@ export class AnimationBinder {
     get isEmpty(): boolean {
         return this.mixers.size === 0;
     }
-
     dispose(): void {
-        this.transportDisposer?.();
-        this.transportDisposer = null;
         this.transport = null;
         for (const id of [...this.mixers.keys()]) this.unmount(id);
     }

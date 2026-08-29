@@ -42,7 +42,7 @@ export { CameraMotionSampler } from "./camera/CameraMotionSampler";
 export type { CameraMotionSink } from "./camera/CameraMotionSampler";
 export type { DirectorPose } from "./store/CameraStore";
 export { CaptureService } from "./capture/CaptureService";
-export type { RenderHandles } from "./capture/CaptureService";
+export type { CaptureHelperLifecycle, RenderHandles } from "./capture/CaptureService";
 export { CaptureFrameCommand, registerCaptureCommands } from "./command/captureCommands";
 export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
 export {
@@ -95,8 +95,21 @@ export {
     UnmountActionCommand,
     TransportStopCommand,
 } from "./command/actionCommands";
-export type { CommandIssue, CommandResult, DirectorContext, SerializedCommand } from "./command/DirectorCommand";
+export type { CommandIssue, CommandIssueOption, CommandResult, DirectorContext, SerializedCommand } from "./command/DirectorCommand";
 export type { CommandCapability, DirectorQuery, QueryResult } from "./command/CommandDispatcher";
+export {
+    AddPoseKeyCommand,
+    ClearPoseCommand,
+    DiscoverPoseBonesQuery,
+    GetPoseQuery,
+    MovePoseKeyCommand,
+    RemovePoseKeyCommand,
+    ReplacePoseCommand,
+    SetPoseBoneCommand,
+    SetPoseKeyEasingCommand,
+    SetPoseWeightCommand,
+    registerPoseCommands,
+} from "./command/poseCommands";
 export { DisposeBag } from "./core/DisposeBag";
 export { SceneManager } from "./core/SceneManager";
 export { IDENTITY_TRANSFORM, SceneObject } from "./core/SceneObject";
@@ -112,6 +125,14 @@ export {
     normalizeLightParams,
 } from "./core/LightParams";
 export type { LightParams, LightType } from "./core/LightParams";
+export { PoseSnapshot } from "./pose/PoseSnapshot";
+export type { BoneKey, PoseSnapshotInit, QuaternionTuple } from "./pose/PoseSnapshot";
+export { PoseKeyframe } from "./pose/PoseKeyframe";
+export type { PoseKeyframeInit } from "./pose/PoseKeyframe";
+export { PoseLayer } from "./pose/PoseLayer";
+export { PoseTimelineSampler } from "./pose/PoseTimelineSampler";
+export { SkeletonRuntimeRegistry } from "./pose/SkeletonRuntimeRegistry";
+export type { BoneTreeNodeDto, SemanticBoneCandidateDto, SkeletonDiscoveryDto } from "./pose/SkeletonRuntimeRegistry";
 export { PostMessageAdapter } from "./host/HostAdapter";
 export type { HostAdapter } from "./host/HostAdapter";
 export { ModelImporter } from "./loaders/ModelImporter";

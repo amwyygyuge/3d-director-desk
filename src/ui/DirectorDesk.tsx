@@ -12,6 +12,7 @@ import { PROTOCOL_VERSION } from "../bridge/protocol";
 import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
+import { BonePicker } from "../pose/BonePicker";
 import { TransformGizmoController } from "../transform/TransformGizmoController";
 import { FlyDrive } from "../navigation/FlyDrive";
 import { ShotNavigation } from "../navigation/ShotNavigation";
@@ -87,6 +88,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                 stores.playback.dispose();
                 stores.binder.dispose();
                 stores.models.dispose();
+                stores.skeletons.dispose();
                 stores.scene.manager.dispose();
                 stores.host.dispose?.();
             });
@@ -159,6 +161,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                             />
                             <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
                             <SceneRoot />
+                            <BonePicker />
                             <TransformGizmoController />
                             <ShotMarkers />
                             <PlaybackDriver />

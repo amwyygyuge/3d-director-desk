@@ -12,6 +12,7 @@ import { registerBuiltinCommands } from "../command/commands";
 import { CommandHistory } from "../command/CommandHistory";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
+import { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
 import { CameraStore } from "../store/CameraStore";
 import { CameraMotionStore } from "../store/CameraMotionStore";
 import { SceneStore } from "../store/SceneStore";
@@ -88,6 +89,8 @@ export interface DirectorDeskStores {
     animations: AnimationLibrary;
     /** 动作挂载协调器;创建时即接入统一时钟 */
     binder: AnimationBinder;
+    /** 骨骼 Three 运行时索引；只存于本桌实例，绝不进入 MobX。 */
+    skeletons: SkeletonRuntimeRegistry;
     /** 生命周期守卫与异步工作取消域 */
     lifecycle: DeskLifecycleGuard;
 }
@@ -107,10 +110,11 @@ export function createDirectorDeskStores(options?: {
     const binder = new AnimationBinder();
     const scene = new SceneStore();
     const timeline = new TimelineStore();
+    const skeletons = new SkeletonRuntimeRegistry();
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);
     const camera = new CameraStore();
-    const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera);
+    const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera, binder, skeletons);
     return {
         scene,
         selection: new SelectionStore(),
@@ -128,6 +132,7 @@ export function createDirectorDeskStores(options?: {
         host,
         history,
         animations: new AnimationLibrary(),
+        skeletons,
         binder,
         lifecycle: new DeskLifecycleGuard(),
     };

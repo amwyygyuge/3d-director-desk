@@ -56,8 +56,13 @@ export const TimelinePanel = observer(function TimelinePanel() {
 
     const setEasing = (easing: TimelineEasing): void => {
         if (!selectedKey) return;
+        const track = document.track(selectedKey.trackId);
+        if (!track) return;
         dispatcher.dispatch(
-            { type: "timeline.set-key-easing", payload: { ...selectedKey, easing } },
+            {
+                type: track.kind === "pose" ? "pose.set-key-easing" : "timeline.set-key-easing",
+                payload: { ...selectedKey, easing },
+            },
             stores,
         );
     };
@@ -68,9 +73,11 @@ export const TimelinePanel = observer(function TimelinePanel() {
         rulerRef.current?.releasePointerCapture(event.pointerId);
         setDragState(null);
         if (time === dragState.time) return;
+        const track = document.track(dragState.trackId);
+        if (!track) return;
         dispatcher.dispatch(
             {
-                type: "timeline.move-key",
+                type: track.kind === "pose" ? "pose.move-key" : "timeline.move-key",
                 payload: { trackId: dragState.trackId, keyframeId: dragState.keyframeId, time },
             },
             stores,
@@ -93,8 +100,10 @@ export const TimelinePanel = observer(function TimelinePanel() {
         const nextTime = clampTime(time + timeDelta, duration);
         setSelectedKey({ trackId, keyframeId });
         if (nextTime === time) return;
+        const track = document.track(trackId);
+        if (!track) return;
         dispatcher.dispatch(
-            { type: "timeline.move-key", payload: { trackId, keyframeId, time: nextTime } },
+            { type: track.kind === "pose" ? "pose.move-key" : "timeline.move-key", payload: { trackId, keyframeId, time: nextTime } },
             stores,
         );
     };
@@ -229,7 +238,7 @@ export const TimelinePanel = observer(function TimelinePanel() {
                         color="error"
                         onClick={() =>
                             dispatcher.dispatch(
-                                { type: "timeline.remove-key", payload: selectedKey },
+                                { type: selectedTrack?.kind === "pose" ? "pose.remove-key" : "timeline.remove-key", payload: selectedKey },
                                 stores,
                             )
                         }

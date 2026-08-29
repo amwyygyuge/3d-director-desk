@@ -83,6 +83,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         if (!runtime || !clip) return;
         ctx.binder.mount(this.payload.objectId, runtime, clip);
         ctx.scene.setObjectAction(this.payload.objectId, this.payload.actionId);
+        ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {

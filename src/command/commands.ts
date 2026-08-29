@@ -1,4 +1,5 @@
 import { toJS } from "mobx";
+import { registerPoseCommands } from "./poseCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
 import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
@@ -170,6 +171,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
         ctx.binder.unmount(this.payload.id);
         ctx.scene.removeObject(this.payload.id);
         ctx.selection.remove(this.payload.id);
+        if (ctx.ui.posePickingObjectId === this.payload.id) ctx.ui.setPosePicking(null, null);
         if (ctx.binder.isEmpty) ctx.clock.pause();
     }
 
@@ -242,4 +244,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerTimelineCommands(dispatcher);
     registerLightingCommands(dispatcher);
     registerCameraMotionCommands(dispatcher);
+    registerPoseCommands(dispatcher);
 }

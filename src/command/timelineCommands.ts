@@ -1,4 +1,5 @@
 import type { Transform } from "../core/SceneObject";
+import { PoseSnapshot, isQuaternionTuple } from "../pose/PoseSnapshot";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
 import type { TimelineTrackInit } from "../timeline/TimelineTrack";
 import { TransformKeyframe, TIMELINE_EASING } from "../timeline/TransformKeyframe";
@@ -95,6 +96,25 @@ function keyframePayloadIssue(value: unknown): CommandIssue | null {
         : issue(ISSUE_CODE.PAYLOAD, "keyframe.easing", "关键帧缓动必须为 linear 或 smooth");
 }
 
+function poseKeyframePayloadIssue(value: unknown): CommandIssue | null {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || typeof value.time !== "number" || !Number.isFinite(value.time) || value.time < 0) {
+        return issue(ISSUE_CODE.PAYLOAD, "keyframe", "姿态关键帧 id 或时间无效");
+    }
+    if (!isTimelineEasing(value.easing)) return issue(ISSUE_CODE.PAYLOAD, "keyframe.easing", "姿态关键帧缓动无效");
+    if (!isRecord(value.value) || !isRecord(value.value.bones)) return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
+    const bones: Record<string, readonly [number, number, number, number]> = {};
+    for (const [boneKey, quaternion] of Object.entries(value.value.bones)) {
+        if (!boneKey || !isQuaternionTuple(quaternion)) return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
+        bones[boneKey] = quaternion;
+    }
+    try {
+        new PoseSnapshot({ bones });
+        return null;
+    } catch {
+        return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
+    }
+}
+
 function restoreTrackIssue(
     value: unknown,
     index: number,
@@ -108,8 +128,8 @@ function restoreTrackIssue(
     if (typeof value.targetId !== "string" || value.targetId.length === 0) {
         return issue(ISSUE_CODE.PAYLOAD, `${path}.targetId`, "恢复轨道目标 id 格式无效");
     }
-    if (value.kind !== TIMELINE_TRACK_KIND.TRANSFORM) {
-        return issue(ISSUE_CODE.PAYLOAD, `${path}.kind`, "恢复轨道类型必须为 transform");
+    if (value.kind !== TIMELINE_TRACK_KIND.TRANSFORM && value.kind !== TIMELINE_TRACK_KIND.POSE) {
+        return issue(ISSUE_CODE.PAYLOAD, `${path}.kind`, "恢复轨道类型无效");
     }
     if (!Array.isArray(value.keyframes) || value.keyframes.length === 0) {
         return issue(ISSUE_CODE.PAYLOAD, `${path}.keyframes`, "恢复轨道必须包含关键帧");
@@ -118,16 +138,18 @@ function restoreTrackIssue(
     if (!ctx.scene.manager.getEntity(value.targetId)) {
         return issue(ISSUE_CODE.TARGET, `${path}.targetId`, "恢复轨道目标不存在");
     }
-    if (ctx.timeline.document.track(value.id) || ctx.timeline.document.trackForTarget(value.targetId)) {
+    if (ctx.timeline.document.track(value.id) || ctx.timeline.document.trackForTarget(value.targetId, value.kind)) {
         return issue(ISSUE_CODE.TRACK_CONFLICT, path, "恢复轨道与当前文档冲突");
     }
     const duplicateTrack = tracks.some((candidate, candidateIndex) =>
         candidateIndex !== index &&
         isRecord(candidate) &&
-        (candidate.id === value.id || candidate.targetId === value.targetId),
+        (candidate.id === value.id || (candidate.targetId === value.targetId && candidate.kind === value.kind)),
     );
-    if (duplicateTrack) return issue(ISSUE_CODE.TRACK_CONFLICT, path, "恢复轨道 id 或目标重复");
-    const invalidKeyIndex = keyframes.findIndex((keyframe) => keyframePayloadIssue(keyframe) !== null);
+    if (duplicateTrack) return issue(ISSUE_CODE.TRACK_CONFLICT, path, "恢复轨道 id 或同类型目标重复");
+    const invalidKeyIndex = keyframes.findIndex((keyframe) =>
+        value.kind === TIMELINE_TRACK_KIND.POSE ? poseKeyframePayloadIssue(keyframe) !== null : keyframePayloadIssue(keyframe) !== null,
+    );
     if (invalidKeyIndex >= 0) {
         return issue(ISSUE_CODE.PAYLOAD, `${path}.keyframes.${invalidKeyIndex}`, "恢复关键帧参数无效");
     }
@@ -194,6 +216,9 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             if (track.targetId !== payload.targetId) {
                 return [issue(ISSUE_CODE.TRACK_CONFLICT, "targetId", "轨道已属于另一个对象")];
             }
+            if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) {
+                return [issue(ISSUE_CODE.TRACK_CONFLICT, "trackId", "轨道类型不是 transform")];
+            }
             const duplicate = duplicateTimeIssue(track, payload.keyframe.time, null);
             if (duplicate) return [duplicate];
             if (track.keyframe(payload.keyframe.id)) {
@@ -201,7 +226,7 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             }
             return [];
         }
-        const targetTrack = ctx.timeline.document.trackForTarget(payload.targetId);
+        const targetTrack = ctx.timeline.document.trackForTarget(payload.targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         return targetTrack
             ? [issue(ISSUE_CODE.TRACK_CONFLICT, "trackId", "每个对象只能有一个 transform 轨道")]
             : [];
@@ -246,6 +271,7 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         if (!track.keyframe(payload.keyframeId)) return [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
         const duplicate = duplicateTimeIssue(track, payload.time, payload.keyframeId);
         return duplicate ? [duplicate] : [];
@@ -256,7 +282,7 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
         if (!keyframe) return;
         ctx.timeline.moveKey(
             this.payload.trackId,
-            new TransformKeyframe({ ...keyframe.toJSON(), time: this.payload.time }),
+            new TransformKeyframe({ ...(keyframe as TransformKeyframe).toJSON(), time: this.payload.time }),
         );
         ctx.playback.sampleCurrent();
     }
@@ -291,6 +317,7 @@ export class RemoveTimelineKeyCommand extends DirectorCommand<RemoveKeyPayload> 
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         return track.keyframe(payload.keyframeId) ? [] : [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
     }
 
@@ -338,6 +365,7 @@ export class SetTimelineKeyEasingCommand extends DirectorCommand<SetEasingPayloa
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         return track.keyframe(payload.keyframeId) ? [] : [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
     }
 
@@ -346,7 +374,7 @@ export class SetTimelineKeyEasingCommand extends DirectorCommand<SetEasingPayloa
         if (!keyframe) return;
         ctx.timeline.moveKey(
             this.payload.trackId,
-            new TransformKeyframe({ ...keyframe.toJSON(), easing: this.payload.easing }),
+            new TransformKeyframe({ ...(keyframe as TransformKeyframe).toJSON(), easing: this.payload.easing }),
         );
         ctx.playback.sampleCurrent();
     }

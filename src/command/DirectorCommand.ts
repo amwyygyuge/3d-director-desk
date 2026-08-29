@@ -4,6 +4,7 @@ import type { HostAdapter } from "../host/HostAdapter";
 import type { CameraStore } from "../store/CameraStore";
 import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { CaptureService } from "../capture/CaptureService";
+import type { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
 import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
 import type { SelectionStore } from "../store/SelectionStore";
@@ -24,6 +25,8 @@ export interface DirectorContext {
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;
     readonly binder: AnimationBinder;
+    /** Per-desk Three skeleton index; command/query boundary returns serializable DTOs only. */
+    readonly skeletons: SkeletonRuntimeRegistry;
     readonly animations: AnimationLibrary;
     /** 宿主适配器(截图回传/模型导入;iframe 与直嵌两形态一契约) */
     readonly host: HostAdapter;
@@ -33,10 +36,16 @@ export interface DirectorContext {
     readonly selection: SelectionStore;
 }
 
+export interface CommandIssueOption {
+    readonly type: string;
+    readonly label: string;
+}
+
 export interface CommandIssue {
     readonly code: string;
     readonly path: string;
     readonly message: string;
+    readonly options?: readonly CommandIssueOption[];
 }
 
 export type CommandResult = {

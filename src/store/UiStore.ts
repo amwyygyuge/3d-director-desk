@@ -35,6 +35,9 @@ export class UiStore {
     flying = false;
     /** 加载中资源:稳定对象请求 id → 进度 0~1(反馈体系;Map 字段自动可观察) */
     readonly loading = new Map<string, number>();
+    /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
+    posePickingObjectId: string | null = null;
+    posePickingBoneKey: string | null = null;
     private disposed = false;
 
     constructor() {
@@ -48,6 +51,11 @@ export class UiStore {
     toggleGizmoAxis(axis: GizmoAxis): void {
         const onlyThisActive = this.gizmoAxes[axis] && Object.values(this.gizmoAxes).filter(Boolean).length === 1;
         this.gizmoAxes = onlyThisActive ? ALL_AXES_FREE : { x: axis === "x", y: axis === "y", z: axis === "z" };
+    }
+
+    setPosePicking(objectId: string | null, boneKey: string | null): void {
+        this.posePickingObjectId = objectId;
+        this.posePickingBoneKey = boneKey;
     }
 
     noteGizmoInteraction(): void {
@@ -69,6 +77,8 @@ export class UiStore {
         this.lastCaptureUrl = null;
         this.loading.clear();
         this.applicationNotice = null;
+        this.posePickingObjectId = null;
+        this.posePickingBoneKey = null;
     }
     toggleHelp(): void {
         this.helpOpen = !this.helpOpen;

@@ -15,7 +15,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import type { CameraShot } from "../camera/CameraShot";
 import { FOV_MAX, FOV_MIN } from "../command/commands";
@@ -23,6 +23,7 @@ import type { CommandResult } from "../command/DirectorCommand";
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "../core/LightParams";
 import type { LightParams, LightType } from "../core/LightParams";
 import type { Vec3 } from "../core/SceneObject";
+import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "../pose/SkeletonRuntimeRegistry";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { PlayheadDisplay } from "./PlayheadDisplay";
 import { TransformFields } from "./TransformFields";
@@ -556,6 +557,116 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
     );
 });
 
+const BoneTree = observer(function BoneTree({
+    objectId,
+    nodes,
+    editing,
+}: {
+    objectId: string;
+    nodes: readonly BoneTreeNodeDto[];
+    editing: boolean;
+}) {
+    const { ui } = useDirectorDeskStores();
+    return (
+        <List dense disablePadding>
+            {nodes.map((node) => (
+                <ListItem key={node.key} disableGutters sx={{ display: "block", pl: node.key.split("/").length - 2 }}>
+                    <Button
+                        size="small"
+                        variant={ui.posePickingObjectId === objectId && ui.posePickingBoneKey === node.key ? "contained" : "text"}
+                        disabled={!editing}
+                        onClick={() => ui.setPosePicking(objectId, node.key)}
+                    >
+                        {node.name} <Typography component="span" variant="caption">({node.key})</Typography>
+                    </Button>
+                    {node.children.length > 0 && <BoneTree objectId={objectId} nodes={node.children} editing={editing} />}
+                </ListItem>
+            ))}
+        </List>
+    );
+});
+
+/** Inspector-only UI state controls skeleton discovery; all persistent mutations use the Dispatcher. */
+const PoseControls = observer(function PoseControls({ objectId, report }: ObjectControlsProps) {
+    const stores = useDirectorDeskStores();
+    const entity = stores.scene.manager.getEntity(objectId);
+    const [discovery, setDiscovery] = useState<SkeletonDiscoveryDto | null>(null);
+    if (!entity || entity.kind !== "model") return null;
+    const editing = !stores.clock.isPlaying;
+    const discover = () => {
+        const result = stores.dispatcher.query({ type: "pose.bones.discover", payload: { objectId } }, stores);
+        if (!result.ok) {
+            report(result);
+            return;
+        }
+        setDiscovery(result.value as SkeletonDiscoveryDto);
+    };
+    const addKey = () => report(stores.dispatcher.dispatch({
+        type: "pose.add-key",
+        payload: {
+            trackId: `pose-${entity.id}`,
+            targetId: entity.id,
+            keyframe: {
+                id: `pose-key-${crypto.randomUUID()}`,
+                time: stores.clock.time,
+                value: entity.pose?.toJSON() ?? { bones: {} },
+                easing: "linear",
+            },
+        },
+    }, stores));
+    return (
+        <>
+            <Divider sx={{ my: CONTROL_GAP }} />
+            <Typography variant="subtitle2">姿态精修</Typography>
+            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+                <Button size="small" variant="outlined" disabled={!editing} onClick={discover}>发现骨骼</Button>
+                {stores.ui.posePickingObjectId === objectId && <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>退出骨骼编辑</Button>}
+                {discovery && !discovery.ready && <Typography variant="caption">模型骨骼尚未就绪，请等待加载完成后重试。</Typography>}
+                {discovery?.ready && (
+                    <>
+                        {discovery.semanticCandidates.length > 0 && (
+                            <Box>
+                                <Typography variant="caption">语义候选（唯一匹配）</Typography>
+                                <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
+                                    {discovery.semanticCandidates.map((candidate) => (
+                                        <Button key={candidate.label} size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(objectId, candidate.boneKey)}>
+                                            {candidate.label}
+                                        </Button>
+                                    ))}
+                                </Stack>
+                            </Box>
+                        )}
+                        <Box>
+                            <Typography variant="caption">原始骨骼树（歧义或未命名时请从此处选择）</Typography>
+                            <BoneTree objectId={objectId} nodes={discovery.roots} editing={editing} />
+                        </Box>
+                    </>
+                )}
+                <Typography variant="caption">姿态权重：{formatValue(entity.poseWeight)}</Typography>
+                <Slider
+                    value={entity.poseWeight}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    disabled={!editing}
+                    onChangeCommitted={(_, value) => {
+                        if (typeof value !== "number") return;
+                        report(stores.dispatcher.dispatch({
+                            type: "pose.set-weight",
+                            payload: { objectId, weight: value },
+                        }, stores));
+                    }}
+                />
+                <Stack direction="row" spacing={CONTROL_GAP}>
+                    <Button size="small" variant="outlined" disabled={!editing} onClick={addKey}>当前姿态打关键帧</Button>
+                    <Button size="small" color="warning" disabled={!editing || entity.pose === null} onClick={() => report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))}>清除姿态</Button>
+                </Stack>
+                {!editing && <Typography variant="caption">播放期间姿态编辑已禁用。</Typography>}
+            </Stack>
+        </>
+    );
+});
+
 /** 当前选中对象的权威实体变换经 timeline.add-key 固化为关键帧。 */
 const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
@@ -603,6 +714,11 @@ export const Inspector = observer(function Inspector() {
     const [notice, setNotice] = useState<string | null>(null);
 
     const primaryId = selection.primaryId;
+    useEffect(() => {
+        if (stores.ui.posePickingObjectId !== null && stores.ui.posePickingObjectId !== primaryId) {
+            stores.ui.setPosePicking(null, null);
+        }
+    }, [stores.ui, primaryId]);
     const entity = primaryId ? scene.manager.getEntity(primaryId) : undefined;
     const shot = primaryId && !entity ? camera.director.getShot(primaryId) : undefined;
     const report = (result: CommandResult) => {
@@ -648,6 +764,7 @@ export const Inspector = observer(function Inspector() {
             {entity.kind === "light" && <LightControls objectId={entity.id} report={report} />}
             <TimelineKeyControls objectId={entity.id} report={report} />
             {entity.kind === "model" && <ModelActionControls objectId={entity.id} report={report} />}
+            {entity.kind === "model" && <PoseControls objectId={entity.id} report={report} />}
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={SNACKBAR_DURATION_MS}

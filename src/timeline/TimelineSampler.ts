@@ -4,6 +4,7 @@ import type { Transform } from "../core/SceneObject";
 import type { TimelineDoc } from "./TimelineDoc";
 import type { TimelineTrack } from "./TimelineTrack";
 import type { TransformKeyframe } from "./TransformKeyframe";
+import { TIMELINE_TRACK_KIND } from "./TimelineTrack";
 import { TIMELINE_EASING } from "./TransformKeyframe";
 
 /** 三维运行时的纯采样服务；每次 evaluate 不分配对象。 */
@@ -27,7 +28,8 @@ export class TimelineSampler {
     }
 
     evaluateTrack(track: TimelineTrack, timeSeconds: number, runtime: Object3D): boolean {
-        const keyframes = track.keyframes;
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return false;
+        const keyframes = track.keyframes as readonly TransformKeyframe[];
         const lastIndex = keyframes.length - 1;
         const first = keyframes[0];
         const last = keyframes[lastIndex];

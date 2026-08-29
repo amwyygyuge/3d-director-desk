@@ -349,7 +349,7 @@ export function ModelContent({ entity }: { entity: SceneObject }) {
 }
 
 function ModelRequestContent({ entity }: { entity: SceneObject }) {
-    const { models, ui } = useDirectorDeskStores();
+    const { models, playback, ui, skeletons } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
     const sourceUrl = entity.sourceUrl;
@@ -400,6 +400,13 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
 
     // 归一化壳按 handle 钉住:渲染期重复构造会导致 <primitive> 反复重挂载
     const shell = useMemo(() => (handle ? normalizedShell(handle.object3d) : null), [handle]);
+
+    useEffect(() => {
+        if (!shell) return;
+        skeletons.register(entity.id, shell);
+        playback.sampleObject(entity.id);
+        return () => skeletons.unregister(entity.id);
+    }, [skeletons, playback, entity.id, shell]);
     if (shell) return <primitive object={shell} />;
     return (
         <mesh>
