@@ -6,8 +6,9 @@
 
 const IS_MAC: boolean = (() => {
     if (typeof navigator === "undefined") return false;
+    // 注意:部分环境(无头/旧内核)userAgentData.platform 是空字符串而非 undefined,须用 || 回退
     const platform =
-        (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform ?? "";
+        (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || "";
     return /mac/i.test(platform);
 })();
 

@@ -28,6 +28,7 @@ import { directorDeskTheme } from "./theme";
 import { SceneRoot } from "./scene/SceneRoot";
 import { PlaybackDriver } from "./scene/PlaybackDriver";
 import { ShotCameraRig } from "./scene/ShotCameraRig";
+import { ShotMarkers } from "./scene/ShotMarkers";
 import { ShotFrameOverlay } from "./ShotFrameOverlay";
 import { ShotPanel } from "./ShotPanel";
 import { Toolbar } from "./Toolbar";
@@ -148,6 +149,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBr
                             <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
                             <SceneRoot />
                             <TransformGizmoController />
+                            <ShotMarkers />
                             <PlaybackDriver />
                             <ShotCameraRig />
                             <FlyDrive />
