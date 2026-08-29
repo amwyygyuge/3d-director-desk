@@ -64,7 +64,8 @@ export const BonePicker = observer(function BonePicker() {
                 helper.removeFromParent();
                 helper.geometry.dispose();
                 const material = helper.material;
-                if (Array.isArray(material)) material.forEach((item) => item.dispose()); else material.dispose();
+                if (Array.isArray(material)) material.forEach((item) => item.dispose());
+                else material.dispose();
             }
         };
     }, [helpers]);
@@ -106,20 +107,30 @@ export const BonePicker = observer(function BonePicker() {
     const commitRotation = () => {
         if (!editing || !selectedBone || !selectedBoneKey) return;
         ui.noteGizmoInteraction();
-        dispatcher.dispatch({
-            type: "pose.set-bone",
-            payload: {
-                objectId,
-                boneKey: selectedBoneKey,
-                quaternion: [selectedBone.quaternion.x, selectedBone.quaternion.y, selectedBone.quaternion.z, selectedBone.quaternion.w],
+        dispatcher.dispatch(
+            {
+                type: "pose.set-bone",
+                payload: {
+                    objectId,
+                    boneKey: selectedBoneKey,
+                    quaternion: [
+                        selectedBone.quaternion.x,
+                        selectedBone.quaternion.y,
+                        selectedBone.quaternion.z,
+                        selectedBone.quaternion.w,
+                    ],
+                },
             },
-        }, stores);
+            stores,
+        );
         invalidate();
     };
 
     return (
         <>
-            {helpers.map((helper) => <primitive key={helper.uuid} object={helper} />)}
+            {helpers.map((helper) => (
+                <primitive key={helper.uuid} object={helper} />
+            ))}
             {editing && boneKeys.length > 0 && (
                 <instancedMesh
                     ref={meshRef}

@@ -89,12 +89,16 @@ export class SceneObject {
         }
         this.currentTransform = copyTransform(init.transform ?? IDENTITY_TRANSFORM);
         this.currentLight = hasLight ? normalizeLightParams(init.light as LightParams) : null;
-        this.currentPose = init.pose instanceof PoseSnapshot ? init.pose : init.pose ? new PoseSnapshot(init.pose) : null;
+        this.currentPose =
+            init.pose instanceof PoseSnapshot ? init.pose : init.pose ? new PoseSnapshot(init.pose) : null;
         if (!Number.isFinite(init.poseWeight ?? 1) || (init.poseWeight ?? 1) < 0 || (init.poseWeight ?? 1) > 1) {
             throw new Error("SceneObject: poseWeight must be a finite value from 0 to 1");
         }
         this.currentPoseWeight = init.poseWeight ?? 1;
-        makeAutoObservable<SceneObject, "currentLight" | "currentPose">(this, { currentLight: observableRef, currentPose: observableRef });
+        makeAutoObservable<SceneObject, "currentLight" | "currentPose">(this, {
+            currentLight: observableRef,
+            currentPose: observableRef,
+        });
     }
 
     get transform(): Transform {

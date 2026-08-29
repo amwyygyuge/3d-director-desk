@@ -45,11 +45,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function emptyPayloadIssues(payload: unknown, type: string): readonly CommandIssue[] {
-    if (
-        isRecord(payload) &&
-        Object.getPrototypeOf(payload) === Object.prototype &&
-        Object.keys(payload).length === 0
-    ) {
+    if (isRecord(payload) && Object.getPrototypeOf(payload) === Object.prototype && Object.keys(payload).length === 0) {
         return [];
     }
     return [issue(ISSUE_CODE.PAYLOAD, "", `${type} payload 必须是空对象`)];
@@ -78,7 +74,11 @@ function continuityPayloadIssues(payload: unknown, ctx: DirectorContext): readon
             seen.add(shotId);
         });
     }
-    if (!Array.isArray(payload.sampleTimes) || !Array.isArray(payload.shotIds) || payload.sampleTimes.length !== payload.shotIds.length) {
+    if (
+        !Array.isArray(payload.sampleTimes) ||
+        !Array.isArray(payload.shotIds) ||
+        payload.sampleTimes.length !== payload.shotIds.length
+    ) {
         issues.push(issue(ISSUE_CODE.PAYLOAD, "sampleTimes", "采样时间必须与机位顺序一一对应"));
     } else {
         payload.sampleTimes.forEach((time, index) => {
@@ -163,7 +163,6 @@ export class ContinuityCheckQuery implements DirectorQuery<ContinuityCheckPayloa
         return { issues: new ContinuityChecker().check(request) };
     }
 }
-
 
 /** continuity.* is intentionally query-only: diagnostics are never scene edits or history entries. */
 export function registerContinuityQueries(dispatcher: CommandDispatcher): void {

@@ -48,14 +48,16 @@ export interface CommandIssue {
     readonly options?: readonly CommandIssueOption[];
 }
 
-export type CommandResult = {
-    ok: true;
-} | {
-    ok: false;
-    error: string;
-    issues?: readonly string[];
-    issueDetails?: readonly CommandIssue[];
-};
+export type CommandResult =
+    | {
+          ok: true;
+      }
+    | {
+          ok: false;
+          error: string;
+          issues?: readonly string[];
+          issueDetails?: readonly CommandIssue[];
+      };
 
 /** 线上传输形态:AI 工具调用 / HostBridge 消息 / 回放日志都是它 */
 export interface SerializedCommand {

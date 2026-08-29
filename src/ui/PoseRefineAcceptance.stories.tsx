@@ -66,17 +66,28 @@ function seedPoseAcceptance(stores: DirectorDeskStores, captureSink: PoseCapture
         name: "骨骼狐狸（姿态验收）",
         transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
     });
-    const notReady = stores.dispatcher.dispatch({
-        type: "pose.set-bone",
-        payload: { objectId: ACTOR_ID, boneKey: "root/0", quaternion: [0, 0, 0, 1] },
-    }, stores);
-    assertAcceptance(!notReady.ok && notReady.issueDetails?.[0]?.code === "runtime-not-ready", "模型未就绪未给出等待模型结构化错误");
+    const notReady = stores.dispatcher.dispatch(
+        {
+            type: "pose.set-bone",
+            payload: { objectId: ACTOR_ID, boneKey: "root/0", quaternion: [0, 0, 0, 1] },
+        },
+        stores,
+    );
+    assertAcceptance(
+        !notReady.ok && notReady.issueDetails?.[0]?.code === "runtime-not-ready",
+        "模型未就绪未给出等待模型结构化错误",
+    );
     const poll = async (): Promise<void> => {
-        const result = stores.dispatcher.query({ type: "pose.bones.discover", payload: { objectId: ACTOR_ID } }, stores);
+        const result = stores.dispatcher.query(
+            { type: "pose.bones.discover", payload: { objectId: ACTOR_ID } },
+            stores,
+        );
         if (!result.ok) throw new Error(result.issues?.join(";") ?? result.error);
         const discovery = result.value as SkeletonDiscoveryDto;
         if (!discovery.ready) {
-            requestAnimationFrame(() => { void poll(); });
+            requestAnimationFrame(() => {
+                void poll();
+            });
             return;
         }
         const firstRawBoneKey = discovery.roots[0]?.key;
@@ -90,28 +101,65 @@ function seedPoseAcceptance(stores: DirectorDeskStores, captureSink: PoseCapture
             actionHandle.release();
             throw new Error("姿态验收: 狐狸夹具未提供动作 clip");
         }
-        const action = stores.animations.register({ name: "狐狸姿态验收动作", url: "/test-assets/fox.glb", clip }).action;
+        const action = stores.animations.register({
+            name: "狐狸姿态验收动作",
+            url: "/test-assets/fox.glb",
+            clip,
+        }).action;
         actionHandle.release();
         dispatch(stores, "action.mount", { objectId: ACTOR_ID, actionId: action.id });
-        dispatch(stores, "pose.set-bone", { objectId: ACTOR_ID, boneKey, quaternion: [0, 0.2588190451, 0, 0.9659258263] });
+        dispatch(stores, "pose.set-bone", {
+            objectId: ACTOR_ID,
+            boneKey,
+            quaternion: [0, 0.2588190451, 0, 0.9659258263],
+        });
         dispatch(stores, "pose.set-weight", { objectId: ACTOR_ID, weight: 0.65 });
         dispatch(stores, "pose.add-key", {
             trackId: POSE_TRACK_ID,
             targetId: ACTOR_ID,
-            keyframe: { id: "pose-key-0", time: 0, value: stores.scene.manager.getEntity(ACTOR_ID)?.pose?.toJSON() ?? { bones: {} }, easing: "linear" },
+            keyframe: {
+                id: "pose-key-0",
+                time: 0,
+                value: stores.scene.manager.getEntity(ACTOR_ID)?.pose?.toJSON() ?? { bones: {} },
+                easing: "linear",
+            },
         });
-        dispatch(stores, "pose.set-bone", { objectId: ACTOR_ID, boneKey, quaternion: [0, -0.2588190451, 0, 0.9659258263] });
+        dispatch(stores, "pose.set-bone", {
+            objectId: ACTOR_ID,
+            boneKey,
+            quaternion: [0, -0.2588190451, 0, 0.9659258263],
+        });
         dispatch(stores, "pose.add-key", {
             trackId: POSE_TRACK_ID,
             targetId: ACTOR_ID,
-            keyframe: { id: "pose-key-2", time: 2, value: stores.scene.manager.getEntity(ACTOR_ID)?.pose?.toJSON() ?? { bones: {} }, easing: "smooth" },
+            keyframe: {
+                id: "pose-key-2",
+                time: 2,
+                value: stores.scene.manager.getEntity(ACTOR_ID)?.pose?.toJSON() ?? { bones: {} },
+                easing: "smooth",
+            },
         });
         assertAcceptance(stores.history.undo(stores).ok && stores.history.redo(stores).ok, "姿态关键帧撤销/重做失败");
-        const missingBone = stores.dispatcher.dispatch({ type: "pose.set-bone", payload: { objectId: ACTOR_ID, boneKey: "root/missing", quaternion: [0, 0, 0, 1] } }, stores);
-        assertAcceptance(!missingBone.ok && missingBone.issueDetails?.[0]?.code === "bone-not-found", "未知骨骼未给出 discover 恢复选项");
+        const missingBone = stores.dispatcher.dispatch(
+            {
+                type: "pose.set-bone",
+                payload: { objectId: ACTOR_ID, boneKey: "root/missing", quaternion: [0, 0, 0, 1] },
+            },
+            stores,
+        );
+        assertAcceptance(
+            !missingBone.ok && missingBone.issueDetails?.[0]?.code === "bone-not-found",
+            "未知骨骼未给出 discover 恢复选项",
+        );
         dispatch(stores, "transport.play", {});
-        const playbackBlocked = stores.dispatcher.dispatch({ type: "pose.set-weight", payload: { objectId: ACTOR_ID, weight: 1 } }, stores);
-        assertAcceptance(!playbackBlocked.ok && playbackBlocked.issueDetails?.[0]?.code === "pose-playback-active", "播放期间姿态编辑未禁用");
+        const playbackBlocked = stores.dispatcher.dispatch(
+            { type: "pose.set-weight", payload: { objectId: ACTOR_ID, weight: 1 } },
+            stores,
+        );
+        assertAcceptance(
+            !playbackBlocked.ok && playbackBlocked.issueDetails?.[0]?.code === "pose-playback-active",
+            "播放期间姿态编辑未禁用",
+        );
         dispatch(stores, "transport.seek", { time: 1 });
         dispatch(stores, "transport.pause", {});
         stores.ui.setPosePicking(ACTOR_ID, boneKey);
@@ -125,11 +173,21 @@ function seedPoseAcceptance(stores: DirectorDeskStores, captureSink: PoseCapture
         const capture = await Promise.race([captureResult, timeout.promise]);
         clearTimeout(timeoutId);
         const helperLifecycle = stores.capture.lastHelperLifecycle;
-        assertAcceptance(capture.width > 0 && capture.height > 0 && capture.blobUrl.startsWith("blob:"), "helper 排除截图未产生有效输出");
-        assertAcceptance(helperLifecycle?.hiddenPoseHelperCount !== undefined && helperLifecycle.hiddenPoseHelperCount > 0 && helperLifecycle.helpersRestored, "姿态 helper 未在截图中隐藏并恢复");
+        assertAcceptance(
+            capture.width > 0 && capture.height > 0 && capture.blobUrl.startsWith("blob:"),
+            "helper 排除截图未产生有效输出",
+        );
+        assertAcceptance(
+            helperLifecycle?.hiddenPoseHelperCount !== undefined &&
+                helperLifecycle.hiddenPoseHelperCount > 0 &&
+                helperLifecycle.helpersRestored,
+            "姿态 helper 未在截图中隐藏并恢复",
+        );
         stores.ui.setPosePicking(null, null);
     };
-    requestAnimationFrame(() => { void poll(); });
+    requestAnimationFrame(() => {
+        void poll();
+    });
 }
 
 const meta: Meta<typeof DirectorDesk> = {

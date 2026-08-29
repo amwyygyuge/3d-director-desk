@@ -69,7 +69,6 @@ export class PlaybackCoordinator {
         this.motionSampler.unbindSink(sink);
     }
 
-
     sampleCurrent(): void {
         this.sample(this.currentTime());
     }
@@ -78,7 +77,6 @@ export class PlaybackCoordinator {
         this.invalidate();
     }
 
-
     sampleObject(targetId: string): void {
         const runtime = this.scene.getRuntime(targetId);
         const entity = this.scene.getEntity(targetId);
@@ -86,7 +84,8 @@ export class PlaybackCoordinator {
         this.skeletons.restoreRotations(targetId);
         this.binder.setTime(this.currentTime());
         const transformTrack = this.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
-        if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.currentTime(), runtime)) this.restoreObject(targetId, false);
+        if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.currentTime(), runtime))
+            this.restoreObject(targetId, false);
         this.applyPose(targetId, this.currentTime());
         this.invalidate();
     }
@@ -129,7 +128,8 @@ export class PlaybackCoordinator {
             const runtime = this.scene.getRuntime(entity.id);
             if (!runtime) continue;
             const transformTrack = this.timeline.document.trackForTarget(entity.id, TIMELINE_TRACK_KIND.TRANSFORM);
-            if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, timeSeconds, runtime)) this.restoreObject(entity.id, false);
+            if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, timeSeconds, runtime))
+                this.restoreObject(entity.id, false);
         }
         this.motionSampler.sampleCurrent(timeSeconds);
         for (let index = 0; index < entities.length; index += 1) {
@@ -150,7 +150,6 @@ export class PlaybackCoordinator {
     private restorePoseBaselines(): void {
         this.skeletons.restoreAllRotations();
     }
-
 
     private currentTime(): number {
         return this.transport.time;

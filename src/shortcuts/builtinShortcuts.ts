@@ -1,4 +1,5 @@
 import { FrameViewCommand } from "../command/navigationCommands";
+import { WORKSPACE_STAGE } from "../workspace/stages";
 import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
 import { ShortcutChord } from "./ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
@@ -15,6 +16,10 @@ export const SHORTCUT_ID = {
     EDIT_UNDO: "edit.undo",
     EDIT_REDO: "edit.redo",
     HELP_TOGGLE: "help.toggle",
+    STAGE_SET: "stage.set",
+    STAGE_ACTION: "stage.action",
+    STAGE_CAMERA: "stage.camera",
+    STAGE_OUTPUT: "stage.output",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
@@ -39,6 +44,10 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.EDIT_UNDO, chords: ["mod+z"], scope: "global", label: "撤销" },
     { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
     { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
+    { id: SHORTCUT_ID.STAGE_SET, chords: ["1"], scope: "global", label: "布景阶段" },
+    { id: SHORTCUT_ID.STAGE_ACTION, chords: ["2"], scope: "global", label: "动作阶段" },
+    { id: SHORTCUT_ID.STAGE_CAMERA, chords: ["3"], scope: "global", label: "运镜阶段" },
+    { id: SHORTCUT_ID.STAGE_OUTPUT, chords: ["4"], scope: "global", label: "成片阶段" },
 ];
 
 function removeSelection(stores: DirectorDeskStores): void {
@@ -60,6 +69,10 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.EDIT_UNDO]: (s) => s.history.undo(s),
     [SHORTCUT_ID.EDIT_REDO]: (s) => s.history.redo(s),
     [SHORTCUT_ID.HELP_TOGGLE]: (s) => s.ui.toggleHelp(),
+    [SHORTCUT_ID.STAGE_SET]: (s) => s.ui.setStage(WORKSPACE_STAGE.SET),
+    [SHORTCUT_ID.STAGE_ACTION]: (s) => s.ui.setStage(WORKSPACE_STAGE.ACTION),
+    [SHORTCUT_ID.STAGE_CAMERA]: (s) => s.ui.setStage(WORKSPACE_STAGE.CAMERA),
+    [SHORTCUT_ID.STAGE_OUTPUT]: (s) => s.ui.setStage(WORKSPACE_STAGE.OUTPUT),
 };
 
 /** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */

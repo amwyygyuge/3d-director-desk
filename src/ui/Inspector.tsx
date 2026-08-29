@@ -38,11 +38,8 @@ const FIELD_LABEL_WIDTH_PX = 32;
 const FOV_INPUT_WIDTH_PX = 80;
 const FOV_STEP = 1;
 const CONTROL_GAP = 1;
-const INSPECTOR_INSET_PX = 12;
 const INSPECTOR_WIDTH_PX = 260;
-const INSPECTOR_MAX_SIZE = "calc(100% - 24px)";
 const PANEL_PADDING = 1.5;
-const PANEL_Z_INDEX = 1;
 const SNACKBAR_DURATION_MS = 4000;
 const TIMELINE_TRACK_PREFIX = "transform-";
 const TIMELINE_KEY_PREFIX = "key-";
@@ -312,15 +309,10 @@ const ShotInspector = observer(function ShotInspector({ shotId, report }: ShotIn
         <Paper
             elevation={2}
             sx={{
-                position: "absolute",
-                top: INSPECTOR_INSET_PX,
-                right: INSPECTOR_INSET_PX,
                 width: INSPECTOR_WIDTH_PX,
-                maxWidth: INSPECTOR_MAX_SIZE,
-                maxHeight: INSPECTOR_MAX_SIZE,
+                maxHeight: "100%",
                 overflowY: "auto",
                 p: PANEL_PADDING,
-                zIndex: PANEL_Z_INDEX,
             }}
         >
             <Typography variant="subtitle2" noWrap>
@@ -353,7 +345,10 @@ interface LightIntensityControlProps {
 }
 
 /** 输入草稿仅服务于一次 slider 拖拽；权威 LightParams 始终留在实体。 */
-const LightIntensityControl = observer(function LightIntensityControl({ intensity, onCommit }: LightIntensityControlProps) {
+const LightIntensityControl = observer(function LightIntensityControl({
+    intensity,
+    onCommit,
+}: LightIntensityControlProps) {
     const [draft, setDraft] = useState(intensity);
 
     return (
@@ -573,13 +568,22 @@ const BoneTree = observer(function BoneTree({
                 <ListItem key={node.key} disableGutters sx={{ display: "block", pl: node.key.split("/").length - 2 }}>
                     <Button
                         size="small"
-                        variant={ui.posePickingObjectId === objectId && ui.posePickingBoneKey === node.key ? "contained" : "text"}
+                        variant={
+                            ui.posePickingObjectId === objectId && ui.posePickingBoneKey === node.key
+                                ? "contained"
+                                : "text"
+                        }
                         disabled={!editing}
                         onClick={() => ui.setPosePicking(objectId, node.key)}
                     >
-                        {node.name} <Typography component="span" variant="caption">({node.key})</Typography>
+                        {node.name}{" "}
+                        <Typography component="span" variant="caption">
+                            ({node.key})
+                        </Typography>
                     </Button>
-                    {node.children.length > 0 && <BoneTree objectId={objectId} nodes={node.children} editing={editing} />}
+                    {node.children.length > 0 && (
+                        <BoneTree objectId={objectId} nodes={node.children} editing={editing} />
+                    )}
                 </ListItem>
             ))}
         </List>
@@ -601,27 +605,41 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
         }
         setDiscovery(result.value as SkeletonDiscoveryDto);
     };
-    const addKey = () => report(stores.dispatcher.dispatch({
-        type: "pose.add-key",
-        payload: {
-            trackId: `pose-${entity.id}`,
-            targetId: entity.id,
-            keyframe: {
-                id: `pose-key-${crypto.randomUUID()}`,
-                time: stores.clock.time,
-                value: entity.pose?.toJSON() ?? { bones: {} },
-                easing: "linear",
-            },
-        },
-    }, stores));
+    const addKey = () =>
+        report(
+            stores.dispatcher.dispatch(
+                {
+                    type: "pose.add-key",
+                    payload: {
+                        trackId: `pose-${entity.id}`,
+                        targetId: entity.id,
+                        keyframe: {
+                            id: `pose-key-${crypto.randomUUID()}`,
+                            time: stores.clock.time,
+                            value: entity.pose?.toJSON() ?? { bones: {} },
+                            easing: "linear",
+                        },
+                    },
+                },
+                stores,
+            ),
+        );
     return (
         <>
             <Divider sx={{ my: CONTROL_GAP }} />
             <Typography variant="subtitle2">姿态精修</Typography>
             <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
-                <Button size="small" variant="outlined" disabled={!editing} onClick={discover}>发现骨骼</Button>
-                {stores.ui.posePickingObjectId === objectId && <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>退出骨骼编辑</Button>}
-                {discovery && !discovery.ready && <Typography variant="caption">模型骨骼尚未就绪，请等待加载完成后重试。</Typography>}
+                <Button size="small" variant="outlined" disabled={!editing} onClick={discover}>
+                    发现骨骼
+                </Button>
+                {stores.ui.posePickingObjectId === objectId && (
+                    <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>
+                        退出骨骼编辑
+                    </Button>
+                )}
+                {discovery && !discovery.ready && (
+                    <Typography variant="caption">模型骨骼尚未就绪，请等待加载完成后重试。</Typography>
+                )}
                 {discovery?.ready && (
                     <>
                         {discovery.semanticCandidates.length > 0 && (
@@ -629,7 +647,12 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
                                 <Typography variant="caption">语义候选（唯一匹配）</Typography>
                                 <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
                                     {discovery.semanticCandidates.map((candidate) => (
-                                        <Button key={candidate.label} size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(objectId, candidate.boneKey)}>
+                                        <Button
+                                            key={candidate.label}
+                                            size="small"
+                                            disabled={!editing}
+                                            onClick={() => stores.ui.setPosePicking(objectId, candidate.boneKey)}
+                                        >
                                             {candidate.label}
                                         </Button>
                                     ))}
@@ -651,15 +674,31 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
                     disabled={!editing}
                     onChangeCommitted={(_, value) => {
                         if (typeof value !== "number") return;
-                        report(stores.dispatcher.dispatch({
-                            type: "pose.set-weight",
-                            payload: { objectId, weight: value },
-                        }, stores));
+                        report(
+                            stores.dispatcher.dispatch(
+                                {
+                                    type: "pose.set-weight",
+                                    payload: { objectId, weight: value },
+                                },
+                                stores,
+                            ),
+                        );
                     }}
                 />
                 <Stack direction="row" spacing={CONTROL_GAP}>
-                    <Button size="small" variant="outlined" disabled={!editing} onClick={addKey}>当前姿态打关键帧</Button>
-                    <Button size="small" color="warning" disabled={!editing || entity.pose === null} onClick={() => report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))}>清除姿态</Button>
+                    <Button size="small" variant="outlined" disabled={!editing} onClick={addKey}>
+                        当前姿态打关键帧
+                    </Button>
+                    <Button
+                        size="small"
+                        color="warning"
+                        disabled={!editing || entity.pose === null}
+                        onClick={() =>
+                            report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
+                        }
+                    >
+                        清除姿态
+                    </Button>
                 </Stack>
                 {!editing && <Typography variant="caption">播放期间姿态编辑已禁用。</Typography>}
             </Stack>
@@ -745,15 +784,10 @@ export const Inspector = observer(function Inspector() {
         <Paper
             elevation={2}
             sx={{
-                position: "absolute",
-                top: INSPECTOR_INSET_PX,
-                right: INSPECTOR_INSET_PX,
                 width: INSPECTOR_WIDTH_PX,
-                maxWidth: INSPECTOR_MAX_SIZE,
-                maxHeight: INSPECTOR_MAX_SIZE,
+                maxHeight: "100%",
                 overflowY: "auto",
                 p: PANEL_PADDING,
-                zIndex: PANEL_Z_INDEX,
             }}
         >
             <Typography variant="subtitle2" noWrap>

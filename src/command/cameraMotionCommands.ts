@@ -49,7 +49,6 @@ function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
 }
 
-
 function isFiniteVec3(value: unknown): value is Vec3 {
     return Array.isArray(value) && value.length === 3 && value.every((component) => Number.isFinite(component));
 }
@@ -62,7 +61,11 @@ function issueMessages(issues: readonly CommandIssue[]): string[] {
     return issues.map((current) => current.message);
 }
 
-function keyAtDifferentTimeIssue(ctx: DirectorContext, timeSeconds: number, excludedId: string | null): CommandIssue | null {
+function keyAtDifferentTimeIssue(
+    ctx: DirectorContext,
+    timeSeconds: number,
+    excludedId: string | null,
+): CommandIssue | null {
     const duplicate = ctx.motion.path?.keys.find((key) => key.id !== excludedId && key.timeSeconds === timeSeconds);
     return duplicate ? issue(ISSUE_CODE.DUPLICATE_TIME, "timeSeconds", "运镜关键帧时间必须唯一") : null;
 }
@@ -78,7 +81,8 @@ function timeIssue(ctx: DirectorContext, timeSeconds: unknown): CommandIssue | n
 
 function canAuthorCurrentViewIssues(ctx: DirectorContext): readonly CommandIssue[] {
     if (ctx.clock.isPlaying) return [issue(ISSUE_CODE.PLAYING, "", "播放中不能记录运镜关键帧")];
-    if (ctx.camera.activeShotId !== null) return [issue(ISSUE_CODE.ACTIVE_SHOT, "", "掌镜机位激活时不能记录运镜关键帧")];
+    if (ctx.camera.activeShotId !== null)
+        return [issue(ISSUE_CODE.ACTIVE_SHOT, "", "掌镜机位激活时不能记录运镜关键帧")];
     return ctx.camera.lastDirectorPose === null
         ? [issue(ISSUE_CODE.DIRECTOR_POSE, "", "等待导演自由视角稳定后再记录运镜关键帧")]
         : [];
@@ -90,12 +94,15 @@ function shotIssue(shot: unknown): CommandIssue | null {
     }
     const snapshot = shot as { position?: unknown; target?: unknown; fov?: unknown };
     const fov = snapshot.fov;
-    if (!isFiniteVec3(snapshot.position) || !isFiniteVec3(snapshot.target) || typeof fov !== "number" || !Number.isFinite(fov)) {
+    if (
+        !isFiniteVec3(snapshot.position) ||
+        !isFiniteVec3(snapshot.target) ||
+        typeof fov !== "number" ||
+        !Number.isFinite(fov)
+    ) {
         return issue(ISSUE_CODE.PAYLOAD, "shot", "运镜快照格式无效");
     }
-    return fov < 1 || fov > 179
-        ? issue(ISSUE_CODE.PAYLOAD, "shot.fov", "运镜 fov 须在 1~179 之间")
-        : null;
+    return fov < 1 || fov > 179 ? issue(ISSUE_CODE.PAYLOAD, "shot.fov", "运镜 fov 须在 1~179 之间") : null;
 }
 
 /** Add the settled free-director view at one absolute timeline time. */
@@ -114,8 +121,11 @@ export class AddMotionKeyCommand extends DirectorCommand<AddMotionKeyPayload> {
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const payload = this.payload;
         if (
-            typeof payload !== "object" || payload === null || Array.isArray(payload) ||
-            typeof payload.id !== "string" || payload.id.length === 0
+            typeof payload !== "object" ||
+            payload === null ||
+            Array.isArray(payload) ||
+            typeof payload.id !== "string" ||
+            payload.id.length === 0
         ) {
             return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
         }
@@ -135,7 +145,14 @@ export class AddMotionKeyCommand extends DirectorCommand<AddMotionKeyPayload> {
     execute(ctx: DirectorContext): void {
         const pose = this.payload.shot ?? ctx.camera.lastDirectorPose;
         if (!pose) return;
-        ctx.motion.addKey(new MotionKey({ id: this.payload.id, timeSeconds: this.payload.timeSeconds, easing: this.payload.easing, shot: new CameraShot(pose) }));
+        ctx.motion.addKey(
+            new MotionKey({
+                id: this.payload.id,
+                timeSeconds: this.payload.timeSeconds,
+                easing: this.payload.easing,
+                shot: new CameraShot(pose),
+            }),
+        );
         ctx.playback.sampleCurrent();
     }
 
@@ -159,8 +176,11 @@ export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> 
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         if (
-            typeof this.payload !== "object" || this.payload === null || Array.isArray(this.payload) ||
-            typeof this.payload.id !== "string" || this.payload.id.length === 0
+            typeof this.payload !== "object" ||
+            this.payload === null ||
+            Array.isArray(this.payload) ||
+            typeof this.payload.id !== "string" ||
+            this.payload.id.length === 0
         ) {
             return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
         }
@@ -179,7 +199,9 @@ export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> 
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const key = ctx.motion.path?.key(this.payload.id);
-        return key ? [{ type: MoveMotionKeyCommand.TYPE, payload: { id: key.id, timeSeconds: key.timeSeconds } }] : null;
+        return key
+            ? [{ type: MoveMotionKeyCommand.TYPE, payload: { id: key.id, timeSeconds: key.timeSeconds } }]
+            : null;
     }
 }
 
@@ -197,8 +219,11 @@ export class RemoveMotionKeyCommand extends DirectorCommand<RemoveMotionKeyPaylo
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         if (
-            typeof this.payload !== "object" || this.payload === null || Array.isArray(this.payload) ||
-            typeof this.payload.id !== "string" || this.payload.id.length === 0
+            typeof this.payload !== "object" ||
+            this.payload === null ||
+            Array.isArray(this.payload) ||
+            typeof this.payload.id !== "string" ||
+            this.payload.id.length === 0
         ) {
             return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
         }
@@ -231,12 +256,16 @@ export class SetMotionKeyEasingCommand extends DirectorCommand<SetMotionKeyEasin
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         if (
-            typeof this.payload !== "object" || this.payload === null || Array.isArray(this.payload) ||
-            typeof this.payload.id !== "string" || this.payload.id.length === 0
+            typeof this.payload !== "object" ||
+            this.payload === null ||
+            Array.isArray(this.payload) ||
+            typeof this.payload.id !== "string" ||
+            this.payload.id.length === 0
         ) {
             return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
         }
-        if (!isEasing(this.payload.easing)) return [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
+        if (!isEasing(this.payload.easing))
+            return [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
         if (!ctx.motion.path) return [issue(ISSUE_CODE.PATH, "", "运镜路径不存在")];
         return ctx.motion.path.key(this.payload.id) ? [] : [issue(ISSUE_CODE.KEY, "id", "运镜关键帧不存在")];
     }
@@ -264,8 +293,11 @@ export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>
     }
 
     validateIssues(): readonly CommandIssue[] {
-        return typeof this.payload === "object" && this.payload !== null && !Array.isArray(this.payload) &&
-                Object.getPrototypeOf(this.payload) === Object.prototype && Object.keys(this.payload).length === 0
+        return typeof this.payload === "object" &&
+            this.payload !== null &&
+            !Array.isArray(this.payload) &&
+            Object.getPrototypeOf(this.payload) === Object.prototype &&
+            Object.keys(this.payload).length === 0
             ? []
             : [issue(ISSUE_CODE.PAYLOAD, "", "motion.get payload 必须是空对象")];
     }
@@ -288,9 +320,29 @@ function capability(type: string, kind: "command" | "query", permissions: readon
 
 /** motion.* command, query, and discovery metadata share the Dispatcher registry. */
 export function registerCameraMotionCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(AddMotionKeyCommand.TYPE, (payload: AddMotionKeyPayload) => new AddMotionKeyCommand(payload), capability(AddMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]));
-    dispatcher.register(MoveMotionKeyCommand.TYPE, (payload: MoveMotionKeyPayload) => new MoveMotionKeyCommand(payload), capability(MoveMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]));
-    dispatcher.register(RemoveMotionKeyCommand.TYPE, (payload: RemoveMotionKeyPayload) => new RemoveMotionKeyCommand(payload), capability(RemoveMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]));
-    dispatcher.register(SetMotionKeyEasingCommand.TYPE, (payload: SetMotionKeyEasingPayload) => new SetMotionKeyEasingCommand(payload), capability(SetMotionKeyEasingCommand.TYPE, "command", [MOTION_PERMISSION]));
-    dispatcher.registerQuery(CameraMotionGetQuery.TYPE, (payload: Record<string, never>) => new CameraMotionGetQuery(payload), capability(CameraMotionGetQuery.TYPE, "query", [MOTION_READ_PERMISSION]));
+    dispatcher.register(
+        AddMotionKeyCommand.TYPE,
+        (payload: AddMotionKeyPayload) => new AddMotionKeyCommand(payload),
+        capability(AddMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]),
+    );
+    dispatcher.register(
+        MoveMotionKeyCommand.TYPE,
+        (payload: MoveMotionKeyPayload) => new MoveMotionKeyCommand(payload),
+        capability(MoveMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]),
+    );
+    dispatcher.register(
+        RemoveMotionKeyCommand.TYPE,
+        (payload: RemoveMotionKeyPayload) => new RemoveMotionKeyCommand(payload),
+        capability(RemoveMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]),
+    );
+    dispatcher.register(
+        SetMotionKeyEasingCommand.TYPE,
+        (payload: SetMotionKeyEasingPayload) => new SetMotionKeyEasingCommand(payload),
+        capability(SetMotionKeyEasingCommand.TYPE, "command", [MOTION_PERMISSION]),
+    );
+    dispatcher.registerQuery(
+        CameraMotionGetQuery.TYPE,
+        (payload: Record<string, never>) => new CameraMotionGetQuery(payload),
+        capability(CameraMotionGetQuery.TYPE, "query", [MOTION_READ_PERMISSION]),
+    );
 }

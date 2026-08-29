@@ -64,7 +64,12 @@ function distance(left: Vec3, right: Vec3): number {
     return Math.hypot(x, y, z);
 }
 
-function hasTransformKeyBetween(document: TimelineDoc, subjectId: string, leftTime: number, rightTime: number): boolean {
+function hasTransformKeyBetween(
+    document: TimelineDoc,
+    subjectId: string,
+    leftTime: number,
+    rightTime: number,
+): boolean {
     const track = document.trackForTarget(subjectId, TIMELINE_TRACK_KIND.TRANSFORM);
     if (!track) return false;
     const start = Math.min(leftTime, rightTime);
@@ -72,7 +77,12 @@ function hasTransformKeyBetween(document: TimelineDoc, subjectId: string, leftTi
     return track.keyframes.some((keyframe) => keyframe.time > start && keyframe.time < end);
 }
 
-function issue(kind: ContinuityIssueKind, shotIds: readonly [string, string], detail: string, axis?: ContinuityAxis): ContinuityIssue {
+function issue(
+    kind: ContinuityIssueKind,
+    shotIds: readonly [string, string],
+    detail: string,
+    axis?: ContinuityAxis,
+): ContinuityIssue {
     return Object.freeze({
         kind,
         shotIds: Object.freeze([shotIds[0], shotIds[1]] as const),
@@ -118,8 +128,16 @@ export class ContinuityChecker {
     check(request: ContinuityCheckRequest): readonly ContinuityIssue[] {
         const document = new TimelineDoc(request.timeline);
         const issues: ContinuityIssue[] = [];
-        const current = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
-        const next = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
+        const current = {
+            position: [0, 0, 0] as [number, number, number],
+            rotation: [0, 0, 0] as [number, number, number],
+            scale: [1, 1, 1] as [number, number, number],
+        };
+        const next = {
+            position: [0, 0, 0] as [number, number, number],
+            rotation: [0, 0, 0] as [number, number, number],
+            scale: [1, 1, 1] as [number, number, number],
+        };
 
         for (let index = 0; index + 1 < request.shots.length; index += 1) {
             const leftShot = request.shots[index];
@@ -135,28 +153,43 @@ export class ContinuityChecker {
             const leftAxis = sideOfAxis(leftSubject, leftShot);
             const rightAxis = sideOfAxis(rightSubject, rightShot);
 
-            if (!leftAxis.axis || !rightAxis.axis || leftAxis.side === 0 || rightAxis.side === 0 || !axesAlign(leftAxis.axis, rightAxis.axis)) {
-                issues.push(issue(
-                    CONTINUITY_ISSUE_KIND.AXIS_AMBIGUOUS,
-                    [leftShot.id, rightShot.id],
-                    `机位 ${leftShot.id} 与 ${rightShot.id} 的轴线端点或站位不明确，无法可靠判定 180° 规则。`,
-                    leftAxis.axis ?? rightAxis.axis ?? undefined,
-                ));
-            } else if ((leftAxis.side < 0) !== (rightAxis.side < 0)) {
-                issues.push(issue(
-                    CONTINUITY_ISSUE_KIND.AXIS_CROSSING,
-                    [leftShot.id, rightShot.id],
-                    `机位 ${leftShot.id} 与 ${rightShot.id} 位于主体轴线两侧，疑似越轴。`,
-                    leftAxis.axis,
-                ));
+            if (
+                !leftAxis.axis ||
+                !rightAxis.axis ||
+                leftAxis.side === 0 ||
+                rightAxis.side === 0 ||
+                !axesAlign(leftAxis.axis, rightAxis.axis)
+            ) {
+                issues.push(
+                    issue(
+                        CONTINUITY_ISSUE_KIND.AXIS_AMBIGUOUS,
+                        [leftShot.id, rightShot.id],
+                        `机位 ${leftShot.id} 与 ${rightShot.id} 的轴线端点或站位不明确，无法可靠判定 180° 规则。`,
+                        leftAxis.axis ?? rightAxis.axis ?? undefined,
+                    ),
+                );
+            } else if (leftAxis.side < 0 !== rightAxis.side < 0) {
+                issues.push(
+                    issue(
+                        CONTINUITY_ISSUE_KIND.AXIS_CROSSING,
+                        [leftShot.id, rightShot.id],
+                        `机位 ${leftShot.id} 与 ${rightShot.id} 位于主体轴线两侧，疑似越轴。`,
+                        leftAxis.axis,
+                    ),
+                );
             }
 
-            if (distance(leftSubject, rightSubject) > request.teleportThreshold && !hasTransformKeyBetween(document, request.subject.id, leftTime, rightTime)) {
-                issues.push(issue(
-                    CONTINUITY_ISSUE_KIND.TELEPORT,
-                    [leftShot.id, rightShot.id],
-                    `主体在 ${leftShot.id} 与 ${rightShot.id} 之间位移超过 ${request.teleportThreshold}，但区间内没有走位关键帧。`,
-                ));
+            if (
+                distance(leftSubject, rightSubject) > request.teleportThreshold &&
+                !hasTransformKeyBetween(document, request.subject.id, leftTime, rightTime)
+            ) {
+                issues.push(
+                    issue(
+                        CONTINUITY_ISSUE_KIND.TELEPORT,
+                        [leftShot.id, rightShot.id],
+                        `主体在 ${leftShot.id} 与 ${rightShot.id} 之间位移超过 ${request.teleportThreshold}，但区间内没有走位关键帧。`,
+                    ),
+                );
             }
         }
         return Object.freeze(issues);

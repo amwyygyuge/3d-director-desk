@@ -13,12 +13,14 @@ import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
 import { BonePicker } from "../pose/BonePicker";
+import { STAGE_DEFS } from "../workspace/stages";
 import { TransformGizmoController } from "../transform/TransformGizmoController";
 import { FlyDrive } from "../navigation/FlyDrive";
 import { ShotNavigation } from "../navigation/ShotNavigation";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { CapturePreview } from "./CapturePreview";
+import { Dock } from "./Dock";
 import { HelpOverlay } from "./HelpOverlay";
 import { Hotkeys } from "./Hotkeys";
 import { placementFor } from "./importFiles";
@@ -28,6 +30,7 @@ import { OutlinerPanel } from "./OutlinerPanel";
 import { directorDeskTheme } from "./theme";
 import { SceneRoot } from "./scene/SceneRoot";
 import { PlaybackDriver } from "./scene/PlaybackDriver";
+import { StudioRig } from "./scene/StudioRig";
 import { CameraMotionRig } from "./scene/CameraMotionRig";
 import { MotionPathPreview } from "./scene/MotionPathPreview";
 import { ShotCameraRig } from "./scene/ShotCameraRig";
@@ -71,6 +74,10 @@ export const DirectorDesk = observer(function DirectorDesk({
     const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge }));
     const deskRef = useRef<HTMLDivElement>(null);
     const [motionPreviewVisible, setMotionPreviewVisible] = useState(initialMotionPreviewVisible);
+    // 掌镜视角下左右/底 Dock 自动收成细条(不压画布);退出即恢复用户原折叠态
+    const shotLive = stores.camera.activeShotId !== null;
+    const hasSelection = stores.selection.selectedIds.length > 0;
+    const stageDef = STAGE_DEFS[stores.ui.stage];
 
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
@@ -130,63 +137,98 @@ export const DirectorDesk = observer(function DirectorDesk({
                 <DirectorDeskProvider value={stores}>
                     <div
                         ref={deskRef}
-                        className="relative h-full w-full overflow-hidden"
+                        className="flex h-full w-full flex-col overflow-hidden"
                         tabIndex={-1}
                         onPointerDown={(event) => event.currentTarget.focus()}
                     >
-                        <Canvas
-                            frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
-                            camera={{ position: [6, 4, 8], fov: 45 }}
-                            gl={{ antialias: true, preserveDrawingBuffer: false }}
-                            onCreated={(state) =>
-                                stores.capture.attach({
-                                    gl: state.gl,
-                                    scene: state.scene,
-                                    camera: state.camera,
-                                    invalidate: state.invalidate,
-                                })
-                            }
-                            onPointerMissed={() => {
-                                // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
-                                if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
-                                    stores.selection.clear();
-                                }
-                            }}
-                        >
-                            <color attach="background" args={["#171717"]} />
-                            <Grid
-                                args={[40, 40]}
-                                cellColor="#333333"
-                                sectionColor="#555555"
-                                infiniteGrid
-                                userData={{ helper: true }}
-                            />
-                            <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
-                            <SceneRoot />
-                            <BonePicker />
-                            <TransformGizmoController />
-                            <ShotMarkers />
-                            <ShotAxisOverlay />
-                            <PlaybackDriver />
-                            <ShotCameraRig />
-                            <CameraMotionRig />
-                            <MotionPathPreview visible={motionPreviewVisible} />
-                            <FlyDrive />
-                            <ShotNavigation />
-                        </Canvas>
-                        <Inspector />
-                        <ShotFrameOverlay />
                         <Toolbar />
+                        <div className="flex min-h-0 flex-1">
+                            <Dock
+                                side="left"
+                                title="场景"
+                                collapsed={stores.ui.leftDockCollapsed || shotLive}
+                                onToggle={() => stores.ui.toggleLeftDock()}
+                            >
+                                <OutlinerPanel />
+                                {stores.ui.stage === "camera" && (
+                                    <ShotPanel
+                                        motionPreviewVisible={motionPreviewVisible}
+                                        onMotionPreviewVisibleChange={setMotionPreviewVisible}
+                                    />
+                                )}
+                            </Dock>
+                            <div className="relative min-w-0 flex-1">
+                                <Canvas
+                                    frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
+                                    camera={{ position: [6, 4, 8], fov: 45 }}
+                                    gl={{ antialias: true, preserveDrawingBuffer: false }}
+                                    onCreated={(state) =>
+                                        stores.capture.attach({
+                                            gl: state.gl,
+                                            scene: state.scene,
+                                            camera: state.camera,
+                                            invalidate: state.invalidate,
+                                        })
+                                    }
+                                    onPointerMissed={() => {
+                                        // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
+                                        if (
+                                            performance.now() - stores.ui.lastGizmoInteractionAt >
+                                            GIZMO_CLICK_GUARD_MS
+                                        ) {
+                                            stores.selection.clear();
+                                        }
+                                    }}
+                                >
+                                    <color attach="background" args={["#171717"]} />
+                                    <Grid
+                                        args={[40, 40]}
+                                        cellColor="#333333"
+                                        sectionColor="#555555"
+                                        infiniteGrid
+                                        userData={{ helper: true }}
+                                    />
+                                    <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
+                                    <StudioRig />
+                                    <SceneRoot />
+                                    <BonePicker />
+                                    <TransformGizmoController />
+                                    <ShotMarkers />
+                                    <ShotAxisOverlay />
+                                    <PlaybackDriver />
+                                    <ShotCameraRig />
+                                    <CameraMotionRig />
+                                    <MotionPathPreview visible={motionPreviewVisible && stageDef.helpers.motionPaths} />
+                                    <FlyDrive />
+                                    <ShotNavigation />
+                                </Canvas>
+                                <ShotFrameOverlay />
+                                <CapturePreview />
+                                <LoadingChip />
+                            </div>
+                            {hasSelection && (
+                                <Dock
+                                    side="right"
+                                    title="属性"
+                                    collapsed={stores.ui.rightDockCollapsed || shotLive}
+                                    onToggle={() => stores.ui.toggleRightDock()}
+                                >
+                                    <Inspector />
+                                </Dock>
+                            )}
+                        </div>
+                        {stageDef.timeline && (
+                            <Dock
+                                side="bottom"
+                                title="时间轴"
+                                collapsed={stores.ui.timelineCollapsed || shotLive}
+                                onToggle={() => stores.ui.toggleTimelineDock()}
+                            >
+                                <TimelinePanel />
+                            </Dock>
+                        )}
                         <Hotkeys deskRef={deskRef} />
-                        <ShotPanel
-                            motionPreviewVisible={motionPreviewVisible}
-                            onMotionPreviewVisibleChange={setMotionPreviewVisible}
-                        />
-                        <CapturePreview />
-                        <TimelinePanel />
-                        <OutlinerPanel />
                         <HelpOverlay />
-                        <LoadingChip />
                     </div>
                 </DirectorDeskProvider>
             </ScopedCssBaseline>

@@ -40,9 +40,14 @@ export class TimelineTrack {
         this.id = init.id;
         this.targetId = init.targetId;
         this.kind = init.kind;
-        const keyframes: TimelineKeyframe[] = init.kind === TIMELINE_TRACK_KIND.TRANSFORM
-            ? init.keyframes.map((keyframe) => keyframe instanceof TransformKeyframe ? keyframe : new TransformKeyframe(keyframe))
-            : init.keyframes.map((keyframe) => keyframe instanceof PoseKeyframe ? keyframe : new PoseKeyframe(keyframe));
+        const keyframes: TimelineKeyframe[] =
+            init.kind === TIMELINE_TRACK_KIND.TRANSFORM
+                ? init.keyframes.map((keyframe) =>
+                      keyframe instanceof TransformKeyframe ? keyframe : new TransformKeyframe(keyframe),
+                  )
+                : init.keyframes.map((keyframe) =>
+                      keyframe instanceof PoseKeyframe ? keyframe : new PoseKeyframe(keyframe),
+                  );
         this.keyframes = Object.freeze(keyframes.sort(compareKeyframes));
         Object.freeze(this);
     }
@@ -53,25 +58,61 @@ export class TimelineTrack {
 
     withKeyframe(keyframe: TimelineKeyframe): TimelineTrack {
         if (this.kind === TIMELINE_TRACK_KIND.TRANSFORM && keyframe instanceof TransformKeyframe) {
-            return new TimelineTrack({ id: this.id, targetId: this.targetId, kind: TIMELINE_TRACK_KIND.TRANSFORM, keyframes: [...this.keyframes.filter((current) => current.id !== keyframe.id) as TransformKeyframe[], keyframe] });
+            return new TimelineTrack({
+                id: this.id,
+                targetId: this.targetId,
+                kind: TIMELINE_TRACK_KIND.TRANSFORM,
+                keyframes: [
+                    ...(this.keyframes.filter((current) => current.id !== keyframe.id) as TransformKeyframe[]),
+                    keyframe,
+                ],
+            });
         }
         if (this.kind === TIMELINE_TRACK_KIND.POSE && keyframe instanceof PoseKeyframe) {
-            return new TimelineTrack({ id: this.id, targetId: this.targetId, kind: TIMELINE_TRACK_KIND.POSE, keyframes: [...this.keyframes.filter((current) => current.id !== keyframe.id) as PoseKeyframe[], keyframe] });
+            return new TimelineTrack({
+                id: this.id,
+                targetId: this.targetId,
+                kind: TIMELINE_TRACK_KIND.POSE,
+                keyframes: [
+                    ...(this.keyframes.filter((current) => current.id !== keyframe.id) as PoseKeyframe[]),
+                    keyframe,
+                ],
+            });
         }
         throw new Error("TimelineTrack: keyframe kind does not match track kind");
     }
 
     withoutKeyframe(keyframeId: string): TimelineTrack {
         if (this.kind === TIMELINE_TRACK_KIND.TRANSFORM) {
-            return new TimelineTrack({ id: this.id, targetId: this.targetId, kind: TIMELINE_TRACK_KIND.TRANSFORM, keyframes: this.keyframes.filter((keyframe) => keyframe.id !== keyframeId) as TransformKeyframe[] });
+            return new TimelineTrack({
+                id: this.id,
+                targetId: this.targetId,
+                kind: TIMELINE_TRACK_KIND.TRANSFORM,
+                keyframes: this.keyframes.filter((keyframe) => keyframe.id !== keyframeId) as TransformKeyframe[],
+            });
         }
-        return new TimelineTrack({ id: this.id, targetId: this.targetId, kind: TIMELINE_TRACK_KIND.POSE, keyframes: this.keyframes.filter((keyframe) => keyframe.id !== keyframeId) as PoseKeyframe[] });
+        return new TimelineTrack({
+            id: this.id,
+            targetId: this.targetId,
+            kind: TIMELINE_TRACK_KIND.POSE,
+            keyframes: this.keyframes.filter((keyframe) => keyframe.id !== keyframeId) as PoseKeyframe[],
+        });
     }
 
     toJSON(): TimelineTrackInit {
         if (this.kind === TIMELINE_TRACK_KIND.TRANSFORM) {
-            return { id: this.id, targetId: this.targetId, kind: TIMELINE_TRACK_KIND.TRANSFORM, keyframes: this.keyframes.map((keyframe) => (keyframe as TransformKeyframe).toJSON()) };
+            return {
+                id: this.id,
+                targetId: this.targetId,
+                kind: TIMELINE_TRACK_KIND.TRANSFORM,
+                keyframes: this.keyframes.map((keyframe) => (keyframe as TransformKeyframe).toJSON()),
+            };
         }
-        return { id: this.id, targetId: this.targetId, kind: TIMELINE_TRACK_KIND.POSE, keyframes: this.keyframes.map((keyframe) => (keyframe as PoseKeyframe).toJSON()) };
+        return {
+            id: this.id,
+            targetId: this.targetId,
+            kind: TIMELINE_TRACK_KIND.POSE,
+            keyframes: this.keyframes.map((keyframe) => (keyframe as PoseKeyframe).toJSON()),
+        };
     }
 }

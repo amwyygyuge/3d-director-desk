@@ -28,7 +28,17 @@ export class ContinuityDiagnosticsStore {
         this.scene = scene;
         this.camera = camera;
         this.timeline = timeline;
-        makeAutoObservable<ContinuityDiagnosticsStore, "currentIssues" | "currentRequest" | "currentSourceSignature" | "disposeInvalidation" | "scene" | "camera" | "timeline" | "sourceSignature">(this, {
+        makeAutoObservable<
+            ContinuityDiagnosticsStore,
+            | "currentIssues"
+            | "currentRequest"
+            | "currentSourceSignature"
+            | "disposeInvalidation"
+            | "scene"
+            | "camera"
+            | "timeline"
+            | "sourceSignature"
+        >(this, {
             currentIssues: observableRef,
             currentRequest: observableRef,
             currentSourceSignature: false,

@@ -6,6 +6,18 @@ import type { LightParams } from "../core/LightParams";
 import type { PoseSnapshot } from "../pose/PoseSnapshot";
 import type { SceneObjectInit, Transform } from "../core/SceneObject";
 
+export const LIGHTING_MODE = {
+    STUDIO: "studio",
+    CUSTOM: "custom",
+} as const;
+export type LightingMode = (typeof LIGHTING_MODE)[keyof typeof LIGHTING_MODE];
+
+export function isLightingMode(value: unknown): value is LightingMode {
+    return value === LIGHTING_MODE.STUDIO || value === LIGHTING_MODE.CUSTOM;
+}
+
+const INITIAL_SCENE_REVISION = 0;
+
 /**
  * 场景 Store(MobX 类):只放可观察的纯数据实体。
  * three 运行时对象永远在 SceneManager 的普通 Map 里,不进本 store(性能铁律)。
@@ -15,6 +27,10 @@ import type { SceneObjectInit, Transform } from "../core/SceneObject";
  */
 export class SceneStore {
     readonly manager = new SceneManager();
+    /** 场景照明策略只保存可序列化模式；实际 Three 灯由 StudioRig 或 LightContent 创建。 */
+    lightingMode: LightingMode = LIGHTING_MODE.STUDIO;
+    /** 模式变化的响应式锚点；Canvas demand 模式由 StudioRig 显式补帧。 */
+    revision = INITIAL_SCENE_REVISION;
 
     constructor() {
         makeAutoObservable(this, { manager: false });
@@ -40,6 +56,12 @@ export class SceneStore {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
         entity.applyLight(light);
+    }
+
+    setLightingMode(mode: LightingMode): void {
+        if (this.lightingMode === mode) return;
+        this.lightingMode = mode;
+        this.revision += 1;
     }
 
     setObjectAction(id: string, actionId: string | null): void {

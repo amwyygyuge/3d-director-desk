@@ -17,7 +17,6 @@ import { TIMELINE_EASING } from "../timeline/TransformKeyframe";
 import { PlayheadDisplay } from "./PlayheadDisplay";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
-const PANEL_INSET_PX = 12;
 const PANEL_HEIGHT_PX = 190;
 const RULER_HEIGHT_PX = 34;
 const TRACK_LABEL_WIDTH_PX = 140;
@@ -84,17 +83,23 @@ export const TimelinePanel = observer(function TimelinePanel() {
         );
     };
 
-    const moveKeyWithKeyboard = (event: KeyboardEvent<HTMLDivElement>, trackId: string, keyframeId: string, time: number): void => {
+    const moveKeyWithKeyboard = (
+        event: KeyboardEvent<HTMLDivElement>,
+        trackId: string,
+        keyframeId: string,
+        time: number,
+    ): void => {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             setSelectedKey({ trackId, keyframeId });
             return;
         }
-        const timeDelta = event.key === "ArrowLeft"
-            ? -KEYBOARD_TIME_STEP_SECONDS
-            : event.key === "ArrowRight"
-                ? KEYBOARD_TIME_STEP_SECONDS
-                : null;
+        const timeDelta =
+            event.key === "ArrowLeft"
+                ? -KEYBOARD_TIME_STEP_SECONDS
+                : event.key === "ArrowRight"
+                  ? KEYBOARD_TIME_STEP_SECONDS
+                  : null;
         if (timeDelta === null) return;
         event.preventDefault();
         const nextTime = clampTime(time + timeDelta, duration);
@@ -103,7 +108,10 @@ export const TimelinePanel = observer(function TimelinePanel() {
         const track = document.track(trackId);
         if (!track) return;
         dispatcher.dispatch(
-            { type: track.kind === "pose" ? "pose.move-key" : "timeline.move-key", payload: { trackId, keyframeId, time: nextTime } },
+            {
+                type: track.kind === "pose" ? "pose.move-key" : "timeline.move-key",
+                payload: { trackId, keyframeId, time: nextTime },
+            },
             stores,
         );
     };
@@ -113,13 +121,8 @@ export const TimelinePanel = observer(function TimelinePanel() {
             elevation={4}
             aria-label="时间轴"
             sx={{
-                position: "absolute",
-                right: PANEL_INSET_PX,
-                bottom: PANEL_INSET_PX,
-                left: PANEL_INSET_PX,
                 minHeight: PANEL_HEIGHT_PX,
                 p: 1,
-                zIndex: 1,
             }}
         >
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -174,19 +177,42 @@ export const TimelinePanel = observer(function TimelinePanel() {
             >
                 <Box
                     aria-label="时间轴标尺"
-                    sx={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(90deg, transparent 99%, rgba(255,255,255,.15) 100%)", backgroundSize: "10% 100%" }}
+                    sx={{
+                        position: "absolute",
+                        inset: 0,
+                        backgroundImage: "linear-gradient(90deg, transparent 99%, rgba(255,255,255,.15) 100%)",
+                        backgroundSize: "10% 100%",
+                    }}
                 />
                 <Box
                     aria-label="播放头"
-                    sx={{ position: "absolute", top: 0, bottom: 0, left: `${(playhead / duration) * 100}%`, borderLeft: 2, borderColor: "error.main" }}
+                    sx={{
+                        position: "absolute",
+                        top: 0,
+                        bottom: 0,
+                        left: `${(playhead / duration) * 100}%`,
+                        borderLeft: 2,
+                        borderColor: "error.main",
+                    }}
                 />
             </Box>
             {document.tracks.map((track) => (
-                <Box key={track.id} sx={{ display: "grid", gridTemplateColumns: `${TRACK_LABEL_WIDTH_PX}px 1fr`, minHeight: TRACK_HEIGHT_PX, alignItems: "center" }}>
-                    <Typography variant="caption" noWrap>{track.targetId}</Typography>
+                <Box
+                    key={track.id}
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: `${TRACK_LABEL_WIDTH_PX}px 1fr`,
+                        minHeight: TRACK_HEIGHT_PX,
+                        alignItems: "center",
+                    }}
+                >
+                    <Typography variant="caption" noWrap>
+                        {track.targetId}
+                    </Typography>
                     <Box sx={{ position: "relative", height: TRACK_HEIGHT_PX }}>
                         {track.keyframes.map((keyframe) => {
-                            const transientTime = dragState?.keyframeId === keyframe.id ? dragState.time : keyframe.time;
+                            const transientTime =
+                                dragState?.keyframeId === keyframe.id ? dragState.time : keyframe.time;
                             return (
                                 <Box
                                     key={keyframe.id}
@@ -202,7 +228,11 @@ export const TimelinePanel = observer(function TimelinePanel() {
                                         event.stopPropagation();
                                         rulerRef.current?.setPointerCapture(event.pointerId);
                                         setSelectedKey({ trackId: track.id, keyframeId: keyframe.id });
-                                        setDragState({ trackId: track.id, keyframeId: keyframe.id, time: keyframe.time });
+                                        setDragState({
+                                            trackId: track.id,
+                                            keyframeId: keyframe.id,
+                                            time: keyframe.time,
+                                        });
                                     }}
                                     sx={{
                                         position: "absolute",
@@ -211,7 +241,8 @@ export const TimelinePanel = observer(function TimelinePanel() {
                                         width: KEY_SIZE_PX,
                                         height: KEY_SIZE_PX,
                                         transform: "rotate(45deg)",
-                                        bgcolor: selectedKey?.keyframeId === keyframe.id ? "primary.main" : "text.secondary",
+                                        bgcolor:
+                                            selectedKey?.keyframeId === keyframe.id ? "primary.main" : "text.secondary",
                                         cursor: "ew-resize",
                                     }}
                                 />
@@ -238,7 +269,10 @@ export const TimelinePanel = observer(function TimelinePanel() {
                         color="error"
                         onClick={() =>
                             dispatcher.dispatch(
-                                { type: selectedTrack?.kind === "pose" ? "pose.remove-key" : "timeline.remove-key", payload: selectedKey },
+                                {
+                                    type: selectedTrack?.kind === "pose" ? "pose.remove-key" : "timeline.remove-key",
+                                    payload: selectedKey,
+                                },
                                 stores,
                             )
                         }

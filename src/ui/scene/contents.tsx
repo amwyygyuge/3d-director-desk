@@ -3,19 +3,12 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { DirectionalLight, Mesh, Object3D, PointLight, Scene, SpotLight } from "three";
-import {
-    ArrowHelper,
-    Box3,
-    DirectionalLightHelper,
-    Group,
-    PointLightHelper,
-    SpotLightHelper,
-    Vector3,
-} from "three";
+import { ArrowHelper, Box3, DirectionalLightHelper, Group, PointLightHelper, SpotLightHelper, Vector3 } from "three";
 
 import type { LightParams, LightType } from "../../core/LightParams";
 import type { SceneObject } from "../../core/SceneObject";
 import type { ModelHandle } from "../../loaders/ModelImporter";
+import { STAGE_DEFS } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 /** 每个 id 一个稳定区分色:走查时肉眼可辨,与选择态高亮解耦 */
@@ -90,7 +83,9 @@ const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
     color,
     scene,
 }: SceneLightHelperRootProps) {
-    const { selection } = useDirectorDeskStores();
+    const { selection, ui } = useDirectorDeskStores();
+    // 阶段透镜:灯光标记只在布景阶段显示(打灯已并入布景)
+    if (!STAGE_DEFS[ui.stage].helpers.lightHelpers) return null;
     return createPortal(
         <group ref={rootRef} userData={{ helper: true }}>
             <mesh

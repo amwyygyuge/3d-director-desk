@@ -18,7 +18,9 @@ export class TimelineDoc {
 
     constructor(init: TimelineDocInit = { duration: DEFAULT_TIMELINE_DURATION_SECONDS, tracks: [] }) {
         this.duration = init.duration;
-        this.tracks = Object.freeze(init.tracks.map((track) => (track instanceof TimelineTrack ? track : new TimelineTrack(track))));
+        this.tracks = Object.freeze(
+            init.tracks.map((track) => (track instanceof TimelineTrack ? track : new TimelineTrack(track))),
+        );
         Object.freeze(this);
     }
 
@@ -38,7 +40,10 @@ export class TimelineDoc {
     }
 
     withoutTrack(trackId: string): TimelineDoc {
-        return new TimelineDoc({ duration: this.duration, tracks: this.tracks.filter((track) => track.id !== trackId) });
+        return new TimelineDoc({
+            duration: this.duration,
+            tracks: this.tracks.filter((track) => track.id !== trackId),
+        });
     }
 
     withDuration(duration: number): TimelineDoc {

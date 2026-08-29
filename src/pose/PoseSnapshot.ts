@@ -26,7 +26,12 @@ function normalizeQuaternion(value: QuaternionTuple): QuaternionTuple {
         nz = -nz;
         nw = -nw;
     }
-    return Object.freeze([normalizedComponent(nx), normalizedComponent(ny), normalizedComponent(nz), normalizedComponent(nw)] as const);
+    return Object.freeze([
+        normalizedComponent(nx),
+        normalizedComponent(ny),
+        normalizedComponent(nz),
+        normalizedComponent(nw),
+    ] as const);
 }
 
 /**
@@ -42,7 +47,12 @@ export class PoseSnapshot {
         const bones: Record<BoneKey, QuaternionTuple> = {};
         for (const key of Object.keys(init.bones).sort()) {
             const quaternion = init.bones[key];
-            if (!key || !Array.isArray(quaternion) || quaternion.length !== 4 || !quaternion.every((component) => typeof component === "number" && Number.isFinite(component))) {
+            if (
+                !key ||
+                !Array.isArray(quaternion) ||
+                quaternion.length !== 4 ||
+                !quaternion.every((component) => typeof component === "number" && Number.isFinite(component))
+            ) {
                 throw new Error("PoseSnapshot: each bone needs a non-empty key and finite quaternion tuple");
             }
             bones[key] = normalizeQuaternion(quaternion);
@@ -77,6 +87,10 @@ export class PoseSnapshot {
 }
 
 export function isQuaternionTuple(value: unknown): value is QuaternionTuple {
-    return Array.isArray(value) && value.length === 4 && value.every((component) => Number.isFinite(component)) &&
-        value.some((component) => component !== 0);
+    return (
+        Array.isArray(value) &&
+        value.length === 4 &&
+        value.every((component) => Number.isFinite(component)) &&
+        value.some((component) => component !== 0)
+    );
 }

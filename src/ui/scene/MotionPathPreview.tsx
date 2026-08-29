@@ -71,10 +71,13 @@ export const MotionPathPreview = observer(function MotionPathPreview({ visible }
     const { motion } = useDirectorDeskStores();
     const geometry = useMemo(() => createPreviewGeometry(visible ? motion.path : null), [motion.path, visible]);
 
-    useEffect(() => () => {
-        geometry?.path.dispose();
-        geometry?.keys.dispose();
-    }, [geometry]);
+    useEffect(
+        () => () => {
+            geometry?.path.dispose();
+            geometry?.keys.dispose();
+        },
+        [geometry],
+    );
 
     if (!geometry) return null;
     return (

@@ -65,7 +65,9 @@ export const ContinuitySection = observer(function ContinuitySection({ onNotice 
 
     const toggleShot = (id: string) => {
         continuity.clear();
-        setOrderedShotIds((current) => current.includes(id) ? current.filter((currentId) => currentId !== id) : [...current, id]);
+        setOrderedShotIds((current) =>
+            current.includes(id) ? current.filter((currentId) => currentId !== id) : [...current, id],
+        );
     };
     const moveShot = (index: number, direction: -1 | 1) => {
         const target = index + direction;
@@ -139,16 +141,28 @@ export const ContinuitySection = observer(function ContinuitySection({ onNotice 
                         <ListItem
                             key={id}
                             disablePadding
-                            secondaryAction={selected && (
-                                <Box>
-                                    <IconButton size="small" disabled={index === 0} aria-label={`机位 ${id} 上移`} onClick={() => moveShot(index, -1)}>
-                                        <ArrowUpwardIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton size="small" disabled={index === orderedShotIds.length - 1} aria-label={`机位 ${id} 下移`} onClick={() => moveShot(index, 1)}>
-                                        <ArrowDownwardIcon fontSize="small" />
-                                    </IconButton>
-                                </Box>
-                            )}
+                            secondaryAction={
+                                selected && (
+                                    <Box>
+                                        <IconButton
+                                            size="small"
+                                            disabled={index === 0}
+                                            aria-label={`机位 ${id} 上移`}
+                                            onClick={() => moveShot(index, -1)}
+                                        >
+                                            <ArrowUpwardIcon fontSize="small" />
+                                        </IconButton>
+                                        <IconButton
+                                            size="small"
+                                            disabled={index === orderedShotIds.length - 1}
+                                            aria-label={`机位 ${id} 下移`}
+                                            onClick={() => moveShot(index, 1)}
+                                        >
+                                            <ArrowDownwardIcon fontSize="small" />
+                                        </IconButton>
+                                    </Box>
+                                )
+                            }
                         >
                             <ListItemButton selected={selected} onClick={() => toggleShot(id)}>
                                 <ListItemText primary={`${selected ? `${index + 1}. ` : ""}${id}`} />
@@ -186,14 +200,24 @@ export const ContinuitySection = observer(function ContinuitySection({ onNotice 
                     setTeleportThreshold(event.target.value);
                 }}
             />
-            <Button size="small" fullWidth variant="outlined" startIcon={<CheckIcon />} sx={{ mt: 0.5 }} onClick={runCheck}>
+            <Button
+                size="small"
+                fullWidth
+                variant="outlined"
+                startIcon={<CheckIcon />}
+                sx={{ mt: 0.5 }}
+                onClick={runCheck}
+            >
                 检查一致性
             </Button>
             <List dense disablePadding aria-label="一致性问题">
                 {continuity.issues.map((issue, index) => (
                     <ListItem key={`${issue.kind}:${issue.shotIds.join(":")}:${index}`} disablePadding>
                         <ListItemButton onClick={() => focusIssue(issue)}>
-                            <ListItemText primary={`${issueLabel(issue)} · ${issue.shotIds.join(" → ")}`} secondary={issue.detail} />
+                            <ListItemText
+                                primary={`${issueLabel(issue)} · ${issue.shotIds.join(" → ")}`}
+                                secondary={issue.detail}
+                            />
                         </ListItemButton>
                     </ListItem>
                 ))}

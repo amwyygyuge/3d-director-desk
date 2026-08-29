@@ -75,7 +75,7 @@ export class CameraMotionPath {
         this.id = DIRECTOR_CAMERA_MOTION_ID;
         this.keys = Object.freeze(
             init.keys
-                .map((key) => key instanceof MotionKey ? key : new MotionKey(key))
+                .map((key) => (key instanceof MotionKey ? key : new MotionKey(key)))
                 .sort((left, right) => left.timeSeconds - right.timeSeconds),
         );
         Object.freeze(this);
@@ -131,7 +131,11 @@ function writeShot(sample: CameraMotionSample, shot: CameraShot): void {
  * Exact shared interpolation for playback and preview. It intentionally rejects samples outside
  * the authored range so the runtime can restore the free director pose rather than clamp.
  */
-export function sampleCameraMotionPath(path: CameraMotionPath, timeSeconds: number, sample: CameraMotionSample): boolean {
+export function sampleCameraMotionPath(
+    path: CameraMotionPath,
+    timeSeconds: number,
+    sample: CameraMotionSample,
+): boolean {
     const first = path.keys[0];
     const last = path.keys[path.keys.length - 1];
     if (!first || !last || timeSeconds < first.timeSeconds || timeSeconds > last.timeSeconds) return false;
@@ -148,7 +152,10 @@ export function sampleCameraMotionPath(path: CameraMotionPath, timeSeconds: numb
         const from = path.keys[index];
         const to = path.keys[index + 1];
         if (!from || !to || timeSeconds < from.timeSeconds || timeSeconds > to.timeSeconds) continue;
-        const progress = easedProgress(from.easing, (timeSeconds - from.timeSeconds) / (to.timeSeconds - from.timeSeconds));
+        const progress = easedProgress(
+            from.easing,
+            (timeSeconds - from.timeSeconds) / (to.timeSeconds - from.timeSeconds),
+        );
         sample.positionX = from.shot.position[0] + (to.shot.position[0] - from.shot.position[0]) * progress;
         sample.positionY = from.shot.position[1] + (to.shot.position[1] - from.shot.position[1]) * progress;
         sample.positionZ = from.shot.position[2] + (to.shot.position[2] - from.shot.position[2]) * progress;

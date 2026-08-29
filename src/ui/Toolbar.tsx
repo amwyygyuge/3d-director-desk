@@ -17,19 +17,26 @@ import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useRef, useState } from "react";
+import type { ComponentType } from "react";
 
 import { createDefaultLightParams } from "../core/LightParams";
 import type { LightType } from "../core/LightParams";
 import { GIZMO_MODE } from "../store/UiStore";
 import type { GizmoMode } from "../store/UiStore";
 import { formatShortcutHint, SHORTCUT_ID } from "../shortcuts/builtinShortcuts";
+import type { ShortcutId } from "../shortcuts/builtinShortcuts";
+import { STAGE_DEFS, STAGE_ORDER } from "../workspace/stages";
+import type { WorkspaceStage } from "../workspace/stages";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
+import { LightModeToggle } from "./LightModeToggle";
 import { importActionFile, importModelFile, placementFor } from "./importFiles";
 
 /** 模式三态查表:图标 + 文案(模式切换只走工具条;W/E/R 已让位给 WASD 飞行,见 navigation/FlyDrive) */
@@ -45,22 +52,52 @@ const PLAY_INDICATOR_SIZE = 8;
 const PLAY_INDICATOR_GAP = 0.5;
 
 const ACTION_FILE_ACCEPT = ".glb,.gltf,.fbx";
-const OVERLAY_INSET_PX = 12;
 const TOOLBAR_MAX_WIDTH = "calc(100% - 24px)";
 
-/**
- * 顶部工具条:场景与相机的持久化写入经 dispatcher 分发；UI 反馈仅写 UiStore。
- * 组件不直接修改场景或相机状态。
- */
-export const Toolbar = observer(function Toolbar() {
+/** 阶段切换页签:点击 + 数字键直切(SHORTCUT_SPECS),提示同源 */
+const STAGE_SHORTCUT_ID: Record<WorkspaceStage, ShortcutId> = {
+    set: SHORTCUT_ID.STAGE_SET,
+    action: SHORTCUT_ID.STAGE_ACTION,
+    camera: SHORTCUT_ID.STAGE_CAMERA,
+    output: SHORTCUT_ID.STAGE_OUTPUT,
+};
+
+const StageTabs = observer(function StageTabs() {
+    const { ui } = useDirectorDeskStores();
+    return (
+        <Tabs
+            value={ui.stage}
+            onChange={(_, stage: WorkspaceStage) => ui.setStage(stage)}
+            aria-label="工作区阶段"
+            sx={{ minHeight: 0, "& .MuiTab-root": { minHeight: 0, py: 0.5 } }}
+        >
+            {STAGE_ORDER.map((stage) => {
+                const def = STAGE_DEFS[stage];
+                const StageIcon = def.icon;
+                return (
+                    <Tab
+                        key={stage}
+                        value={stage}
+                        label={
+                            <Tooltip title={`${def.label}(${formatShortcutHint(STAGE_SHORTCUT_ID[stage])})`}>
+                                <Box className="flex items-center" sx={{ gap: 0.5 }}>
+                                    <StageIcon fontSize="small" />
+                                    {def.label}
+                                </Box>
+                            </Tooltip>
+                        }
+                    />
+                );
+            })}
+        </Tabs>
+    );
+});
+
+/** 布景:放置几何体 + 导入模型 */
+const SectionPlace = observer(function SectionPlace() {
     const stores = useDirectorDeskStores();
     const { scene, dispatcher, ui } = stores;
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const actionInputRef = useRef<HTMLInputElement>(null);
-    const [notice, setNotice] = useState<string | null>(null);
-    const [lightMenuAnchor, setLightMenuAnchor] = useState<HTMLElement | null>(null);
-    const applicationNotice = ui.applicationNotice;
-    const displayedNotice = applicationNotice ?? notice;
 
     const placePrimitive = () => {
         const result = dispatcher.dispatch(
@@ -69,17 +106,42 @@ export const Toolbar = observer(function Toolbar() {
                 payload: {
                     id: `prim-${crypto.randomUUID()}`,
                     kind: "primitive",
-                    transform: {
-                        position: placementFor(scene.objectCount),
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
+                    transform: { position: placementFor(scene.objectCount), rotation: [0, 0, 0], scale: [1, 1, 1] },
                 },
             },
             stores,
         );
-        if (!result.ok) setNotice(`放置被拒绝:${result.error}`);
+        if (!result.ok) ui.setApplicationNotice(`放置被拒绝:${result.error}`);
     };
+
+    return (
+        <>
+            <Button variant="contained" startIcon={<AddBoxIcon />} onClick={placePrimitive}>
+                添加几何体
+            </Button>
+            <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileInputRef.current?.click()}>
+                导入模型
+            </Button>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept={MODEL_FILE_ACCEPT}
+                hidden
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) importModelFile(stores, file, (message) => ui.setApplicationNotice(message));
+                }}
+            />
+        </>
+    );
+});
+
+/** 布景(含打灯):添加灯光菜单 + 灯光模式 */
+const SectionLight = observer(function SectionLight() {
+    const stores = useDirectorDeskStores();
+    const { scene, dispatcher, ui } = stores;
+    const [lightMenuAnchor, setLightMenuAnchor] = useState<HTMLElement | null>(null);
 
     const placeLight = (type: LightType) => {
         const [x, , z] = placementFor(scene.objectCount);
@@ -93,130 +155,203 @@ export const Toolbar = observer(function Toolbar() {
                     kind: "light",
                     name: `${label} ${id.slice(-4)}`,
                     light: createDefaultLightParams(type),
-                    transform: {
-                        position: [x, 3, z],
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
+                    transform: { position: [x, 3, z], rotation: [0, 0, 0], scale: [1, 1, 1] },
                 },
             },
             stores,
         );
         setLightMenuAnchor(null);
-        if (!result.ok) setNotice(`添加灯光被拒绝:${result.issues?.join(";") ?? result.error}`);
+        if (!result.ok) ui.setApplicationNotice(`添加灯光被拒绝:${result.issues?.join(";") ?? result.error}`);
     };
 
-    const clearAll = () => {
-        for (const entity of scene.manager.list()) {
-            dispatcher.dispatch({ type: "object.remove", payload: { id: entity.id } }, stores);
-        }
-    };
+    return (
+        <>
+            <Button
+                variant="outlined"
+                startIcon={<LightbulbIcon />}
+                aria-controls={lightMenuAnchor ? "light-creation-menu" : undefined}
+                aria-haspopup="menu"
+                onClick={(event) => setLightMenuAnchor(event.currentTarget)}
+            >
+                添加灯光
+            </Button>
+            <LightModeToggle />
+            <Menu
+                id="light-creation-menu"
+                anchorEl={lightMenuAnchor}
+                open={lightMenuAnchor !== null}
+                onClose={() => setLightMenuAnchor(null)}
+            >
+                <MenuItem onClick={() => placeLight("directional")}>添加平行光</MenuItem>
+                <MenuItem onClick={() => placeLight("point")}>添加点光</MenuItem>
+                <MenuItem onClick={() => placeLight("spot")}>添加聚光</MenuItem>
+            </Menu>
+        </>
+    );
+});
+
+/** 动作:导入动作 */
+const SectionAction = observer(function SectionAction() {
+    const stores = useDirectorDeskStores();
+    const actionInputRef = useRef<HTMLInputElement>(null);
+    return (
+        <>
+            <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => actionInputRef.current?.click()}>
+                导入动作
+            </Button>
+            <input
+                ref={actionInputRef}
+                type="file"
+                accept={ACTION_FILE_ACCEPT}
+                hidden
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void importActionFile(stores, file, (message) => stores.ui.setApplicationNotice(message));
+                }}
+            />
+        </>
+    );
+});
+
+/** 成片:截图 */
+const SectionCapture = observer(function SectionCapture() {
+    const stores = useDirectorDeskStores();
+    return (
+        <Button
+            variant="outlined"
+            startIcon={<PhotoCameraIcon />}
+            onClick={() => {
+                const result = stores.dispatcher.dispatch({ type: "capture.frame", payload: {} }, stores);
+                if (!result.ok) stores.ui.setApplicationNotice(`截图被拒绝:${result.error}`);
+            }}
+        >
+            截图
+        </Button>
+    );
+});
+
+/** 布景:清空场景 */
+const SectionClear = observer(function SectionClear() {
+    const stores = useDirectorDeskStores();
+    const { scene, dispatcher } = stores;
+    return (
+        <Button
+            variant="outlined"
+            startIcon={<DeleteSweepIcon />}
+            onClick={() => {
+                for (const entity of scene.manager.list()) {
+                    dispatcher.dispatch({ type: "object.remove", payload: { id: entity.id } }, stores);
+                }
+            }}
+            disabled={scene.objectCount === 0}
+        >
+            清空({scene.objectCount})
+        </Button>
+    );
+});
+
+/** 全局:撤销/重做(全阶段常驻) */
+const SectionHistory = observer(function SectionHistory() {
+    const stores = useDirectorDeskStores();
+    return (
+        <>
+            <Tooltip title={`撤销(${formatShortcutHint(SHORTCUT_ID.EDIT_UNDO)})`}>
+                <span>
+                    <IconButton
+                        size="small"
+                        disabled={!stores.history.canUndo}
+                        onClick={() => stores.history.undo(stores)}
+                        aria-label="撤销"
+                    >
+                        <UndoIcon fontSize="small" />
+                    </IconButton>
+                </span>
+            </Tooltip>
+            <Tooltip title={`重做(${formatShortcutHint(SHORTCUT_ID.EDIT_REDO)})`}>
+                <span>
+                    <IconButton
+                        size="small"
+                        disabled={!stores.history.canRedo}
+                        onClick={() => stores.history.redo(stores)}
+                        aria-label="重做"
+                    >
+                        <RedoIcon fontSize="small" />
+                    </IconButton>
+                </span>
+            </Tooltip>
+        </>
+    );
+});
+
+/** 全局:gizmo 模式三态(全阶段常驻) */
+const SectionGizmo = observer(function SectionGizmo() {
+    const { ui } = useDirectorDeskStores();
+    return (
+        <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={ui.gizmoMode}
+            aria-label="变换工具"
+            onChange={(_, mode: GizmoMode | null) => {
+                if (mode) ui.setGizmoMode(mode);
+            }}
+        >
+            {Object.entries(GIZMO_MODE_META).map(([mode, meta]) => (
+                <ToggleButton key={mode} value={mode} aria-label={meta.label}>
+                    <Tooltip title={meta.label}>
+                        <meta.icon fontSize="small" />
+                    </Tooltip>
+                </ToggleButton>
+            ))}
+        </ToggleButtonGroup>
+    );
+});
+
+/** 工具组 key → 组件查表;阶段 → 工具组列表查表(禁 if 链) */
+const SECTION_COMPONENTS = {
+    place: SectionPlace,
+    light: SectionLight,
+    action: SectionAction,
+    capture: SectionCapture,
+    clear: SectionClear,
+} satisfies Record<string, ComponentType>;
+
+const STAGE_SECTIONS: Record<WorkspaceStage, readonly (keyof typeof SECTION_COMPONENTS)[]> = {
+    set: ["place", "light", "clear"],
+    action: ["action"],
+    camera: [],
+    output: ["capture"],
+};
+
+/**
+ * 顶部工具条:阶段 Tabs + 当前阶段工具组 + 全局组(历史/gizmo/播放态)。
+ * 阶段只是聚焦透镜:不重置选中/视角/场景数据;一切写操作经 dispatcher 分发。
+ */
+export const Toolbar = observer(function Toolbar() {
+    const stores = useDirectorDeskStores();
+    const { ui } = stores;
 
     return (
         <>
             <Paper
                 elevation={2}
+                square
                 role="toolbar"
                 aria-label="导演工具"
-                sx={{
-                    position: "absolute",
-                    top: OVERLAY_INSET_PX,
-                    left: OVERLAY_INSET_PX,
-                    maxWidth: TOOLBAR_MAX_WIDTH,
-                    overflowX: "auto",
-                    px: 1,
-                    py: 0.5,
-                    zIndex: 1,
-                }}
+                sx={{ maxWidth: TOOLBAR_MAX_WIDTH, overflowX: "auto", px: 1, py: 0.5 }}
             >
-                <Stack direction="row" spacing={1} sx={{ width: "max-content" }}>
-                    <Button variant="contained" startIcon={<AddBoxIcon />} onClick={placePrimitive}>
-                        添加几何体
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<LightbulbIcon />}
-                        aria-controls={lightMenuAnchor ? "light-creation-menu" : undefined}
-                        aria-haspopup="menu"
-                        onClick={(event) => setLightMenuAnchor(event.currentTarget)}
-                    >
-                        添加灯光
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<UploadFileIcon />}
-                        onClick={() => fileInputRef.current?.click()}
-                    >
-                        导入模型
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<UploadFileIcon />}
-                        onClick={() => actionInputRef.current?.click()}
-                    >
-                        导入动作
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<PhotoCameraIcon />}
-                        onClick={() => {
-                            const result = dispatcher.dispatch({ type: "capture.frame", payload: {} }, stores);
-                            if (!result.ok) setNotice(`截图被拒绝:${result.error}`);
-                        }}
-                    >
-                        截图
-                    </Button>
-                    <Button
-                        variant="outlined"
-                        startIcon={<DeleteSweepIcon />}
-                        onClick={clearAll}
-                        disabled={scene.objectCount === 0}
-                    >
-                        清空({scene.objectCount})
-                    </Button>
+                <Stack direction="row" spacing={1} sx={{ width: "max-content", alignItems: "center" }}>
+                    <StageTabs />
                     <Divider orientation="vertical" flexItem />
-                    <Tooltip title={`撤销(${formatShortcutHint(SHORTCUT_ID.EDIT_UNDO)})`}>
-                        <span>
-                            <IconButton
-                                size="small"
-                                disabled={!stores.history.canUndo}
-                                onClick={() => stores.history.undo(stores)}
-                                aria-label="撤销"
-                            >
-                                <UndoIcon fontSize="small" />
-                            </IconButton>
-                        </span>
-                    </Tooltip>
-                    <Tooltip title={`重做(${formatShortcutHint(SHORTCUT_ID.EDIT_REDO)})`}>
-                        <span>
-                            <IconButton
-                                size="small"
-                                disabled={!stores.history.canRedo}
-                                onClick={() => stores.history.redo(stores)}
-                                aria-label="重做"
-                            >
-                                <RedoIcon fontSize="small" />
-                            </IconButton>
-                        </span>
-                    </Tooltip>
+                    {STAGE_SECTIONS[ui.stage].map((key) => {
+                        const Section = SECTION_COMPONENTS[key];
+                        return <Section key={key} />;
+                    })}
                     <Divider orientation="vertical" flexItem />
-                    <ToggleButtonGroup
-                        exclusive
-                        size="small"
-                        value={stores.ui.gizmoMode}
-                        aria-label="变换工具"
-                        onChange={(_, mode: GizmoMode | null) => {
-                            if (mode) stores.ui.setGizmoMode(mode);
-                        }}
-                    >
-                        {Object.entries(GIZMO_MODE_META).map(([mode, meta]) => (
-                            <ToggleButton key={mode} value={mode} aria-label={meta.label}>
-                                <Tooltip title={meta.label}>
-                                    <meta.icon fontSize="small" />
-                                </Tooltip>
-                            </ToggleButton>
-                        ))}
-                    </ToggleButtonGroup>
+                    <SectionHistory />
+                    <Divider orientation="vertical" flexItem />
+                    <SectionGizmo />
                     {stores.clock.isPlaying && (
                         <>
                             <Divider orientation="vertical" flexItem />
@@ -237,43 +372,11 @@ export const Toolbar = observer(function Toolbar() {
                     )}
                 </Stack>
             </Paper>
-            <Menu
-                id="light-creation-menu"
-                anchorEl={lightMenuAnchor}
-                open={lightMenuAnchor !== null}
-                onClose={() => setLightMenuAnchor(null)}
-            >
-                <MenuItem onClick={() => placeLight("directional")}>添加平行光</MenuItem>
-                <MenuItem onClick={() => placeLight("point")}>添加点光</MenuItem>
-                <MenuItem onClick={() => placeLight("spot")}>添加聚光</MenuItem>
-            </Menu>
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept={MODEL_FILE_ACCEPT}
-                hidden
-                onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) importModelFile(stores, file, setNotice);
-                }}
-            />
-            <input
-                ref={actionInputRef}
-                type="file"
-                accept={ACTION_FILE_ACCEPT}
-                hidden
-                onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) void importActionFile(stores, file, setNotice);
-                }}
-            />
             <Snackbar
-                open={displayedNotice !== null}
+                open={ui.applicationNotice !== null}
                 autoHideDuration={3000}
-                onClose={() => (applicationNotice === null ? setNotice(null) : ui.clearApplicationNotice())}
-                message={displayedNotice}
+                onClose={() => ui.clearApplicationNotice()}
+                message={ui.applicationNotice}
                 slotProps={{ content: { role: "alert", "aria-live": "assertive" } }}
                 anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
             />

@@ -43,7 +43,10 @@ function verifyContinuityAcceptance(stores: DirectorDeskStores): void {
     const capabilities = stores.dispatcher.listCapabilities();
     for (const type of ["continuity.selection-options", "continuity.check"]) {
         const capability = capabilities.find((candidate) => candidate.type === type);
-        assertAcceptance(capability?.kind === "query" && capability.permissions.includes("continuity:read"), `${type} 未注册为只读能力`);
+        assertAcceptance(
+            capability?.kind === "query" && capability.permissions.includes("continuity:read"),
+            `${type} 未注册为只读能力`,
+        );
     }
     const options = stores.dispatcher.query({ type: "continuity.selection-options", payload: {} }, stores);
     assertAcceptance(options.ok, "continuity.selection-options 查询失败");
@@ -60,17 +63,29 @@ function verifyContinuityAcceptance(stores: DirectorDeskStores): void {
         stores,
     );
     const invalidIssue = invalid.ok ? undefined : invalid.issueDetails?.[0];
-    assertAcceptance(invalidIssue?.code === "continuity.duplicate-shot" && invalidIssue.path === "shotIds.1", "重复机位未返回稳定结构化错误");
+    assertAcceptance(
+        invalidIssue?.code === "continuity.duplicate-shot" && invalidIssue.path === "shotIds.1",
+        "重复机位未返回稳定结构化错误",
+    );
 
     const initialIssues = check(stores);
-    stores.continuity.present({
-        subjectId: SUBJECT_ID,
-        shotIds: [LEFT_SHOT_ID, RIGHT_SHOT_ID],
-        sampleTimes: [0, 2],
-        teleportThreshold: 0.5,
-    }, initialIssues);
-    assertAcceptance(initialIssues.some((issue) => issue.kind === "axis-crossing"), "越轴未被检出");
-    assertAcceptance(initialIssues.some((issue) => issue.kind === "teleport"), "无区间走位关键帧的突变未被检出");
+    stores.continuity.present(
+        {
+            subjectId: SUBJECT_ID,
+            shotIds: [LEFT_SHOT_ID, RIGHT_SHOT_ID],
+            sampleTimes: [0, 2],
+            teleportThreshold: 0.5,
+        },
+        initialIssues,
+    );
+    assertAcceptance(
+        initialIssues.some((issue) => issue.kind === "axis-crossing"),
+        "越轴未被检出",
+    );
+    assertAcceptance(
+        initialIssues.some((issue) => issue.kind === "teleport"),
+        "无区间走位关键帧的突变未被检出",
+    );
     assertAcceptance(stores.continuity.issues.length === initialIssues.length, "瞬时诊断未呈现查询结果");
     const ambiguous = stores.dispatcher.query(
         {
@@ -84,8 +99,12 @@ function verifyContinuityAcceptance(stores: DirectorDeskStores): void {
         },
         stores,
     );
-    const ambiguousIssues = (ambiguous.ok ? ambiguous.value : undefined) as { readonly issues?: readonly ContinuityIssue[] } | undefined;
-    assertAcceptance(ambiguousIssues?.issues?.some((issue) => issue.kind === "axis-ambiguous"), "轴线不明确未被检出");
+    const ambiguousIssues = (ambiguous.ok ? ambiguous.value : undefined) as
+        { readonly issues?: readonly ContinuityIssue[] } | undefined;
+    assertAcceptance(
+        ambiguousIssues?.issues?.some((issue) => issue.kind === "axis-ambiguous"),
+        "轴线不明确未被检出",
+    );
 
     dispatch(stores, "camera.set-shot", {
         id: RIGHT_SHOT_ID,
@@ -103,12 +122,15 @@ function verifyContinuityAcceptance(stores: DirectorDeskStores): void {
     });
     assertAcceptance(stores.continuity.issues.length === 0, "依赖变更后诊断未失效");
     const correctedIssues = check(stores);
-    stores.continuity.present({
-        subjectId: SUBJECT_ID,
-        shotIds: [LEFT_SHOT_ID, RIGHT_SHOT_ID],
-        sampleTimes: [0, 2],
-        teleportThreshold: 0.5,
-    }, correctedIssues);
+    stores.continuity.present(
+        {
+            subjectId: SUBJECT_ID,
+            shotIds: [LEFT_SHOT_ID, RIGHT_SHOT_ID],
+            sampleTimes: [0, 2],
+            teleportThreshold: 0.5,
+        },
+        correctedIssues,
+    );
     assertAcceptance(correctedIssues.length === 0 && stores.continuity.issues.length === 0, "修正后诊断未收敛");
 }
 

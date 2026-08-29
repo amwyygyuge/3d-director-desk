@@ -18,7 +18,13 @@ export class PoseLayer {
         }
     }
 
-    applyInterpolated(objectId: string, left: PoseSnapshot, right: PoseSnapshot, progress: number, weight: number): void {
+    applyInterpolated(
+        objectId: string,
+        left: PoseSnapshot,
+        right: PoseSnapshot,
+        progress: number,
+        weight: number,
+    ): void {
         if (weight <= 0) return;
         for (let index = 0; index < left.entries.length; index += 1) {
             const entry = left.entries[index];

@@ -68,12 +68,7 @@ function isFiniteVec3(value: unknown): value is readonly [number, number, number
 }
 
 function isFiniteTransform(value: unknown): value is Transform {
-    return (
-        isRecord(value) &&
-        isFiniteVec3(value.position) &&
-        isFiniteVec3(value.rotation) &&
-        isFiniteVec3(value.scale)
-    );
+    return isRecord(value) && isFiniteVec3(value.position) && isFiniteVec3(value.rotation) && isFiniteVec3(value.scale);
 }
 
 function isTimelineEasing(value: unknown): value is TimelineEasing {
@@ -97,14 +92,23 @@ function keyframePayloadIssue(value: unknown): CommandIssue | null {
 }
 
 function poseKeyframePayloadIssue(value: unknown): CommandIssue | null {
-    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || typeof value.time !== "number" || !Number.isFinite(value.time) || value.time < 0) {
+    if (
+        !isRecord(value) ||
+        typeof value.id !== "string" ||
+        value.id.length === 0 ||
+        typeof value.time !== "number" ||
+        !Number.isFinite(value.time) ||
+        value.time < 0
+    ) {
         return issue(ISSUE_CODE.PAYLOAD, "keyframe", "姿态关键帧 id 或时间无效");
     }
     if (!isTimelineEasing(value.easing)) return issue(ISSUE_CODE.PAYLOAD, "keyframe.easing", "姿态关键帧缓动无效");
-    if (!isRecord(value.value) || !isRecord(value.value.bones)) return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
+    if (!isRecord(value.value) || !isRecord(value.value.bones))
+        return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
     const bones: Record<string, readonly [number, number, number, number]> = {};
     for (const [boneKey, quaternion] of Object.entries(value.value.bones)) {
-        if (!boneKey || !isQuaternionTuple(quaternion)) return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
+        if (!boneKey || !isQuaternionTuple(quaternion))
+            return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "姿态关键帧快照无效");
         bones[boneKey] = quaternion;
     }
     try {
@@ -141,31 +145,41 @@ function restoreTrackIssue(
     if (ctx.timeline.document.track(value.id) || ctx.timeline.document.trackForTarget(value.targetId, value.kind)) {
         return issue(ISSUE_CODE.TRACK_CONFLICT, path, "恢复轨道与当前文档冲突");
     }
-    const duplicateTrack = tracks.some((candidate, candidateIndex) =>
-        candidateIndex !== index &&
-        isRecord(candidate) &&
-        (candidate.id === value.id || (candidate.targetId === value.targetId && candidate.kind === value.kind)),
+    const duplicateTrack = tracks.some(
+        (candidate, candidateIndex) =>
+            candidateIndex !== index &&
+            isRecord(candidate) &&
+            (candidate.id === value.id || (candidate.targetId === value.targetId && candidate.kind === value.kind)),
     );
     if (duplicateTrack) return issue(ISSUE_CODE.TRACK_CONFLICT, path, "恢复轨道 id 或同类型目标重复");
     const invalidKeyIndex = keyframes.findIndex((keyframe) =>
-        value.kind === TIMELINE_TRACK_KIND.POSE ? poseKeyframePayloadIssue(keyframe) !== null : keyframePayloadIssue(keyframe) !== null,
+        value.kind === TIMELINE_TRACK_KIND.POSE
+            ? poseKeyframePayloadIssue(keyframe) !== null
+            : keyframePayloadIssue(keyframe) !== null,
     );
     if (invalidKeyIndex >= 0) {
         return issue(ISSUE_CODE.PAYLOAD, `${path}.keyframes.${invalidKeyIndex}`, "恢复关键帧参数无效");
     }
-    const outOfDurationIndex = keyframes.findIndex((keyframe) =>
-        isRecord(keyframe) && typeof keyframe.time === "number" && keyframe.time > ctx.timeline.document.duration,
+    const outOfDurationIndex = keyframes.findIndex(
+        (keyframe) =>
+            isRecord(keyframe) && typeof keyframe.time === "number" && keyframe.time > ctx.timeline.document.duration,
     );
     if (outOfDurationIndex >= 0) {
-        return issue(ISSUE_CODE.DURATION, `${path}.keyframes.${outOfDurationIndex}.time`, "恢复关键帧时间超过时间轴时长");
+        return issue(
+            ISSUE_CODE.DURATION,
+            `${path}.keyframes.${outOfDurationIndex}.time`,
+            "恢复关键帧时间超过时间轴时长",
+        );
     }
-    const duplicateKey = keyframes.some((keyframe, keyframeIndex) =>
-        isRecord(keyframe) &&
-        keyframes.some((candidate, candidateIndex) =>
-            candidateIndex !== keyframeIndex &&
-            isRecord(candidate) &&
-            (candidate.id === keyframe.id || candidate.time === keyframe.time),
-        ),
+    const duplicateKey = keyframes.some(
+        (keyframe, keyframeIndex) =>
+            isRecord(keyframe) &&
+            keyframes.some(
+                (candidate, candidateIndex) =>
+                    candidateIndex !== keyframeIndex &&
+                    isRecord(candidate) &&
+                    (candidate.id === keyframe.id || candidate.time === keyframe.time),
+            ),
     );
     return duplicateKey
         ? issue(ISSUE_CODE.DUPLICATE_TIME, `${path}.keyframes`, "恢复轨道的关键帧 id 或时间重复")
@@ -204,9 +218,10 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
         }
         const keyIssue = keyframePayloadIssue(payload.keyframe);
         if (keyIssue) return [keyIssue];
-        const durationIssue = payload.keyframe.time > ctx.timeline.document.duration
-            ? issue(ISSUE_CODE.DURATION, "keyframe.time", "关键帧时间不能超过时间轴时长")
-            : null;
+        const durationIssue =
+            payload.keyframe.time > ctx.timeline.document.duration
+                ? issue(ISSUE_CODE.DURATION, "keyframe.time", "关键帧时间不能超过时间轴时长")
+                : null;
         if (durationIssue) return [durationIssue];
         if (!ctx.scene.manager.getEntity(payload.targetId)) {
             return [issue(ISSUE_CODE.TARGET, "targetId", "关键帧目标对象不存在")];
@@ -227,9 +242,7 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             return [];
         }
         const targetTrack = ctx.timeline.document.trackForTarget(payload.targetId, TIMELINE_TRACK_KIND.TRANSFORM);
-        return targetTrack
-            ? [issue(ISSUE_CODE.TRACK_CONFLICT, "trackId", "每个对象只能有一个 transform 轨道")]
-            : [];
+        return targetTrack ? [issue(ISSUE_CODE.TRACK_CONFLICT, "trackId", "每个对象只能有一个 transform 轨道")] : [];
     }
 
     execute(ctx: DirectorContext): void {
@@ -238,7 +251,12 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
     }
 
     override invert(): readonly SerializedCommand[] {
-        return [{ type: RemoveTimelineKeyCommand.TYPE, payload: { trackId: this.payload.trackId, keyframeId: this.payload.keyframe.id } }];
+        return [
+            {
+                type: RemoveTimelineKeyCommand.TYPE,
+                payload: { trackId: this.payload.trackId, keyframeId: this.payload.keyframe.id },
+            },
+        ];
     }
 }
 
@@ -271,7 +289,8 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
-        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM)
+            return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         if (!track.keyframe(payload.keyframeId)) return [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
         const duplicate = duplicateTimeIssue(track, payload.time, payload.keyframeId);
         return duplicate ? [duplicate] : [];
@@ -317,7 +336,8 @@ export class RemoveTimelineKeyCommand extends DirectorCommand<RemoveKeyPayload> 
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
-        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM)
+            return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         return track.keyframe(payload.keyframeId) ? [] : [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
     }
 
@@ -332,10 +352,12 @@ export class RemoveTimelineKeyCommand extends DirectorCommand<RemoveKeyPayload> 
         const track = ctx.timeline.document.track(this.payload.trackId);
         const keyframe = track?.keyframe(this.payload.keyframeId);
         return track && keyframe
-            ? [{
-                type: AddTimelineKeyCommand.TYPE,
-                payload: { trackId: track.id, targetId: track.targetId, keyframe: keyframe.toJSON() },
-            }]
+            ? [
+                  {
+                      type: AddTimelineKeyCommand.TYPE,
+                      payload: { trackId: track.id, targetId: track.targetId, keyframe: keyframe.toJSON() },
+                  },
+              ]
             : null;
     }
 }
@@ -365,7 +387,8 @@ export class SetTimelineKeyEasingCommand extends DirectorCommand<SetEasingPayloa
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
-        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
+        if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM)
+            return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         return track.keyframe(payload.keyframeId) ? [] : [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
     }
 
@@ -477,12 +500,36 @@ function capability(type: string, kind: "command" | "query", permissions: readon
 
 /** timeline.* 的命令、只读查询与 AI 发现元数据在同一个 Dispatcher 注册表中声明。 */
 export function registerTimelineCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(AddTimelineKeyCommand.TYPE, (payload: AddKeyPayload) => new AddTimelineKeyCommand(payload), capability(AddTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]));
-    dispatcher.register(MoveTimelineKeyCommand.TYPE, (payload: MoveKeyPayload) => new MoveTimelineKeyCommand(payload), capability(MoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]));
-    dispatcher.register(RemoveTimelineKeyCommand.TYPE, (payload: RemoveKeyPayload) => new RemoveTimelineKeyCommand(payload), capability(RemoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]));
-    dispatcher.register(SetTimelineKeyEasingCommand.TYPE, (payload: SetEasingPayload) => new SetTimelineKeyEasingCommand(payload), capability(SetTimelineKeyEasingCommand.TYPE, "command", [TIMELINE_PERMISSION]));
-    dispatcher.register(SetTimelineDurationCommand.TYPE, (payload: SetDurationPayload) => new SetTimelineDurationCommand(payload), capability(SetTimelineDurationCommand.TYPE, "command", [TIMELINE_PERMISSION]));
-    dispatcher.register(RestoreTimelineTracksCommand.TYPE, (payload: RestoreTracksPayload) => new RestoreTimelineTracksCommand(payload), capability(RestoreTimelineTracksCommand.TYPE, "command", [TIMELINE_PERMISSION]));
+    dispatcher.register(
+        AddTimelineKeyCommand.TYPE,
+        (payload: AddKeyPayload) => new AddTimelineKeyCommand(payload),
+        capability(AddTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+    );
+    dispatcher.register(
+        MoveTimelineKeyCommand.TYPE,
+        (payload: MoveKeyPayload) => new MoveTimelineKeyCommand(payload),
+        capability(MoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+    );
+    dispatcher.register(
+        RemoveTimelineKeyCommand.TYPE,
+        (payload: RemoveKeyPayload) => new RemoveTimelineKeyCommand(payload),
+        capability(RemoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+    );
+    dispatcher.register(
+        SetTimelineKeyEasingCommand.TYPE,
+        (payload: SetEasingPayload) => new SetTimelineKeyEasingCommand(payload),
+        capability(SetTimelineKeyEasingCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+    );
+    dispatcher.register(
+        SetTimelineDurationCommand.TYPE,
+        (payload: SetDurationPayload) => new SetTimelineDurationCommand(payload),
+        capability(SetTimelineDurationCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+    );
+    dispatcher.register(
+        RestoreTimelineTracksCommand.TYPE,
+        (payload: RestoreTracksPayload) => new RestoreTimelineTracksCommand(payload),
+        capability(RestoreTimelineTracksCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+    );
     dispatcher.registerQuery(
         TimelineDocumentQuery.TYPE,
         (payload: Record<string, never>) => new TimelineDocumentQuery(payload),

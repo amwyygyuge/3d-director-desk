@@ -51,7 +51,9 @@ export class TimelineStore {
         if (!track) return;
         const nextTrack = track.withoutKeyframe(keyframeId);
         this.currentDocument =
-            nextTrack.keyframes.length === 0 ? this.currentDocument.withoutTrack(trackId) : this.currentDocument.withTrack(nextTrack);
+            nextTrack.keyframes.length === 0
+                ? this.currentDocument.withoutTrack(trackId)
+                : this.currentDocument.withTrack(nextTrack);
     }
 
     removeObjectTracks(targetId: string): readonly TimelineTrack[] {

@@ -27,7 +27,6 @@ import { ContinuitySection } from "./ContinuitySection";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
-const OVERLAY_INSET_PX = 12;
 const SHOT_PANEL_WIDTH = 240;
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
 const OVERLAY_MAX_SIZE = "calc(100% - 24px)";
@@ -191,11 +190,13 @@ const MotionSection = observer(function MotionSection({
                 fullWidth
                 disabled={!canAddCurrentView}
                 aria-describedby={canAddCurrentView ? undefined : "director-desk-motion-add-status"}
-                onClick={() => dispatch("motion.add-key", {
-                    id: crypto.randomUUID(),
-                    timeSeconds: clock.time,
-                    easing: CAMERA_MOTION_EASING.SMOOTH,
-                })}
+                onClick={() =>
+                    dispatch("motion.add-key", {
+                        id: crypto.randomUUID(),
+                        timeSeconds: clock.time,
+                        easing: CAMERA_MOTION_EASING.SMOOTH,
+                    })
+                }
             >
                 当前视角加关键帧
             </Button>
@@ -214,7 +215,10 @@ const MotionSection = observer(function MotionSection({
                 {previewVisible ? "隐藏运镜轨迹" : "显示运镜轨迹"}
             </Button>
             {path?.keys.map((key) => (
-                <Box key={`${key.id}:${key.timeSeconds}`} sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 0.5, mt: 0.5, alignItems: "center" }}>
+                <Box
+                    key={`${key.id}:${key.timeSeconds}`}
+                    sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 0.5, mt: 0.5, alignItems: "center" }}
+                >
                     <TextField
                         size="small"
                         type="number"
@@ -234,7 +238,9 @@ const MotionSection = observer(function MotionSection({
                         size="small"
                         value={key.easing}
                         aria-label={`运镜关键帧 ${key.id} 缓动`}
-                        onChange={(event) => dispatch("motion.set-key-easing", { id: key.id, easing: event.target.value })}
+                        onChange={(event) =>
+                            dispatch("motion.set-key-easing", { id: key.id, easing: event.target.value })
+                        }
                     >
                         <MenuItem value={CAMERA_MOTION_EASING.LINEAR}>linear</MenuItem>
                         <MenuItem value={CAMERA_MOTION_EASING.SMOOTH}>smooth</MenuItem>
@@ -332,9 +338,6 @@ export const ShotPanel = observer(function ShotPanel({
         <Paper
             elevation={2}
             sx={{
-                position: "absolute",
-                left: OVERLAY_INSET_PX,
-                bottom: OVERLAY_INSET_PX,
                 width: SHOT_PANEL_WIDTH,
                 maxWidth: OVERLAY_MAX_SIZE,
                 maxHeight: OVERLAY_MAX_SIZE,

@@ -36,13 +36,19 @@ function recordViewKeys(stores: DirectorDeskStores, index: number): void {
 
 function verifyMotionAcceptance(stores: DirectorDeskStores): void {
     const capabilityTypes = stores.dispatcher.listCapabilities().map((capability) => capability.type);
-    for (const type of ["motion.add-key", "motion.move-key", "motion.remove-key", "motion.set-key-easing", "motion.get"]) {
+    for (const type of [
+        "motion.add-key",
+        "motion.move-key",
+        "motion.remove-key",
+        "motion.set-key-easing",
+        "motion.get",
+    ]) {
         assertAcceptance(capabilityTypes.includes(type), `${type} capability 未注册`);
     }
 
     const motion = stores.dispatcher.query({ type: "motion.get", payload: {} }, stores);
     assertAcceptance(motion.ok, "motion.get 查询失败");
-    const value = motion.ok ? motion.value as { path: { keys: unknown[] } | null } : null;
+    const value = motion.ok ? (motion.value as { path: { keys: unknown[] } | null }) : null;
     assertAcceptance(value?.path?.keys.length === 4, "四个推拉摇移关键帧未建立");
 
     dispatch(stores, "motion.set-key-easing", { id: KEY_IDS[1], easing: "smooth" });

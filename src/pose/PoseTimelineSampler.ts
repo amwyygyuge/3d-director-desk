@@ -1,4 +1,3 @@
-
 import type { PoseLayer } from "./PoseLayer";
 import type { PoseKeyframe } from "./PoseKeyframe";
 import { TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
@@ -29,9 +28,8 @@ export class PoseTimelineSampler {
         const right = keyframes[upperIndex];
         if (!left || !right) return false;
         const rawProgress = (timeSeconds - left.time) / (right.time - left.time);
-        const progress = right.easing === TIMELINE_EASING.SMOOTH
-            ? rawProgress * rawProgress * (3 - 2 * rawProgress)
-            : rawProgress;
+        const progress =
+            right.easing === TIMELINE_EASING.SMOOTH ? rawProgress * rawProgress * (3 - 2 * rawProgress) : rawProgress;
         this.layer.applyInterpolated(track.targetId, left.value, right.value, progress, weight);
         return true;
     }

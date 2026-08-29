@@ -38,7 +38,12 @@ function upperBound(keyframes: readonly TransformKeyframe[], timeSeconds: number
     return low;
 }
 
-function interpolate(left: TransformKeyframe, right: TransformKeyframe, progress: number, output: TransformSample): void {
+function interpolate(
+    left: TransformKeyframe,
+    right: TransformKeyframe,
+    progress: number,
+    output: TransformSample,
+): void {
     const leftValue = left.value;
     const rightValue = right.value;
     output.position[0] = leftValue.position[0] + (rightValue.position[0] - leftValue.position[0]) * progress;
@@ -114,12 +119,7 @@ export class TimelineSampler {
         }
     }
 
-    evaluateTarget(
-        document: TimelineDoc,
-        targetId: string,
-        timeSeconds: number,
-        runtime: Object3D,
-    ): boolean {
+    evaluateTarget(document: TimelineDoc, targetId: string, timeSeconds: number, runtime: Object3D): boolean {
         const track = document.trackForTarget(targetId);
         return track ? this.evaluateTrack(track, timeSeconds, runtime) : false;
     }

@@ -26,8 +26,8 @@ function geometryFor(axes: readonly ContinuityAxis[]): AxisGeometry | null {
         const directionX = end[0] - start[0];
         const directionZ = end[2] - start[2];
         const length = Math.hypot(directionX, directionZ);
-        const normalX = length === 0 ? 0 : -directionZ / length * AXIS_REFERENCE_HALF_LENGTH;
-        const normalZ = length === 0 ? 0 : directionX / length * AXIS_REFERENCE_HALF_LENGTH;
+        const normalX = length === 0 ? 0 : (-directionZ / length) * AXIS_REFERENCE_HALF_LENGTH;
+        const normalZ = length === 0 ? 0 : (directionX / length) * AXIS_REFERENCE_HALF_LENGTH;
         axisPositions[axisOffset] = start[0];
         axisPositions[axisOffset + 1] = start[1];
         axisPositions[axisOffset + 2] = start[2];
@@ -53,7 +53,7 @@ export const ShotAxisOverlay = observer(function ShotAxisOverlay() {
     const { continuity } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const geometry = useMemo(
-        () => geometryFor(continuity.issues.flatMap((current) => current.axis ? [current.axis] : [])),
+        () => geometryFor(continuity.issues.flatMap((current) => (current.axis ? [current.axis] : []))),
         [continuity.issues],
     );
 

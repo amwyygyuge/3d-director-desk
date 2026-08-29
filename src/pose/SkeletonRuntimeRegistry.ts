@@ -96,7 +96,9 @@ export class SkeletonRuntimeRegistry {
             indexedBones,
             baselineRotations,
             roots: Object.freeze(roots),
-            semanticCandidates: Object.freeze(semanticCandidates.sort((left, right) => left.label.localeCompare(right.label))),
+            semanticCandidates: Object.freeze(
+                semanticCandidates.sort((left, right) => left.label.localeCompare(right.label)),
+            ),
         };
         this.runtimes.set(objectId, runtime);
         this.indexedRuntimes.push(runtime);

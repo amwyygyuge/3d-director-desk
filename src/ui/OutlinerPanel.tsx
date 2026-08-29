@@ -36,17 +36,9 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
 
     return (
         <Paper
-            elevation={2}
+            elevation={0}
             sx={{
-                position: "absolute",
-                left: 12,
-                top: 64,
-                width: 220,
-                maxWidth: "calc(100% - 24px)",
-                maxHeight: "calc(100% - 76px)",
-                overflowY: "auto",
                 p: 1.5,
-                zIndex: 1,
             }}
         >
             <Typography variant="subtitle2">场景对象({entities.length})</Typography>

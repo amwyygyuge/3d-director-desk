@@ -180,7 +180,9 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.id);
         if (!entity) return null;
-        const tracks = ctx.timeline.document.tracks.filter((track) => track.targetId === entity.id).map((track) => track.toJSON());
+        const tracks = ctx.timeline.document.tracks
+            .filter((track) => track.targetId === entity.id)
+            .map((track) => track.toJSON());
         const restoreObject: SerializedCommand = {
             type: PlaceObjectCommand.TYPE,
             payload: entity.toJSON(),
