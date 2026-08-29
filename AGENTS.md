@@ -21,6 +21,14 @@
 10. **许可纪律**:可参考 `xiaozangao/3d-director-desk`(MIT)的思路,禁止整段搬运代码;awplanet(非商用)/ CozyClay(AGPL)/ shotblock(无许可)的代码一行都不许进本仓。
 11. **状态管理纪律(MobX 单轨)**:一切共享/领域状态必须是 `makeAutoObservable` 类实体;React 组件一律 `observer`(具名 function,来自 `mobx-react-lite`)渲染期直读。**禁止手搓响应式**:版本号计数器与 `void x.revision` 锚定、自建 `listeners`/`subscribe`/`emit` pub/sub、`useState` 镜像 observable、`useEffect` 把 observable 同步进本地 state、渲染外快照缓存集合。`createContext` 唯一合法用途是 `DirectorDeskContext` 每实例注入(value 必须稳定引用,禁放变化状态);禁全局单例,禁 mobx-react 的 `Provider`/`inject`。`useState` 白名单仅限局部瞬时 UI 态(输入草稿、开关、Snackbar)。集合消费统一 `values`/`entries`/`get`,禁手搓展开。惰性副作用统一 `onBecomeObserved`/`onBecomeUnobserved`,disposer 进 dispose 链;观察者常驻的 observable 禁挂 lazy。渲染纪律:传引用晚解引用、列表渲染独立组件、禁 index 作 key、`observer` 已含 `memo` 勿重复包裹、非 observer 第三方组件经 function props 或 `<Observer>` 桥接。高频(帧级)observable 禁渲染期直读,经 `reaction`/`autorun`/`useFrame` 消费;UI 显示值用 lazy 低频派生(见 `ui/PlayheadDisplay`)。细则与正误对照见 `docs/state-management.md`。
 
+## 强制工程闸门（每次迭代必经）
+
+架构、性能与设计是与功能同级的发布门槛；**禁止以迭代速度、临时可用或功能完成为由交换或降低本节及上述红线**。
+
+1. **编码前（MUST）**：明确并记录领域边界、负责的类/接口、生命周期与不变量、运行时所有权、性能关键路径，以及验收标准和回滚影响；上述任一项不清晰时**禁止编码**。
+2. **编码中（MUST NOT）**：禁止为求快绕过领域/命令/资源边界；禁止未经度量就在热路径引入分配、场景遍历或额外重渲染；禁止扩张功能范围而削弱既定阶段设计、可序列化状态、每实例隔离、Three/MobX 分离、按需渲染、资源释放等约束。
+3. **交付前（MUST）**：针对既有边界完成架构、设计与性能审查；UI 或运行时变更必须在实际界面或运行面验证。任何有意权衡必须记录其影响并确认不触碰红线；若触碰红线或无法证明符合本节，**禁止交付，必须阻塞**。
+
 ## 兼容矩阵(不可单方面升级)
 
 | 依赖               | 版本                 | 原因                                            |
