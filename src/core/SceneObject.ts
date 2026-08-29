@@ -1,6 +1,8 @@
-import { makeAutoObservable } from "mobx";
+import { makeAutoObservable, observableRef } from "mobx";
 
 import type { ModelFormat } from "../assets/ModelAsset";
+import { normalizeLightParams } from "./LightParams";
+import type { LightParams } from "./LightParams";
 
 export type Vec3 = readonly [number, number, number];
 
@@ -28,15 +30,31 @@ export const IDENTITY_TRANSFORM: Transform = Object.freeze({
     scale: Object.freeze([1, 1, 1] as const),
 });
 
-export type SceneObjectKind = "model" | "primitive" | "camera";
+export type SceneObjectKind = "model" | "primitive" | "camera" | "light";
 
-const KIND_LABEL: Record<SceneObjectKind, string> = { model: "模型", primitive: "几何体", camera: "机位对象" };
+const KIND_LABEL: Record<SceneObjectKind, string> = {
+    model: "模型",
+    primitive: "几何体",
+    camera: "机位对象",
+    light: "灯光",
+};
 
 /**
  * 场景对象实体:稳定身份 + 受保护的可变变换。
  * three 运行时对象(Object3D)不进本实体,由 SceneManager 的运行时注册表持有,
  * 避免 three 对象被 observable 包装(性能铁律)。
  */
+export interface SceneObjectInit {
+    readonly id: string;
+    readonly kind: SceneObjectKind;
+    readonly sourceUrl?: string | null;
+    readonly format?: ModelFormat | null;
+    readonly name?: string;
+    readonly transform?: Transform;
+    /** kind="light" 必须有值；其他 kind 必须为 null/undefined。 */
+    readonly light?: LightParams | null;
+}
+
 export class SceneObject {
     readonly id: string;
     readonly kind: SceneObjectKind;
@@ -48,22 +66,22 @@ export class SceneObject {
     readonly name: string;
     private currentTransform: Transform;
     private mountedActionId: string | null = null;
+    /** 灯光参数值对象；仅 light 实体有值，Three 光源仍由运行时树拥有。 */
+    private currentLight: LightParams | null;
 
-    constructor(init: {
-        id: string;
-        kind: SceneObjectKind;
-        sourceUrl?: string | null;
-        format?: ModelFormat | null;
-        name?: string;
-        transform?: Transform;
-    }) {
+    constructor(init: SceneObjectInit) {
         this.id = init.id;
         this.kind = init.kind;
         this.sourceUrl = init.sourceUrl ?? null;
         this.format = init.format ?? null;
         this.name = init.name ?? `${KIND_LABEL[init.kind]} ${init.id.slice(-4)}`;
+        const hasLight = init.light !== undefined && init.light !== null;
+        if ((init.kind === "light") !== hasLight) {
+            throw new Error('SceneObject: kind="light" iff light params exist');
+        }
         this.currentTransform = copyTransform(init.transform ?? IDENTITY_TRANSFORM);
-        makeAutoObservable(this);
+        this.currentLight = hasLight ? normalizeLightParams(init.light as LightParams) : null;
+        makeAutoObservable<SceneObject, "currentLight">(this, { currentLight: observableRef });
     }
 
     get transform(): Transform {
@@ -73,6 +91,29 @@ export class SceneObject {
     applyTransform(next: Transform): void {
         this.currentTransform = copyTransform(next);
     }
+
+    get light(): LightParams | null {
+        return this.currentLight;
+    }
+
+    applyLight(next: LightParams): void {
+        if (this.kind !== "light") throw new Error("SceneObject: only light entities accept LightParams");
+        this.currentLight = normalizeLightParams(next);
+    }
+
+    /** JSON 往返保留 kind/light 的双向不变量，且不泄露 Three 运行时。 */
+    toJSON(): SceneObjectInit {
+        return {
+            id: this.id,
+            kind: this.kind,
+            sourceUrl: this.sourceUrl,
+            format: this.format,
+            name: this.name,
+            transform: copyTransform(this.currentTransform),
+            light: this.currentLight,
+        };
+    }
+
     /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
     get actionId(): string | null {
         return this.mountedActionId;

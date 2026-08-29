@@ -33,6 +33,13 @@ export { CaptureService } from "./capture/CaptureService";
 export type { RenderHandles } from "./capture/CaptureService";
 export { CaptureFrameCommand, registerCaptureCommands } from "./command/captureCommands";
 export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
+export {
+    AdjustLightCommand,
+    LightingGetQuery,
+    LightingListQuery,
+    registerLightingCommands,
+} from "./command/lightingCommands";
+export type { LightingObjectSnapshot } from "./command/lightingCommands";
 export { CommandHistory } from "./command/CommandHistory";
 export type { HistoryEntry } from "./command/CommandHistory";
 export { CommandDispatcher } from "./command/CommandDispatcher";
@@ -73,7 +80,18 @@ export type { CommandCapability, DirectorQuery, QueryResult } from "./command/Co
 export { DisposeBag } from "./core/DisposeBag";
 export { SceneManager } from "./core/SceneManager";
 export { IDENTITY_TRANSFORM, SceneObject } from "./core/SceneObject";
-export type { SceneObjectKind, Transform, Vec3 } from "./core/SceneObject";
+export type { SceneObjectInit, SceneObjectKind, Transform, Vec3 } from "./core/SceneObject";
+export {
+    createDefaultLightParams,
+    isLightColor,
+    isLightIntensity,
+    isLightType,
+    LIGHT_INTENSITY_MAX,
+    LIGHT_INTENSITY_MIN,
+    LIGHT_TYPES,
+    normalizeLightParams,
+} from "./core/LightParams";
+export type { LightParams, LightType } from "./core/LightParams";
 export { PostMessageAdapter } from "./host/HostAdapter";
 export type { HostAdapter } from "./host/HostAdapter";
 export { ModelImporter } from "./loaders/ModelImporter";

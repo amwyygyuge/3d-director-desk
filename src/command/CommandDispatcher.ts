@@ -1,4 +1,4 @@
-import type { DirectorCommand, DirectorContext, SerializedCommand } from "./DirectorCommand";
+import type { CommandIssue, DirectorCommand, DirectorContext, SerializedCommand } from "./DirectorCommand";
 import type { CommandResult } from "./DirectorCommand";
 import type { CommandHistory } from "./CommandHistory";
 
@@ -17,6 +17,8 @@ export interface DirectorQuery<P = unknown> {
     readonly type: string;
     readonly payload: P;
     validate(ctx: DirectorContext): readonly string[];
+    /** 与命令一致的稳定结构化校验失败，供 AI/宿主按 path 重试。 */
+    validateIssues?(ctx: DirectorContext): readonly CommandIssue[];
     execute(ctx: DirectorContext): unknown;
 }
 
@@ -130,8 +132,16 @@ export class CommandDispatcher {
         if (!factory) return { ok: false, error: `${COMMAND_ERROR.UNKNOWN}: ${serialized.type}` };
         try {
             const query = factory(serialized.payload as never);
-            const issues = query.validate(ctx);
-            if (issues.length > 0) return { ok: false, error: COMMAND_ERROR.VALIDATION_FAILED, issues };
+            const details = query.validateIssues?.(ctx);
+            const issues = details ? details.map((issue) => issue.message) : query.validate(ctx);
+            if (issues.length > 0) {
+                return {
+                    ok: false,
+                    error: COMMAND_ERROR.VALIDATION_FAILED,
+                    issues,
+                    ...(details ? { issueDetails: details } : {}),
+                };
+            }
             return { ok: true, value: query.execute(ctx) };
         } catch {
             return { ok: false, error: COMMAND_ERROR.CONSTRUCTION_FAILED, issues: [MALFORMED_PAYLOAD_ISSUE] };

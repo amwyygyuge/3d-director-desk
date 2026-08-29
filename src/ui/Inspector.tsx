@@ -7,6 +7,7 @@ import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
 import Snackbar from "@mui/material/Snackbar";
@@ -18,8 +19,10 @@ import { type KeyboardEvent, useRef, useState } from "react";
 
 import type { CameraShot } from "../camera/CameraShot";
 import { FOV_MAX, FOV_MIN } from "../command/commands";
-import type { Vec3 } from "../core/SceneObject";
 import type { CommandResult } from "../command/DirectorCommand";
+import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "../core/LightParams";
+import type { LightParams, LightType } from "../core/LightParams";
+import type { Vec3 } from "../core/SceneObject";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { PlayheadDisplay } from "./PlayheadDisplay";
 import { TransformFields } from "./TransformFields";
@@ -338,10 +341,42 @@ const ShotInspector = observer(function ShotInspector({ shotId, report }: ShotIn
 
 type ReportCommandResult = (result: CommandResult) => void;
 
-interface ModelActionControlsProps {
+interface ObjectControlsProps {
     objectId: string;
     report: ReportCommandResult;
 }
+
+interface LightIntensityControlProps {
+    readonly intensity: number;
+    readonly onCommit: (intensity: number) => void;
+}
+
+/** 输入草稿仅服务于一次 slider 拖拽；权威 LightParams 始终留在实体。 */
+const LightIntensityControl = observer(function LightIntensityControl({ intensity, onCommit }: LightIntensityControlProps) {
+    const [draft, setDraft] = useState(intensity);
+
+    return (
+        <Box>
+            <Typography variant="caption" color="text.secondary">
+                强度 {draft}
+            </Typography>
+            <Slider
+                size="small"
+                min={LIGHT_INTENSITY_MIN}
+                max={LIGHT_INTENSITY_MAX}
+                step={0.1}
+                value={draft}
+                aria-label="灯光强度"
+                onChange={(_, value) => {
+                    if (typeof value === "number") setDraft(value);
+                }}
+                onChangeCommitted={(_, value) => {
+                    if (typeof value === "number" && value !== intensity) onCommit(value);
+                }}
+            />
+        </Box>
+    );
+});
 
 interface ActionLibraryProps {
     actionId: string | null;
@@ -452,7 +487,7 @@ const PlaybackControls = observer(function PlaybackControls({ actionId, report }
     );
 });
 
-const ModelActionControls = observer(function ModelActionControls({ objectId, report }: ModelActionControlsProps) {
+const ModelActionControls = observer(function ModelActionControls({ objectId, report }: ObjectControlsProps) {
     const { scene } = useDirectorDeskStores();
     const entity = scene.manager.getEntity(objectId);
     if (!entity || entity.kind !== "model") return null;
@@ -467,8 +502,62 @@ const ModelActionControls = observer(function ModelActionControls({ objectId, re
     );
 });
 
+/** 灯光参数只读实体、写回 light.adjust；不维护 LightParams 的组件本地镜像。 */
+const LightControls = observer(function LightControls({ objectId, report }: ObjectControlsProps) {
+    const stores = useDirectorDeskStores();
+    const entity = stores.scene.manager.getEntity(objectId);
+    const light = entity?.light;
+    if (!entity || !light) return null;
+
+    const adjust = (next: Partial<LightParams>) => {
+        const latest = stores.scene.manager.getEntity(objectId)?.light;
+        if (!latest) return;
+        report(
+            stores.dispatcher.dispatch(
+                { type: "light.adjust", payload: { id: objectId, light: { ...latest, ...next } } },
+                stores,
+            ),
+        );
+    };
+
+    return (
+        <>
+            <Divider sx={{ my: CONTROL_GAP }} />
+            <Typography variant="subtitle2">灯光</Typography>
+            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+                <TextField
+                    select
+                    size="small"
+                    label="类型"
+                    value={light.type}
+                    onChange={(event) => adjust({ type: event.target.value as LightType })}
+                >
+                    {LIGHT_TYPES.map((type) => (
+                        <MenuItem key={type} value={type}>
+                            {type === "directional" ? "平行光" : type === "point" ? "点光" : "聚光"}
+                        </MenuItem>
+                    ))}
+                </TextField>
+                <TextField
+                    size="small"
+                    label="颜色"
+                    type="color"
+                    value={light.color}
+                    slotProps={{ htmlInput: { "aria-label": "灯光颜色" } }}
+                    onChange={(event) => adjust({ color: event.target.value })}
+                />
+                <LightIntensityControl
+                    key={`${objectId}-${light.intensity}`}
+                    intensity={light.intensity}
+                    onCommit={(intensity) => adjust({ intensity })}
+                />
+            </Stack>
+        </>
+    );
+});
+
 /** 当前选中对象的权威实体变换经 timeline.add-key 固化为关键帧。 */
-const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, report }: ModelActionControlsProps) {
+const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
     const entity = stores.scene.manager.getEntity(objectId);
     if (!entity) return null;
@@ -556,6 +645,7 @@ export const Inspector = observer(function Inspector() {
             </Typography>
             <Divider sx={{ my: CONTROL_GAP }} />
             <TransformFields objectId={entity.id} />
+            {entity.kind === "light" && <LightControls objectId={entity.id} report={report} />}
             <TimelineKeyControls objectId={entity.id} report={report} />
             {entity.kind === "model" && <ModelActionControls objectId={entity.id} report={report} />}
             <Snackbar

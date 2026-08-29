@@ -3,11 +3,14 @@ import { toJS } from "mobx";
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
 import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
+import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "../core/LightParams";
+import type { LightParams } from "../core/LightParams";
 import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
 import type { CommandDispatcher } from "./CommandDispatcher";
 import { registerActionCommands } from "./actionCommands";
 import { registerCameraCommands, RemoveShotCommand } from "./cameraCommands";
 import { registerCaptureCommands } from "./captureCommands";
+import { registerLightingCommands } from "./lightingCommands";
 import { registerNavigationCommands } from "./navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
 import { DirectorCommand } from "./DirectorCommand";
@@ -28,19 +31,21 @@ function finiteTransform(value: unknown): value is Transform {
 export const FOV_MIN = 1;
 export const FOV_MAX = 179;
 
-const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "primitive", "camera"];
+const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "primitive", "camera", "light"];
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
 
 interface PlaceObjectPayload {
     id: string;
     kind: SceneObjectKind;
-    sourceUrl?: string;
+    sourceUrl?: string | null;
     /** 可选初始摆位;缺省落原点 */
     transform?: Transform;
     /** kind="model" 时的显式格式;缺省从 sourceUrl 扩展名解析(blob URL 必须显式携带) */
-    format?: ModelFormat;
+    format?: ModelFormat | null;
     /** 显示名(Outliner/Inspector);缺省由实体按 kind+id 派生 */
     name?: string;
+    /** kind="light" 的可序列化值对象；其他 kind 必须无此字段。 */
+    light?: LightParams | null;
 }
 /** 校验与执行共用的格式解析(Rule of Two) */
 function resolveModelFormat(payload: PlaceObjectPayload): ModelFormat | null {
@@ -61,8 +66,8 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
             typeof payload.id !== "string" ||
             payload.id.length === 0 ||
             !SCENE_OBJECT_KINDS.includes(payload.kind) ||
-            (payload.sourceUrl !== undefined && typeof payload.sourceUrl !== "string") ||
-            (payload.format !== undefined && !MODEL_FORMATS.includes(payload.format)) ||
+            (payload.sourceUrl !== undefined && payload.sourceUrl !== null && typeof payload.sourceUrl !== "string") ||
+            (payload.format !== undefined && payload.format !== null && !MODEL_FORMATS.includes(payload.format)) ||
             (payload.name !== undefined && typeof payload.name !== "string")
         ) {
             return ["对象参数格式无效"];
@@ -76,11 +81,27 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
             if (!payload.sourceUrl) issues.push("模型缺少 sourceUrl");
             else if (!resolveModelFormat(payload)) issues.push("无法识别模型格式(支持 glb/gltf/fbx/obj)");
         }
+        const hasLight = payload.light !== undefined && payload.light !== null;
+        if ((payload.kind === "light") !== hasLight) {
+            issues.push('kind="light" 必须且只能携带 light 参数');
+        } else if (
+            hasLight &&
+            (!isLightType(payload.light?.type) ||
+                !isLightColor(payload.light?.color) ||
+                !isLightIntensity(payload.light?.intensity))
+        ) {
+            issues.push("light 参数无效(类型、#rrggbb 颜色或 0~100 强度)");
+        }
         return issues;
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.scene.addObject({ ...this.payload, format: resolveModelFormat(this.payload) });
+        const { light, ...object } = this.payload;
+        if (light) {
+            ctx.scene.addObject({ ...object, light: normalizeLightParams(light) });
+            return;
+        }
+        ctx.scene.addObject(object);
     }
 
     override invert(): readonly SerializedCommand[] {
@@ -158,14 +179,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
         const tracks = ctx.timeline.document.tracks.filter((track) => track.targetId === entity.id).map((track) => track.toJSON());
         const restoreObject: SerializedCommand = {
             type: PlaceObjectCommand.TYPE,
-            payload: {
-                id: entity.id,
-                kind: entity.kind,
-                sourceUrl: entity.sourceUrl ?? undefined,
-                format: entity.format ?? undefined,
-                name: entity.name,
-                transform: toJS(entity.transform),
-            },
+            payload: entity.toJSON(),
         };
         return tracks.length === 0
             ? [restoreObject]
@@ -225,4 +239,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerCaptureCommands(dispatcher);
     registerNavigationCommands(dispatcher);
     registerTimelineCommands(dispatcher);
+    registerLightingCommands(dispatcher);
 }

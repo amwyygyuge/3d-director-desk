@@ -1,6 +1,7 @@
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import DeleteIcon from "@mui/icons-material/Delete";
+import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import IconButton from "@mui/material/IconButton";
@@ -23,6 +24,7 @@ const KIND_ICONS: Record<SceneObjectKind, ReactNode> = {
     model: <ViewInArIcon fontSize="small" />,
     primitive: <CheckBoxOutlineBlankIcon fontSize="small" />,
     camera: <VideocamIcon fontSize="small" />,
+    light: <LightbulbIcon fontSize="small" />,
 };
 
 /** 场景大纲(左侧):实体列表、共享选中态与逐项取景/删除。 */

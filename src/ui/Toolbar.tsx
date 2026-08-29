@@ -1,26 +1,31 @@
 import AddBoxIcon from "@mui/icons-material/AddBox";
-import UndoIcon from "@mui/icons-material/Undo";
-import RedoIcon from "@mui/icons-material/Redo";
-import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
+import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import RedoIcon from "@mui/icons-material/Redo";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
+import UndoIcon from "@mui/icons-material/Undo";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import ToggleButton from "@mui/material/ToggleButton";
-import IconButton from "@mui/material/IconButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useRef, useState } from "react";
 
+import { createDefaultLightParams } from "../core/LightParams";
+import type { LightType } from "../core/LightParams";
 import { GIZMO_MODE } from "../store/UiStore";
 import type { GizmoMode } from "../store/UiStore";
 import { formatShortcutHint, SHORTCUT_ID } from "../shortcuts/builtinShortcuts";
@@ -53,6 +58,7 @@ export const Toolbar = observer(function Toolbar() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const actionInputRef = useRef<HTMLInputElement>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [lightMenuAnchor, setLightMenuAnchor] = useState<HTMLElement | null>(null);
     const applicationNotice = ui.applicationNotice;
     const displayedNotice = applicationNotice ?? notice;
 
@@ -73,6 +79,31 @@ export const Toolbar = observer(function Toolbar() {
             stores,
         );
         if (!result.ok) setNotice(`放置被拒绝:${result.error}`);
+    };
+
+    const placeLight = (type: LightType) => {
+        const [x, , z] = placementFor(scene.objectCount);
+        const id = `light-${crypto.randomUUID()}`;
+        const label = type === "directional" ? "平行光" : type === "point" ? "点光" : "聚光";
+        const result = dispatcher.dispatch(
+            {
+                type: "object.place",
+                payload: {
+                    id,
+                    kind: "light",
+                    name: `${label} ${id.slice(-4)}`,
+                    light: createDefaultLightParams(type),
+                    transform: {
+                        position: [x, 3, z],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    },
+                },
+            },
+            stores,
+        );
+        setLightMenuAnchor(null);
+        if (!result.ok) setNotice(`添加灯光被拒绝:${result.issues?.join(";") ?? result.error}`);
     };
 
     const clearAll = () => {
@@ -101,6 +132,15 @@ export const Toolbar = observer(function Toolbar() {
                 <Stack direction="row" spacing={1} sx={{ width: "max-content" }}>
                     <Button variant="contained" startIcon={<AddBoxIcon />} onClick={placePrimitive}>
                         添加几何体
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        startIcon={<LightbulbIcon />}
+                        aria-controls={lightMenuAnchor ? "light-creation-menu" : undefined}
+                        aria-haspopup="menu"
+                        onClick={(event) => setLightMenuAnchor(event.currentTarget)}
+                    >
+                        添加灯光
                     </Button>
                     <Button
                         variant="outlined"
@@ -197,6 +237,16 @@ export const Toolbar = observer(function Toolbar() {
                     )}
                 </Stack>
             </Paper>
+            <Menu
+                id="light-creation-menu"
+                anchorEl={lightMenuAnchor}
+                open={lightMenuAnchor !== null}
+                onClose={() => setLightMenuAnchor(null)}
+            >
+                <MenuItem onClick={() => placeLight("directional")}>添加平行光</MenuItem>
+                <MenuItem onClick={() => placeLight("point")}>添加点光</MenuItem>
+                <MenuItem onClick={() => placeLight("spot")}>添加聚光</MenuItem>
+            </Menu>
             <input
                 ref={fileInputRef}
                 type="file"

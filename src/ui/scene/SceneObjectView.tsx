@@ -7,7 +7,7 @@ import { Box3, Box3Helper, BufferGeometry, Matrix4 } from "three";
 
 import type { SceneObject, SceneObjectKind } from "../../core/SceneObject";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
-import { ModelContent, PrimitiveContent } from "./contents";
+import { LightContent, ModelContent, PrimitiveContent } from "./contents";
 
 const HIGHLIGHT_COLOR = "#ffd54f";
 
@@ -94,11 +94,12 @@ function updateWorldBounds(index: LocalBoundsIndex, object: Group, helper: Box3H
     index.updateWorld(object, helper.box);
 }
 
-/** kind → 渲染内容查表(纪律:禁 if 链);camera 占位待 06 任务 */
+/** kind → 渲染内容查表(纪律:禁 if 链)。 */
 const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject }>> = {
     primitive: PrimitiveContent,
     model: ModelContent,
     camera: () => null,
+    light: LightContent,
 };
 
 /**
@@ -137,7 +138,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
     useEffect(() => invalidate(), [invalidate, transform]);
     useEffect(() => {
         const object = groupRef.current;
-        if (!selected || !object) return;
+        if (!selected || !object || entity.kind === "light") return;
         const boundsIndex = new LocalBoundsIndex();
         boundsIndex.updateLocal(object);
         const bounds = new Box3();
@@ -170,7 +171,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
             helper.geometry.dispose();
             invalidate();
         };
-    }, [selected, scene3, invalidate, transform]);
+    }, [selected, scene3, invalidate, transform, entity.kind]);
 
     // 播放仅把缓存的局部 bounds 变换到世界坐标；子内容变化才重建索引并 traverse 一次。
     useFrame(() => {

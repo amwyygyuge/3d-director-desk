@@ -146,8 +146,6 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBr
                                 infiniteGrid
                                 userData={{ helper: true }}
                             />
-                            <ambientLight intensity={0.6} />
-                            <directionalLight position={[5, 10, 4]} intensity={1.2} />
                             <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
                             <SceneRoot />
                             <TransformGizmoController />
