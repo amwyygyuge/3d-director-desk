@@ -143,53 +143,50 @@ export const DirectorDesk = observer(function DirectorDesk({
                     >
                         {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
                         <div className="absolute inset-0">
-                                <Canvas
-                                    frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
-                                    camera={{ position: [6, 4, 8], fov: 45 }}
-                                    gl={{ antialias: true, preserveDrawingBuffer: false }}
-                                    onCreated={(state) =>
-                                        stores.capture.attach({
-                                            gl: state.gl,
-                                            scene: state.scene,
-                                            camera: state.camera,
-                                            invalidate: state.invalidate,
-                                        })
+                            <Canvas
+                                frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
+                                camera={{ position: [6, 4, 8], fov: 45 }}
+                                gl={{ antialias: true, preserveDrawingBuffer: false }}
+                                onCreated={(state) =>
+                                    stores.capture.attach({
+                                        gl: state.gl,
+                                        scene: state.scene,
+                                        camera: state.camera,
+                                        invalidate: state.invalidate,
+                                    })
+                                }
+                                onPointerMissed={() => {
+                                    // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
+                                    if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
+                                        stores.selection.clear();
                                     }
-                                    onPointerMissed={() => {
-                                        // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
-                                        if (
-                                            performance.now() - stores.ui.lastGizmoInteractionAt >
-                                            GIZMO_CLICK_GUARD_MS
-                                        ) {
-                                            stores.selection.clear();
-                                        }
-                                    }}
-                                >
-                                    <color attach="background" args={["#171717"]} />
-                                    <Grid
-                                        args={[40, 40]}
-                                        cellColor="#333333"
-                                        sectionColor="#555555"
-                                        infiniteGrid
-                                        userData={{ helper: true }}
-                                    />
-                                    <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
-                                    <StudioRig />
-                                    <SceneRoot />
-                                    <BonePicker />
-                                    <TransformGizmoController />
-                                    <ShotMarkers />
-                                    <ShotAxisOverlay />
-                                    <PlaybackDriver />
-                                    <ShotCameraRig />
-                                    <CameraMotionRig />
-                                    <MotionPathPreview visible={motionPreviewVisible && stageDef.helpers.motionPaths} />
-                                    <FlyDrive />
-                                    <ShotNavigation />
-                                </Canvas>
-                                <ShotFrameOverlay />
-                                <CapturePreview />
-                                <LoadingChip />
+                                }}
+                            >
+                                <color attach="background" args={["#171717"]} />
+                                <Grid
+                                    args={[40, 40]}
+                                    cellColor="#333333"
+                                    sectionColor="#555555"
+                                    infiniteGrid
+                                    userData={{ helper: true }}
+                                />
+                                <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
+                                <StudioRig />
+                                <SceneRoot />
+                                <BonePicker />
+                                <TransformGizmoController />
+                                <ShotMarkers />
+                                <ShotAxisOverlay />
+                                <PlaybackDriver />
+                                <ShotCameraRig />
+                                <CameraMotionRig />
+                                <MotionPathPreview visible={motionPreviewVisible && stageDef.helpers.motionPaths} />
+                                <FlyDrive />
+                                <ShotNavigation />
+                            </Canvas>
+                            <ShotFrameOverlay />
+                            <CapturePreview />
+                            <LoadingChip />
                         </div>
                         <Toolbar />
                         <Dock

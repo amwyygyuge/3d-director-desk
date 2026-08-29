@@ -11,6 +11,7 @@ export const SHORTCUT_ID = {
     AXIS_Z: "gizmo.axis.z",
     REMOVE_SELECTION: "selection.remove",
     CLEAR_SELECTION: "selection.clear",
+    SHOT_EXIT: "shot.exit",
     FRAME_SELECTED: "view.frame-selected",
     FRAME_ALL: "view.frame-all",
     EDIT_UNDO: "edit.undo",
@@ -38,6 +39,12 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
     { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
+    {
+        id: SHORTCUT_ID.SHOT_EXIT,
+        chords: ["escape"],
+        scope: "shot",
+        label: "退出掌镜(Pointer Lock 下首按先解锁,再按退出)",
+    },
     { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
     { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "gizmo", label: "聚焦选中对象" },
     { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
@@ -62,6 +69,7 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
+    [SHORTCUT_ID.SHOT_EXIT]: (s) => s.dispatcher.dispatch({ type: "camera.deactivate", payload: {} }, s),
     [SHORTCUT_ID.CLEAR_SELECTION]: (s) => s.selection.clear(),
     [SHORTCUT_ID.FRAME_SELECTED]: (s) =>
         s.dispatcher.dispatch({ type: FrameViewCommand.TYPE, payload: { ids: [...s.selection.selectedIds] } }, s),
@@ -92,11 +100,12 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
     };
 }
 
-/** 当前激活作用域:global 常驻;有选中(已进入摆位交互)激活 gizmo 域 */
+/** 当前激活作用域:global 常驻;有选中激活 gizmo 域;掌镜激活 shot 域(注册顺序保证 Esc 先退掌镜再清选中) */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
-    return stores.selection.primaryId
-        ? new Set<ShortcutScope>(["global", "gizmo"])
-        : new Set<ShortcutScope>(["global"]);
+    const scopes = new Set<ShortcutScope>(["global"]);
+    if (stores.selection.primaryId) scopes.add("gizmo");
+    if (stores.camera.activeShotId) scopes.add("shot");
+    return scopes;
 }
 /** UI 提示:同 id 多 chord 用 / 连接;平台格式化后同形的去重(Mac 上 Delete 与 Backspace 都是 ⌫) */
 export function formatShortcutHint(id: ShortcutId): string {

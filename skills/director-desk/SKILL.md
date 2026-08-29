@@ -57,8 +57,17 @@ dispatch({ type: "object.remove", payload: { id: "mecha" } })
 
 ### 动作与播放
 
+动作是两段式:先把模型文件里的 clip 注册进动作库,再挂载。**动作不是命令**(clip 是运行时资源),注册这两步直接调句柄:
+
 ```js
-dispatch({ type: "action.mount", payload: { objectId: "mecha", actionId } }); // actionId 从 animations 资产表查
+// 注册(异步):拿模型文件的动画 clip 进动作库;已注册过同名的会复用(duplicate)
+const handle = await desk.models.acquire(url, "gltf"); // format: glb/gltf→"gltf", fbx→"fbx", obj→"obj"
+const clip = handle.animations.find((c) => /run/i.test(c.name)) ?? handle.animations[0];
+const { action } = desk.animations.register({ name: "出拳", url, clip });
+handle.release();
+// 挂载(命令层):
+dispatch({ type: "action.mount", payload: { objectId: "mecha", actionId: action.id } });
+// 播放/定位/暂停
 dispatch({ type: "transport.play", payload: {} });
 dispatch({ type: "transport.seek", payload: { time: 2.0 } }); // 秒
 dispatch({ type: "transport.pause", payload: {} });

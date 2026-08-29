@@ -1,7 +1,7 @@
 import type { ShortcutChord } from "./ShortcutChord";
 
-/** 作用域:global 常驻;gizmo 在有选中(已进入摆位交互)时激活;后续 mode:* / playing 等按域扩展 */
-export type ShortcutScope = "global" | "gizmo";
+/** 作用域:global 常驻;gizmo 在有选中(已进入摆位交互)时激活;shot 在掌镜(机位激活)时激活 */
+export type ShortcutScope = "global" | "gizmo" | "shot";
 
 /** 快捷键绑定:spec(数据)× action(行为)的合体,注册表持有 */
 export interface ShortcutBinding<TEnv> {

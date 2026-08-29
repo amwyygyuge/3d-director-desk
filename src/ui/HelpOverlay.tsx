@@ -16,6 +16,7 @@ const FIRST_GROUP_INDEX = 0;
 const SHORTCUT_SCOPE_LABELS: Record<ShortcutScope, string> = {
     global: "全局",
     gizmo: "选中对象后",
+    shot: "掌镜中",
 };
 const SHORTCUT_SCOPE_ORDER = Object.keys(SHORTCUT_SCOPE_LABELS) as ShortcutScope[];
 const KBD_SX = {
