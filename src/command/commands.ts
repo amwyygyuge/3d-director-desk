@@ -1,5 +1,5 @@
-import { CameraShot } from "../camera/CameraShot";
-import { formatFromUrl } from "../assets/ModelAsset";
+import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
+import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
 import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
 import type { CommandDispatcher } from "./CommandDispatcher";
@@ -24,6 +24,9 @@ function finiteTransform(value: unknown): value is Transform {
 /** FOV 合法域:命令校验与 UI 滑杆共用(Rule of Two) */
 export const FOV_MIN = 1;
 export const FOV_MAX = 179;
+
+const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "primitive", "camera"];
+const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
 
 interface PlaceObjectPayload {
     id: string;
@@ -50,15 +53,25 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
     }
 
     validate(ctx: DirectorContext): string[] {
+        const payload = this.payload;
+        if (
+            typeof payload.id !== "string" ||
+            payload.id.length === 0 ||
+            !SCENE_OBJECT_KINDS.includes(payload.kind) ||
+            (payload.sourceUrl !== undefined && typeof payload.sourceUrl !== "string") ||
+            (payload.format !== undefined && !MODEL_FORMATS.includes(payload.format)) ||
+            (payload.name !== undefined && typeof payload.name !== "string")
+        ) {
+            return ["对象参数格式无效"];
+        }
         const issues: string[] = [];
-        if (!this.payload.id) issues.push("id 不能为空");
-        if (ctx.scene.manager.getEntity(this.payload.id)) issues.push(`id "${this.payload.id}" 已存在`);
-        if (this.payload.transform !== undefined && !finiteTransform(this.payload.transform)) {
+        if (ctx.scene.manager.getEntity(payload.id)) issues.push(`id "${payload.id}" 已存在`);
+        if (payload.transform !== undefined && !finiteTransform(payload.transform)) {
             issues.push("transform 含非法数值");
         }
-        if (this.payload.kind === "model") {
-            if (!this.payload.sourceUrl) issues.push("模型缺少 sourceUrl");
-            else if (!resolveModelFormat(this.payload)) issues.push("无法识别模型格式(支持 glb/gltf/fbx/obj)");
+        if (payload.kind === "model") {
+            if (!payload.sourceUrl) issues.push("模型缺少 sourceUrl");
+            else if (!resolveModelFormat(payload)) issues.push("无法识别模型格式(支持 glb/gltf/fbx/obj)");
         }
         return issues;
     }
@@ -86,6 +99,9 @@ export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
     }
 
     validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+            return ["对象 id 格式无效"];
+        }
         const issues: string[] = [];
         if (!ctx.scene.manager.getEntity(this.payload.id)) issues.push(`对象 "${this.payload.id}" 不存在`);
         if (!finiteTransform(this.payload.transform)) issues.push("transform 含非法数值");
@@ -115,11 +131,17 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     }
 
     validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+            return ["对象 id 格式无效"];
+        }
         return ctx.scene.manager.getEntity(this.payload.id) ? [] : [`对象 "${this.payload.id}" 不存在`];
     }
 
     execute(ctx: DirectorContext): void {
+        ctx.binder.unmount(this.payload.id);
         ctx.scene.removeObject(this.payload.id);
+        ctx.selection.remove(this.payload.id);
+        if (ctx.binder.isEmpty) ctx.clock.pause();
     }
 
     /** 实体快照回放;已知限制:不恢复动作挂载(运行时异步,模型就绪时序不可控) */
@@ -156,12 +178,17 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
     }
 
     validate(): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+            return ["机位 id 格式无效"];
+        }
         const { shot } = this.payload;
+        if (typeof shot !== "object" || shot === null) return ["机位参数格式无效"];
         const issues: string[] = [];
-        if (!this.payload.id) issues.push("机位 id 不能为空");
         if (!finiteVec3(shot.position) || !finiteVec3(shot.target)) issues.push("机位坐标含非法数值");
-        const fov = shot.fov ?? 45;
-        if (fov < FOV_MIN || fov > FOV_MAX) issues.push(`fov 须在 ${FOV_MIN}~${FOV_MAX} 之间`);
+        const fov = shot.fov ?? DEFAULT_CAMERA_FOV;
+        if (!Number.isFinite(fov) || fov < FOV_MIN || fov > FOV_MAX) {
+            issues.push(`fov 须在 ${FOV_MIN}~${FOV_MAX} 之间的有限数`);
+        }
         return issues;
     }
 

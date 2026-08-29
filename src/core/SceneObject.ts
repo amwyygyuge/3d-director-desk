@@ -8,11 +8,23 @@ export interface Transform {
     readonly scale: Vec3;
 }
 
-export const IDENTITY_TRANSFORM: Transform = {
-    position: [0, 0, 0],
-    rotation: [0, 0, 0],
-    scale: [1, 1, 1],
-};
+function copyVec3([x, y, z]: Vec3): Vec3 {
+    return [x, y, z];
+}
+
+function copyTransform(transform: Transform): Transform {
+    return {
+        position: copyVec3(transform.position),
+        rotation: copyVec3(transform.rotation),
+        scale: copyVec3(transform.scale),
+    };
+}
+
+export const IDENTITY_TRANSFORM: Transform = Object.freeze({
+    position: Object.freeze([0, 0, 0] as const),
+    rotation: Object.freeze([0, 0, 0] as const),
+    scale: Object.freeze([1, 1, 1] as const),
+});
 
 export type SceneObjectKind = "model" | "primitive" | "camera";
 
@@ -48,15 +60,15 @@ export class SceneObject {
         this.sourceUrl = init.sourceUrl ?? null;
         this.format = init.format ?? null;
         this.name = init.name ?? `${KIND_LABEL[init.kind]} ${init.id.slice(-4)}`;
-        this.currentTransform = init.transform ?? IDENTITY_TRANSFORM;
+        this.currentTransform = copyTransform(init.transform ?? IDENTITY_TRANSFORM);
     }
 
     get transform(): Transform {
-        return this.currentTransform;
+        return copyTransform(this.currentTransform);
     }
 
     applyTransform(next: Transform): void {
-        this.currentTransform = next;
+        this.currentTransform = copyTransform(next);
     }
     /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
     get actionId(): string | null {

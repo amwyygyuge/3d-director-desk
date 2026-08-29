@@ -13,7 +13,7 @@ import Select from "@mui/material/Select";
 import Slider from "@mui/material/Slider";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box3, Vector3 } from "three";
 
 import { SHOT_SIZE } from "../camera/CameraShot";
@@ -23,6 +23,11 @@ import { FOV_MAX, FOV_MIN } from "../command/commands";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
+const DEFAULT_FOV = 45;
+const OVERLAY_INSET_PX = 12;
+const SHOT_PANEL_WIDTH = 240;
+const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
+const OVERLAY_MAX_SIZE = "calc(100% - 24px)";
 
 const SHOT_SIZE_LABELS: Record<ShotSize, string> = {
     [SHOT_SIZE.EXTREME_LONG]: "大远景",
@@ -45,14 +50,31 @@ export const ShotPanel = observer(function ShotPanel() {
     const stores = useDirectorDeskStores();
     const { camera, scene, selection, dispatcher } = stores;
     const [shotSize, setShotSize] = useState<ShotSize>(SHOT_SIZE.MEDIUM);
+    const [draftFov, setDraftFov] = useState<number | null>(null);
+    const [savedDirectorPoseAvailable, setSavedDirectorPoseAvailable] = useState(
+        () => camera.lastDirectorPose !== null,
+    );
 
     void camera.revision;
     const shots = camera.director.listShots();
     const activeShot = camera.activeShotId ? camera.director.getShot(camera.activeShotId) : undefined;
+    const canSaveCurrentView = savedDirectorPoseAvailable || camera.lastDirectorPose !== null;
+    const activeFov = draftFov ?? activeShot?.fov ?? DEFAULT_FOV;
+
+    useEffect(() => {
+        setDraftFov(null);
+        const frameId = window.requestAnimationFrame(() => {
+            setSavedDirectorPoseAvailable(camera.lastDirectorPose !== null);
+        });
+        return () => window.cancelAnimationFrame(frameId);
+    }, [activeShot?.fov, camera, camera.activeShotId, camera.revision]);
 
     const saveCurrentView = () => {
         const pose = camera.lastDirectorPose;
-        if (!pose) return;
+        if (!pose) {
+            setSavedDirectorPoseAvailable(false);
+            return;
+        }
         dispatcher.dispatch(
             {
                 type: "camera.set-shot",
@@ -83,23 +105,43 @@ export const ShotPanel = observer(function ShotPanel() {
     };
 
     const setActiveFov = (fov: number) => {
-        if (!camera.activeShotId || !activeShot) return;
+        const activeShotId = camera.activeShotId;
+        const currentShot = activeShotId ? camera.director.getShot(activeShotId) : undefined;
+        if (!activeShotId || !currentShot || currentShot.fov === fov) return;
         dispatcher.dispatch(
             {
                 type: "camera.set-shot",
                 payload: {
-                    id: camera.activeShotId,
-                    shot: { position: activeShot.position, target: activeShot.target, fov },
+                    id: activeShotId,
+                    shot: { position: currentShot.position, target: currentShot.target, fov },
                 },
             },
             stores,
         );
     };
 
+    const commitActiveFov = (fov: number) => {
+        setActiveFov(fov);
+        setDraftFov(null);
+    };
+
     return (
-        <Paper elevation={2} sx={{ position: "absolute", left: 12, bottom: 12, width: 240, p: 1.5, zIndex: 1 }}>
+        <Paper
+            elevation={2}
+            sx={{
+                position: "absolute",
+                left: OVERLAY_INSET_PX,
+                bottom: OVERLAY_INSET_PX,
+                width: SHOT_PANEL_WIDTH,
+                maxWidth: OVERLAY_MAX_SIZE,
+                maxHeight: OVERLAY_MAX_SIZE,
+                overflowY: "auto",
+                p: 1.5,
+                zIndex: 1,
+            }}
+        >
             <Typography variant="subtitle2">机位({shots.length})</Typography>
-            <List dense disablePadding>
+            <List dense disablePadding aria-label="机位列表">
                 {shots.map(([id]) => {
                     const active = camera.activeShotId === id;
                     return (
@@ -136,9 +178,28 @@ export const ShotPanel = observer(function ShotPanel() {
                     );
                 })}
             </List>
-            <Button size="small" variant="outlined" startIcon={<AddAPhotoIcon />} onClick={saveCurrentView} fullWidth>
+            <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AddAPhotoIcon />}
+                onClick={saveCurrentView}
+                disabled={!canSaveCurrentView}
+                aria-describedby={canSaveCurrentView ? undefined : SAVE_SHOT_STATUS_ID}
+                fullWidth
+            >
                 当前视角存为机位
             </Button>
+            {!canSaveCurrentView && (
+                <Typography
+                    id={SAVE_SHOT_STATUS_ID}
+                    role="status"
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block", mt: 0.5 }}
+                >
+                    暂无可保存的导演视角
+                </Typography>
+            )}
             <Divider sx={{ my: 1 }} />
             <Typography variant="caption" color="text.secondary">
                 景别(作用于选中对象)
@@ -149,6 +210,7 @@ export const ShotPanel = observer(function ShotPanel() {
                 value={shotSize}
                 onChange={(e) => applyShotSize(e.target.value as ShotSize)}
                 disabled={!selection.primaryId}
+                aria-label="景别"
             >
                 {Object.entries(SHOT_SIZE_LABELS).map(([size, label]) => (
                     <MenuItem key={size} value={size}>
@@ -158,15 +220,17 @@ export const ShotPanel = observer(function ShotPanel() {
             </Select>
             <Box sx={{ mt: 1 }}>
                 <Typography variant="caption" color="text.secondary">
-                    FOV {activeShot?.fov.toFixed(0) ?? "—"}°(激活机位可调)
+                    FOV {activeShot ? activeFov.toFixed(0) : "—"}°(激活机位可调)
                 </Typography>
                 <Slider
                     size="small"
                     min={FOV_MIN}
                     max={FOV_MAX}
-                    value={activeShot?.fov ?? 45}
+                    value={activeFov}
                     disabled={!activeShot}
-                    onChange={(_, value) => setActiveFov(value as number)}
+                    aria-label="激活机位 FOV"
+                    onChange={(_, value) => setDraftFov(value as number)}
+                    onChangeCommitted={(_, value) => commitActiveFov(value as number)}
                 />
             </Box>
         </Paper>

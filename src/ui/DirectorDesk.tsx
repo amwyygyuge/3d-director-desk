@@ -4,10 +4,12 @@ import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 import { observer } from "mobx-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { PROTOCOL_VERSION } from "../bridge/protocol";
 import { formatFromUrl } from "../assets/ModelAsset";
+import type { HostBridgeConfiguration } from "../bridge/HostBridge";
+import { PROTOCOL_VERSION } from "../bridge/protocol";
+import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
 import { TransformGizmoController } from "../transform/TransformGizmoController";
@@ -30,11 +32,13 @@ import { ShotFrameOverlay } from "./ShotFrameOverlay";
 import { ShotPanel } from "./ShotPanel";
 import { Toolbar } from "./Toolbar";
 
-interface DirectorDeskProps {
+export interface DirectorDeskProps {
     /** 宿主可传 MUI theme 覆盖默认暗色主题 */
     theme?: Theme;
-    /** 宿主适配器:Monet 直嵌注入 MonetNodeAdapter;缺省 iframe 形态自动落 PostMessageAdapter */
+    /** 宿主适配器:直嵌形态直接注入，不创建 postMessage 监听器 */
     host?: HostAdapter;
+    /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
+    hostBridge?: HostBridgeConfiguration;
     /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
     onReady?: (stores: DirectorDeskStores) => void;
 }
@@ -49,8 +53,9 @@ interface DirectorDeskProps {
  * - three 对象经 ref 注册进 SceneManager 运行时表,不进 observable;
  * - 面板订阅走 MobX 细粒度 observer,Canvas 树不随 UI state 重渲染。
  */
-export const DirectorDesk = observer(function DirectorDesk({ theme, host, onReady }: DirectorDeskProps) {
-    const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host }));
+export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBridge, onReady }: DirectorDeskProps) {
+    const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge }));
+    const deskRef = useRef<HTMLDivElement>(null);
 
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
@@ -59,20 +64,25 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
     }, [stores]);
 
     useEffect(() => {
+        stores.lifecycle.activate();
         return () => {
-            stores.capture.detach();
-            stores.assets.dispose();
-            stores.animations.dispose();
-            stores.binder.dispose();
-            stores.models.dispose();
-            stores.scene.manager.dispose();
-            stores.host.dispose?.();
+            stores.lifecycle.scheduleDispose(() => {
+                stores.capture.detach();
+                stores.ui.dispose();
+                stores.assets.dispose();
+                stores.animations.dispose();
+                stores.binder.dispose();
+                stores.models.dispose();
+                stores.scene.manager.dispose();
+                stores.host.dispose?.();
+            });
         };
     }, [stores]);
     // 宿主入站:import-model → 命令层;ready 握手(adapter 内部决定是否有意义)
     useEffect(() => {
+        if (stores.host instanceof PostMessageAdapter) stores.host.activate();
         const detachImport = stores.host.onImportModel(({ url, name }) => {
-            stores.dispatcher.dispatch(
+            const result = stores.dispatcher.dispatch(
                 {
                     type: "object.place",
                     payload: {
@@ -90,6 +100,7 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
                 },
                 stores,
             );
+            if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
         });
         stores.host.reportReady(PROTOCOL_VERSION);
         return detachImport;
@@ -99,7 +110,12 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
         <ThemeProvider theme={theme ?? directorDeskTheme}>
             <ScopedCssBaseline className="h-full">
                 <DirectorDeskProvider value={stores}>
-                    <div className="relative h-full w-full overflow-hidden">
+                    <div
+                        ref={deskRef}
+                        className="relative h-full w-full overflow-hidden"
+                        tabIndex={-1}
+                        onPointerDown={(event) => event.currentTarget.focus()}
+                    >
                         <Canvas
                             frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
                             camera={{ position: [6, 4, 8], fov: 45 }}
@@ -137,10 +153,10 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, onRead
                             <FlyDrive />
                             <ShotNavigation />
                         </Canvas>
+                        <Inspector />
                         <ShotFrameOverlay />
                         <Toolbar />
-                        <Hotkeys />
-                        <Inspector />
+                        <Hotkeys deskRef={deskRef} />
                         <ShotPanel />
                         <CapturePreview />
                         <OutlinerPanel />

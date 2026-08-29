@@ -1,103 +1,114 @@
-# 3d-director-desk
+# @dm/3d-director-desk
 
-## Getting started
+Embeddable React director desk for placing game models, mounting actions, composing camera shots, and producing still captures.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Requirements
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- Node.js `^20.19.0 || >=22.12.0` (required by the Vite/Storybook toolchain).
+- pnpm and the package peers listed below.
+- A sized parent element: `DirectorDesk` fills its container.
 
-## Add your files
+| Peer | Supported range |
+| --- | --- |
+| `react`, `react-dom` | `^18.2.0` |
+| `three` | `>=0.184.0` |
+| `@react-three/fiber` | `^8.18.0` |
+| `@react-three/drei` | `^9.122.0` |
+| `mobx` | `^7.0.0` |
+| `mobx-react` | `^10.0.0` |
+| `@mui/material`, `@mui/icons-material` | `^9.3.1` |
+| `@emotion/react`, `@emotion/styled` | `^11.14.0` |
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Install and render
 
+```sh
+pnpm add @dm/3d-director-desk
 ```
-cd existing_repo
-git remote add origin https://git-sa.nie.netease.com/caijunxiong01/3d-director-desk.git
-git branch -M master
-git push -uf origin master
+
+Import the package stylesheet from its only supported subpath, then render the desk inside a container with a real height.
+
+```tsx
+import "@dm/3d-director-desk/style.css";
+import { DirectorDesk } from "@dm/3d-director-desk";
+
+export function DirectorNode(): JSX.Element {
+    return (
+        <div style={{ height: "720px" }}>
+            <DirectorDesk />
+        </div>
+    );
+}
 ```
 
-## Integrate with your tools
+`DirectorDesk` accepts `theme`, `onReady`, and one host integration mechanism:
 
-- [ ] [Set up project integrations](https://git-sa.nie.netease.com/caijunxiong01/3d-director-desk/-/settings/integrations)
+- `host?: HostAdapter` injects an in-process adapter for a directly embedded host.
+- `hostBridge?: HostBridgeConfiguration` configures a trusted `postMessage` bridge for an iframe integration.
+- With neither prop, the desk uses an inert adapter: it does not install a message listener or post to a wildcard origin.
 
-## Collaborate with your team
+## Host bridge contract
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Use a specific host window, a concrete URL origin, and a per-desk session. `"*"` is rejected as a target origin.
 
-## Test and Deploy
+```tsx
+import {
+    DirectorDesk,
+    HostBridgeConfiguration,
+    HostBridgeSession,
+} from "@dm/3d-director-desk";
 
-Use the built-in continuous integration in GitLab.
+const hostBridge = new HostBridgeConfiguration(
+    window.parent,
+    "https://canvas.example.com",
+    new HostBridgeSession("director-node-42"),
+);
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+export function EmbeddedDirectorNode(): JSX.Element {
+    return <DirectorDesk hostBridge={hostBridge} />;
+}
+```
 
----
+`HostAdapter` is the direct-embedding contract: `onImportModel(handler)` returns its unsubscribe function; `reportCapture({ blobUrl, width, height })` receives captures; `reportReady(protocolVersion)` receives the readiness handshake; and `dispose?()` runs during desk teardown.
 
-# Editing this README
+The bridge exports `HostBridge`, `HostBridgeConfiguration`, `HostBridgeSession`, `HostAdapter`, `PostMessageAdapter`, `PROTOCOL_VERSION`, `HOST_INBOUND_MESSAGE_TYPE`, `HOST_OUTBOUND_MESSAGE_TYPE`, `HOST_BRIDGE_FAILURE_CODE`, `isDirectorDeskMessage`, `HostInboundMessage`, `HostOutboundRequest`, `HostOutboundMessage`, and `HostBridgeFailureCode`.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+All bridged messages include the configured `sessionId` where applicable:
 
-## Suggestions for a good README
+- Inbound import: `{ type: "director-desk:import-model", sessionId, payload: { url, name } }`.
+- Outbound ready: `{ type: "director-desk:ready", sessionId, payload: { protocolVersion } }`.
+- Outbound capture: `{ type: "director-desk:capture-produced", sessionId, payload: { blobUrl, width, height } }`.
+- Structured failure: `{ type: "director-desk:command-failed", sessionId, payload: { code: "invalid-message", message } }`.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+The bridge accepts an inbound message only when its origin, source window, session, message type, and full payload are valid. Wrong origin, source, or session messages are ignored. A malformed message from the configured trusted source receives `invalid-message`. Rejected imports are reported through `UiStore.setApplicationNotice(...)`, not as an outbound bridge event.
 
-## Name
+## Public API
 
-Choose a self-explaining name for your project.
+The root entry exports the UI and integration surface above, plus:
 
-## Description
+- `DirectorDesk` and `DirectorDeskProps` for the embeddable component.
+- `createDirectorDeskStores`, `DirectorDeskProvider`, `useDirectorDeskStores`, and `DirectorDeskStores` for a controlled composition.
+- Scene, camera, capture, asset, animation, shortcut, time, and store classes for command-driven integrations.
+- `CommandDispatcher`, `CommandHistory`, `DirectorCommand`, built-in command classes, command registration helpers, and their contract types.
 
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Use root named exports only; `@dm/3d-director-desk/style.css` is the only public subpath. Deep imports, Storybook stories, playground code, fixtures, and test assets are not package APIs.
 
-## Badges
+## Manual Storybook verification
 
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Phase one has no unit-test command. Verify the package surface manually with Storybook:
 
-## Visuals
+```sh
+pnpm storybook
+```
 
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+At `http://localhost:6087`, open the **验收** stories and confirm model import, object selection and transform, action mounting/playback, camera shots, and capture output. For an iframe host integration, also send a correctly scoped `director-desk:import-model` message and confirm the matching desk imports it, while a different session or origin has no effect.
 
-## Installation
+## Release gate
 
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+```sh
+pnpm run release-check
+pnpm publish
+```
 
-## Usage
+`release-check` runs static type checking, linting, a production Storybook build, the library/declaration build, artifact sanitation, and `pnpm pack --dry-run`. `prepublishOnly` runs that same gate, and `prepack` repeats artifact sanitation for direct pack workflows, so normal publishing cannot skip it. Do not publish or pack with lifecycle scripts disabled.
 
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-
-Show your appreciation to those who have contributed to the project.
-
-## License
-
-For open source projects, say how it is licensed.
-
-## Project status
-
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+The publish allowlist contains only `dist` (plus npm-required package metadata and this README). `artifact:clean` removes generated fixture and Storybook declaration paths before packing. Source, Storybook support declarations, playground code, fixture assets, and the Storybook build output are excluded.

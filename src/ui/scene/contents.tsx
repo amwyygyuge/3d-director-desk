@@ -17,6 +17,8 @@ function colorOf(id: string): string {
 
 /** 导入模型归一化目标:最大边缩放到 2 个场景单位,底面贴地——游戏模型单位各异(cm/m),裸放会糊满屏 */
 const MODEL_TARGET_MAX_DIM = 2;
+const LOADING_START_PROGRESS = 0;
+
 
 const TMP_BOX = new Box3();
 const TMP_SIZE = new Vector3();
@@ -51,44 +53,59 @@ export function PrimitiveContent({ entity }: { entity: SceneObject }) {
  * 卸载纪律:effect cleanup 调 handle.release(),引用计数归零后 GL 资源由 ModelImporter 统一释放。
  */
 export function ModelContent({ entity }: { entity: SceneObject }) {
+    const requestKey = JSON.stringify([entity.id, entity.sourceUrl, entity.format]);
+    return <ModelRequestContent key={requestKey} entity={entity} />;
+}
+
+function ModelRequestContent({ entity }: { entity: SceneObject }) {
     const { models, ui } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
     const sourceUrl = entity.sourceUrl;
     const format = entity.format;
-    const label = entity.name;
+    const requestId = entity.id;
     const [handle, setHandle] = useState<ModelHandle | null>(null);
     const [loadFailed, setLoadFailed] = useState(false);
     const failed = sourceUrl === null || format === null || loadFailed;
 
     useEffect(() => {
-        if (sourceUrl === null || format === null) return;
+        if (sourceUrl === null || format === null) {
+            ui.clearLoading(requestId);
+            return;
+        }
+
+        const abortController = new AbortController();
         const request = { cancelled: false, acquired: null as ModelHandle | null };
+        ui.reportLoading(requestId, LOADING_START_PROGRESS);
         models
-            .acquire(sourceUrl, format, { onProgress: (progress01) => ui.reportLoading(label, progress01) })
+            .acquire(sourceUrl, format, {
+                signal: abortController.signal,
+                onProgress: (progress01) => ui.reportLoading(requestId, progress01),
+            })
             .then((loadedHandle) => {
                 if (request.cancelled) {
                     loadedHandle.release();
                     return;
                 }
-                ui.clearLoading(label);
+                ui.clearLoading(requestId);
                 request.acquired = loadedHandle;
                 setHandle(loadedHandle);
                 invalidate();
             })
             .catch((error: unknown) => {
                 if (request.cancelled) return;
-                ui.clearLoading(label);
+                ui.clearLoading(requestId);
                 console.warn(`[ModelContent] 加载失败 ${sourceUrl}`, error);
                 setLoadFailed(true);
                 invalidate();
             });
         return () => {
             request.cancelled = true;
-            ui.clearLoading(label);
+            abortController.abort();
+            ui.clearLoading(requestId);
             request.acquired?.release();
         };
-    }, [models, ui, sourceUrl, format, label, invalidate]);
+    }, [models, ui, sourceUrl, format, requestId, invalidate]);
 
     // 归一化壳按 handle 钉住:渲染期重复构造会导致 <primitive> 反复重挂载
     const shell = useMemo(() => (handle ? normalizedShell(handle.object3d) : null), [handle]);

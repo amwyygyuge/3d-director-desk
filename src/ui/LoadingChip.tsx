@@ -20,18 +20,27 @@ export const LoadingChip = observer(function LoadingChip() {
     return (
         <Paper
             elevation={LOADING_CHIP_ELEVATION}
-            className="absolute bottom-3 left-1/2 z-[1] w-72 -translate-x-1/2 px-3 py-2"
+            className="absolute bottom-3 left-1/2 z-[1] max-h-[calc(100%-1.5rem)] w-72 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-y-auto px-3 py-2"
         >
             <Stack spacing={LOADING_ITEM_SPACING}>
                 {Array.from(ui.loading, ([label, progress01]) => {
                     const percent = Math.round(progress01 * PROGRESS_PERCENT_SCALE);
                     return (
                         <Box key={label}>
-                            <Box className="flex items-center justify-between gap-2">
-                                <Typography variant="caption">{label}</Typography>
-                                <Typography variant="caption">{percent}%</Typography>
+                            <Box className="flex min-w-0 items-center justify-between gap-2">
+                                <Typography variant="caption" className="min-w-0 break-words">
+                                    {label}
+                                </Typography>
+                                <Typography variant="caption" className="shrink-0">
+                                    {percent}%
+                                </Typography>
                             </Box>
-                            <LinearProgress variant="determinate" value={percent} />
+                            <LinearProgress
+                                variant="determinate"
+                                value={percent}
+                                aria-label={`${label} 加载进度`}
+                                aria-valuetext={`${percent}%`}
+                            />
                         </Box>
                     );
                 })}

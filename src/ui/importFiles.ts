@@ -74,7 +74,12 @@ export async function importActionFile(
         return;
     }
     try {
-        const handle = await stores.models.acquire(source.url, source.format);
+        const handle = await stores.models.acquire(source.url, source.format, { signal: stores.lifecycle.signal });
+        if (stores.lifecycle.signal.aborted) {
+            handle.release();
+            URL.revokeObjectURL(source.url);
+            return;
+        }
         const clips = [...handle.animations];
         handle.release();
         if (clips.length === 0) {
@@ -96,6 +101,7 @@ export async function importActionFile(
         notify(`动作入库:${file.name} 新增 ${freshCount} 条 / 共 ${clips.length} 条`);
     } catch (error) {
         URL.revokeObjectURL(source.url);
+        if (stores.lifecycle.signal.aborted) return;
         console.warn(`[importActionFile] 解析失败 ${file.name}`, error);
         notify(`动作解析失败:${file.name}`);
     }

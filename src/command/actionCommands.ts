@@ -1,9 +1,43 @@
-import { BoneCompatibilityChecker, BONE_MATCH_THRESHOLD } from "../animation/BoneCompatibilityChecker";
+import { BONE_MATCH_THRESHOLD } from "../animation/BoneCompatibilityChecker";
+import type { BoneCheckResult } from "../animation/BoneCompatibilityChecker";
+import type { AnimationClip, Object3D } from "three";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 import type { CommandDispatcher } from "./CommandDispatcher";
 
-const boneChecker = new BoneCompatibilityChecker();
+class BoneCompatibilityIndex {
+    private readonly nodeNamesByRoot = new WeakMap<Object3D, ReadonlySet<string>>();
+    private readonly resultsByRoot = new WeakMap<Object3D, Map<AnimationClip, BoneCheckResult>>();
+
+    check(root: Object3D, clip: AnimationClip): BoneCheckResult {
+        const cached = this.resultsByRoot.get(root)?.get(clip);
+        if (cached) return cached;
+
+        const nodeNames = this.nodeNamesByRoot.get(root) ?? this.indexNodeNames(root);
+        const targets = [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean);
+        const missingTargets = targets.filter((name) => !nodeNames.has(name));
+        const result = {
+            matchedRatio: targets.length === 0 ? 0 : (targets.length - missingTargets.length) / targets.length,
+            missingTargets,
+            ok: targets.length > 0 && (targets.length - missingTargets.length) / targets.length >= BONE_MATCH_THRESHOLD,
+        };
+        const results = this.resultsByRoot.get(root) ?? new Map<AnimationClip, BoneCheckResult>();
+        results.set(clip, result);
+        this.resultsByRoot.set(root, results);
+        return result;
+    }
+
+    private indexNodeNames(root: Object3D): ReadonlySet<string> {
+        const nodeNames = new Set<string>();
+        root.traverse((node) => {
+            if (node.name) nodeNames.add(node.name);
+        });
+        this.nodeNamesByRoot.set(root, nodeNames);
+        return nodeNames;
+    }
+}
+
+const boneCompatibilityIndex = new BoneCompatibilityIndex();
 
 interface MountActionPayload {
     objectId: string;
@@ -28,12 +62,12 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
         if (!runtime) return [`对象 "${this.payload.objectId}" 运行时未就绪(模型加载中?)`];
 
-        const check = boneChecker.check(runtime, clip);
+        const check = boneCompatibilityIndex.check(runtime, clip);
         if (check.ok) return [];
         const compatible = ctx.animations.actions
             .filter((action) => {
                 const actionClip = ctx.animations.getClip(action.id);
-                return actionClip ? boneChecker.check(runtime, actionClip).ok : false;
+                return actionClip ? boneCompatibilityIndex.check(runtime, actionClip).ok : false;
             })
             .map((action) => action.name);
         return [
@@ -51,8 +85,11 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         ctx.scene.setObjectAction(this.payload.objectId, this.payload.actionId);
     }
 
-    override invert(): readonly SerializedCommand[] {
-        return [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const previousActionId = ctx.scene.manager.getEntity(this.payload.objectId)?.actionId;
+        return previousActionId
+            ? [{ type: MountActionCommand.TYPE, payload: { objectId: this.payload.objectId, actionId: previousActionId } }]
+            : [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
     }
 }
 

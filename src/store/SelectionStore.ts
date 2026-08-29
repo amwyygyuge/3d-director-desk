@@ -23,6 +23,11 @@ export class SelectionStore {
         this.selectedIds = [];
     }
 
+    remove(id: string): void {
+        if (!this.selectedIds.includes(id)) return;
+        this.selectedIds = this.selectedIds.filter((selectedId) => selectedId !== id);
+    }
+
     isSelected(id: string): boolean {
         return this.selectedIds.includes(id);
     }

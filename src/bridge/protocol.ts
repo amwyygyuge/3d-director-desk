@@ -1,26 +1,64 @@
 /** 宿主通信协议:Monet 画布节点嵌入的契约层 */
 
-/**
- * 协议版本:主仓与本包独立发版后会漂移,
- * ready 握手携带本版本,宿主据此做兼容判定。
- */
+/** 协议版本:主仓与本包独立发版后会漂移,ready 握手携带本版本。 */
 export const PROTOCOL_VERSION = 1;
 
+export const HOST_INBOUND_MESSAGE_TYPE = {
+    IMPORT_MODEL: "director-desk:import-model",
+} as const;
+
+export const HOST_OUTBOUND_MESSAGE_TYPE = {
+    READY: "director-desk:ready",
+    CAPTURE_PRODUCED: "director-desk:capture-produced",
+    COMMAND_FAILED: "director-desk:command-failed",
+} as const;
+export const HOST_BRIDGE_FAILURE_CODE = {
+    INVALID_MESSAGE: "invalid-message",
+} as const;
+export type HostBridgeFailureCode = (typeof HOST_BRIDGE_FAILURE_CODE)[keyof typeof HOST_BRIDGE_FAILURE_CODE];
+
+interface HostMessageBase<TType extends string, TPayload> {
+    readonly type: TType;
+    readonly sessionId: string;
+    readonly payload: TPayload;
+}
+
 /** 宿主 → 导演台 */
-export type HostInboundMessage =
-    | { type: "director-desk:open-session"; payload: { canvasId: string; nodeId: string } }
-    | { type: "director-desk:import-model"; payload: { url: string; name: string } };
+export type HostInboundMessage = HostMessageBase<
+    (typeof HOST_INBOUND_MESSAGE_TYPE)[keyof typeof HOST_INBOUND_MESSAGE_TYPE],
+    { readonly url: string; readonly name: string }
+>;
 
-/** 导演台 → 宿主 */
-export type HostOutboundMessage =
-    | { type: "director-desk:ready"; payload: { protocolVersion: number } }
-    | { type: "director-desk:capture-produced"; payload: { blobUrl: string; width: number; height: number } };
+/** 导演台 → 宿主(Bridge 自动附加已配置的 sessionId) */
+export type HostOutboundRequest =
+    | {
+          readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["READY"];
+          readonly payload: { readonly protocolVersion: number };
+      }
+    | {
+          readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["CAPTURE_PRODUCED"];
+          readonly payload: { readonly blobUrl: string; readonly width: number; readonly height: number };
+      }
+    | {
+          readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["COMMAND_FAILED"];
+          readonly payload: { readonly code: HostBridgeFailureCode; readonly message: string };
+      };
 
-export const DIRECTOR_DESK_MESSAGE_PREFIX = "director-desk:" as const;
+/** DirectorDesk → host wire message;只由 HostBridge 构造 sessionId。 */
+export type HostOutboundMessage = HostOutboundRequest & { readonly sessionId: string };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function isSessionId(value: unknown): value is string {
+    return typeof value === "string" && value.length > 0;
+}
+
+/** 仅接受完整的、已知类型的入站消息，禁止把未校验对象交给领域层。 */
 export function isDirectorDeskMessage(data: unknown): data is HostInboundMessage {
-    if (typeof data !== "object" || data === null) return false;
-    if (!("type" in data)) return false;
-    const type: unknown = data.type;
-    return typeof type === "string" && type.startsWith(DIRECTOR_DESK_MESSAGE_PREFIX);
+    if (!isRecord(data)) return false;
+    if (data.type !== HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL || !isSessionId(data.sessionId)) return false;
+    if (!isRecord(data.payload)) return false;
+    return typeof data.payload.url === "string" && data.payload.url.length > 0 && typeof data.payload.name === "string";
 }

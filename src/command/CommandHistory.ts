@@ -1,7 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import type { CommandDispatcher } from "./CommandDispatcher";
-import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
+import type { CommandResult, DirectorContext, SerializedCommand } from "./DirectorCommand";
 
 /** 一条可逆历史记录:undo/redo 互为逆序列 */
 export interface HistoryEntry {
@@ -9,6 +9,11 @@ export interface HistoryEntry {
     readonly undo: readonly SerializedCommand[];
     readonly redo: readonly SerializedCommand[];
 }
+
+const HISTORY_ERROR = {
+    EMPTY: "history-empty",
+    DISPATCHER_UNAVAILABLE: "history-dispatcher-unavailable",
+} as const;
 
 /**
  * 命令历史(撤销/重做):命令层红利的兑现。
@@ -45,20 +50,44 @@ export class CommandHistory {
         this.redoStack.length = 0;
     }
 
-    undo(ctx: DirectorContext): void {
-        this.replay(this.undoStack, this.redoStack, ctx);
+    undo(ctx: DirectorContext): CommandResult {
+        return this.replay(this.undoStack, this.redoStack, ctx, (entry) => entry.undo, (entry) => entry.redo);
     }
 
-    redo(ctx: DirectorContext): void {
-        this.replay(this.redoStack, this.undoStack, ctx);
+    redo(ctx: DirectorContext): CommandResult {
+        return this.replay(this.redoStack, this.undoStack, ctx, (entry) => entry.redo, (entry) => entry.undo);
     }
 
-    private replay(from: HistoryEntry[], to: HistoryEntry[], ctx: DirectorContext): void {
-        const entry = from.pop();
-        if (!entry || !this.dispatcher) return;
-        for (const command of from === this.undoStack ? entry.undo : entry.redo) {
-            this.dispatcher.dispatch(command, ctx, { record: false });
+    private replay(
+        from: HistoryEntry[],
+        to: HistoryEntry[],
+        ctx: DirectorContext,
+        commandsFor: (entry: HistoryEntry) => readonly SerializedCommand[],
+        compensationFor: (entry: HistoryEntry) => readonly SerializedCommand[],
+    ): CommandResult {
+        const entry = from.at(-1);
+        const dispatcher = this.dispatcher;
+        if (!entry || !dispatcher) {
+            return { ok: false, error: entry ? HISTORY_ERROR.DISPATCHER_UNAVAILABLE : HISTORY_ERROR.EMPTY };
         }
+
+        for (const command of commandsFor(entry)) {
+            const result = dispatcher.dispatch(command, ctx, { record: false });
+            if (!result.ok) {
+                this.compensate(compensationFor(entry), ctx, dispatcher);
+                return result;
+            }
+        }
+        from.pop();
         to.push(entry);
+        return { ok: true };
+    }
+
+    private compensate(
+        commands: readonly SerializedCommand[],
+        ctx: DirectorContext,
+        dispatcher: CommandDispatcher,
+    ): void {
+        for (const command of commands) dispatcher.dispatch(command, ctx, { record: false });
     }
 }

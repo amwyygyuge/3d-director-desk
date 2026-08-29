@@ -1,6 +1,8 @@
 import type { Camera, Scene, WebGLRenderer } from "three";
 import type { Object3D } from "three";
 
+const PNG_MIME_TYPE = "image/png";
+
 /** 渲染句柄:R3F onCreated 时注入;three 运行时引用,普通字段不进 observable */
 export interface RenderHandles {
     gl: WebGLRenderer;
@@ -21,12 +23,15 @@ export interface RenderHandles {
  */
 export class CaptureService {
     private handles: RenderHandles | null = null;
+    private generation = 0;
 
     attach(handles: RenderHandles): void {
+        this.generation += 1;
         this.handles = handles;
     }
 
     detach(): void {
+        this.generation += 1;
         this.handles = null;
     }
 
@@ -43,6 +48,7 @@ export class CaptureService {
     /** 截取当前场景为 PNG blob;hideHelpers 默认开(网格/gizmo/高亮框不入镜) */
     async capture(options?: { hideHelpers?: boolean }): Promise<Blob | null> {
         const handles = this.handles;
+        const generation = this.generation;
         if (!handles) return null;
         const { gl, scene, camera } = handles;
         // 诊断(dev only,构建期消除):截图所用相机的实际投影参数
@@ -68,10 +74,14 @@ export class CaptureService {
 
         gl.render(scene, camera);
         const { promise, resolve } = Promise.withResolvers<Blob | null>();
-        gl.domElement.toBlob((blob) => resolve(blob), "image/png");
+        gl.domElement.toBlob((blob) => resolve(this.isCurrentCapture(handles, generation) ? blob : null), PNG_MIME_TYPE);
 
         for (const object of hidden) object.visible = true;
         if (hidden.length > 0) gl.render(scene, camera);
         return promise;
+    }
+
+    private isCurrentCapture(handles: RenderHandles, generation: number): boolean {
+        return this.handles === handles && this.generation === generation;
     }
 }

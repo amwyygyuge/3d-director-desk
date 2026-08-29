@@ -1,11 +1,8 @@
-import type { HostBridge } from "../bridge/HostBridge";
+import { HostBridge } from "../bridge/HostBridge";
+import type { HostBridgeConfiguration } from "../bridge/HostBridge";
+import { HOST_INBOUND_MESSAGE_TYPE, HOST_OUTBOUND_MESSAGE_TYPE } from "../bridge/protocol";
 
-/**
- * 宿主适配器接口:导演台与宿主的唯一契约面(两形态一契约)。
- * - iframe 形态:PostMessageAdapter 走 HostBridge;
- * - Monet 组件直嵌形态:MonetNodeAdapter 直连 Monet api,不绕 postMessage。
- * DirectorDesk 经 `host` prop 注入;缺省(无 prop)时 iframe 形态自动落 PostMessageAdapter。
- */
+/** 宿主适配器接口:导演台与宿主的唯一契约面(两形态一契约)。 */
 export interface HostAdapter {
     /** 宿主侧请求导入模型(Monet 生成资产 → 导演台场景) */
     readonly onImportModel: (handler: (payload: { url: string; name: string }) => void) => () => void;
@@ -17,29 +14,73 @@ export interface HostAdapter {
     readonly dispose?: () => void;
 }
 
-/** iframe 形态:把 HostAdapter 契约映射到 HostBridge 的 postMessage 协议 */
-export class PostMessageAdapter implements HostAdapter {
-    constructor(private readonly bridge: HostBridge) {}
+type ImportHandler = (payload: { url: string; name: string }) => void;
 
-    onImportModel(handler: (payload: { url: string; name: string }) => void): () => void {
-        this.bridge.on("director-desk:import-model", (msg) => {
-            if (msg.type === "director-desk:import-model") handler(msg.payload);
-        });
-        // HostBridge 生命周期随 DirectorDesk 实例整体回收,无单独解绑面
-        return () => {};
+interface ImportSubscription {
+    readonly handler: ImportHandler;
+    unsubscribe: (() => void) | null;
+}
+
+/**
+ * iframe 形态:把 HostAdapter 契约映射到 HostBridge 的 postMessage 协议。
+ * Bridge 监听器只在已挂载的 DirectorDesk effect 中 activate，避免 StrictMode 丢弃实例泄漏监听器。
+ */
+export class PostMessageAdapter implements HostAdapter {
+    private readonly subscriptions = new Set<ImportSubscription>();
+    private bridge: HostBridge | null = null;
+    private disposed = false;
+
+    constructor(private readonly configuration: HostBridgeConfiguration) {}
+
+    activate(): void {
+        if (this.disposed || this.bridge !== null) return;
+        const bridge = new HostBridge(this.configuration);
+        this.bridge = bridge;
+        for (const subscription of this.subscriptions) {
+            subscription.unsubscribe = bridge.on(HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL, (message) =>
+                subscription.handler(message.payload),
+            );
+        }
+    }
+
+    onImportModel(handler: ImportHandler): () => void {
+        if (this.disposed) return () => {};
+        const subscription: ImportSubscription = { handler, unsubscribe: null };
+        this.subscriptions.add(subscription);
+        if (this.bridge !== null) {
+            subscription.unsubscribe = this.bridge.on(HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL, (message) =>
+                handler(message.payload),
+            );
+        }
+        return () => {
+            subscription.unsubscribe?.();
+            this.subscriptions.delete(subscription);
+        };
     }
 
     reportCapture(payload: { blobUrl: string; width: number; height: number }): void {
-        this.bridge.post({ type: "director-desk:capture-produced", payload });
+        this.bridge?.post({ type: HOST_OUTBOUND_MESSAGE_TYPE.CAPTURE_PRODUCED, payload });
     }
 
     reportReady(protocolVersion: number): void {
-        // 顶层窗口(playground)无宿主,握手只在 iframe 形态发出
-        if (window.parent === window) return;
-        this.bridge.post({ type: "director-desk:ready", payload: { protocolVersion } });
+        this.bridge?.post({ type: HOST_OUTBOUND_MESSAGE_TYPE.READY, payload: { protocolVersion } });
     }
 
     dispose(): void {
-        this.bridge.dispose();
+        if (this.disposed) return;
+        this.disposed = true;
+        this.bridge?.dispose();
+        this.subscriptions.clear();
     }
+}
+
+/** 未配置可信 postMessage 宿主时的安全缺省适配器。 */
+export class InertHostAdapter implements HostAdapter {
+    onImportModel(): () => void {
+        return () => {};
+    }
+
+    reportCapture(): void {}
+
+    reportReady(): void {}
 }

@@ -23,6 +23,9 @@
         "registry": "https://npm.nie.netease.com",
         "access": "public"
     },
+    "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+    },
     "scripts": {
         "dev": "vite",
         "build": "vite build && tsc -p tsconfig.build.json",
@@ -32,7 +35,11 @@
         "format": "prettier --write .",
         "storybook": "storybook dev -p 6087",
         "build-storybook": "storybook build",
-        "prepublishOnly": "pnpm run clean && pnpm run build",
+        "artifact:clean": "rm -rf dist/test-assets dist/ui/stories",
+        "pack:check": "pnpm run artifact:clean && pnpm pack --dry-run",
+        "release-check": "pnpm run typecheck && pnpm run lint && pnpm run build-storybook && pnpm run build && pnpm run pack:check",
+        "prepack": "pnpm run artifact:clean",
+        "prepublishOnly": "pnpm run release-check",
         "pa": "npm version patch && npm publish",
         "mi": "npm version minor && npm publish",
         "ma": "npm version major && npm publish"

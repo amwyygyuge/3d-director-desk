@@ -9,9 +9,15 @@ export { AnimationLibrary } from "./assets/AnimationLibrary";
 export { ActionAsset } from "./assets/ActionAsset";
 export { formatFromFileName, formatFromUrl, ModelAsset, MODEL_FORMAT } from "./assets/ModelAsset";
 export type { ModelFormat } from "./assets/ModelAsset";
-export { HostBridge } from "./bridge/HostBridge";
-export { isDirectorDeskMessage } from "./bridge/protocol";
-export type { HostInboundMessage, HostOutboundMessage } from "./bridge/protocol";
+export { HostBridge, HostBridgeConfiguration, HostBridgeSession } from "./bridge/HostBridge";
+export {
+    HOST_BRIDGE_FAILURE_CODE,
+    HOST_INBOUND_MESSAGE_TYPE,
+    HOST_OUTBOUND_MESSAGE_TYPE,
+    PROTOCOL_VERSION,
+    isDirectorDeskMessage,
+} from "./bridge/protocol";
+export type { HostBridgeFailureCode, HostInboundMessage, HostOutboundMessage, HostOutboundRequest } from "./bridge/protocol";
 export { CameraDirector } from "./camera/CameraDirector";
 export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
@@ -77,3 +83,4 @@ export { TimeTransport } from "./time/TimeTransport";
 export { createDirectorDeskStores, DirectorDeskProvider, useDirectorDeskStores } from "./ui/DirectorDeskContext";
 export type { DirectorDeskStores } from "./ui/DirectorDeskContext";
 export { DirectorDesk } from "./ui/DirectorDesk";
+export type { DirectorDeskProps } from "./ui/DirectorDesk";

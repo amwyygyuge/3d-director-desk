@@ -10,5 +10,5 @@
         "stripInternal": true
     },
     "include": ["src"],
-    "exclude": ["src/**/*.stories.tsx", "src/playground"]
+    "exclude": ["src/**/*.stories.ts", "src/**/*.stories.tsx", "src/**/stories/**", "playground", ".storybook", "public/test-assets"]
 }

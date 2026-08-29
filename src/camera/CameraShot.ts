@@ -1,6 +1,10 @@
 import type { Vec3 } from "../core/SceneObject";
 
-/** 景别:业务资产视角的镜头规格 */
+export const DEFAULT_CAMERA_FOV = 45;
+
+function copyVec3([x, y, z]: Vec3): Vec3 {
+    return Object.freeze([x, y, z] as const);
+}
 export const SHOT_SIZE = {
     EXTREME_LONG: "extreme-long",
     LONG: "long",
@@ -22,9 +26,13 @@ export class CameraShot {
     readonly fov: number;
 
     constructor(init: { position: Vec3; target: Vec3; fov?: number }) {
-        this.position = init.position;
-        this.target = init.target;
-        this.fov = init.fov ?? 45;
+        const fov = init.fov ?? DEFAULT_CAMERA_FOV;
+        if (!Number.isFinite(fov)) {
+            throw new Error("CameraShot: fov must be finite");
+        }
+        this.position = copyVec3(init.position);
+        this.target = copyVec3(init.target);
+        this.fov = fov;
         Object.freeze(this);
     }
 
@@ -34,6 +42,6 @@ export class CameraShot {
     }
 
     toJSON(): { position: Vec3; target: Vec3; fov: number } {
-        return { position: this.position, target: this.target, fov: this.fov };
+        return { position: copyVec3(this.position), target: copyVec3(this.target), fov: this.fov };
     }
 }

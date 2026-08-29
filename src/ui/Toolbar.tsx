@@ -40,17 +40,21 @@ const PLAY_INDICATOR_SIZE = 8;
 const PLAY_INDICATOR_GAP = 0.5;
 
 const ACTION_FILE_ACCEPT = ".glb,.gltf,.fbx";
+const OVERLAY_INSET_PX = 12;
+const TOOLBAR_MAX_WIDTH = "calc(100% - 24px)";
 
 /**
- * 顶部工具条:一切写操作经 dispatcher 分发(命令层样板)。
- * 本组件不直接触达 store 的任何写字段。
+ * 顶部工具条:场景与相机的持久化写入经 dispatcher 分发；UI 反馈仅写 UiStore。
+ * 组件不直接修改场景或相机状态。
  */
 export const Toolbar = observer(function Toolbar() {
     const stores = useDirectorDeskStores();
-    const { scene, dispatcher } = stores;
+    const { scene, dispatcher, ui } = stores;
     const fileInputRef = useRef<HTMLInputElement>(null);
     const actionInputRef = useRef<HTMLInputElement>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const applicationNotice = ui.applicationNotice;
+    const displayedNotice = applicationNotice ?? notice;
 
     const placePrimitive = () => {
         const result = dispatcher.dispatch(
@@ -79,8 +83,22 @@ export const Toolbar = observer(function Toolbar() {
 
     return (
         <>
-            <Paper elevation={2} sx={{ position: "absolute", top: 12, left: 12, px: 1, py: 0.5, zIndex: 1 }}>
-                <Stack direction="row" spacing={1}>
+            <Paper
+                elevation={2}
+                role="toolbar"
+                aria-label="导演工具"
+                sx={{
+                    position: "absolute",
+                    top: OVERLAY_INSET_PX,
+                    left: OVERLAY_INSET_PX,
+                    maxWidth: TOOLBAR_MAX_WIDTH,
+                    overflowX: "auto",
+                    px: 1,
+                    py: 0.5,
+                    zIndex: 1,
+                }}
+            >
+                <Stack direction="row" spacing={1} sx={{ width: "max-content" }}>
                     <Button variant="contained" startIcon={<AddBoxIcon />} onClick={placePrimitive}>
                         添加几何体
                     </Button>
@@ -146,6 +164,7 @@ export const Toolbar = observer(function Toolbar() {
                         exclusive
                         size="small"
                         value={stores.ui.gizmoMode}
+                        aria-label="变换工具"
                         onChange={(_, mode: GizmoMode | null) => {
                             if (mode) stores.ui.setGizmoMode(mode);
                         }}
@@ -201,10 +220,11 @@ export const Toolbar = observer(function Toolbar() {
                 }}
             />
             <Snackbar
-                open={notice !== null}
+                open={displayedNotice !== null}
                 autoHideDuration={3000}
-                onClose={() => setNotice(null)}
-                message={notice}
+                onClose={() => (applicationNotice === null ? setNotice(null) : ui.clearApplicationNotice())}
+                message={displayedNotice}
+                slotProps={{ content: { role: "alert", "aria-live": "assertive" } }}
                 anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
             />
         </>

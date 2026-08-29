@@ -1,27 +1,34 @@
 import { useEffect } from "react";
+import type { RefObject } from "react";
 
 import { activeShortcutScopes, registerBuiltinShortcuts } from "../shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
+interface HotkeysProps {
+    readonly deskRef: RefObject<HTMLDivElement | null>;
+}
+
 /**
- * 键盘事件接入层(薄壳):window keydown → ShortcutRegistry。
- * 一切快捷键语义在 shortcuts/ 的 SPECS/ACTIONS 表;本组件只做挂载与作用域供给。
- * 后续接 Monet 事件系统时,只换本层的事件源。
+ * 键盘事件接入层:只监听当前桌面根节点的冒泡事件。
+ * 这让多个 DirectorDesk 可同时挂载而不互相执行命令，Dialog 打开时亦不会突变场景。
  */
-export function Hotkeys() {
+export function Hotkeys({ deskRef }: HotkeysProps) {
     const stores = useDirectorDeskStores();
 
     useEffect(() => {
+        const desk = deskRef.current;
+        if (!desk) return undefined;
         const unregister = registerBuiltinShortcuts(stores.shortcuts);
         const onKeyDown = (event: KeyboardEvent) => {
+            if (stores.ui.helpOpen) return;
             stores.shortcuts.handleKeyDown(event, stores, activeShortcutScopes(stores));
         };
-        window.addEventListener("keydown", onKeyDown);
+        desk.addEventListener("keydown", onKeyDown);
         return () => {
-            window.removeEventListener("keydown", onKeyDown);
+            desk.removeEventListener("keydown", onKeyDown);
             unregister();
         };
-    }, [stores]);
+    }, [deskRef, stores]);
 
     return null;
 }

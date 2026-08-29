@@ -107,17 +107,21 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
     if (!entity) return null;
 
     const commitAxis = (key: TransformKey, axis: AxisIndex, displayedValue: number) => {
+        const latestEntity = scene.manager.getEntity(objectId);
+        if (!latestEntity) return;
         const storedValue = key === "rotation" ? displayedValue * DEG_TO_RAD : displayedValue;
+        const currentTransform = latestEntity.transform;
         const transform: Transform = {
             position:
                 key === "position"
-                    ? replaceAxis(entity.transform.position, axis, storedValue)
-                    : entity.transform.position,
+                    ? replaceAxis(currentTransform.position, axis, storedValue)
+                    : currentTransform.position,
             rotation:
                 key === "rotation"
-                    ? replaceAxis(entity.transform.rotation, axis, storedValue)
-                    : entity.transform.rotation,
-            scale: key === "scale" ? replaceAxis(entity.transform.scale, axis, storedValue) : entity.transform.scale,
+                    ? replaceAxis(currentTransform.rotation, axis, storedValue)
+                    : currentTransform.rotation,
+            scale:
+                key === "scale" ? replaceAxis(currentTransform.scale, axis, storedValue) : currentTransform.scale,
         };
         dispatcher.dispatch({ type: "object.move", payload: { id: objectId, transform } }, stores);
     };

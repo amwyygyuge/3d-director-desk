@@ -13,11 +13,15 @@ import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import type { TimeTransport } from "../time/TimeTransport";
 import type { CommandResult } from "../command/DirectorCommand";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { TransformFields } from "./TransformFields";
+
+const PLAYHEAD_DISPLAY_RATE_HZ = 12;
+const PLAYHEAD_DISPLAY_INTERVAL_MS = 1000 / PLAYHEAD_DISPLAY_RATE_HZ;
 
 type ReportCommandResult = (result: CommandResult) => void;
 
@@ -35,6 +39,39 @@ interface ActionLibraryProps {
 interface PlaybackControlsProps {
     actionId: string | null;
     report: ReportCommandResult;
+}
+
+function useThrottledPlayhead(clock: TimeTransport): number {
+    const [playhead, setPlayhead] = useState(clock.time);
+    const latestPlayhead = useRef(clock.time);
+    const updateTimer = useRef<number | null>(null);
+    const lastUpdateAt = useRef(0);
+
+    useEffect(() => {
+        const flush = () => {
+            updateTimer.current = null;
+            lastUpdateAt.current = performance.now();
+            setPlayhead(latestPlayhead.current);
+        };
+        const queueUpdate = (time: number) => {
+            latestPlayhead.current = time;
+            if (updateTimer.current !== null) return;
+            const elapsed = performance.now() - lastUpdateAt.current;
+            const delay = Math.max(0, PLAYHEAD_DISPLAY_INTERVAL_MS - elapsed);
+            updateTimer.current = window.setTimeout(flush, delay);
+        };
+        const unsubscribe = clock.subscribe(queueUpdate);
+        queueUpdate(clock.time);
+        return () => {
+            unsubscribe();
+            if (updateTimer.current !== null) {
+                window.clearTimeout(updateTimer.current);
+                updateTimer.current = null;
+            }
+        };
+    }, [clock]);
+
+    return playhead;
 }
 
 const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, report }: ActionLibraryProps) {
@@ -90,17 +127,16 @@ const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, repo
 const PlaybackControls = observer(function PlaybackControls({ actionId, report }: PlaybackControlsProps) {
     const stores = useDirectorDeskStores();
     const { animations, clock, dispatcher } = stores;
-    const [playhead, setPlayhead] = useState(clock.time);
+    const playhead = useThrottledPlayhead(clock);
     const mountedAction = actionId ? animations.actions.find((action) => action.id === actionId) : undefined;
     const duration = mountedAction?.duration ?? 0;
-
-    useEffect(() => clock.subscribe((time) => setPlayhead(time)), [clock]);
 
     return (
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <IconButton
                 size="small"
                 disabled={!mountedAction}
+                aria-label={clock.isPlaying ? "暂停动作播放" : "播放动作"}
                 onClick={() =>
                     report(
                         dispatcher.dispatch(
@@ -120,6 +156,7 @@ const PlaybackControls = observer(function PlaybackControls({ actionId, report }
                     step={0.01}
                     value={Math.min(playhead, duration)}
                     disabled={!mountedAction}
+                    aria-label="动作播放进度"
                     onChange={(_, value) =>
                         report(
                             dispatcher.dispatch({ type: "transport.seek", payload: { time: value as number } }, stores),
@@ -166,7 +203,20 @@ export const Inspector = observer(function Inspector() {
     };
 
     return (
-        <Paper elevation={2} sx={{ position: "absolute", top: 12, right: 12, width: 260, p: 1.5, zIndex: 1 }}>
+        <Paper
+            elevation={2}
+            sx={{
+                position: "absolute",
+                top: 12,
+                right: 12,
+                width: 260,
+                maxWidth: "calc(100% - 24px)",
+                maxHeight: "calc(100% - 24px)",
+                overflowY: "auto",
+                p: 1.5,
+                zIndex: 1,
+            }}
+        >
             <Typography variant="subtitle2" noWrap>
                 {entity.name}
             </Typography>

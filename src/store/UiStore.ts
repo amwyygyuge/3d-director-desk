@@ -29,13 +29,16 @@ export class UiStore {
     lastCaptureUrl: string | null = null;
     /** 快捷键速查浮层开关 */
     helpOpen = false;
+    /** 应用级命令失败提示；宿主边界写入，展示层自行订阅和清除。 */
+    applicationNotice: string | null = null;
     /** 飞行中(WASD 按住):DirectorDesk 据此把 frameloop 切 "always" */
     flying = false;
-    /** 加载中资源:label → 进度 0~1(反馈体系;Map 字段自动可观察) */
+    /** 加载中资源:稳定对象请求 id → 进度 0~1(反馈体系;Map 字段自动可观察) */
     readonly loading = new Map<string, number>();
+    private disposed = false;
 
     constructor() {
-        makeAutoObservable(this, { lastGizmoInteractionAt: false });
+        makeAutoObservable(this, { lastGizmoInteractionAt: false, disposed: false } as never);
     }
 
     setGizmoMode(mode: GizmoMode): void {
@@ -51,8 +54,21 @@ export class UiStore {
         this.lastGizmoInteractionAt = performance.now();
     }
     setLastCaptureUrl(url: string): void {
+        if (this.disposed) {
+            URL.revokeObjectURL(url);
+        } else {
+            if (this.lastCaptureUrl) URL.revokeObjectURL(this.lastCaptureUrl);
+            this.lastCaptureUrl = url;
+        }
+    }
+    /** 释放本 Store 持有的最终截图 URL；重复调用保持安全。 */
+    dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
         if (this.lastCaptureUrl) URL.revokeObjectURL(this.lastCaptureUrl);
-        this.lastCaptureUrl = url;
+        this.lastCaptureUrl = null;
+        this.loading.clear();
+        this.applicationNotice = null;
     }
     toggleHelp(): void {
         this.helpOpen = !this.helpOpen;
@@ -61,11 +77,21 @@ export class UiStore {
         this.flying = flying;
     }
 
-    reportLoading(label: string, progress: number): void {
-        this.loading.set(label, progress);
+    setApplicationNotice(message: string): void {
+        if (this.disposed) return;
+        this.applicationNotice = message;
     }
 
-    clearLoading(label: string): void {
-        this.loading.delete(label);
+    clearApplicationNotice(): void {
+        this.applicationNotice = null;
+    }
+
+    reportLoading(requestId: string, progress: number): void {
+        if (this.disposed) return;
+        this.loading.set(requestId, progress);
+    }
+
+    clearLoading(requestId: string): void {
+        this.loading.delete(requestId);
     }
 }

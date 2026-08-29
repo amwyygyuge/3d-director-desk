@@ -5,11 +5,11 @@ import type { CameraStore } from "../store/CameraStore";
 import type { CaptureService } from "../capture/CaptureService";
 import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
+import type { SelectionStore } from "../store/SelectionStore";
 import type { UiStore } from "../store/UiStore";
 
 /**
- * 命令执行上下文:命令可触达的状态面。
- * DirectorDeskStores 在结构上天然满足本接口(接口隔离:命令不需要 selection 等 UI 态)。
+ * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。
  */
 export interface DirectorContext {
     readonly scene: SceneStore;
@@ -22,6 +22,8 @@ export interface DirectorContext {
     readonly host: HostAdapter;
     /** 截图预览等界面态 */
     readonly ui: UiStore;
+    /** 对象移除后由命令层收敛选中态，避免 UI 留下失效引用 */
+    readonly selection: SelectionStore;
 }
 
 export type CommandResult = { ok: true } | { ok: false; error: string; issues?: string[] };

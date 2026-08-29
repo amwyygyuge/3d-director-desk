@@ -34,14 +34,27 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
     const entities = scene.manager.list();
 
     return (
-        <Paper elevation={2} className="absolute left-3 top-16 z-[1] w-[220px] p-3">
+        <Paper
+            elevation={2}
+            sx={{
+                position: "absolute",
+                left: 12,
+                top: 64,
+                width: 220,
+                maxWidth: "calc(100% - 24px)",
+                maxHeight: "calc(100% - 76px)",
+                overflowY: "auto",
+                p: 1.5,
+                zIndex: 1,
+            }}
+        >
             <Typography variant="subtitle2">场景对象({entities.length})</Typography>
             {entities.length === 0 ? (
                 <Typography variant="caption" color="text.secondary">
                     场景为空,先添加几何体或导入模型
                 </Typography>
             ) : (
-                <List dense disablePadding>
+                <List dense disablePadding aria-label="场景对象">
                     {entities.map((entity) => (
                         <ListItem
                             key={entity.id}
@@ -79,12 +92,17 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
                             <ListItemButton
                                 className="pr-16"
                                 selected={selection.isSelected(entity.id)}
+                                aria-label={`选择 ${entity.name}`}
                                 onClick={(event) =>
                                     selection.select(entity.id, { additive: event.metaKey || event.ctrlKey })
                                 }
                             >
                                 <ListItemIcon className="min-w-8">{KIND_ICONS[entity.kind]}</ListItemIcon>
-                                <ListItemText primary={entity.name} />
+                                <ListItemText
+                                    primary={entity.name}
+                                    slotProps={{ primary: { noWrap: true, title: entity.name } }}
+                                    sx={{ minWidth: 0 }}
+                                />
                             </ListItemButton>
                         </ListItem>
                     ))}
