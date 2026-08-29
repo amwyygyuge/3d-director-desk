@@ -55,7 +55,6 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
             savedDirectorPose.current ??= currentPose(camera, controls);
             // 进入机位时 DirectorDesk 已关阻尼(enableDamping=false),这次 update 把轨道残量一次清零
             controls.update();
-            cameraStore.rememberDirectorPose(savedDirectorPose.current);
             camera.position.set(shot.position[0], shot.position[1], shot.position[2]);
             camera.fov = shot.fov;
             camera.updateProjectionMatrix();

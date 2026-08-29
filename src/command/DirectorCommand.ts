@@ -2,6 +2,7 @@ import type { AnimationBinder } from "../animation/AnimationBinder";
 import type { AnimationLibrary } from "../assets/AnimationLibrary";
 import type { HostAdapter } from "../host/HostAdapter";
 import type { CameraStore } from "../store/CameraStore";
+import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { CaptureService } from "../capture/CaptureService";
 import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
@@ -18,6 +19,7 @@ export interface DirectorContext {
     readonly camera: CameraStore;
     readonly clock: TimeTransport;
     readonly timeline: TimelineStore;
+    readonly motion: CameraMotionStore;
     /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;

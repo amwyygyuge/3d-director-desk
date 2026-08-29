@@ -13,6 +13,7 @@ import { registerCaptureCommands } from "./captureCommands";
 import { registerLightingCommands } from "./lightingCommands";
 import { registerNavigationCommands } from "./navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
+import { registerCameraMotionCommands } from "./cameraMotionCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 
@@ -240,4 +241,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerNavigationCommands(dispatcher);
     registerTimelineCommands(dispatcher);
     registerLightingCommands(dispatcher);
+    registerCameraMotionCommands(dispatcher);
 }

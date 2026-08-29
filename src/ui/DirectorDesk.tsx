@@ -27,6 +27,8 @@ import { OutlinerPanel } from "./OutlinerPanel";
 import { directorDeskTheme } from "./theme";
 import { SceneRoot } from "./scene/SceneRoot";
 import { PlaybackDriver } from "./scene/PlaybackDriver";
+import { CameraMotionRig } from "./scene/CameraMotionRig";
+import { MotionPathPreview } from "./scene/MotionPathPreview";
 import { ShotCameraRig } from "./scene/ShotCameraRig";
 import { ShotMarkers } from "./scene/ShotMarkers";
 import { ShotFrameOverlay } from "./ShotFrameOverlay";
@@ -41,6 +43,8 @@ export interface DirectorDeskProps {
     host?: HostAdapter;
     /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
     hostBridge?: HostBridgeConfiguration;
+    /** Storybook/host initial local visibility for the non-persistent motion preview helper. */
+    initialMotionPreviewVisible?: boolean;
     /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
     onReady?: (stores: DirectorDeskStores) => void;
 }
@@ -53,11 +57,18 @@ export interface DirectorDeskProps {
  * 性能铁律落实:
  * - frameloop="demand":静态场景不持续渲染,状态变更显式 invalidate;
  * - three 对象经 ref 注册进 SceneManager 运行时表,不进 observable;
- * - 面板订阅走 MobX 细粒度 observer,Canvas 树不随 UI state 重渲染。
+ * - 面板订阅走 MobX 细粒度 observer；仅本桌局部的轨迹预览开关会重建对应 helper。
  */
-export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBridge, onReady }: DirectorDeskProps) {
+export const DirectorDesk = observer(function DirectorDesk({
+    theme,
+    host,
+    hostBridge,
+    onReady,
+    initialMotionPreviewVisible = false,
+}: DirectorDeskProps) {
     const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge }));
     const deskRef = useRef<HTMLDivElement>(null);
+    const [motionPreviewVisible, setMotionPreviewVisible] = useState(initialMotionPreviewVisible);
 
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
@@ -152,6 +163,8 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBr
                             <ShotMarkers />
                             <PlaybackDriver />
                             <ShotCameraRig />
+                            <CameraMotionRig />
+                            <MotionPathPreview visible={motionPreviewVisible} />
                             <FlyDrive />
                             <ShotNavigation />
                         </Canvas>
@@ -159,7 +172,10 @@ export const DirectorDesk = observer(function DirectorDesk({ theme, host, hostBr
                         <ShotFrameOverlay />
                         <Toolbar />
                         <Hotkeys deskRef={deskRef} />
-                        <ShotPanel />
+                        <ShotPanel
+                            motionPreviewVisible={motionPreviewVisible}
+                            onMotionPreviewVisibleChange={setMotionPreviewVisible}
+                        />
                         <CapturePreview />
                         <TimelinePanel />
                         <OutlinerPanel />

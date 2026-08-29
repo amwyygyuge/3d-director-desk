@@ -376,10 +376,13 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
         if (!isRecord(payload) || !Number.isFinite(payload.duration) || payload.duration <= 0) {
             return [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长必须是大于零的有限秒数")];
         }
-        const oversized = ctx.timeline.document.tracks.find((track) =>
+        const oversizedTrack = ctx.timeline.document.tracks.find((track) =>
             track.keyframes.some((keyframe) => keyframe.time > payload.duration),
         );
-        return oversized ? [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长不能截断已有关键帧")] : [];
+        const oversizedMotionKey = ctx.motion.path?.keys.find((key) => key.timeSeconds > payload.duration);
+        return oversizedTrack || oversizedMotionKey
+            ? [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长不能截断已有关键帧")]
+            : [];
     }
 
     execute(ctx: DirectorContext): void {

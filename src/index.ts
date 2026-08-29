@@ -28,6 +28,18 @@ export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
 export { ShotSizePresets } from "./camera/ShotSizePresets";
 export { FramingService } from "./camera/FramingService";
+export { CameraMotionPath, CAMERA_MOTION_EASING, DIRECTOR_CAMERA_MOTION_ID, MotionKey, sampleCameraMotionPath } from "./camera/CameraMotionPath";
+export type {
+    CameraMotionEasing,
+    CameraMotionPathInit,
+    CameraMotionPathJSON,
+    CameraMotionSample,
+    CameraShotSnapshot,
+    MotionKeyInit,
+    MotionKeyJSON,
+} from "./camera/CameraMotionPath";
+export { CameraMotionSampler } from "./camera/CameraMotionSampler";
+export type { CameraMotionSink } from "./camera/CameraMotionSampler";
 export type { DirectorPose } from "./store/CameraStore";
 export { CaptureService } from "./capture/CaptureService";
 export type { RenderHandles } from "./capture/CaptureService";
@@ -40,6 +52,14 @@ export {
     registerLightingCommands,
 } from "./command/lightingCommands";
 export type { LightingObjectSnapshot } from "./command/lightingCommands";
+export {
+    AddMotionKeyCommand,
+    CameraMotionGetQuery,
+    MoveMotionKeyCommand,
+    RemoveMotionKeyCommand,
+    registerCameraMotionCommands,
+    SetMotionKeyEasingCommand,
+} from "./command/cameraMotionCommands";
 export { CommandHistory } from "./command/CommandHistory";
 export type { HistoryEntry } from "./command/CommandHistory";
 export { CommandDispatcher } from "./command/CommandDispatcher";
@@ -97,6 +117,7 @@ export type { HostAdapter } from "./host/HostAdapter";
 export { ModelImporter } from "./loaders/ModelImporter";
 export type { ModelHandle } from "./loaders/ModelImporter";
 export { CameraStore } from "./store/CameraStore";
+export { CameraMotionStore } from "./store/CameraMotionStore";
 export { SceneStore } from "./store/SceneStore";
 export { SelectionStore } from "./store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "./store/UiStore";

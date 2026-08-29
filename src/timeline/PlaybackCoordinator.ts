@@ -1,8 +1,12 @@
 import { reaction } from "mobx";
 
+import { CameraMotionSampler } from "../camera/CameraMotionSampler";
+import type { CameraMotionSink } from "../camera/CameraMotionSampler";
 import type { SceneManager } from "../core/SceneManager";
-import type { TimeTransport } from "../time/TimeTransport";
+import type { CameraStore } from "../store/CameraStore";
+import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { TimelineStore } from "../store/TimelineStore";
+import type { TimeTransport } from "../time/TimeTransport";
 import { TimelineSampler } from "./TimelineSampler";
 
 export type TimelineInvalidator = () => void;
@@ -13,6 +17,7 @@ export type TimelineInvalidator = () => void;
  */
 export class PlaybackCoordinator {
     private readonly sampler = new TimelineSampler();
+    private readonly motionSampler: CameraMotionSampler;
     private invalidator: TimelineInvalidator | null = null;
     private readonly stopTransportReaction: () => void;
     private readonly stopStoppedReaction: () => void;
@@ -21,7 +26,10 @@ export class PlaybackCoordinator {
         private readonly timeline: TimelineStore,
         private readonly scene: SceneManager,
         private readonly transport: TimeTransport,
+        motion: CameraMotionStore,
+        camera: CameraStore,
     ) {
+        this.motionSampler = new CameraMotionSampler(motion, camera);
         // AnimationBinder 在本协调器之前绑定 transport，因此动作 → transform → 后续 pose 的反应顺序确定。
         this.stopTransportReaction = reaction(
             () => transport.time,
@@ -41,10 +49,24 @@ export class PlaybackCoordinator {
     unbindInvalidator(invalidator: TimelineInvalidator): void {
         if (this.invalidator === invalidator) this.invalidator = null;
     }
+    bindMotionSink(sink: CameraMotionSink): void {
+        this.motionSampler.bindSink(sink);
+        this.sampleCurrent();
+    }
+
+    unbindMotionSink(sink: CameraMotionSink): void {
+        this.motionSampler.unbindSink(sink);
+    }
+
 
     sampleCurrent(): void {
         this.sample(this.currentTime());
     }
+    restoreCameraMotion(): void {
+        this.motionSampler.restore();
+        this.invalidate();
+    }
+
 
     sampleObject(targetId: string): void {
         const runtime = this.scene.getRuntime(targetId);
@@ -57,6 +79,7 @@ export class PlaybackCoordinator {
 
     restoreAll(): void {
         for (const track of this.timeline.document.tracks) this.restoreObject(track.targetId, false);
+        this.motionSampler.restore();
         this.invalidate();
     }
 
@@ -86,6 +109,7 @@ export class PlaybackCoordinator {
                 this.restoreObject(track.targetId, false);
             }
         }
+        this.motionSampler.sampleCurrent(timeSeconds);
         this.invalidate();
     }
 

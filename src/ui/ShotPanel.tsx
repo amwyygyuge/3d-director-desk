@@ -13,6 +13,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
@@ -20,6 +21,7 @@ import { Box3, Vector3 } from "three";
 
 import { SHOT_SIZE } from "../camera/CameraShot";
 import type { ShotSize } from "../camera/CameraShot";
+import { CAMERA_MOTION_EASING } from "../camera/CameraMotionPath";
 import { ShotSizePresets } from "../camera/ShotSizePresets";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
@@ -51,6 +53,11 @@ interface ShotSizeControlProps {
 interface SaveCurrentViewControlProps {
     available: boolean;
     onSave: () => void;
+}
+
+interface ShotPanelProps {
+    readonly motionPreviewVisible: boolean;
+    readonly onMotionPreviewVisibleChange: (visible: boolean) => void;
 }
 
 /** 机位面板(左下):机位 CRUD、当前视角存机位与景别预设。 */
@@ -151,6 +158,101 @@ const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
     );
 });
 
+interface MotionSectionProps {
+    readonly previewVisible: boolean;
+    readonly onPreviewVisibleChange: (visible: boolean) => void;
+    readonly onNotice: (message: string) => void;
+}
+
+/** 运镜编辑只发 dispatcher 命令；预览开关是本桌局部 UI 状态。 */
+const MotionSection = observer(function MotionSection({
+    previewVisible,
+    onPreviewVisibleChange,
+    onNotice,
+}: MotionSectionProps) {
+    const stores = useDirectorDeskStores();
+    const { camera, clock, dispatcher, motion } = stores;
+    const path = motion.path;
+    const canAddCurrentView = !clock.isPlaying && camera.activeShotId === null && camera.lastDirectorPose !== null;
+
+    const dispatch = (type: string, payload: unknown) => {
+        const result = dispatcher.dispatch({ type, payload }, stores);
+        if (!result.ok) onNotice(result.issues?.join(";") ?? result.error);
+    };
+
+    return (
+        <>
+            <Typography variant="subtitle2">运镜({path?.keys.length ?? 0})</Typography>
+            <Button
+                size="small"
+                variant="outlined"
+                startIcon={<VideocamIcon />}
+                fullWidth
+                disabled={!canAddCurrentView}
+                aria-describedby={canAddCurrentView ? undefined : "director-desk-motion-add-status"}
+                onClick={() => dispatch("motion.add-key", {
+                    id: crypto.randomUUID(),
+                    timeSeconds: clock.time,
+                    easing: CAMERA_MOTION_EASING.SMOOTH,
+                })}
+            >
+                当前视角加关键帧
+            </Button>
+            {!canAddCurrentView && (
+                <Typography id="director-desk-motion-add-status" role="status" variant="caption" color="text.secondary">
+                    需暂停、回到导演自由视角并等待视角稳定
+                </Typography>
+            )}
+            <Button
+                size="small"
+                fullWidth
+                sx={{ mt: 0.5 }}
+                aria-pressed={previewVisible}
+                onClick={() => onPreviewVisibleChange(!previewVisible)}
+            >
+                {previewVisible ? "隐藏运镜轨迹" : "显示运镜轨迹"}
+            </Button>
+            {path?.keys.map((key) => (
+                <Box key={`${key.id}:${key.timeSeconds}`} sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 0.5, mt: 0.5, alignItems: "center" }}>
+                    <TextField
+                        size="small"
+                        type="number"
+                        label="时间(秒)"
+                        defaultValue={key.timeSeconds}
+                        aria-label={`运镜关键帧 ${key.id} 时间`}
+                        slotProps={{ htmlInput: { min: 0, max: stores.timeline.document.duration, step: 0.1 } }}
+                        onBlur={(event) => {
+                            const rawTime = event.currentTarget.value;
+                            const timeSeconds = rawTime.length === 0 ? Number.NaN : Number(rawTime);
+                            if (Number.isFinite(timeSeconds) && timeSeconds !== key.timeSeconds) {
+                                dispatch("motion.move-key", { id: key.id, timeSeconds });
+                            }
+                        }}
+                    />
+                    <Select
+                        size="small"
+                        value={key.easing}
+                        aria-label={`运镜关键帧 ${key.id} 缓动`}
+                        onChange={(event) => dispatch("motion.set-key-easing", { id: key.id, easing: event.target.value })}
+                    >
+                        <MenuItem value={CAMERA_MOTION_EASING.LINEAR}>linear</MenuItem>
+                        <MenuItem value={CAMERA_MOTION_EASING.SMOOTH}>smooth</MenuItem>
+                    </Select>
+                    <Button
+                        size="small"
+                        color="error"
+                        sx={{ gridColumn: "1 / -1" }}
+                        aria-label={`删除运镜关键帧 ${key.id}，${key.timeSeconds.toFixed(2)} 秒`}
+                        onClick={() => dispatch("motion.remove-key", { id: key.id })}
+                    >
+                        删除关键帧
+                    </Button>
+                </Box>
+            ))}
+        </>
+    );
+});
+
 const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSizeControlProps) {
     const stores = useDirectorDeskStores();
     const { camera, scene, selection, dispatcher } = stores;
@@ -199,7 +301,10 @@ const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSize
     );
 });
 
-export const ShotPanel = observer(function ShotPanel() {
+export const ShotPanel = observer(function ShotPanel({
+    motionPreviewVisible,
+    onMotionPreviewVisibleChange,
+}: ShotPanelProps) {
     const stores = useDirectorDeskStores();
     const { camera, dispatcher } = stores;
     const [notice, setNotice] = useState<string | null>(null);
@@ -241,6 +346,12 @@ export const ShotPanel = observer(function ShotPanel() {
             <SaveCurrentViewControl available={canSaveCurrentView} onSave={saveCurrentView} />
             <Divider sx={{ my: PANEL_SECTION_GAP }} />
             <ShotSizeControl onNotice={setNotice} />
+            <Divider sx={{ my: PANEL_SECTION_GAP }} />
+            <MotionSection
+                previewVisible={motionPreviewVisible}
+                onPreviewVisibleChange={onMotionPreviewVisibleChange}
+                onNotice={setNotice}
+            />
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={SNACKBAR_DURATION_MS}

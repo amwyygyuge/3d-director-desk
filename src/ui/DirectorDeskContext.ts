@@ -13,6 +13,7 @@ import { CommandHistory } from "../command/CommandHistory";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
 import { CameraStore } from "../store/CameraStore";
+import { CameraMotionStore } from "../store/CameraMotionStore";
 import { SceneStore } from "../store/SceneStore";
 import { SelectionStore } from "../store/SelectionStore";
 import { UiStore } from "../store/UiStore";
@@ -64,7 +65,9 @@ export interface DirectorDeskStores {
     clock: TimeTransport;
     /** 可序列化 TimelineDoc 的每实例状态容器 */
     timeline: TimelineStore;
-    /** TimelineDoc → Three 运行时的唯一回放写方 */
+    /** 单条导演运镜路径的每实例可序列化状态容器 */
+    motion: CameraMotionStore;
+    /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
     /** 命令层唯一入口:UI/宿主/AI 的一切写操作经此分发 */
@@ -104,14 +107,17 @@ export function createDirectorDeskStores(options?: {
     const binder = new AnimationBinder();
     const scene = new SceneStore();
     const timeline = new TimelineStore();
+    const motion = new CameraMotionStore();
     binder.bindTransport(clock);
-    const playback = new PlaybackCoordinator(timeline, scene.manager, clock);
+    const camera = new CameraStore();
+    const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera);
     return {
         scene,
-        timeline,
-        playback,
-        camera: new CameraStore(),
         selection: new SelectionStore(),
+        timeline,
+        motion,
+        playback,
+        camera,
         clock,
         capture: new CaptureService(),
         dispatcher,
