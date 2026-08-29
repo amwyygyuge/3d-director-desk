@@ -16,12 +16,12 @@ sequenceDiagram
     participant C as CaptureFrameCommand
     participant CS as CaptureService
     participant GL as three renderer
-    participant HB as HostBridge
+    participant HA as HostAdapter
     C->>CS: capture()
     CS->>GL: invalidate + 同帧 render 后 toBlob
     GL-->>CS: Blob(PNG)
     CS-->>C: blob
-    C->>HB: capture-produced(blobUrl)
+    C->>HA: reportCapture(blobUrl, width, height)
 ```
 
 - **帧内取样**:frameloop="demand" 下直接 `gl.render(scene, camera)` 强制渲一帧,同一 JS 帧内 `toBlob`——不需要常驻 `preserveDrawingBuffer`(性能铁律)。
@@ -31,14 +31,14 @@ sequenceDiagram
 ## 实现步骤
 
 1. `CaptureService.capture()` 增强:注入 invalidate/render 句柄,保证同帧取样;加 `hideHelpers` 选项。
-2. 命令 `capture.frame` 注册;执行后 blob → objectURL → HostBridge `capture-produced`。
+2. 命令 `capture.frame` 注册;执行后 blob → objectURL → `HostAdapter.reportCapture`。iframe 形态由受信任的 HostBridge 附加匹配 `sessionId` 后发送 `capture-produced`。
 3. 工具条「截图」按钮走 dispatcher(命令层样板又一次)。
-4. playground 验收 + postMessage 手工模拟宿主接收。
+4. playground 验收 + 仅接受配置 origin/source window/session 的宿主消息。
 
 ## 验收清单
 
 - [ ] 截图内容与机位视角像素一致(无辅助物入镜)
 - [ ] 静置场景截图成功(demand 模式强制渲染生效)
 - [ ] 连续截 20 张,内存无泄漏(objectURL 及时 revoke)
-- [ ] 宿主收到 `capture-produced` 且 blobUrl 可打开
+- [ ] 宿主收到携带匹配 session ID 的 `capture-produced`,且 blobUrl 可打开
 - [ ] `capture.frame` 出现在 `dispatcher.listCommands()`(AI 可调)
