@@ -137,27 +137,12 @@ export const DirectorDesk = observer(function DirectorDesk({
                 <DirectorDeskProvider value={stores}>
                     <div
                         ref={deskRef}
-                        className="flex h-full w-full flex-col overflow-hidden"
+                        className="relative h-full w-full overflow-hidden"
                         tabIndex={-1}
                         onPointerDown={(event) => event.currentTarget.focus()}
                     >
-                        <Toolbar />
-                        <div className="flex min-h-0 flex-1">
-                            <Dock
-                                side="left"
-                                title="场景"
-                                collapsed={stores.ui.leftDockCollapsed || shotLive}
-                                onToggle={() => stores.ui.toggleLeftDock()}
-                            >
-                                <OutlinerPanel />
-                                {stores.ui.stage === "camera" && (
-                                    <ShotPanel
-                                        motionPreviewVisible={motionPreviewVisible}
-                                        onMotionPreviewVisibleChange={setMotionPreviewVisible}
-                                    />
-                                )}
-                            </Dock>
-                            <div className="relative min-w-0 flex-1">
+                        {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
+                        <div className="absolute inset-0">
                                 <Canvas
                                     frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
                                     camera={{ position: [6, 4, 8], fov: 45 }}
@@ -205,18 +190,32 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <ShotFrameOverlay />
                                 <CapturePreview />
                                 <LoadingChip />
-                            </div>
-                            {hasSelection && (
-                                <Dock
-                                    side="right"
-                                    title="属性"
-                                    collapsed={stores.ui.rightDockCollapsed || shotLive}
-                                    onToggle={() => stores.ui.toggleRightDock()}
-                                >
-                                    <Inspector />
-                                </Dock>
-                            )}
                         </div>
+                        <Toolbar />
+                        <Dock
+                            side="left"
+                            title="场景"
+                            collapsed={stores.ui.leftDockCollapsed || shotLive}
+                            onToggle={() => stores.ui.toggleLeftDock()}
+                        >
+                            <OutlinerPanel />
+                            {stores.ui.stage === "camera" && (
+                                <ShotPanel
+                                    motionPreviewVisible={motionPreviewVisible}
+                                    onMotionPreviewVisibleChange={setMotionPreviewVisible}
+                                />
+                            )}
+                        </Dock>
+                        {hasSelection && (
+                            <Dock
+                                side="right"
+                                title="属性"
+                                collapsed={stores.ui.rightDockCollapsed || shotLive}
+                                onToggle={() => stores.ui.toggleRightDock()}
+                            >
+                                <Inspector />
+                            </Dock>
+                        )}
                         {stageDef.timeline && (
                             <Dock
                                 side="bottom"

@@ -100,11 +100,13 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
 
     execute(ctx: DirectorContext): void {
         const { light, ...object } = this.payload;
+        // 格式解析与校验共用(Rule of Two):必须落解析结果,否则实体 format=null 被渲染层当静态失败(红框占位)
+        const resolved = { ...object, format: resolveModelFormat(this.payload) };
         if (light) {
-            ctx.scene.addObject({ ...object, light: normalizeLightParams(light) });
+            ctx.scene.addObject({ ...resolved, light: normalizeLightParams(light) });
             return;
         }
-        ctx.scene.addObject(object);
+        ctx.scene.addObject(resolved);
     }
 
     override invert(): readonly SerializedCommand[] {

@@ -52,7 +52,6 @@ const PLAY_INDICATOR_SIZE = 8;
 const PLAY_INDICATOR_GAP = 0.5;
 
 const ACTION_FILE_ACCEPT = ".glb,.gltf,.fbx";
-const TOOLBAR_MAX_WIDTH = "calc(100% - 24px)";
 
 /** 阶段切换页签:点击 + 数字键直切(SHORTCUT_SPECS),提示同源 */
 const STAGE_SHORTCUT_ID: Record<WorkspaceStage, ShortcutId> = {
@@ -339,9 +338,9 @@ export const Toolbar = observer(function Toolbar() {
                 square
                 role="toolbar"
                 aria-label="导演工具"
-                sx={{ maxWidth: TOOLBAR_MAX_WIDTH, overflowX: "auto", px: 1, py: 0.5 }}
+                sx={{ overflowX: "auto", px: 1, py: 0.5 }}
             >
-                <Stack direction="row" spacing={1} sx={{ width: "max-content", alignItems: "center" }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                     <StageTabs />
                     <Divider orientation="vertical" flexItem />
                     {STAGE_SECTIONS[ui.stage].map((key) => {

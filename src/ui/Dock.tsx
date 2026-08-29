@@ -7,20 +7,23 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
 
-/** 停靠方向 → 折叠态尺寸与图标的查表(纪律:禁 if 链) */
+/** 停靠方向 → 悬浮定位与图标的查表(纪律:禁 if 链) */
 const DOCK_SIDE_META = {
     left: {
-        railClass: "w-8",
+        panelClass: `left-3 top-[52px] max-h-[calc(100%-64px)] w-[280px]`,
+        chipClass: "left-3 top-[52px]",
         expandIcon: <ChevronRightIcon fontSize="small" />,
         collapseIcon: <ChevronLeftIcon fontSize="small" />,
     },
     right: {
-        railClass: "w-8",
+        panelClass: `right-3 top-[52px] max-h-[calc(100%-64px)] w-[280px]`,
+        chipClass: "right-3 top-[52px]",
         expandIcon: <ChevronLeftIcon fontSize="small" />,
         collapseIcon: <ChevronRightIcon fontSize="small" />,
     },
     bottom: {
-        railClass: "h-8",
+        panelClass: "left-3 right-3 bottom-3",
+        chipClass: "left-3 bottom-3",
         expandIcon: <ExpandMoreIcon fontSize="small" />,
         collapseIcon: <ExpandMoreIcon fontSize="small" />,
     },
@@ -37,16 +40,16 @@ interface DockProps {
 }
 
 /**
- * 停靠栏容器:面板与画布永不重叠的布局原子。
- * 折叠态渲染为细条(rail)只留展开按钮;展开态为正常面板,右上角(底部栏为右侧)收起按钮。
- * 布局纪律:Dock 在文档流内占格,禁 absolute 压画布。
+ * 悬浮停靠面板:绝对定位压在画布上,画布永远全屏——
+ * 折叠/展开不再引起画布重排(画面零跳动)。
+ * 折叠态是边缘小钮,展开态是浮动面板。
  */
 export function Dock({ side, title, collapsed, onToggle, children }: DockProps) {
     const meta = DOCK_SIDE_META[side];
 
     if (collapsed) {
         return (
-            <Paper elevation={2} square className={`flex shrink-0 items-center justify-center ${meta.railClass}`}>
+            <Paper elevation={3} className={`absolute z-[2] ${meta.chipClass}`}>
                 <Tooltip title={`展开${title}`}>
                     <IconButton size="small" onClick={onToggle} aria-label={`展开${title}`}>
                         {meta.expandIcon}
@@ -56,12 +59,9 @@ export function Dock({ side, title, collapsed, onToggle, children }: DockProps) 
         );
     }
 
-    const horizontal = side === "bottom";
     return (
-        <Paper elevation={2} square className={`flex shrink-0 flex-col overflow-hidden ${horizontal ? "" : "h-full"}`}>
-            <div
-                className={`flex items-center justify-between px-2 py-1 ${horizontal ? "" : "border-b border-white/10"}`}
-            >
+        <Paper elevation={3} className={`absolute z-[2] flex flex-col overflow-hidden ${meta.panelClass}`}>
+            <div className="flex items-center justify-between border-b border-white/10 px-2 py-1">
                 <Typography variant="caption" color="text.secondary">
                     {title}
                 </Typography>

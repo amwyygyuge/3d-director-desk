@@ -27,7 +27,6 @@ import { ContinuitySection } from "./ContinuitySection";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
-const SHOT_PANEL_WIDTH = 240;
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
 const OVERLAY_MAX_SIZE = "calc(100% - 24px)";
 const ROW_ACTIONS_PADDING = 10;
@@ -338,7 +337,7 @@ export const ShotPanel = observer(function ShotPanel({
         <Paper
             elevation={2}
             sx={{
-                width: SHOT_PANEL_WIDTH,
+                width: "100%",
                 maxWidth: OVERLAY_MAX_SIZE,
                 maxHeight: OVERLAY_MAX_SIZE,
                 overflowY: "auto",
