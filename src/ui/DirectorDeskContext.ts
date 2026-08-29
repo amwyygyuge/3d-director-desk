@@ -15,6 +15,7 @@ import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
 import { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
 import { CameraStore } from "../store/CameraStore";
 import { CameraMotionStore } from "../store/CameraMotionStore";
+import { ContinuityDiagnosticsStore } from "../store/ContinuityDiagnosticsStore";
 import { SceneStore } from "../store/SceneStore";
 import { SelectionStore } from "../store/SelectionStore";
 import { UiStore } from "../store/UiStore";
@@ -68,6 +69,8 @@ export interface DirectorDeskStores {
     timeline: TimelineStore;
     /** 单条导演运镜路径的每实例可序列化状态容器 */
     motion: CameraMotionStore;
+    /** Non-persistent continuity query presentation state; it never enters history or scene data. */
+    continuity: ContinuityDiagnosticsStore;
     /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
@@ -121,6 +124,7 @@ export function createDirectorDeskStores(options?: {
         timeline,
         motion,
         playback,
+        continuity: new ContinuityDiagnosticsStore(scene, camera, timeline),
         camera,
         clock,
         capture: new CaptureService(),

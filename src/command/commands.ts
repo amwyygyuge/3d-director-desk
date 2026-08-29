@@ -15,6 +15,7 @@ import { registerLightingCommands } from "./lightingCommands";
 import { registerNavigationCommands } from "./navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
 import { registerCameraMotionCommands } from "./cameraMotionCommands";
+import { registerContinuityQueries } from "./continuityCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 
@@ -245,4 +246,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerLightingCommands(dispatcher);
     registerCameraMotionCommands(dispatcher);
     registerPoseCommands(dispatcher);
+    registerContinuityQueries(dispatcher);
 }

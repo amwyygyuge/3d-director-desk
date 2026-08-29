@@ -23,6 +23,7 @@ import { SHOT_SIZE } from "../camera/CameraShot";
 import type { ShotSize } from "../camera/CameraShot";
 import { CAMERA_MOTION_EASING } from "../camera/CameraMotionPath";
 import { ShotSizePresets } from "../camera/ShotSizePresets";
+import { ContinuitySection } from "./ContinuitySection";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
@@ -352,6 +353,8 @@ export const ShotPanel = observer(function ShotPanel({
                 onPreviewVisibleChange={onMotionPreviewVisibleChange}
                 onNotice={setNotice}
             />
+            <Divider sx={{ my: PANEL_SECTION_GAP }} />
+            <ContinuitySection onNotice={setNotice} />
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={SNACKBAR_DURATION_MS}
