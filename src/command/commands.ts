@@ -11,6 +11,7 @@ import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
 import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "../core/LightParams";
 import type { LightParams } from "../core/LightParams";
+import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "../core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
 import type { CommandDispatcher } from "./CommandDispatcher";
 import { registerActionCommands } from "./actionCommands";
@@ -21,25 +22,14 @@ import { registerNavigationCommands } from "./navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
 import { registerCameraMotionCommands } from "./cameraMotionCommands";
 import { registerContinuityQueries } from "./continuityCommands";
+import { registerDocumentCommands } from "./documentCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
-
-/** 空间幻觉围栏:一切来自外部(AI/宿主)的数值先过有限性检查 */
-function finiteVec3(value: unknown): value is Vec3 {
-    return Array.isArray(value) && value.length === 3 && value.every((v) => Number.isFinite(v));
-}
-
-function finiteTransform(value: unknown): value is Transform {
-    if (typeof value !== "object" || value === null) return false;
-    if (!("position" in value) || !("rotation" in value) || !("scale" in value)) return false;
-    return finiteVec3(value.position) && finiteVec3(value.rotation) && finiteVec3(value.scale);
-}
 
 /** FOV 合法域:命令校验与 UI 滑杆共用(Rule of Two) */
 export const FOV_MIN = 1;
 export const FOV_MAX = 179;
 
-const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "primitive", "camera", "light"];
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
 
 interface PlaceObjectPayload {
@@ -334,4 +324,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerCameraMotionCommands(dispatcher);
     registerPoseCommands(dispatcher);
     registerContinuityQueries(dispatcher);
+    registerDocumentCommands(dispatcher);
 }

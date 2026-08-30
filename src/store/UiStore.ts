@@ -49,6 +49,9 @@ export class UiStore {
     readonly modelOutcomes = new Map<string, "loaded" | "failed">();
     /** 最近截图溯源元数据,与 lastCaptureUrl 同寿命 */
     lastCaptureMeta: CaptureMeta | null = null;
+    /** 最近视频产物;替换时回收旧 objectURL(同截图纪律) */
+    lastVideoUrl: string | null = null;
+    lastVideoMeta: { readonly durationSeconds: number; readonly width: number; readonly height: number } | null = null;
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
     posePickingBoneKey: string | null = null;
@@ -104,6 +107,15 @@ export class UiStore {
             this.lastCaptureMeta = meta;
         }
     }
+    setLastVideo(url: string, meta: { durationSeconds: number; width: number; height: number }): void {
+        if (this.disposed) {
+            URL.revokeObjectURL(url);
+        } else {
+            if (this.lastVideoUrl) URL.revokeObjectURL(this.lastVideoUrl);
+            this.lastVideoUrl = url;
+            this.lastVideoMeta = meta;
+        }
+    }
     /** 释放本 Store 持有的最终截图 URL；重复调用保持安全。 */
     dispose(): void {
         if (this.disposed) return;
@@ -111,6 +123,9 @@ export class UiStore {
         if (this.lastCaptureUrl) URL.revokeObjectURL(this.lastCaptureUrl);
         this.lastCaptureUrl = null;
         this.lastCaptureMeta = null;
+        if (this.lastVideoUrl) URL.revokeObjectURL(this.lastVideoUrl);
+        this.lastVideoUrl = null;
+        this.lastVideoMeta = null;
         this.loading.clear();
         this.modelOutcomes.clear();
         this.applicationNotice = null;

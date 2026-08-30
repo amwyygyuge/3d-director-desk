@@ -1,0 +1,93 @@
+{
+    "version": 1,
+    "entities": [
+        {
+            "id": "mecha",
+            "kind": "model",
+            "sourceUrl": "/test-assets/desk-test.fbx",
+            "format": "fbx",
+            "name": "机甲·桑巴武者",
+            "transform": {
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1.4, 1.4, 1.4]
+            },
+            "light": null,
+            "pose": null,
+            "poseWeight": 1
+        },
+        {
+            "id": "kaiju",
+            "kind": "model",
+            "sourceUrl": "/test-assets/fox.glb",
+            "format": "gltf",
+            "name": "怪兽·狐狸替身",
+            "transform": {
+                "position": [3.4, 0, 0],
+                "rotation": [0, 1.5707963267948966, 0],
+                "scale": [1.7, 1.7, 1.7]
+            },
+            "light": null,
+            "pose": null,
+            "poseWeight": 1
+        }
+    ],
+    "shots": [],
+    "motion": {
+        "id": "director-camera-motion",
+        "keys": [
+            {
+                "id": "mk-wide",
+                "timeSeconds": 0,
+                "shot": {
+                    "position": [-6.5, 1, 7.5],
+                    "target": [1.7, 1.2, 0],
+                    "fov": 50
+                },
+                "easing": "smooth"
+            },
+            {
+                "id": "mk-mid",
+                "timeSeconds": 2.5,
+                "shot": {
+                    "position": [-2.8, 1.1, 4.6],
+                    "target": [1.9, 1, 0],
+                    "fov": 40
+                },
+                "easing": "smooth"
+            },
+            {
+                "id": "mk-impact",
+                "timeSeconds": 4.2,
+                "shot": {
+                    "position": [0.9, 1.4, 2.6],
+                    "target": [3.2, 1.2, 0],
+                    "fov": 34
+                },
+                "easing": "smooth"
+            },
+            {
+                "id": "mk-hold",
+                "timeSeconds": 4.35,
+                "shot": {
+                    "position": [0.92, 1.4, 2.62],
+                    "target": [3.2, 1.2, 0],
+                    "fov": 34
+                },
+                "easing": "linear"
+            }
+        ]
+    },
+    "timeline": {
+        "duration": 5,
+        "tracks": []
+    },
+    "actions": [
+        {
+            "name": "机甲连击",
+            "url": "/test-assets/desk-test.fbx",
+            "clipName": "mixamo.com",
+            "mountedOn": "mecha"
+        }
+    ]
+}

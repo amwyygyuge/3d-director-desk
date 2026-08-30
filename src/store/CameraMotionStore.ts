@@ -34,4 +34,8 @@ export class CameraMotionStore {
     removeKey(keyId: string): void {
         this.currentPath = this.currentPath?.withoutKey(keyId) ?? null;
     }
+    /** 文档导入的整树恢复(同 TimelineStore.restoreTracks 先例) */
+    restorePath(path: CameraMotionPath | null): void {
+        this.currentPath = path;
+    }
 }

@@ -33,6 +33,18 @@ export const IDENTITY_TRANSFORM: Transform = Object.freeze({
 });
 
 export type SceneObjectKind = "model" | "primitive" | "camera" | "light";
+export const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "primitive", "camera", "light"];
+
+/** 空间幻觉围栏:一切来自外部(AI/宿主)的数值先过有限性检查(命令层共用,Rule of Two) */
+export function finiteVec3(value: unknown): value is Vec3 {
+    return Array.isArray(value) && value.length === 3 && value.every((v) => Number.isFinite(v));
+}
+
+export function finiteTransform(value: unknown): value is Transform {
+    if (typeof value !== "object" || value === null) return false;
+    if (!("position" in value) || !("rotation" in value) || !("scale" in value)) return false;
+    return finiteVec3(value.position) && finiteVec3(value.rotation) && finiteVec3(value.scale);
+}
 
 const KIND_LABEL: Record<SceneObjectKind, string> = {
     model: "模型",

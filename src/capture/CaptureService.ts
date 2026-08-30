@@ -1,4 +1,6 @@
 import { PerspectiveCamera, Vector3 } from "three";
+
+import { waitMs } from "../core/waitMs";
 import type { Camera, Scene, WebGLRenderer } from "three";
 import type { Object3D } from "three";
 
@@ -6,6 +8,10 @@ import type { Vec3 } from "../core/SceneObject";
 
 const PNG_MIME_TYPE = "image/png";
 const TMP_DIRECTION = new Vector3();
+const VIDEO_FPS = 30;
+/** 录制时长上限(秒):参考片段场景,防失控长录 */
+export const VIDEO_MAX_DURATION_SECONDS = 120;
+const VIDEO_MIME_CANDIDATES = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"] as const;
 
 /** agent 可读的生效相机位姿(纯数据,可序列化) */
 export interface LiveCameraPose {
@@ -42,6 +48,8 @@ export interface CaptureHelperLifecycle {
 export class CaptureService {
     private handles: RenderHandles | null = null;
     private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
+    private recorder: MediaRecorder | null = null;
+    private cancelSignal: (() => void) | null = null;
 
     attach(handles: RenderHandles): void {
         this.handles = handles;
@@ -74,6 +82,48 @@ export class CaptureService {
             direction: direction.toArray() as Vec3,
             fov: camera instanceof PerspectiveCamera ? camera.fov : null,
         };
+    }
+    get isRecording(): boolean {
+        return this.recorder !== null;
+    }
+
+    /**
+     * 录制画布为 WebM 视频:canvas.captureStream 帧流 + MediaRecorder。
+     * 播放驱动由命令层负责(seek(0)+play);本服务只管画面采集。
+     * 取消经 cancelRecording:提前停录且返回 null(产物不交付)。
+     */
+    async recordVideo(options: { durationSeconds: number }): Promise<Blob | null> {
+        const handles = this.handles;
+        if (!handles || this.recorder) return null;
+        const stream = handles.gl.domElement.captureStream(VIDEO_FPS);
+        const mimeType =
+            VIDEO_MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "video/webm";
+        const recorder = new MediaRecorder(stream, { mimeType });
+        const { promise: stopped, resolve: markStopped } = Promise.withResolvers<void>();
+        const { promise: cancelled, resolve: fireCancel } = Promise.withResolvers<void>();
+        this.cancelSignal = fireCancel;
+        this.recorder = recorder;
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) chunks.push(event.data);
+        };
+        recorder.onstop = () => markStopped();
+        recorder.start();
+        await Promise.race([waitMs(options.durationSeconds * 1000), cancelled]);
+        const wasCancelled = this.cancelSignal === null;
+        recorder.stop();
+        await stopped;
+        for (const track of stream.getTracks()) track.stop();
+        this.recorder = null;
+        this.cancelSignal = null;
+        return wasCancelled ? null : new Blob(chunks, { type: mimeType });
+    }
+
+    /** 提前终止录制;产物丢弃(返回 null 路径) */
+    cancelRecording(): void {
+        const signal = this.cancelSignal;
+        this.cancelSignal = null;
+        signal?.();
     }
 
     /** 截取当前场景为 PNG blob;hideHelpers 默认开(网格/gizmo/高亮框不入镜) */

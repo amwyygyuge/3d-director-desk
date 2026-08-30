@@ -5,6 +5,9 @@ export const DEFAULT_CAMERA_FOV = 45;
 function copyVec3([x, y, z]: Vec3): Vec3 {
     return Object.freeze([x, y, z] as const);
 }
+/** 机位的可序列化形态(toJSON 返回类型;文档/命令载荷共用) */
+export type CameraShotJSON = { position: Vec3; target: Vec3; fov: number };
+
 export const SHOT_SIZE = {
     EXTREME_LONG: "extreme-long",
     LONG: "long",
@@ -41,7 +44,7 @@ export class CameraShot {
         return eq(this.position, other.position) && eq(this.target, other.target) && this.fov === other.fov;
     }
 
-    toJSON(): { position: Vec3; target: Vec3; fov: number } {
+    toJSON(): CameraShotJSON {
         return { position: copyVec3(this.position), target: copyVec3(this.target), fov: this.fov };
     }
 }

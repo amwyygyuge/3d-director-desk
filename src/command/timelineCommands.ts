@@ -1,4 +1,4 @@
-import type { Transform } from "../core/SceneObject";
+import { finiteTransform } from "../core/SceneObject";
 import { PoseSnapshot, isQuaternionTuple } from "../pose/PoseSnapshot";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
 import type { TimelineTrackInit } from "../timeline/TimelineTrack";
@@ -63,14 +63,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isFiniteVec3(value: unknown): value is readonly [number, number, number] {
-    return Array.isArray(value) && value.length === 3 && value.every((component) => Number.isFinite(component));
-}
-
-function isFiniteTransform(value: unknown): value is Transform {
-    return isRecord(value) && isFiniteVec3(value.position) && isFiniteVec3(value.rotation) && isFiniteVec3(value.scale);
-}
-
 function isTimelineEasing(value: unknown): value is TimelineEasing {
     return value === TIMELINE_EASING.LINEAR || value === TIMELINE_EASING.SMOOTH;
 }
@@ -83,7 +75,7 @@ function keyframePayloadIssue(value: unknown): CommandIssue | null {
     if (typeof value.time !== "number" || !Number.isFinite(value.time) || value.time < 0) {
         return issue(ISSUE_CODE.PAYLOAD, "keyframe.time", "关键帧时间必须是非负有限秒数");
     }
-    if (!isFiniteTransform(value.value)) {
+    if (!finiteTransform(value.value)) {
         return issue(ISSUE_CODE.PAYLOAD, "keyframe.value", "关键帧变换含非法数值");
     }
     return isTimelineEasing(value.easing)

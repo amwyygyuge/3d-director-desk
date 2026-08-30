@@ -58,7 +58,15 @@ export type {
 export type { DirectorPose } from "./store/CameraStore";
 export { CaptureService } from "./capture/CaptureService";
 export type { CaptureHelperLifecycle, RenderHandles } from "./capture/CaptureService";
-export { CaptureFrameCommand, registerCaptureCommands } from "./command/captureCommands";
+export {
+    CaptureFrameCommand,
+    CaptureVideoCommand,
+    CancelVideoCaptureCommand,
+    registerCaptureCommands,
+} from "./command/captureCommands";
+export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "./command/documentCommands";
+export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "./document/DeskDocument";
+export type { DeskDocument, DeskDocumentAction } from "./document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
 export {
     AdjustLightCommand,

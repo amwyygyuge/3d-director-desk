@@ -1,6 +1,7 @@
 import type { AnimationBinder } from "../animation/AnimationBinder";
 import type { AnimationLibrary } from "../assets/AnimationLibrary";
 import type { HostAdapter } from "../host/HostAdapter";
+import type { ModelImporter } from "../loaders/ModelImporter";
 import type { CameraStore } from "../store/CameraStore";
 import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { CaptureService } from "../capture/CaptureService";
@@ -24,6 +25,8 @@ export interface DirectorContext {
     /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;
+    /** 模型加载/缓存(文档导入时重取动作 clip) */
+    readonly models: ModelImporter;
     readonly binder: AnimationBinder;
     /** Per-desk Three skeleton index; command/query boundary returns serializable DTOs only. */
     readonly skeletons: SkeletonRuntimeRegistry;

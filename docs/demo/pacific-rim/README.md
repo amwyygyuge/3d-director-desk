@@ -32,7 +32,11 @@
 - `capture.frame` 元数据:三帧 `timeSeconds` 精确 0.5/2.5/4.25,相机位姿随帧推进;
 - 幻觉围栏:`object.move` 含 NaN 坐标被拒(`validation-failed: transform 含非法数值`)。
 
-## 成片参考帧(capture.frame 产物,辅助物已摘除)
+## 产物清单
+
+- `preview.webm` — **5 秒运镜成片**(capture.video,WebM/30fps,1706×960,EBML 头校验通过)
+- `scene.json` — **整桌文档**(desk.export-document;含实体/运镜/时间轴/动作引用,可在其他控制台 `desk.import-document` 接管,本仓库已验证还原往返:清空→导入→双实体+4 运镜帧+动作挂载全部还原)
+- `frames/` — 节拍参考帧(capture.frame 产物,辅助物已摘除)
 
 - `frames/beat-0.png` — 全景开场
 - `frames/beat-0.5.png` — 开场后挥臂起势

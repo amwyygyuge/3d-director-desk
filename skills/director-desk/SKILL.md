@@ -42,13 +42,15 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ### 断言驱动验收协议
 
-| 步骤     | 断言(query/直读)                                                                    | 失败时                                      |
-| -------- | ----------------------------------------------------------------------------------- | ------------------------------------------- |
-| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理(≈2 单位×scale) | `failed` → 换资产;`loading` 超 10s → 查 URL |
-| 尺度断言 | `bounds.size` 之比 = 设计尺度比(如机甲:怪兽 ≈ 1.4:1)                                | 调 transform.scale,勿目测                   |
-| 挂动作   | `pose.bones.discover` ready → mount 返回 ok                                         | bone 类 issue → 按 suggestions 换方案       |
-| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                             | 不符 → 检查是否播放中录 key 被拒            |
-| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                           | 不符 → capture 时机错,重新 seek+capture     |
+| 步骤     | 断言(query/直读)                                                                    | 失败时                                                |
+| -------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理(≈2 单位×scale) | `failed` → 换资产;`loading` 超 10s → 查 URL           |
+| 尺度断言 | `bounds.size` 之比 = 设计尺度比(如机甲:怪兽 ≈ 1.4:1)                                | 调 transform.scale,勿目测                             |
+| 挂动作   | `pose.bones.discover` ready → mount 返回 ok                                         | bone 类 issue → 按 suggestions 换方案                 |
+| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                             | 不符 → 检查是否播放中录 key 被拒                      |
+| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                           | 不符 → capture 时机错,重新 seek+capture               |
+| 视频     | `lastVideoMeta.durationSeconds` == 目标时长,文件头 EBML(0x1A45DFA3)                 | 录制被拒 → 已有录制在进行(cancel 或等完成)            |
+| 文档接管 | import 后 `scene.describe` 与导出前一致;动作 actionId 恢复                          | 动作恢复失败 → 看 applicationNotice(资产 URL 不可达?) |
 
 ## 核心命令速查
 
@@ -128,12 +130,22 @@ dispatch({
 
 ### 灯光与成片
 
-```js
+````js
 dispatch({ type: "scene.set-lighting-mode", payload: { mode: "studio" | "custom" } })
 dispatch({ type: "light.adjust", payload: {...} })   // 细节先 lighting.list 看现状
 dispatch({ type: "capture.frame", payload: {} })     // 截图(隐藏辅助物)
+dispatch({ type: "capture.video", payload: {} })     // 录 WebM(缺省=时间轴时长;产物在 ui.lastVideoUrl/lastVideoMeta)
+dispatch({ type: "capture.video-cancel", payload: {} }) // 提前终止录制(丢弃产物)
 dispatch({ type: "view.frame", payload: {} })        // 导演视角取景到场景内容
-```
+
+### 文档导出/接管
+
+```js
+// 导出整桌为一份 JSON(实体/机位/运镜/时间轴/动作引用)——存档或交给另一个控制台接管
+const doc = query({ type: "desk.export-document", payload: {} }).value;
+// 导入(替换式,清空重建;动作 clip 按 URL 异步重取并恢复挂载;可撤销)
+dispatch({ type: "desk.import-document", payload: { document: doc } })
+````
 
 ## 工作流配方(标准成片路径)
 
