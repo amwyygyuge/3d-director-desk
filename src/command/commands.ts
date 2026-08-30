@@ -22,6 +22,7 @@ import { registerNavigationCommands } from "./navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
 import { registerCameraMotionCommands } from "./cameraMotionCommands";
 import { registerContinuityQueries } from "./continuityCommands";
+import { registerAssetCatalogCommands } from "./assetCatalogCommands";
 import { registerDocumentCommands } from "./documentCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
@@ -325,4 +326,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerPoseCommands(dispatcher);
     registerContinuityQueries(dispatcher);
     registerDocumentCommands(dispatcher);
+    registerAssetCatalogCommands(dispatcher);
 }

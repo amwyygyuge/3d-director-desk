@@ -6,6 +6,8 @@ import { HOST_INBOUND_MESSAGE_TYPE, HOST_OUTBOUND_MESSAGE_TYPE } from "../bridge
 export interface HostAdapter {
     /** 宿主侧请求导入模型(Monet 生成资产 → 导演台场景) */
     readonly onImportModel: (handler: (payload: { url: string; name: string }) => void) => () => void;
+    /** 宿主侧注册资源条目进目录(外部注入通道;条目逐条过校验围栏) */
+    readonly onRegisterAssets: (handler: (payload: { assets: readonly unknown[] }) => void) => () => void;
     /** 截图产物回传宿主(成为节点 outputs) */
     readonly reportCapture: (payload: { blobUrl: string; width: number; height: number }) => void;
     /** ready 握手(带协议版本;直嵌形态是空操作) */
@@ -14,10 +16,12 @@ export interface HostAdapter {
     readonly dispose?: () => void;
 }
 
-type ImportHandler = (payload: { url: string; name: string }) => void;
+type InboundType = (typeof HOST_INBOUND_MESSAGE_TYPE)[keyof typeof HOST_INBOUND_MESSAGE_TYPE];
+type InboundHandler = (payload: never) => void;
 
-interface ImportSubscription {
-    readonly handler: ImportHandler;
+interface InboundSubscription {
+    readonly type: InboundType;
+    readonly handler: InboundHandler;
     unsubscribe: (() => void) | null;
 }
 
@@ -26,7 +30,7 @@ interface ImportSubscription {
  * Bridge 监听器只在已挂载的 DirectorDesk effect 中 activate，避免 StrictMode 丢弃实例泄漏监听器。
  */
 export class PostMessageAdapter implements HostAdapter {
-    private readonly subscriptions = new Set<ImportSubscription>();
+    private readonly subscriptions = new Set<InboundSubscription>();
     private bridge: HostBridge | null = null;
     private disposed = false;
 
@@ -36,26 +40,32 @@ export class PostMessageAdapter implements HostAdapter {
         if (this.disposed || this.bridge !== null) return;
         const bridge = new HostBridge(this.configuration);
         this.bridge = bridge;
-        for (const subscription of this.subscriptions) {
-            subscription.unsubscribe = bridge.on(HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL, (message) =>
-                subscription.handler(message.payload),
-            );
-        }
+        for (const subscription of this.subscriptions) this.attachSubscription(bridge, subscription);
     }
 
-    onImportModel(handler: ImportHandler): () => void {
+    private attachSubscription(bridge: HostBridge, subscription: InboundSubscription): void {
+        subscription.unsubscribe = bridge.on(subscription.type, (message) =>
+            subscription.handler(message.payload as never),
+        );
+    }
+
+    private addSubscription(type: InboundType, handler: InboundHandler): () => void {
         if (this.disposed) return () => {};
-        const subscription: ImportSubscription = { handler, unsubscribe: null };
+        const subscription: InboundSubscription = { type, handler, unsubscribe: null };
         this.subscriptions.add(subscription);
-        if (this.bridge !== null) {
-            subscription.unsubscribe = this.bridge.on(HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL, (message) =>
-                handler(message.payload),
-            );
-        }
+        if (this.bridge !== null) this.attachSubscription(this.bridge, subscription);
         return () => {
             subscription.unsubscribe?.();
             this.subscriptions.delete(subscription);
         };
+    }
+
+    onImportModel(handler: (payload: { url: string; name: string }) => void): () => void {
+        return this.addSubscription(HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL, handler);
+    }
+
+    onRegisterAssets(handler: (payload: { assets: readonly unknown[] }) => void): () => void {
+        return this.addSubscription(HOST_INBOUND_MESSAGE_TYPE.REGISTER_ASSETS, handler);
     }
 
     reportCapture(payload: { blobUrl: string; width: number; height: number }): void {
@@ -77,6 +87,9 @@ export class PostMessageAdapter implements HostAdapter {
 /** 未配置可信 postMessage 宿主时的安全缺省适配器。 */
 export class InertHostAdapter implements HostAdapter {
     onImportModel(): () => void {
+        return () => {};
+    }
+    onRegisterAssets(): () => void {
         return () => {};
     }
 

@@ -31,18 +31,15 @@ const TMP_HELPER_LIGHT_POSITION = new Vector3();
 const TMP_HELPER_TARGET_POSITION = new Vector3();
 const TMP_HELPER_DIRECTION = new Vector3();
 
-/** 给克隆体套归一化壳:等比缩放 + 水平居中 + 底面贴 y=0;实体 transform 仍是用户语义 */
-function normalizedShell(object3d: Object3D): Object3D {
-    measureModelBox(object3d, TMP_BOX);
+/** 归一化壳的就地适配(首轮渲染后调用):等比缩放 + 水平居中 + 底面贴 y=0;实体 transform 仍是用户语义 */
+function fitShell(shell: Group): void {
+    measureModelBox(shell, TMP_BOX);
     TMP_BOX.getSize(TMP_SIZE);
     TMP_BOX.getCenter(TMP_CENTER);
     const maxDim = Math.max(TMP_SIZE.x, TMP_SIZE.y, TMP_SIZE.z);
     const factor = maxDim > 0 ? MODEL_TARGET_MAX_DIM / maxDim : 1;
-    const shell = new Group();
     shell.scale.setScalar(factor);
     shell.position.set(-TMP_CENTER.x * factor, -TMP_BOX.min.y * factor, -TMP_CENTER.z * factor);
-    shell.add(object3d);
-    return shell;
 }
 
 export function PrimitiveContent({ entity }: { entity: SceneObject }) {
@@ -396,8 +393,28 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
         };
     }, [models, ui, sourceUrl, format, requestId, invalidate]);
 
-    // 归一化壳按 handle 钉住:渲染期重复构造会导致 <primitive> 反复重挂载
-    const shell = useMemo(() => (handle ? normalizedShell(handle.object3d) : null), [handle]);
+    // 壳按 handle 钉住:渲染期重复构造会导致 <primitive> 反复重挂载。
+    // 归一化推迟到首轮渲染后(useFrame):蒙皮骨架矩阵由渲染器初始化,克隆期测量必失真(armature 缩放型 rig 会错百倍)
+    const shell = useMemo(() => {
+        if (!handle) return null;
+        const group = new Group();
+        group.add(handle.object3d);
+        return group;
+    }, [handle]);
+    const fittedRef = useRef(false);
+    const shellFramesRef = useRef(0);
+    useFrame(() => {
+        if (fittedRef.current || !shell) return;
+        // useFrame 在渲染前触发;首帧渲染才初始化骨架矩阵 → 第二帧再测量
+        shellFramesRef.current += 1;
+        if (shellFramesRef.current < 2) {
+            invalidate();
+            return;
+        }
+        fittedRef.current = true;
+        fitShell(shell);
+        invalidate();
+    });
 
     useEffect(() => {
         if (!shell) return;

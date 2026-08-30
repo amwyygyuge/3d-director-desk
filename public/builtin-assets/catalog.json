@@ -1,0 +1,109 @@
+{
+    "version": 1,
+    "assets": [
+        {
+            "id": "builtin.robot-expressive",
+            "kind": "model",
+            "category": "character.human",
+            "name": "机器人侠客",
+            "source": "builtin",
+            "url": "/builtin-assets/robot-expressive.glb",
+            "format": "gltf",
+            "license": "CC0 (Quaternius)",
+            "skeletonFamily": "robot-expressive",
+            "embeddedClips": [
+                "Dance",
+                "Death",
+                "Idle",
+                "Jump",
+                "No",
+                "Punch",
+                "Running",
+                "Sitting",
+                "Standing",
+                "ThumbsUp",
+                "Walking",
+                "WalkJump",
+                "Wave",
+                "Yes"
+            ],
+            "tags": ["robot", "mecha", "animated", "humanoid"]
+        },
+        {
+            "id": "builtin.soldier",
+            "kind": "model",
+            "category": "character.human",
+            "name": "士兵",
+            "source": "builtin",
+            "url": "/builtin-assets/soldier.glb",
+            "format": "gltf",
+            "license": "MIT (three.js examples)",
+            "skeletonFamily": "mixamo",
+            "embeddedClips": ["Idle", "Walk", "Run", "TPose"],
+            "tags": ["human", "soldier", "animated", "humanoid"]
+        },
+        {
+            "id": "builtin.fox",
+            "kind": "model",
+            "category": "character.animal",
+            "name": "狐狸",
+            "source": "builtin",
+            "url": "/test-assets/fox.glb",
+            "format": "gltf",
+            "license": "CC0 模型 / CC-BY 4.0 纹理 (Khronos)",
+            "skeletonFamily": "fox",
+            "embeddedClips": ["Survey", "Walk", "Run"],
+            "tags": ["animal", "fox", "animated", "quadruped"]
+        },
+        {
+            "id": "builtin.armchair",
+            "kind": "model",
+            "category": "furniture",
+            "name": "维多利亚扶手椅",
+            "source": "builtin",
+            "url": "/builtin-assets/furniture-armchair-01/ArmChair_01_1k.gltf",
+            "format": "gltf",
+            "license": "CC0 (Poly Haven)",
+            "skeletonFamily": null,
+            "tags": ["furniture", "chair", "vintage"]
+        },
+        {
+            "id": "builtin.calathea",
+            "kind": "model",
+            "category": "plant",
+            "name": "青纹竹芋",
+            "source": "builtin",
+            "url": "/builtin-assets/plant-calathea/calathea_orbifolia_01_1k.gltf",
+            "format": "gltf",
+            "license": "CC0 (Poly Haven)",
+            "skeletonFamily": null,
+            "tags": ["plant", "indoor", "potted"]
+        },
+        {
+            "id": "builtin.action.samba",
+            "kind": "action",
+            "category": "action.dance",
+            "name": "桑巴连击",
+            "source": "builtin",
+            "url": "/test-assets/desk-test.fbx",
+            "format": "fbx",
+            "license": "MIT (three.js examples)",
+            "skeletonFamily": "mixamo",
+            "clipName": "mixamo.com",
+            "tags": ["dance", "attack-standin", "humanoid"]
+        },
+        {
+            "id": "builtin.action.punch",
+            "kind": "action",
+            "category": "action.combat",
+            "name": "出拳",
+            "source": "builtin",
+            "url": "/builtin-assets/robot-expressive.glb",
+            "format": "gltf",
+            "license": "CC0 (Quaternius)",
+            "skeletonFamily": "robot-expressive",
+            "clipName": "Punch",
+            "tags": ["combat", "punch", "humanoid"]
+        }
+    ]
+}

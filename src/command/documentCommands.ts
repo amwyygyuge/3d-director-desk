@@ -1,8 +1,7 @@
 import { CameraShot } from "../camera/CameraShot";
 import { CameraMotionPath } from "../camera/CameraMotionPath";
-import { formatFromUrl } from "../assets/ModelAsset";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "../core/SceneObject";
-import { waitMs } from "../core/waitMs";
+import { mountWhenReady, provisionAction } from "./actionProvisioning";
 import { TimelineTrack } from "../timeline/TimelineTrack";
 import { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "../document/DeskDocument";
 import type { DeskDocument } from "../document/DeskDocument";
@@ -14,10 +13,6 @@ const DOCUMENT_COMMAND_VERSION = "1" as const;
 const DOCUMENT_READ_PERMISSION = "document:read";
 const DOCUMENT_EDIT_PERMISSION = "document:edit";
 const EMPTY_PAYLOAD: Record<string, never> = {};
-/** 挂载恢复的运行时等待上限:40 × 250ms = 10s(模型重新加载) */
-const MOUNT_RETRY_LIMIT = 40;
-const MOUNT_RETRY_INTERVAL_MS = 250;
-
 function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
     return { type, version: DOCUMENT_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.document-v1" };
 }
@@ -116,34 +111,19 @@ export class ImportDocumentCommand extends DirectorCommand<ImportDocumentPayload
     private async restoreActions(ctx: DirectorContext, doc: DeskDocument): Promise<void> {
         for (const action of doc.actions) {
             try {
-                const format = formatFromUrl(action.url);
-                if (!format) throw new Error(`无法识别格式: ${action.url}`);
-                const handle = await ctx.models.acquire(action.url, format);
-                const clip =
-                    handle.animations.find((candidate) => candidate.name === action.clipName) ?? handle.animations[0];
-                handle.release();
-                if (!clip) throw new Error(`资产无动作 clip: ${action.url}`);
-                const { action: registered } = ctx.animations.register({ name: action.name, url: action.url, clip });
-                if (action.mountedOn) await this.mountWhenReady(ctx, action.mountedOn, registered.id);
+                const registered = await provisionAction(ctx, {
+                    name: action.name,
+                    url: action.url,
+                    clipName: action.clipName,
+                });
+                if (action.mountedOn && !(await mountWhenReady(ctx, action.mountedOn, registered.id))) {
+                    ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${action.mountedOn}`);
+                }
             } catch {
                 ctx.ui.setApplicationNotice(`动作 "${action.name}" 恢复失败:${action.url}`);
             }
         }
         ctx.playback.sampleCurrent();
-    }
-
-    private async mountWhenReady(ctx: DirectorContext, objectId: string, actionId: string): Promise<void> {
-        for (let attempt = 0; attempt < MOUNT_RETRY_LIMIT; attempt++) {
-            const runtime = ctx.scene.manager.getRuntime(objectId);
-            const clip = ctx.animations.getClip(actionId);
-            if (runtime && clip) {
-                ctx.binder.mount(objectId, runtime, clip);
-                ctx.scene.setObjectAction(objectId, actionId);
-                return;
-            }
-            await waitMs(MOUNT_RETRY_INTERVAL_MS);
-        }
-        ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${objectId}`);
     }
 }
 

@@ -66,6 +66,17 @@ export {
 } from "./command/captureCommands";
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "./command/documentCommands";
 export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "./document/DeskDocument";
+export { AssetCatalog } from "./assets/catalog/AssetCatalog";
+export { BuiltinAssetProvider } from "./assets/catalog/AssetProvider";
+export type { AssetProvider } from "./assets/catalog/AssetProvider";
+export { ASSET_CATEGORY, ASSET_KIND, ASSET_SOURCE } from "./assets/catalog/AssetEntry";
+export type { AssetEntry, AssetKind, AssetSource } from "./assets/catalog/AssetEntry";
+export {
+    AssetsListQuery,
+    AssetsMountCommand,
+    AssetsPlaceCommand,
+    registerAssetCatalogCommands,
+} from "./command/assetCatalogCommands";
 export type { DeskDocument, DeskDocumentAction } from "./document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
 export {

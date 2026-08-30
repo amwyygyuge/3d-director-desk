@@ -1,5 +1,6 @@
 import type { AnimationBinder } from "../animation/AnimationBinder";
 import type { AnimationLibrary } from "../assets/AnimationLibrary";
+import type { AssetCatalog } from "../assets/catalog/AssetCatalog";
 import type { HostAdapter } from "../host/HostAdapter";
 import type { ModelImporter } from "../loaders/ModelImporter";
 import type { CameraStore } from "../store/CameraStore";
@@ -31,6 +32,8 @@ export interface DirectorContext {
     /** Per-desk Three skeleton index; command/query boundary returns serializable DTOs only. */
     readonly skeletons: SkeletonRuntimeRegistry;
     readonly animations: AnimationLibrary;
+    /** 资源目录(内置/注入/远程条目的统一注册表) */
+    readonly catalog: AssetCatalog;
     /** 宿主适配器(截图回传/模型导入;iframe 与直嵌两形态一契约) */
     readonly host: HostAdapter;
     /** 截图预览等界面态 */

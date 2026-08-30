@@ -1,5 +1,9 @@
 import { createContext, useContext } from "react";
 
+import { AssetCatalog } from "../assets/catalog/AssetCatalog";
+import { BuiltinAssetProvider } from "../assets/catalog/AssetProvider";
+import type { AssetProvider } from "../assets/catalog/AssetProvider";
+
 import { AnimationBinder } from "../animation/AnimationBinder";
 import { AnimationLibrary } from "../assets/AnimationLibrary";
 import { AssetLibrary } from "../assets/AssetLibrary";
@@ -78,6 +82,8 @@ export interface DirectorDeskStores {
     dispatcher: CommandDispatcher;
     /** 已导入模型资产表(MobX 纯数据) */
     assets: AssetLibrary;
+    /** 资源目录:内置/注入条目的统一注册表(纯元数据,与资源本体解耦) */
+    catalog: AssetCatalog;
     /** 模型加载/缓存/释放(非 observable,three 资源) */
     models: ModelImporter;
     /** gizmo 模式等纯界面状态 */
@@ -101,6 +107,8 @@ export interface DirectorDeskStores {
 export function createDirectorDeskStores(options?: {
     host?: HostAdapter | undefined;
     hostBridge?: HostBridgeConfiguration | undefined;
+    /** 宿主注入的资源 provider(直嵌形态);内置资源始终加载 */
+    assetProviders?: readonly AssetProvider[] | undefined;
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
@@ -118,6 +126,13 @@ export function createDirectorDeskStores(options?: {
     binder.bindTransport(clock);
     const camera = new CameraStore();
     const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera, binder, skeletons);
+    const catalog = new AssetCatalog();
+    const lifecycle = new DeskLifecycleGuard();
+    // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
+    void catalog.loadProvider(new BuiltinAssetProvider(), "builtin", lifecycle.signal);
+    for (const provider of options?.assetProviders ?? []) {
+        void catalog.loadProvider(provider, "injected", lifecycle.signal);
+    }
     return {
         scene,
         selection: new SelectionStore(),
@@ -138,7 +153,8 @@ export function createDirectorDeskStores(options?: {
         animations: new AnimationLibrary(),
         skeletons,
         binder,
-        lifecycle: new DeskLifecycleGuard(),
+        catalog,
+        lifecycle,
     };
 }
 

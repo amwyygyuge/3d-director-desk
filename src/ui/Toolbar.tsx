@@ -278,7 +278,12 @@ const SectionCapture = observer(function SectionCapture() {
                 </Button>
             </Tooltip>
             {ui.lastVideoUrl && (
-                <Button variant="text" startIcon={<FileDownloadIcon />} href={ui.lastVideoUrl} download="director-desk-preview.webm">
+                <Button
+                    variant="text"
+                    startIcon={<FileDownloadIcon />}
+                    href={ui.lastVideoUrl}
+                    download="director-desk-preview.webm"
+                >
                     下载视频
                 </Button>
             )}
@@ -288,7 +293,11 @@ const SectionCapture = observer(function SectionCapture() {
                 </Button>
             </Tooltip>
             <Tooltip title="导入工程 JSON(替换当前场景)">
-                <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => documentInputRef.current?.click()}>
+                <Button
+                    variant="outlined"
+                    startIcon={<UploadFileIcon />}
+                    onClick={() => documentInputRef.current?.click()}
+                >
                     导入工程
                 </Button>
             </Tooltip>

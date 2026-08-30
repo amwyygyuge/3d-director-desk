@@ -17,6 +17,7 @@ import { STAGE_DEFS } from "../workspace/stages";
 import { TransformGizmoController } from "../transform/TransformGizmoController";
 import { FlyDrive } from "../navigation/FlyDrive";
 import { ShotNavigation } from "../navigation/ShotNavigation";
+import type { AssetProvider } from "../assets/catalog/AssetProvider";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { CapturePreview } from "./CapturePreview";
@@ -46,6 +47,8 @@ export interface DirectorDeskProps {
     theme?: Theme;
     /** 宿主适配器:直嵌形态直接注入，不创建 postMessage 监听器 */
     host?: HostAdapter;
+    /** 宿主注入的资源 provider(直嵌形态;iframe 形态走 bridge register-assets 消息) */
+    assetProviders?: readonly AssetProvider[];
     /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
     hostBridge?: HostBridgeConfiguration;
     /** Storybook/host initial local visibility for the non-persistent motion preview helper. */
@@ -68,10 +71,11 @@ export const DirectorDesk = observer(function DirectorDesk({
     theme,
     host,
     hostBridge,
+    assetProviders,
     onReady,
     initialMotionPreviewVisible = false,
 }: DirectorDeskProps) {
-    const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge }));
+    const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge, assetProviders }));
     const deskRef = useRef<HTMLDivElement>(null);
     const [motionPreviewVisible, setMotionPreviewVisible] = useState(initialMotionPreviewVisible);
     // 掌镜视角下左右/底 Dock 自动收成细条(不压画布);退出即恢复用户原折叠态
@@ -106,6 +110,9 @@ export const DirectorDesk = observer(function DirectorDesk({
     // 宿主入站:import-model → 命令层;ready 握手(adapter 内部决定是否有意义)
     useEffect(() => {
         if (stores.host instanceof PostMessageAdapter) stores.host.activate();
+        const detachRegisterAssets = stores.host.onRegisterAssets(({ assets }) => {
+            stores.catalog.registerInjected(assets);
+        });
         const detachImport = stores.host.onImportModel(({ url, name }) => {
             const result = stores.dispatcher.dispatch(
                 {
@@ -128,7 +135,10 @@ export const DirectorDesk = observer(function DirectorDesk({
             if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
         });
         stores.host.reportReady(PROTOCOL_VERSION);
-        return detachImport;
+        return () => {
+            detachImport();
+            detachRegisterAssets();
+        };
     }, [stores]);
 
     return (

@@ -29,6 +29,9 @@ class PoseCaptureSink implements HostAdapter {
     onImportModel(): () => void {
         return () => {};
     }
+    onRegisterAssets(): () => void {
+        return () => {};
+    }
 
     reportCapture(capture: CapturedFrame): void {
         this.captures.push(capture);

@@ -25,20 +25,27 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ## 感知(怎么看懂场景)
 
-| 你要知道的              | 怎么拿                                                                                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 场景全貌(主入口)        | `query({ type: "scene.describe", payload: {} })` → 每实体 id/kind/name/transform/**loadState**(loading/loaded/failed)/**bounds**(世界包围盒,蒙皮感知) |
-| 生效相机位姿            | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                      |
-| 截图溯源                | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                  |
-| 机位表                  | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                           |
-| 时间轴文档              | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                           |
-| 运镜路径                | `query({ type: "motion.get", payload: {} })` → 关键帧 + 可创作条件                                                                                    |
-| 灯光                    | `query({ type: "lighting.list", payload: {} })`                                                                                                       |
-| 骨骼(姿态编辑前必查)    | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                       |
-| 多机位连续性体检        | `query({ type: "continuity.check", payload: { subjectId, shotIds } })`                                                                                |
-| 眼睛(构图确认,仅美学用) | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                        |
+| 你要知道的                  | 怎么拿                                                                                                                                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 资源目录(发现可用模型/动作) | `query({ type: "assets.list", payload: { kind?: "model"\|"action", category?: "character.human"\|"character.animal"\|"plant"\|"furniture" } })` → 条目含 license/skeletonFamily/embeddedClips |
+| 生效相机位姿                | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                              |
+| 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                                                          |
+| 机位表                      | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                                                                   |
+| 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                   |
+| 运镜路径                    | `query({ type: "motion.get", payload: {} })` → 关键帧 + 可创作条件                                                                                                                            |
+| 灯光                        | `query({ type: "lighting.list", payload: {} })`                                                                                                                                               |
+| 骨骼(姿态编辑前必查)        | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                                                               |
+| 多机位连续性体检            | `query({ type: "continuity.check", payload: { subjectId, shotIds } })`                                                                                                                        |
+| 眼睛(构图确认,仅美学用)     | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                                                                |
 
 **分工:度量问数据,美学问截图。默认断言驱动:每步操作后用 query 断言结果,断言过了不截图;只有断言失败(排查)或验收构图(美学)才截图。**
+
+### 资源目录(优先用目录,别手搓 URL)
+
+- `assets.list` 发现 → `assets.place { assetId, transform? }` 放模型 → `assets.mount { assetId, objectId }` 挂动作;
+- 动作↔模型兼容看 `skeletonFamily` 是否一致(如 mixamo↔mixamo);不一致大概率被骨骼校验拦,按 issue 换资产;
+- 内置资源已入库缓存(许可干净:CC0/MIT/CC-BY);宿主注入的条目 `source: "injected"`,远程的 `"remote"`,内置的 `"builtin"`;
+- 目录为空 → 内置 catalog.json 加载失败,停止并报告(别改用 URL 硬编)。
 
 ### 断言驱动验收协议
 

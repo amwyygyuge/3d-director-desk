@@ -5,6 +5,7 @@ export const PROTOCOL_VERSION = 1;
 
 export const HOST_INBOUND_MESSAGE_TYPE = {
     IMPORT_MODEL: "director-desk:import-model",
+    REGISTER_ASSETS: "director-desk:register-assets",
 } as const;
 
 export const HOST_OUTBOUND_MESSAGE_TYPE = {
@@ -24,10 +25,12 @@ interface HostMessageBase<TType extends string, TPayload> {
 }
 
 /** 宿主 → 导演台 */
-export type HostInboundMessage = HostMessageBase<
-    (typeof HOST_INBOUND_MESSAGE_TYPE)[keyof typeof HOST_INBOUND_MESSAGE_TYPE],
-    { readonly url: string; readonly name: string }
->;
+export type HostInboundMessage =
+    | HostMessageBase<
+          (typeof HOST_INBOUND_MESSAGE_TYPE)["IMPORT_MODEL"],
+          { readonly url: string; readonly name: string }
+      >
+    | HostMessageBase<(typeof HOST_INBOUND_MESSAGE_TYPE)["REGISTER_ASSETS"], { readonly assets: readonly unknown[] }>;
 
 /** 导演台 → 宿主(Bridge 自动附加已配置的 sessionId) */
 export type HostOutboundRequest =
@@ -57,8 +60,14 @@ function isSessionId(value: unknown): value is string {
 
 /** 仅接受完整的、已知类型的入站消息，禁止把未校验对象交给领域层。 */
 export function isDirectorDeskMessage(data: unknown): data is HostInboundMessage {
-    if (!isRecord(data)) return false;
-    if (data.type !== HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL || !isSessionId(data.sessionId)) return false;
-    if (!isRecord(data.payload)) return false;
-    return typeof data.payload.url === "string" && data.payload.url.length > 0 && typeof data.payload.name === "string";
+    if (!isRecord(data) || !isSessionId(data.sessionId) || !isRecord(data.payload)) return false;
+    if (data.type === HOST_INBOUND_MESSAGE_TYPE.IMPORT_MODEL) {
+        return (
+            typeof data.payload.url === "string" && data.payload.url.length > 0 && typeof data.payload.name === "string"
+        );
+    }
+    if (data.type === HOST_INBOUND_MESSAGE_TYPE.REGISTER_ASSETS) {
+        return Array.isArray(data.payload.assets);
+    }
+    return false;
 }
