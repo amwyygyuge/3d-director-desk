@@ -8,6 +8,7 @@ import { ArrowHelper, Box3, DirectionalLightHelper, Group, PointLightHelper, Spo
 import type { LightParams, LightType } from "../../core/LightParams";
 import type { SceneObject } from "../../core/SceneObject";
 import type { ModelHandle } from "../../loaders/ModelImporter";
+import { measureModelBox } from "../../core/measureModelBox";
 import { STAGE_DEFS } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
@@ -32,7 +33,7 @@ const TMP_HELPER_DIRECTION = new Vector3();
 
 /** 给克隆体套归一化壳:等比缩放 + 水平居中 + 底面贴 y=0;实体 transform 仍是用户语义 */
 function normalizedShell(object3d: Object3D): Object3D {
-    TMP_BOX.setFromObject(object3d);
+    measureModelBox(object3d, TMP_BOX);
     TMP_BOX.getSize(TMP_SIZE);
     TMP_BOX.getCenter(TMP_CENTER);
     const maxDim = Math.max(TMP_SIZE.x, TMP_SIZE.y, TMP_SIZE.z);
@@ -375,6 +376,7 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
                 }
                 ui.clearLoading(requestId);
                 request.acquired = loadedHandle;
+                ui.reportModelOutcome(requestId, "loaded");
                 setHandle(loadedHandle);
                 invalidate();
             })
@@ -382,6 +384,7 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
                 if (request.cancelled) return;
                 ui.clearLoading(requestId);
                 console.warn(`[ModelContent] 加载失败 ${sourceUrl}`, error);
+                ui.reportModelOutcome(requestId, "failed");
                 setLoadFailed(true);
                 invalidate();
             });

@@ -30,7 +30,11 @@ export class CaptureFrameCommand extends DirectorCommand<CaptureFramePayload> {
             const size = ctx.capture.size ?? { width: 0, height: 0 };
             const blobUrl = URL.createObjectURL(blob);
             ctx.host.reportCapture({ blobUrl, ...size });
-            ctx.ui.setLastCaptureUrl(blobUrl);
+            ctx.ui.setLastCapture(blobUrl, {
+                timeSeconds: ctx.clock.time,
+                cameraPose: ctx.capture.readCameraPose(),
+                ...size,
+            });
         });
     }
 }

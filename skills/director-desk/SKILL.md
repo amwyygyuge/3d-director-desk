@@ -25,18 +25,30 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ## 感知(怎么看懂场景)
 
-| 你要知道的           | 怎么拿                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| 场景里有什么         | `desk.scene.manager.list().map(e => e.toJSON())` → id/kind/name/transform/灯光/姿态         |
-| 机位表               | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId` |
-| 时间轴文档           | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧 |
-| 运镜路径             | `query({ type: "motion.get", payload: {} })` → 关键帧 + 可创作条件                          |
-| 灯光                 | `query({ type: "lighting.list", payload: {} })`                                             |
-| 骨骼(姿态编辑前必查) | `query({ type: "pose.bones.discover", payload: { objectId } })`                             |
-| 多机位连续性体检     | `query({ type: "continuity.check", payload: { subjectId, shotIds } })`                      |
-| 眼睛(构图确认)       | `dispatch({ type: "capture.frame", payload: {} })` 截图;多模态看画面,度量看上面的数据       |
+| 你要知道的              | 怎么拿                                                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 场景全貌(主入口)        | `query({ type: "scene.describe", payload: {} })` → 每实体 id/kind/name/transform/**loadState**(loading/loaded/failed)/**bounds**(世界包围盒,蒙皮感知) |
+| 生效相机位姿            | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                      |
+| 截图溯源                | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                  |
+| 机位表                  | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                           |
+| 时间轴文档              | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                           |
+| 运镜路径                | `query({ type: "motion.get", payload: {} })` → 关键帧 + 可创作条件                                                                                    |
+| 灯光                    | `query({ type: "lighting.list", payload: {} })`                                                                                                       |
+| 骨骼(姿态编辑前必查)    | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                       |
+| 多机位连续性体检        | `query({ type: "continuity.check", payload: { subjectId, shotIds } })`                                                                                |
+| 眼睛(构图确认,仅美学用) | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                        |
 
-**分工:度量问数据(距离/朝向/尺度从 transform 算),美学问截图。** 不要凭截图猜坐标。
+**分工:度量问数据,美学问截图。默认断言驱动:每步操作后用 query 断言结果,断言过了不截图;只有断言失败(排查)或验收构图(美学)才截图。**
+
+### 断言驱动验收协议
+
+| 步骤     | 断言(query/直读)                                                                    | 失败时                                      |
+| -------- | ----------------------------------------------------------------------------------- | ------------------------------------------- |
+| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理(≈2 单位×scale) | `failed` → 换资产;`loading` 超 10s → 查 URL |
+| 尺度断言 | `bounds.size` 之比 = 设计尺度比(如机甲:怪兽 ≈ 1.4:1)                                | 调 transform.scale,勿目测                   |
+| 挂动作   | `pose.bones.discover` ready → mount 返回 ok                                         | bone 类 issue → 按 suggestions 换方案       |
+| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                             | 不符 → 检查是否播放中录 key 被拒            |
+| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                           | 不符 → capture 时机错,重新 seek+capture     |
 
 ## 核心命令速查
 

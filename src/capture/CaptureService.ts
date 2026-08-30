@@ -1,7 +1,18 @@
+import { PerspectiveCamera, Vector3 } from "three";
 import type { Camera, Scene, WebGLRenderer } from "three";
 import type { Object3D } from "three";
 
+import type { Vec3 } from "../core/SceneObject";
+
 const PNG_MIME_TYPE = "image/png";
+const TMP_DIRECTION = new Vector3();
+
+/** agent 可读的生效相机位姿(纯数据,可序列化) */
+export interface LiveCameraPose {
+    readonly position: Vec3;
+    readonly direction: Vec3;
+    readonly fov: number | null;
+}
 
 /** 渲染句柄:R3F onCreated 时注入;three 运行时引用,普通字段不进 observable */
 export interface RenderHandles {
@@ -31,15 +42,12 @@ export interface CaptureHelperLifecycle {
 export class CaptureService {
     private handles: RenderHandles | null = null;
     private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
-    private generation = 0;
 
     attach(handles: RenderHandles): void {
-        this.generation += 1;
         this.handles = handles;
     }
 
     detach(): void {
-        this.generation += 1;
         this.handles = null;
     }
 
@@ -56,11 +64,21 @@ export class CaptureService {
         const canvas = this.handles?.gl.domElement;
         return canvas ? { width: canvas.width, height: canvas.height } : null;
     }
+    /** 当前生效相机位姿(R3F 默认相机,运镜 sink 写入的就是它);未 attach 返回 null */
+    readCameraPose(): LiveCameraPose | null {
+        const camera = this.handles?.camera;
+        if (!camera) return null;
+        const direction = camera.getWorldDirection(TMP_DIRECTION);
+        return {
+            position: camera.position.toArray() as Vec3,
+            direction: direction.toArray() as Vec3,
+            fov: camera instanceof PerspectiveCamera ? camera.fov : null,
+        };
+    }
 
     /** 截取当前场景为 PNG blob;hideHelpers 默认开(网格/gizmo/高亮框不入镜) */
     async capture(options?: { hideHelpers?: boolean }): Promise<Blob | null> {
         const handles = this.handles;
-        const generation = this.generation;
         if (!handles) return null;
         const { gl, scene, camera } = handles;
         // 诊断(dev only,构建期消除):截图所用相机的实际投影参数
@@ -87,11 +105,7 @@ export class CaptureService {
         }
 
         gl.render(scene, camera);
-        const { promise, resolve } = Promise.withResolvers<Blob | null>();
-        gl.domElement.toBlob(
-            (blob) => resolve(this.isCurrentCapture(handles, generation) ? blob : null),
-            PNG_MIME_TYPE,
-        );
+        const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
 
         for (let index = 0; index < hidden.length; index += 1) {
             const object = hidden[index];
@@ -103,10 +117,16 @@ export class CaptureService {
             helpersRestored: hidden.every((object) => object.visible),
         });
         if (hidden.length > 0) gl.render(scene, camera);
-        return promise;
+        // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
+        return Promise.resolve(dataUrlToBlob(dataUrl));
     }
+}
 
-    private isCurrentCapture(handles: RenderHandles, generation: number): boolean {
-        return this.handles === handles && this.generation === generation;
-    }
+/** dataURL → Blob(同步,不触碰网络/任务队列) */
+function dataUrlToBlob(dataUrl: string): Blob {
+    const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: PNG_MIME_TYPE });
 }

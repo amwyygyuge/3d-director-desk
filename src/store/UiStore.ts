@@ -1,5 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
+import type { LiveCameraPose } from "../capture/CaptureService";
 import { WORKSPACE_STAGE } from "../workspace/stages";
 import type { WorkspaceStage } from "../workspace/stages";
 /** gizmo 模式:三态查表,工具条与控制器共享 */
@@ -10,6 +11,13 @@ export const GIZMO_MODE = {
 } as const;
 export type GizmoMode = (typeof GIZMO_MODE)[keyof typeof GIZMO_MODE];
 export type GizmoAxis = "x" | "y" | "z";
+/** 最近一次截图的溯源元数据(agent 断言用:拍的哪一秒、什么机位、多大) */
+export interface CaptureMeta {
+    readonly timeSeconds: number;
+    readonly cameraPose: LiveCameraPose | null;
+    readonly width: number;
+    readonly height: number;
+}
 const ALL_AXES_FREE: Record<GizmoAxis, boolean> = { x: true, y: true, z: true };
 
 /**
@@ -37,6 +45,10 @@ export class UiStore {
     flying = false;
     /** 加载中资源:稳定对象请求 id → 进度 0~1(反馈体系;Map 字段自动可观察) */
     readonly loading = new Map<string, number>();
+    /** 模型加载结局:loaded/failed;loading 管进度,本表管结果(agent 可断言装载成败) */
+    readonly modelOutcomes = new Map<string, "loaded" | "failed">();
+    /** 最近截图溯源元数据,与 lastCaptureUrl 同寿命 */
+    lastCaptureMeta: CaptureMeta | null = null;
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
     posePickingBoneKey: string | null = null;
@@ -83,12 +95,13 @@ export class UiStore {
     noteGizmoInteraction(): void {
         this.lastGizmoInteractionAt = performance.now();
     }
-    setLastCaptureUrl(url: string): void {
+    setLastCapture(url: string, meta: CaptureMeta): void {
         if (this.disposed) {
             URL.revokeObjectURL(url);
         } else {
             if (this.lastCaptureUrl) URL.revokeObjectURL(this.lastCaptureUrl);
             this.lastCaptureUrl = url;
+            this.lastCaptureMeta = meta;
         }
     }
     /** 释放本 Store 持有的最终截图 URL；重复调用保持安全。 */
@@ -97,7 +110,9 @@ export class UiStore {
         this.disposed = true;
         if (this.lastCaptureUrl) URL.revokeObjectURL(this.lastCaptureUrl);
         this.lastCaptureUrl = null;
+        this.lastCaptureMeta = null;
         this.loading.clear();
+        this.modelOutcomes.clear();
         this.applicationNotice = null;
         this.posePickingObjectId = null;
         this.posePickingBoneKey = null;
@@ -120,10 +135,16 @@ export class UiStore {
 
     reportLoading(requestId: string, progress: number): void {
         if (this.disposed) return;
+        // 新一次加载尝试清掉旧结局
+        this.modelOutcomes.delete(requestId);
         this.loading.set(requestId, progress);
     }
 
     clearLoading(requestId: string): void {
         this.loading.delete(requestId);
+    }
+    reportModelOutcome(requestId: string, outcome: "loaded" | "failed"): void {
+        if (this.disposed) return;
+        this.modelOutcomes.set(requestId, outcome);
     }
 }

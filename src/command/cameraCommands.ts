@@ -1,7 +1,61 @@
+import { sampleCameraMotionPath } from "../camera/CameraMotionPath";
+import type { CameraMotionSample } from "../camera/CameraMotionPath";
 import { DirectorCommand } from "./DirectorCommand";
+import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
 import type { CommandDispatcher } from "./CommandDispatcher";
 
+/** 采样缓冲:查询低频但遵守零分配纪律(命令层模块级临时对象先例) */
+const TMP_MOTION_SAMPLE: CameraMotionSample = {
+    positionX: 0,
+    positionY: 0,
+    positionZ: 0,
+    targetX: 0,
+    targetY: 0,
+    targetZ: 0,
+    fov: 45,
+};
+
+const CAMERA_POSE_CAPABILITY: CommandCapability = {
+    type: "camera.get-pose",
+    version: "1",
+    kind: "query",
+    permissions: ["camera:read"],
+    appliesWhen: "director-desk.camera-v1",
+};
+
+/**
+ * 生效相机位姿查询(agent 断言用):live = 渲染器实际相机(运镜 sink 写入后的真值);
+ * motionSampled = 当前时刻运镜路径的采样期望值。两者并排,运镜是否生效一眼可断。
+ */
+export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> {
+    static readonly TYPE = "camera.get-pose";
+    readonly type = CameraGetPoseQuery.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {}
+
+    validate(): readonly string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): unknown {
+        const path = ctx.motion.path;
+        const sampled =
+            path && sampleCameraMotionPath(path, ctx.clock.time, TMP_MOTION_SAMPLE) ? TMP_MOTION_SAMPLE : null;
+        return {
+            activeShotId: ctx.camera.activeShotId,
+            live: ctx.capture.readCameraPose(),
+            motionSampled: sampled
+                ? {
+                      position: [sampled.positionX, sampled.positionY, sampled.positionZ],
+                      target: [sampled.targetX, sampled.targetY, sampled.targetZ],
+                      fov: sampled.fov,
+                  }
+                : null,
+            directorPose: ctx.camera.lastDirectorPose,
+        };
+    }
+}
 interface ShotIdPayload {
     id: string;
 }
@@ -87,4 +141,9 @@ export function registerCameraCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(ActivateShotCommand.TYPE, (payload: ShotIdPayload) => new ActivateShotCommand(payload));
     dispatcher.register(DeactivateShotCommand.TYPE, () => new DeactivateShotCommand());
     dispatcher.register(RemoveShotCommand.TYPE, (payload: ShotIdPayload) => new RemoveShotCommand(payload));
+    dispatcher.registerQuery(
+        CameraGetPoseQuery.TYPE,
+        (payload: Record<string, never>) => new CameraGetPoseQuery(payload),
+        CAMERA_POSE_CAPABILITY,
+    );
 }

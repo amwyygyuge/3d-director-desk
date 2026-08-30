@@ -1,4 +1,9 @@
 import { toJS } from "mobx";
+import { Box3, Vector3 } from "three";
+
+import { measureModelBox } from "../core/measureModelBox";
+import type { SceneObject } from "../core/SceneObject";
+import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
 import { registerPoseCommands } from "./poseCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
@@ -236,12 +241,90 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
     }
 }
 
+/** 场景实体的 agent 可读描述(验收断言的数据面) */
+interface SceneEntityDescription {
+    readonly id: string;
+    readonly kind: SceneObjectKind;
+    readonly name: string;
+    readonly transform: Transform;
+    /** none=非模型无装载;loading/loaded/failed 由 UiStore 装载结果表与运行时绑定共同判定 */
+    readonly loadState: "none" | "loading" | "loaded" | "failed";
+    readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
+}
+
+const TMP_DESCRIBE_BOX = new Box3();
+const TMP_DESCRIBE_SIZE = new Vector3();
+const TMP_DESCRIBE_CENTER = new Vector3();
+
+const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
+    type: "scene.describe",
+    version: "1",
+    kind: "query",
+    permissions: ["scene:read"],
+    appliesWhen: "director-desk.scene-v1",
+};
+
+function loadStateOf(ctx: DirectorContext, entity: SceneObject): SceneEntityDescription["loadState"] {
+    // 结局表是唯一事实源:runtime 外层组在内容加载前就绑定,不能当 loaded 证据
+    if (entity.kind !== "model") return "none";
+    if (ctx.ui.loading.has(entity.id)) return "loading";
+    return ctx.ui.modelOutcomes.get(entity.id) ?? "loading";
+}
+
+function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityDescription {
+    const runtime = ctx.scene.manager.getRuntime(entity.id);
+    let bounds: SceneEntityDescription["bounds"] = null;
+    if (runtime) {
+        measureModelBox(runtime, TMP_DESCRIBE_BOX);
+        if (!TMP_DESCRIBE_BOX.isEmpty()) {
+            TMP_DESCRIBE_BOX.getSize(TMP_DESCRIBE_SIZE);
+            TMP_DESCRIBE_BOX.getCenter(TMP_DESCRIBE_CENTER);
+            bounds = {
+                size: TMP_DESCRIBE_SIZE.toArray() as Vec3,
+                center: TMP_DESCRIBE_CENTER.toArray() as Vec3,
+            };
+        }
+    }
+    return {
+        id: entity.id,
+        kind: entity.kind,
+        name: entity.name,
+        transform: toJS(entity.transform),
+        loadState: loadStateOf(ctx, entity),
+        bounds,
+    };
+}
+
+/**
+ * 场景全貌查询(agent 的「眼睛」主通道):每个实体的变换/加载态/世界包围盒。
+ * 断言用途:装载是否成功(loadState)、尺度是否符合预期(bounds.size)、相对位置(transform)。
+ */
+export class SceneDescribeQuery implements DirectorQuery<Record<string, never>> {
+    static readonly TYPE = "scene.describe";
+    readonly type = SceneDescribeQuery.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {}
+
+    validate(): readonly string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): unknown {
+        return ctx.scene.manager.list().map((entity) => describeEntity(ctx, entity));
+    }
+}
+
 /** 内置命令注册:Dispatcher 实例化后调一次,AI 工具 schema 由此派生 */
 export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(PlaceObjectCommand.TYPE, (payload) => new PlaceObjectCommand(payload));
     dispatcher.register(MoveObjectCommand.TYPE, (payload) => new MoveObjectCommand(payload));
     dispatcher.register(RemoveObjectCommand.TYPE, (payload) => new RemoveObjectCommand(payload));
     dispatcher.register(SetCameraShotCommand.TYPE, (payload) => new SetCameraShotCommand(payload));
+    dispatcher.registerQuery(
+        SceneDescribeQuery.TYPE,
+        (payload: Record<string, never>) => new SceneDescribeQuery(payload),
+        SCENE_DESCRIBE_CAPABILITY,
+    );
     registerActionCommands(dispatcher);
     registerCameraCommands(dispatcher);
     registerCaptureCommands(dispatcher);
