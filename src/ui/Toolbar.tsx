@@ -3,6 +3,9 @@ import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import StopIcon from "@mui/icons-material/Stop";
+import VideocamIcon from "@mui/icons-material/Videocam";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import RedoIcon from "@mui/icons-material/Redo";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
 import UndoIcon from "@mui/icons-material/Undo";
@@ -213,20 +216,94 @@ const SectionAction = observer(function SectionAction() {
     );
 });
 
-/** 成片:截图 */
+/** 成片:截图 + 录制视频 + 工程文档导出/导入(写操作全走命令层) */
 const SectionCapture = observer(function SectionCapture() {
     const stores = useDirectorDeskStores();
+    const { ui, dispatcher } = stores;
+    const documentInputRef = useRef<HTMLInputElement>(null);
+
+    const exportDocument = () => {
+        const result = dispatcher.query({ type: "desk.export-document", payload: {} }, stores);
+        if (!result.ok) {
+            ui.setApplicationNotice(`导出被拒:${result.error}`);
+            return;
+        }
+        const blob = new Blob([JSON.stringify(result.value, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "director-desk-scene.json";
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const importDocument = async (file: File) => {
+        let document: unknown;
+        try {
+            document = JSON.parse(await file.text());
+        } catch {
+            ui.setApplicationNotice("工程文件不是合法 JSON");
+            return;
+        }
+        const result = dispatcher.dispatch({ type: "desk.import-document", payload: { document } }, stores);
+        if (!result.ok) ui.setApplicationNotice(`导入被拒:${result.issues?.join(";") ?? result.error}`);
+    };
+
+    const toggleRecording = () => {
+        const type = ui.videoRecording ? "capture.video-cancel" : "capture.video";
+        const result = dispatcher.dispatch({ type, payload: {} }, stores);
+        if (!result.ok) ui.setApplicationNotice(`录制被拒:${result.issues?.join(";") ?? result.error}`);
+    };
+
     return (
-        <Button
-            variant="outlined"
-            startIcon={<PhotoCameraIcon />}
-            onClick={() => {
-                const result = stores.dispatcher.dispatch({ type: "capture.frame", payload: {} }, stores);
-                if (!result.ok) stores.ui.setApplicationNotice(`截图被拒绝:${result.error}`);
-            }}
-        >
-            截图
-        </Button>
+        <>
+            <Button
+                variant="outlined"
+                startIcon={<PhotoCameraIcon />}
+                onClick={() => {
+                    const result = dispatcher.dispatch({ type: "capture.frame", payload: {} }, stores);
+                    if (!result.ok) ui.setApplicationNotice(`截图被拒绝:${result.error}`);
+                }}
+            >
+                截图
+            </Button>
+            <Tooltip title={`录制时间轴(0~${stores.timeline.document.duration}s)为 WebM`}>
+                <Button
+                    variant={ui.videoRecording ? "contained" : "outlined"}
+                    color={ui.videoRecording ? "error" : "inherit"}
+                    startIcon={ui.videoRecording ? <StopIcon /> : <VideocamIcon />}
+                    onClick={toggleRecording}
+                >
+                    {ui.videoRecording ? "停止录制" : "录制视频"}
+                </Button>
+            </Tooltip>
+            {ui.lastVideoUrl && (
+                <Button variant="text" startIcon={<FileDownloadIcon />} href={ui.lastVideoUrl} download="director-desk-preview.webm">
+                    下载视频
+                </Button>
+            )}
+            <Tooltip title="导出整桌工程为 JSON(可在他处导入接管)">
+                <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={exportDocument}>
+                    导出工程
+                </Button>
+            </Tooltip>
+            <Tooltip title="导入工程 JSON(替换当前场景)">
+                <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => documentInputRef.current?.click()}>
+                    导入工程
+                </Button>
+            </Tooltip>
+            <input
+                ref={documentInputRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void importDocument(file);
+                }}
+            />
+        </>
     );
 });
 

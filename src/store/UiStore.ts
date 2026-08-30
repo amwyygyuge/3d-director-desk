@@ -51,6 +51,8 @@ export class UiStore {
     lastCaptureMeta: CaptureMeta | null = null;
     /** 最近视频产物;替换时回收旧 objectURL(同截图纪律) */
     lastVideoUrl: string | null = null;
+    /** 视频录制中(命令层在录制起止写入;工具条据此切换 录制/停止 按钮) */
+    videoRecording = false;
     lastVideoMeta: { readonly durationSeconds: number; readonly width: number; readonly height: number } | null = null;
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
@@ -107,6 +109,10 @@ export class UiStore {
             this.lastCaptureMeta = meta;
         }
     }
+    setVideoRecording(recording: boolean): void {
+        this.videoRecording = recording;
+    }
+
     setLastVideo(url: string, meta: { durationSeconds: number; width: number; height: number }): void {
         if (this.disposed) {
             URL.revokeObjectURL(url);

@@ -84,8 +84,10 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
             ctx.clock.pause();
             ctx.clock.seek(0);
             const recording = ctx.capture.recordVideo({ durationSeconds });
+            ctx.ui.setVideoRecording(true);
             ctx.clock.play();
             const blob = await recording;
+            ctx.ui.setVideoRecording(false);
             ctx.clock.pause();
             if (!blob) return;
             const size = ctx.capture.size ?? { width: 0, height: 0 };
