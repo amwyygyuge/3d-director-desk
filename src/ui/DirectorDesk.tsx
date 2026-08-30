@@ -20,6 +20,7 @@ import { ShotNavigation } from "../navigation/ShotNavigation";
 import type { AssetProvider } from "../assets/catalog/AssetProvider";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
+import { AssetLibraryPanel } from "./AssetLibraryPanel";
 import { CapturePreview } from "./CapturePreview";
 import { Dock } from "./Dock";
 import { HelpOverlay } from "./HelpOverlay";
@@ -205,6 +206,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                             collapsed={stores.ui.leftDockCollapsed || shotLive}
                             onToggle={() => stores.ui.toggleLeftDock()}
                         >
+                            {stores.ui.stage === "set" && <AssetLibraryPanel />}
                             <OutlinerPanel />
                             {stores.ui.stage === "camera" && (
                                 <ShotPanel
