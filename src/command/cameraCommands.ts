@@ -1,3 +1,4 @@
+import { FocusTargetResolver } from "../camera/FocusTargetResolver";
 import { sampleCameraMotionClip } from "../camera/CameraMotionClip";
 import type { CameraMotionSample } from "../camera/CameraMotionClip";
 import type { PathPositionSample } from "../camera/CameraMotionPath";
@@ -18,6 +19,7 @@ const TMP_MOTION_SAMPLE: CameraMotionSample = {
     fov: 45,
 };
 const TMP_PATH_SAMPLE: PathPositionSample = { x: 0, y: 0, z: 0 };
+const TMP_FOCUS_SAMPLE = { x: 0, y: 0, z: 0 };
 
 const CAMERA_POSE_CAPABILITY: CommandCapability = {
     type: "camera.get-pose",
@@ -45,8 +47,12 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
         const programCameraId = ctx.motion.program.cameraAt(ctx.clock.time);
         const shot = programCameraId ? ctx.camera.director.getShot(programCameraId) : undefined;
         const clip = programCameraId ? ctx.motion.clipAt(programCameraId, ctx.clock.time) : null;
+        const focusResolver = new FocusTargetResolver(ctx.scene.manager);
         const sampled =
-            clip && shot && sampleCameraMotionClip(clip, ctx.clock.time, shot, TMP_PATH_SAMPLE, TMP_MOTION_SAMPLE)
+            clip &&
+            shot &&
+            focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) &&
+            sampleCameraMotionClip(clip, ctx.clock.time, shot, TMP_FOCUS_SAMPLE, TMP_PATH_SAMPLE, TMP_MOTION_SAMPLE)
                 ? TMP_MOTION_SAMPLE
                 : null;
         return {

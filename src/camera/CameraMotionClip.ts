@@ -1,7 +1,8 @@
+import { CameraFocusTrack } from "./CameraFocusTrack";
+import type { CameraFocusTrackJSON, FocusTargetSample } from "./CameraFocusTrack";
 import { CameraMotionPath, sampleCameraMotionPath } from "./CameraMotionPath";
 import type { CameraMotionPathJSON, PathPositionSample } from "./CameraMotionPath";
 import type { CameraShot } from "./CameraShot";
-import type { Vec3 } from "../core/SceneObject";
 
 export const CAMERA_MOTION_EASING = {
     LINEAR: "linear",
@@ -15,7 +16,7 @@ export interface CameraMotionClipInit {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly path: CameraMotionPath | CameraMotionPathJSON;
-    readonly target: Vec3;
+    readonly focus: CameraFocusTrack | CameraFocusTrackJSON;
     readonly easing: CameraMotionEasing;
 }
 
@@ -25,7 +26,7 @@ export interface CameraMotionClipJSON {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly path: CameraMotionPathJSON;
-    readonly target: Vec3;
+    readonly focus: CameraFocusTrackJSON;
     readonly easing: CameraMotionEasing;
 }
 
@@ -40,21 +41,13 @@ export interface CameraMotionSample {
     fov: number;
 }
 
-function copyVector(vector: Vec3): Vec3 {
-    return [vector[0], vector[1], vector[2]];
-}
-
-function isFiniteVector(vector: Vec3): boolean {
-    return vector.every((component) => Number.isFinite(component));
-}
-
 function isEasing(value: CameraMotionEasing): boolean {
     return value === CAMERA_MOTION_EASING.LINEAR || value === CAMERA_MOTION_EASING.SMOOTH;
 }
 
 /**
  * Time-bound camera movement aggregate. Camera configuration remains on CameraShot;
- * this aggregate owns only the temporal path and its default look-at target.
+ * path and focus remain separate so future target keys do not alter spatial motion semantics.
  */
 export class CameraMotionClip {
     readonly id: string;
@@ -62,11 +55,12 @@ export class CameraMotionClip {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly path: CameraMotionPath;
-    readonly target: Vec3;
+    readonly focus: CameraFocusTrack;
     readonly easing: CameraMotionEasing;
 
     constructor(init: CameraMotionClipInit) {
         const path = init.path instanceof CameraMotionPath ? init.path : new CameraMotionPath(init.path);
+        const focus = init.focus instanceof CameraFocusTrack ? init.focus : new CameraFocusTrack({ target: init.focus.target });
         if (
             init.id.length === 0 ||
             init.cameraId.length === 0 ||
@@ -74,17 +68,16 @@ export class CameraMotionClip {
             init.startTimeSeconds < 0 ||
             !Number.isFinite(init.durationSeconds) ||
             init.durationSeconds <= 0 ||
-            !isFiniteVector(init.target) ||
             !isEasing(init.easing)
         ) {
-            throw new Error("CameraMotionClip requires stable identifiers, finite timing, a target, and easing");
+            throw new Error("CameraMotionClip requires stable identifiers, finite timing, a focus track, and easing");
         }
         this.id = init.id;
         this.cameraId = init.cameraId;
         this.startTimeSeconds = init.startTimeSeconds;
         this.durationSeconds = init.durationSeconds;
         this.path = path;
-        this.target = copyVector(init.target);
+        this.focus = focus;
         this.easing = init.easing;
         Object.freeze(this);
     }
@@ -105,8 +98,8 @@ export class CameraMotionClip {
         return new CameraMotionClip({ ...this.toJSON(), path });
     }
 
-    withTarget(target: Vec3): CameraMotionClip {
-        return new CameraMotionClip({ ...this.toJSON(), target });
+    withFocus(focus: CameraFocusTrack): CameraMotionClip {
+        return new CameraMotionClip({ ...this.toJSON(), focus });
     }
 
     withEasing(easing: CameraMotionEasing): CameraMotionClip {
@@ -120,7 +113,7 @@ export class CameraMotionClip {
             startTimeSeconds: this.startTimeSeconds,
             durationSeconds: this.durationSeconds,
             path: this.path.toJSON(),
-            target: copyVector(this.target),
+            focus: this.focus.toJSON(),
             easing: this.easing,
         };
     }
@@ -130,11 +123,12 @@ function easedProgress(easing: CameraMotionEasing, progress: number): number {
     return easing === CAMERA_MOTION_EASING.SMOOTH ? progress * progress * (3 - 2 * progress) : progress;
 }
 
-/** Samples a clip's path and fixed look-at target into caller-owned scalars without allocations. */
+/** Samples spatial motion and a resolved focus target into caller-owned scalars without allocations. */
 export function sampleCameraMotionClip(
     clip: CameraMotionClip,
     timeSeconds: number,
     shot: CameraShot,
+    focusTarget: FocusTargetSample,
     pathSample: PathPositionSample,
     sample: CameraMotionSample,
 ): boolean {
@@ -144,9 +138,9 @@ export function sampleCameraMotionClip(
     sample.positionX = pathSample.x;
     sample.positionY = pathSample.y;
     sample.positionZ = pathSample.z;
-    sample.targetX = clip.target[0];
-    sample.targetY = clip.target[1];
-    sample.targetZ = clip.target[2];
+    sample.targetX = focusTarget.x;
+    sample.targetY = focusTarget.y;
+    sample.targetZ = focusTarget.z;
     sample.fov = shot.fov;
     return true;
 }

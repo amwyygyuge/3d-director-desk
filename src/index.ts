@@ -28,6 +28,18 @@ export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
 export { ShotSizePresets } from "./camera/ShotSizePresets";
 export { FramingService } from "./camera/FramingService";
+export { CameraFocusTrack, FOCUS_TARGET_KIND, SceneObjectFocusTarget, WorldPointFocusTarget } from "./camera/CameraFocusTrack";
+export type {
+    CameraFocusTrackInit,
+    CameraFocusTrackJSON,
+    FocusTarget,
+    FocusTargetJSON,
+    FocusTargetKind,
+    FocusTargetSample,
+    SceneObjectFocusTargetJSON,
+    WorldPointFocusTargetJSON,
+} from "./camera/CameraFocusTrack";
+export { FocusTargetResolver } from "./camera/FocusTargetResolver";
 export { CameraMotionPath, MotionPathAnchor, sampleCameraMotionPath } from "./camera/CameraMotionPath";
 export type {
     CameraMotionPathInit,
@@ -87,7 +99,7 @@ export {
     SetMotionClipEasingCommand,
     SetMotionClipPathCommand,
     SetMotionClipRangeCommand,
-    SetMotionClipTargetCommand,
+    SetMotionClipFocusCommand,
     SetProgramClipCommand,
 } from "./command/cameraMotionCommands";
 export { CommandHistory } from "./command/CommandHistory";

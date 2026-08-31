@@ -1,10 +1,11 @@
+import { CameraFocusTrack, FOCUS_TARGET_KIND } from "../camera/CameraFocusTrack";
+import type { FocusTargetJSON } from "../camera/CameraFocusTrack";
 import { CAMERA_MOTION_EASING, CameraMotionClip } from "../camera/CameraMotionClip";
 import type { CameraMotionClipJSON, CameraMotionEasing } from "../camera/CameraMotionClip";
 import { CameraMotionPath } from "../camera/CameraMotionPath";
 import type { CameraMotionPathJSON } from "../camera/CameraMotionPath";
 import { CameraProgramClip } from "../camera/CameraProgramTrack";
 import type { CameraProgramClipJSON } from "../camera/CameraProgramTrack";
-import type { Vec3 } from "../core/SceneObject";
 import { DirectorCommand } from "./DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
@@ -21,6 +22,7 @@ const ISSUE_CODE = {
     OVERLAP: "motion-overlapping-clip",
     PROGRAM_OVERLAP: "program-overlapping-clip",
     PROGRAM_CLIP: "program-clip-not-found",
+    FOCUS_OBJECT: "motion-focus-object-not-found",
 } as const;
 
 interface CreateMotionClipPayload {
@@ -38,9 +40,9 @@ interface SetMotionClipPathPayload {
     readonly path: CameraMotionPathJSON;
 }
 
-interface SetMotionClipTargetPayload {
+interface SetMotionClipFocusPayload {
     readonly id: string;
-    readonly target: Vec3;
+    readonly target: FocusTargetJSON;
 }
 
 interface SetMotionClipEasingPayload {
@@ -68,9 +70,6 @@ function issueMessages(issues: readonly CommandIssue[]): string[] {
     return issues.map((current) => current.message);
 }
 
-function finiteVector(value: unknown): value is Vec3 {
-    return Array.isArray(value) && value.length === 3 && value.every((component) => Number.isFinite(component));
-}
 
 function motionClipFrom(payload: CreateMotionClipPayload): CameraMotionClip | null {
     try {
@@ -104,7 +103,12 @@ function existingClip(ctx: DirectorContext, id: unknown): CameraMotionClip | nul
 function clipIssues(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): readonly CommandIssue[] {
     const camera = ctx.camera.director.getShot(clip.cameraId);
     const range = clipRangeIssue(ctx, clip, excludedId);
-    return camera ? (range ? [range] : []) : [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "运镜引用的机位不存在")];
+    const target = clip.focus.target;
+    const hasFocusObject =
+        target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId) !== undefined;
+    if (!camera) return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "运镜引用的机位不存在")];
+    if (!hasFocusObject) return [issue(ISSUE_CODE.FOCUS_OBJECT, "clip.focus.target.objectId", "注视绑定对象不存在")];
+    return range ? [range] : [];
 }
 
 function restoreMotionClipPayload(clip: CameraMotionClip): CreateMotionClipPayload {
@@ -233,12 +237,12 @@ export class SetMotionClipPathCommand extends DirectorCommand<SetMotionClipPathP
     }
 }
 
-/** Changes the default world-space look-at target. Object binding is intentionally a later strategy. */
-export class SetMotionClipTargetCommand extends DirectorCommand<SetMotionClipTargetPayload> {
-    static readonly TYPE = "motion.set-clip-target";
-    readonly type = SetMotionClipTargetCommand.TYPE;
+/** Replaces one clip focus source. World points and scene-object bindings share this stable AI contract. */
+export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocusPayload> {
+    static readonly TYPE = "motion.set-focus";
+    readonly type = SetMotionClipFocusCommand.TYPE;
 
-    constructor(readonly payload: SetMotionClipTargetPayload) {
+    constructor(readonly payload: SetMotionClipFocusPayload) {
         super();
     }
 
@@ -249,18 +253,28 @@ export class SetMotionClipTargetCommand extends DirectorCommand<SetMotionClipTar
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const current = existingClip(ctx, this.payload.id);
         if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
-        return finiteVector(this.payload.target) ? [] : [issue(ISSUE_CODE.PAYLOAD, "target", "注视目标必须是有限三维坐标")];
+        try {
+            const focus = new CameraFocusTrack({ target: this.payload.target });
+            const target = focus.target;
+            return target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId)
+                ? []
+                : [issue(ISSUE_CODE.FOCUS_OBJECT, "target.objectId", "注视绑定对象不存在")];
+        } catch {
+            return [issue(ISSUE_CODE.PAYLOAD, "target", "注视目标格式无效")];
+        }
     }
 
     execute(ctx: DirectorContext): void {
         const current = existingClip(ctx, this.payload.id);
-        if (current) ctx.motion.replaceClip(current.withTarget(this.payload.target));
+        if (current) ctx.motion.replaceClip(current.withFocus(new CameraFocusTrack({ target: this.payload.target })));
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const current = existingClip(ctx, this.payload.id);
-        return current ? [{ type: SetMotionClipTargetCommand.TYPE, payload: { id: current.id, target: current.target } }] : null;
+        return current
+            ? [{ type: SetMotionClipFocusCommand.TYPE, payload: { id: current.id, target: current.focus.target.toJSON() } }]
+            : null;
     }
 }
 
@@ -429,7 +443,7 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         CreateMotionClipCommand,
         SetMotionClipRangeCommand,
         SetMotionClipPathCommand,
-        SetMotionClipTargetCommand,
+        SetMotionClipFocusCommand,
         SetMotionClipEasingCommand,
         RemoveMotionClipCommand,
         SetProgramClipCommand,

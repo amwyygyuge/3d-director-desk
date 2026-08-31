@@ -1,3 +1,6 @@
+import type { FocusTargetSample } from "./CameraFocusTrack";
+import { FocusTargetResolver } from "./FocusTargetResolver";
+import type { SceneManager } from "../core/SceneManager";
 import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { CameraStore } from "../store/CameraStore";
 import { sampleCameraMotionClip } from "./CameraMotionClip";
@@ -17,6 +20,8 @@ export interface CameraMotionSink {
 export class CameraMotionSampler {
     private sink: CameraMotionSink | null = null;
     private readonly pathSample: PathPositionSample = { x: 0, y: 0, z: 0 };
+    private readonly focusSample: FocusTargetSample = { x: 0, y: 0, z: 0 };
+    private readonly focusResolver: FocusTargetResolver;
     private readonly sample: CameraMotionSample = {
         positionX: 0,
         positionY: 0,
@@ -30,7 +35,10 @@ export class CameraMotionSampler {
     constructor(
         private readonly motion: CameraMotionStore,
         private readonly camera: CameraStore,
-    ) {}
+        scene: SceneManager,
+    ) {
+        this.focusResolver = new FocusTargetResolver(scene);
+    }
 
     bindSink(sink: CameraMotionSink): void {
         this.sink = sink;
@@ -50,7 +58,11 @@ export class CameraMotionSampler {
             return false;
         }
         const clip = this.motion.clipAt(cameraId, timeSeconds);
-        if (clip && sampleCameraMotionClip(clip, timeSeconds, shot, this.pathSample, this.sample)) {
+        if (
+            clip &&
+            this.focusResolver.resolve(clip.focus, this.focusSample) &&
+            sampleCameraMotionClip(clip, timeSeconds, shot, this.focusSample, this.pathSample, this.sample)
+        ) {
             this.sink?.applyMotion(this.sample);
             return true;
         }

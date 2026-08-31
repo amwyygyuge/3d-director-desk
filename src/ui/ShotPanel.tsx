@@ -22,6 +22,7 @@ import { Box3, Vector3 } from "three";
 import { SHOT_SIZE } from "../camera/CameraShot";
 import type { ShotSize } from "../camera/CameraShot";
 import { CAMERA_MOTION_EASING } from "../camera/CameraMotionClip";
+import { FOCUS_TARGET_KIND } from "../camera/CameraFocusTrack";
 import { ShotSizePresets } from "../camera/ShotSizePresets";
 import type { CameraMotionClip } from "../camera/CameraMotionClip";
 import type { CameraMotionPathJSON } from "../camera/CameraMotionPath";
@@ -221,12 +222,16 @@ const MotionSection = observer(function MotionSection({
     onNotice,
 }: MotionSectionProps) {
     const stores = useDirectorDeskStores();
-    const { camera, clock, dispatcher, motion, selection, timeline } = stores;
+    const { camera, clock, dispatcher, motion, scene, selection, timeline } = stores;
     const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
     const selectedCameraId = selection.primaryId;
     const selectedShot = selectedCameraId ? camera.director.getShot(selectedCameraId) : undefined;
     const directorPose = camera.lastDirectorPose;
     const selectedClip = selectedClipId ? motion.clip(selectedClipId) : undefined;
+    const selectedSceneObject = selection.primaryId ? scene.manager.getEntity(selection.primaryId) : undefined;
+    const focusTarget = selectedClip?.focus.target;
+    const canBindFocusObject = selectedClip !== undefined && selectedSceneObject !== undefined;
+    const canRestoreWorldFocus = selectedClip !== undefined && directorPose !== null;
     const remainingSeconds = timeline.document.duration - clock.time;
     const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, remainingSeconds);
     const canCreateMotion =
@@ -247,7 +252,7 @@ const MotionSection = observer(function MotionSection({
                 cameraId: selectedCameraId,
                 startTimeSeconds: clock.time,
                 durationSeconds,
-                target: directorPose.target,
+                focus: { target: { kind: FOCUS_TARGET_KIND.WORLD_POINT, position: directorPose.target } },
                 easing: CAMERA_MOTION_EASING.SMOOTH,
                 path: {
                     anchors: [
@@ -331,6 +336,48 @@ const MotionSection = observer(function MotionSection({
                     </Button>
                 </Box>
             ))}
+            {selectedClip && focusTarget && (
+                <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
+                    <Typography variant="caption" color="text.secondary">
+                        注视：
+                        {focusTarget.kind === FOCUS_TARGET_KIND.SCENE_OBJECT
+                            ? `绑定 ${focusTarget.objectId}`
+                            : `世界点 ${focusTarget.position.map((value) => value.toFixed(1)).join(", ")}`}
+                    </Typography>
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mt: 0.5 }}>
+                        <Button
+                            size="small"
+                            disabled={!canBindFocusObject}
+                            onClick={() => {
+                                if (!selectedSceneObject) return;
+                                dispatch("motion.set-focus", {
+                                    id: selectedClip.id,
+                                    target: {
+                                        kind: FOCUS_TARGET_KIND.SCENE_OBJECT,
+                                        objectId: selectedSceneObject.id,
+                                        worldOffset: [0, 0, 0],
+                                    },
+                                });
+                            }}
+                        >
+                            绑定选中对象
+                        </Button>
+                        <Button
+                            size="small"
+                            disabled={!canRestoreWorldFocus}
+                            onClick={() => {
+                                if (!directorPose) return;
+                                dispatch("motion.set-focus", {
+                                    id: selectedClip.id,
+                                    target: { kind: FOCUS_TARGET_KIND.WORLD_POINT, position: directorPose.target },
+                                });
+                            }}
+                        >
+                            固定当前注视点
+                        </Button>
+                    </Box>
+                </Box>
+            )}
             {selectedClip && (
                 <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
                     <Typography variant="caption" color="text.secondary">

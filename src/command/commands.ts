@@ -28,13 +28,14 @@ import { registerCameraMotionCommands } from "./cameraMotionCommands";
 import { registerAssetCatalogCommands } from "./assetCatalogCommands";
 import { registerDocumentCommands } from "./documentCommands";
 import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
+import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
 
 /** FOV 合法域:命令校验与 UI 滑杆共用(Rule of Two) */
 export const FOV_MIN = 1;
 export const FOV_MAX = 179;
 
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
+const FOCUS_TARGET_IN_USE_CODE = "focus-target-in-use";
 
 interface PlaceObjectPayload {
     id: string;
@@ -162,10 +163,30 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     }
 
     validate(ctx: DirectorContext): string[] {
+        return this.validateIssues(ctx).map((current) => current.message);
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
-            return ["对象 id 格式无效"];
+            return [{ code: "object-invalid-id", path: "id", message: "对象 id 格式无效" }];
         }
-        return ctx.scene.manager.getEntity(this.payload.id) ? [] : [`对象 "${this.payload.id}" 不存在`];
+        if (!ctx.scene.manager.getEntity(this.payload.id)) {
+            return [{ code: "object-not-found", path: "id", message: `对象 "${this.payload.id}" 不存在` }];
+        }
+        const dependentClipIds = ctx.motion.clipsForFocusObject(this.payload.id).map((clip) => clip.id);
+        return dependentClipIds.length > 0
+            ? [
+                  {
+                      code: FOCUS_TARGET_IN_USE_CODE,
+                      path: "id",
+                      message: `对象 "${this.payload.id}" 被运镜注视引用: ${dependentClipIds.join(", ")}`,
+                      options: [
+                          { type: "freeze-world-point", label: "冻结为世界点后删除" },
+                          { type: "remove-dependent-focus", label: "移除关联注视后删除" },
+                      ],
+                  },
+              ]
+            : [];
     }
 
     execute(ctx: DirectorContext): void {

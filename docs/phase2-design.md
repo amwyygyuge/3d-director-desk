@@ -5,16 +5,16 @@
 
 ## 范围（导剪）
 
-做：机位、运镜与时间轴的分离编排；单一 Program 输出；自由编辑视口；运镜路径与默认注视目标；灯光氛围；姿态精修。
+做：机位、运镜与时间轴的分离编排；单一 Program 输出；自由编辑视口；Bézier 运镜路径；默认世界点或场景对象的注视绑定；灯光氛围；姿态精修。
 
-不做：多机位宫格、并行 Program/Preview 监看、AI 生成分镜、导出/协作、动作重定向。多监看只扩展运行时渲染面，不改变以下领域模型。
+不做：目标关键帧、速度曲线编辑器、镜头转场、多机位宫格、并行 Program/Preview 监看、AI 生成分镜、导出/协作、动作重定向。后续镜头能力与依赖记录在 [`exec2/04-camera-future.md`](./exec2/04-camera-future.md)。
 
 ## 运镜架构决策
 
 - **机位领域**：`CameraShot` 是可复用机位的静态默认姿态与镜头参数，具有稳定 ID，不保存时间轴数据。
-- **时序领域**：`CameraMotionClip` 引用一个 `cameraId`，在自身时间范围内持有路径、进度曲线与注视目标；它是时间轴的运镜片段，不属于机位实体。
-- **输出领域**：`CameraProgramTrack` 在任一时间最多选择一个 `cameraId` 作为 Program 输出。其他机位运镜仍会被求值，保证切入瞬间位姿正确。
-- **编辑器领域**：自由视口、选中态、路径辅助物可见性和未来 Preview Monitor 都是每 `DirectorDesk` 实例的局部 UI 或运行时状态，绝不写入作品文档。
+- **时序领域**：`CameraMotionClip` 引用一个 `cameraId`，在自身时间范围内持有路径、进度曲线与 `CameraFocusTrack`；当前 focus 可为世界点或场景对象绑定，未来关键帧只扩展 track 内部，不改变 clip 边界。
+- **输出领域**：`CameraProgramTrack` 在任一时间最多选择一个 `cameraId` 作为 Program 输出。其他机位以当前时间直接求值，切入时不依赖历史帧状态。
+- **编辑器领域**：自由视口、选中态、路径辅助物和未来 Preview Monitor 都是每 `DirectorDesk` 实例的局部 UI 或运行时状态，绝不写入作品文档。
 
 ```mermaid
 flowchart LR
@@ -22,7 +22,7 @@ flowchart LR
         Camera[CameraShot<br/>静态默认姿态 / FOV]
     end
     subgraph TimelineDomain[时间轴聚合]
-        Motion[CameraMotionClip<br/>cameraId / 时间范围 / 路径 / 注视目标]
+        Motion[CameraMotionClip<br/>cameraId / 时间范围 / 路径 / FocusTrack]
         Program[CameraProgramTrack<br/>同一时刻唯一输出机位]
     end
     subgraph Runtime[运行时]
@@ -71,14 +71,21 @@ classDiagram
         +cameraId: string
         +timeRange: TimeRange
         +path: CameraMotionPath
-        +orientation: LookAtTargetTrack
+        +focus: CameraFocusTrack
     }
     class CameraMotionPath {
         +anchors: PathAnchor[]
         +sample(progress): Vec3
     }
-    class LookAtTargetTrack {
-        +target: Vec3
+    class CameraFocusTrack {
+        +target: FocusTarget
+    }
+    class WorldPointFocusTarget {
+        +position: Vec3
+    }
+    class SceneObjectFocusTarget {
+        +objectId: string
+        +worldOffset: Vec3
     }
     class CameraProgramTrack {
         +clips: CameraProgramClip[]
@@ -89,7 +96,9 @@ classDiagram
     }
     CameraMotionClip --> CameraShot : references cameraId
     CameraMotionClip *-- CameraMotionPath
-    CameraMotionClip *-- LookAtTargetTrack
+    CameraMotionClip *-- CameraFocusTrack
+    CameraFocusTrack --> WorldPointFocusTarget
+    CameraFocusTrack --> SceneObjectFocusTarget
     CameraProgramTrack --> CameraShot : references cameraId
     CameraMotionSampler --> CameraMotionClip
     CameraMotionSampler --> CameraProgramTrack
