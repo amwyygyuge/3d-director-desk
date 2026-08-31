@@ -1,5 +1,6 @@
 import { FrameViewCommand } from "../command/navigationCommands";
 import { WORKSPACE_STAGE } from "../workspace/stages";
+import { requestFrameCapture } from "../command/captureCommands";
 import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
 import { ShortcutChord } from "./ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
@@ -13,6 +14,7 @@ export const SHORTCUT_ID = {
     CLEAR_SELECTION: "selection.clear",
     SHOT_ENTER: "shot.enter",
     SHOT_EXIT: "shot.exit",
+    SHOT_PHOTO: "shot.photo",
     FRAME_SELECTED: "view.frame-selected",
     FRAME_ALL: "view.frame-all",
     EDIT_UNDO: "edit.undo",
@@ -41,6 +43,7 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
     { id: SHORTCUT_ID.SHOT_ENTER, chords: ["enter"], scope: "shot-selected", label: "进入掌镜" },
     { id: SHORTCUT_ID.SHOT_EXIT, chords: ["escape"], scope: "shot", label: "退出掌镜" },
+    { id: SHORTCUT_ID.SHOT_PHOTO, chords: ["enter"], scope: "shot", label: "拍照" },
     { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
     { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "gizmo", label: "聚焦选中对象" },
     { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
@@ -72,6 +75,7 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
     [SHORTCUT_ID.SHOT_ENTER]: activateSelectedShot,
     [SHORTCUT_ID.SHOT_EXIT]: (s) => s.dispatcher.dispatch({ type: "camera.deactivate", payload: {} }, s),
+    [SHORTCUT_ID.SHOT_PHOTO]: (s) => requestFrameCapture({ dispatcher: s.dispatcher, context: s }),
     [SHORTCUT_ID.CLEAR_SELECTION]: (s) => s.selection.clear(),
     [SHORTCUT_ID.FRAME_SELECTED]: (s) =>
         s.dispatcher.dispatch({ type: FrameViewCommand.TYPE, payload: { ids: [...s.selection.selectedIds] } }, s),

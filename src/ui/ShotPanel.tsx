@@ -124,6 +124,7 @@ const ShotList = observer(function ShotList() {
     );
 });
 
+
 const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
     available,
     onSave,

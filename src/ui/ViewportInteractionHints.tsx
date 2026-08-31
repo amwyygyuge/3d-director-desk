@@ -37,6 +37,7 @@ const VIEWPORT_INTERACTION_HINT = {
             { keys: "Space/Shift", label: "升降" },
             { keys: "按住拖拽", label: "转向" },
             { keys: "滚轮", label: "变焦" },
+            { shortcutId: SHORTCUT_ID.SHOT_PHOTO, label: "拍照" },
             { shortcutId: SHORTCUT_ID.SHOT_EXIT, label: "退出掌镜" },
         ],
     },

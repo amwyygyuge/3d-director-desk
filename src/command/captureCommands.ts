@@ -39,6 +39,18 @@ export class CaptureFrameCommand extends DirectorCommand<CaptureFramePayload> {
         });
     }
 }
+const CAPTURE_FRAME_FAILURE_PREFIX = "截图被拒绝:";
+
+interface CaptureFrameRequest {
+    readonly dispatcher: CommandDispatcher;
+    readonly context: DirectorContext;
+}
+
+/** 将 UI 与快捷键入口收敛到同一截图命令及失败提示。 */
+export function requestFrameCapture({ dispatcher, context }: CaptureFrameRequest): void {
+    const result = dispatcher.dispatch({ type: CaptureFrameCommand.TYPE, payload: {} }, context);
+    if (!result.ok) context.ui.setApplicationNotice(`${CAPTURE_FRAME_FAILURE_PREFIX}${result.error}`);
+}
 
 interface CaptureVideoPayload {
     /** 录制时长(秒);缺省 = 时间轴时长 */

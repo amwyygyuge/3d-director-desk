@@ -32,7 +32,7 @@ sequenceDiagram
 
 1. `CaptureService.capture()` 增强:注入 invalidate/render 句柄,保证同帧取样;加 `hideHelpers` 选项。
 2. 命令 `capture.frame` 注册;执行后 blob → objectURL → `HostAdapter.reportCapture`。iframe 形态由受信任的 HostBridge 附加匹配 `sessionId` 后发送 `capture-produced`。
-3. 工具条「截图」按钮走 dispatcher(命令层样板又一次)。
+3. 成片工具条「截图」与掌镜时 Enter「拍照」复用截图命令；掌镜提示从快捷键规格自动展示。
 4. playground 验收 + 仅接受配置 origin/source window/session 的宿主消息。
 
 ## 验收清单

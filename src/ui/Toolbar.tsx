@@ -37,6 +37,7 @@ import { formatShortcutHint, SHORTCUT_ID } from "../shortcuts/builtinShortcuts";
 import type { ShortcutId } from "../shortcuts/builtinShortcuts";
 import { STAGE_DEFS, STAGE_ORDER } from "../workspace/stages";
 import type { WorkspaceStage } from "../workspace/stages";
+import { requestFrameCapture } from "../command/captureCommands";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { LightModeToggle } from "./LightModeToggle";
 import { importModelFile, placementFor } from "./importFiles";
@@ -214,10 +215,7 @@ const SectionCapture = observer(function SectionCapture() {
             <Button
                 variant="outlined"
                 startIcon={<PhotoCameraIcon />}
-                onClick={() => {
-                    const result = dispatcher.dispatch({ type: "capture.frame", payload: {} }, stores);
-                    if (!result.ok) ui.setApplicationNotice(`截图被拒绝:${result.error}`);
-                }}
+                onClick={() => requestFrameCapture({ dispatcher: stores.dispatcher, context: stores })}
             >
                 截图
             </Button>
