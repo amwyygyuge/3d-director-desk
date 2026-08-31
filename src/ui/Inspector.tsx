@@ -1,9 +1,6 @@
-import PauseIcon from "@mui/icons-material/Pause";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import MenuItem from "@mui/material/MenuItem";
@@ -45,8 +42,6 @@ const CONTROL_GAP = 1;
 const INSPECTOR_WIDTH_PX = 260;
 const PANEL_PADDING = 1.5;
 const SNACKBAR_DURATION_MS = 4000;
-const TIMELINE_TRACK_PREFIX = "transform-";
-const TIMELINE_KEY_PREFIX = "key-";
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type ShotVectorKey = "position" | "target";
@@ -378,11 +373,6 @@ const LightIntensityControl = observer(function LightIntensityControl({
     );
 });
 
-interface PlaybackControlsProps {
-    readonly actionId: string | null;
-    readonly objectId: string;
-    readonly report: ReportCommandResult;
-}
 
 interface PresetGridProps {
     readonly presets: readonly PosePresetPresentation[];
@@ -409,7 +399,7 @@ function renderPresetGrid({ presets, onApply }: PresetGridProps) {
 
 const PosePresetSection = observer(function PosePresetSection({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
-    const { animations, catalog, dispatcher, models, scene, skeletons, ui } = stores;
+    const { catalog, dispatcher, models, scene, skeletons, ui } = stores;
     const entity = scene.manager.getEntity(objectId);
     const entry =
         entity?.kind === "model" && entity.sourceUrl
@@ -421,7 +411,6 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
     const clips = entry.embeddedClips;
     const presets = clips.map(presentPosePreset);
     const posePresets = presets.filter((preset) => preset.kind === POSE_PRESET_KIND.POSE);
-    const actionPresets = presets.filter((preset) => preset.kind === POSE_PRESET_KIND.ACTION);
     const format = entry.format;
 
     const applyPreset = async (clipName: string) => {
@@ -430,23 +419,17 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
             try {
                 const clip = handle.animations.find((candidate) => candidate.name === clipName);
                 if (!clip) throw new Error(`预设 clip 不存在:${clipName}`);
-                if (isStaticPoseClip(clip)) {
-                    const snapshot = createStaticPoseSnapshot(clip, skeletons.discover(objectId));
-                    if (!snapshot) throw new Error(`预设姿势骨骼未就绪:${clipName}`);
-                    report(
-                        dispatcher.dispatch(
-                            { type: "pose.apply-preset", payload: { objectId, pose: snapshot.toJSON() } },
-                            stores,
-                        ),
-                    );
+                if (!isStaticPoseClip(clip)) {
+                    ui.setApplicationNotice(`当前仅支持静态姿势预设:${clipName}`);
                     return;
                 }
-                if (entity.pose) {
-                    report(dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
-                }
-                const action = animations.register({ name: `${entry.name}#${clipName}`, url: entry.url, clip }).action;
+                const snapshot = createStaticPoseSnapshot(clip, skeletons.discover(objectId));
+                if (!snapshot) throw new Error(`预设姿势骨骼未就绪:${clipName}`);
                 report(
-                    dispatcher.dispatch({ type: "action.mount", payload: { objectId, actionId: action.id } }, stores),
+                    dispatcher.dispatch(
+                        { type: "pose.apply-preset", payload: { objectId, pose: snapshot.toJSON() } },
+                        stores,
+                    ),
                 );
             } finally {
                 handle.release();
@@ -463,60 +446,11 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
                 姿势({posePresets.length})
             </Typography>
             {renderPresetGrid({ presets: posePresets, onApply: applyPreset })}
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                动作({actionPresets.length})
-            </Typography>
-            {renderPresetGrid({ presets: actionPresets, onApply: applyPreset })}
             <Divider sx={{ my: 1 }} />
         </>
     );
 });
 
-const PlaybackControls = observer(function PlaybackControls({ actionId, objectId, report }: PlaybackControlsProps) {
-    const stores = useDirectorDeskStores();
-    const { actionPreview, animations, dispatcher } = stores;
-    const mountedAction = actionId ? animations.actions.find((action) => action.id === actionId) : undefined;
-    if (!mountedAction) return null;
-    const isPlaying = actionPreview.activeObjectId === objectId && actionPreview.isPlaying;
-
-    return (
-        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                当前动作
-            </Typography>
-            <IconButton
-                size="small"
-                aria-label={isPlaying ? "暂停动作播放" : "播放动作"}
-                onClick={() =>
-                    report(
-                        dispatcher.dispatch(
-                            isPlaying
-                                ? { type: "action.preview.pause", payload: {} }
-                                : { type: "action.preview.play", payload: { objectId } },
-                            stores,
-                        ),
-                    )
-                }
-            >
-                {isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-            </IconButton>
-        </Stack>
-    );
-});
-
-const ModelActionControls = observer(function ModelActionControls({ objectId, report }: ObjectControlsProps) {
-    const { scene } = useDirectorDeskStores();
-    const entity = scene.manager.getEntity(objectId);
-    if (!entity || entity.kind !== "model") return null;
-
-    return (
-        <>
-            <Divider sx={{ my: 1 }} />
-            <PosePresetSection objectId={objectId} report={report} />
-            <PlaybackControls actionId={entity.actionId} objectId={objectId} report={report} />
-        </>
-    );
-});
 
 /** 灯光参数只读实体、写回 light.adjust；不维护 LightParams 的组件本地镜像。 */
 const LightControls = observer(function LightControls({ objectId, report }: ObjectControlsProps) {
@@ -682,45 +616,6 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
     );
 });
 
-/** 当前选中对象的权威实体变换经 timeline.add-key 固化为关键帧。 */
-const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, report }: ObjectControlsProps) {
-    const stores = useDirectorDeskStores();
-    const entity = stores.scene.manager.getEntity(objectId);
-    if (!entity) return null;
-
-    return (
-        <>
-            <Divider sx={{ my: 1 }} />
-            <Button
-                size="small"
-                variant="outlined"
-                fullWidth
-                onClick={() =>
-                    report(
-                        stores.dispatcher.dispatch(
-                            {
-                                type: "timeline.add-key",
-                                payload: {
-                                    trackId: `${TIMELINE_TRACK_PREFIX}${entity.id}`,
-                                    targetId: entity.id,
-                                    keyframe: {
-                                        id: `${TIMELINE_KEY_PREFIX}${crypto.randomUUID()}`,
-                                        time: stores.clock.time,
-                                        value: entity.transform,
-                                        easing: "linear",
-                                    },
-                                },
-                            },
-                            stores,
-                        ),
-                    )
-                }
-            >
-                在当前时间打关键帧
-            </Button>
-        </>
-    );
-});
 
 /** 对象面板(右侧):实体显示数值变换，机位显示镜头参数与机位控制。 */
 export const Inspector = observer(function Inspector() {
@@ -772,8 +667,7 @@ export const Inspector = observer(function Inspector() {
             <Divider sx={{ my: CONTROL_GAP }} />
             <TransformFields objectId={entity.id} />
             {entity.kind === "light" && <LightControls objectId={entity.id} report={report} />}
-            <TimelineKeyControls objectId={entity.id} report={report} />
-            {entity.kind === "model" && <ModelActionControls objectId={entity.id} report={report} />}
+            {entity.kind === "model" && <PosePresetSection objectId={entity.id} report={report} />}
             {entity.kind === "model" && <PoseControls objectId={entity.id} report={report} />}
             <Snackbar
                 open={notice !== null}

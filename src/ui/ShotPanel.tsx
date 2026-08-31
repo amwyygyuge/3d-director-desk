@@ -23,8 +23,10 @@ import { SHOT_SIZE } from "../camera/CameraShot";
 import type { ShotSize } from "../camera/CameraShot";
 import { CAMERA_MOTION_EASING } from "../camera/CameraMotionClip";
 import { FOCUS_TARGET_KIND } from "../camera/CameraFocusTrack";
+import { PATH_EDIT_STATE, VIEWPORT_MODE } from "../store/CameraAuthoringStore";
 import { ShotSizePresets } from "../camera/ShotSizePresets";
 import type { CameraMotionClip } from "../camera/CameraMotionClip";
+import { appendCameraMotionPathAnchor } from "../camera/CameraMotionPath";
 import type { CameraMotionPathJSON } from "../camera/CameraMotionPath";
 import type { Vec3 } from "../core/SceneObject";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
@@ -38,7 +40,6 @@ const SNACKBAR_DURATION_MS = 4000;
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
 const DEFAULT_MOTION_DURATION_SECONDS = 2;
-const BEZIER_CONTROL_DIVISOR = 3;
 const PATH_VECTOR_FIELDS = ["inHandle", "outHandle"] as const;
 const PATH_VECTOR_AXIS_LABELS = ["X", "Y", "Z"] as const;
 
@@ -55,21 +56,6 @@ function withVectorCoordinate(vector: Vec3, axis: number, value: number): Vec3 {
     }
 }
 
-function appendCurveAnchor(path: CameraMotionPathJSON, position: Vec3, id: string): CameraMotionPathJSON {
-    const anchors = path.anchors;
-    const previous = anchors[anchors.length - 1];
-    if (!previous) return path;
-    const outgoingHandle: Vec3 = [
-        (position[0] - previous.position[0]) / BEZIER_CONTROL_DIVISOR,
-        (position[1] - previous.position[1]) / BEZIER_CONTROL_DIVISOR,
-        (position[2] - previous.position[2]) / BEZIER_CONTROL_DIVISOR,
-    ];
-    const incomingHandle: Vec3 = [-outgoingHandle[0], -outgoingHandle[1], -outgoingHandle[2]];
-    const updatedAnchors = anchors.map((anchor) =>
-        anchor.id === previous.id ? { ...anchor, outHandle: outgoingHandle } : anchor,
-    );
-    return { anchors: [...updatedAnchors, { id, position, inHandle: incomingHandle, outHandle: [0, 0, 0] }] };
-}
 
 function replaceAnchorVector(
     clip: CameraMotionClip,
@@ -113,12 +99,12 @@ interface ShotPanelProps {
 /** 机位面板(左下):机位 CRUD、当前视角存机位与景别预设。 */
 const ShotList = observer(function ShotList() {
     const stores = useDirectorDeskStores();
-    const { camera, dispatcher, selection } = stores;
+    const { authoring, camera, dispatcher } = stores;
     const shots = camera.director.listShots();
 
     const removeShot = (id: string) => {
         const result = dispatcher.dispatch({ type: "camera.remove-shot", payload: { id } }, stores);
-        if (result.ok) selection.remove(id);
+        if (result.ok && authoring.selectedCameraId === id) authoring.selectCamera(null);
     };
 
     return (
@@ -126,7 +112,7 @@ const ShotList = observer(function ShotList() {
             <Typography variant="subtitle2">机位({shots.length})</Typography>
             <List dense disablePadding aria-label="机位列表">
                 {shots.map(([id]) => {
-                    const active = camera.activeShotId === id;
+                    const active = authoring.viewportMode === VIEWPORT_MODE.CAMERA && authoring.selectedCameraId === id;
                     return (
                         <ListItem
                             key={id}
@@ -137,16 +123,11 @@ const ShotList = observer(function ShotList() {
                                         size="small"
                                         edge="end"
                                         color={active ? "primary" : "default"}
-                                        aria-label={active ? `回导演视角 ${id}` : `掌镜 ${id}`}
-                                        onClick={() =>
-                                            dispatcher.dispatch(
-                                                {
-                                                    type: active ? "camera.deactivate" : "camera.activate",
-                                                    payload: active ? {} : { id },
-                                                },
-                                                stores,
-                                            )
-                                        }
+                                        aria-label={active ? `返回导演视角 ${id}` : `预览机位 ${id}`}
+                                        onClick={() => {
+                                            authoring.selectCamera(id);
+                                            authoring.setViewportMode(active ? VIEWPORT_MODE.DIRECTOR : VIEWPORT_MODE.CAMERA);
+                                        }}
                                     >
                                         <VideocamIcon fontSize="small" />
                                     </IconButton>
@@ -162,11 +143,11 @@ const ShotList = observer(function ShotList() {
                             }
                         >
                             <ListItemButton
-                                selected={selection.isSelected(id)}
-                                onClick={() => selection.select(id)}
+                                selected={authoring.selectedCameraId === id}
+                                onClick={() => authoring.selectCamera(id)}
                                 sx={{ pr: ROW_ACTIONS_PADDING }}
                             >
-                                <ListItemText primary={id} secondary={active ? "掌镜中" : undefined} />
+                                <ListItemText primary={id} secondary={active ? "机位预览中" : undefined} />
                             </ListItemButton>
                         </ListItem>
                     );
@@ -222,17 +203,16 @@ const MotionSection = observer(function MotionSection({
     onNotice,
 }: MotionSectionProps) {
     const stores = useDirectorDeskStores();
-    const { camera, clock, dispatcher, motion, scene, selection, timeline } = stores;
-    const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-    const selectedCameraId = selection.primaryId;
+    const { authoring, camera, clock, dispatcher, motion, scene, selection, timeline } = stores;
+    const selectedCameraId = authoring.selectedCameraId;
     const selectedShot = selectedCameraId ? camera.director.getShot(selectedCameraId) : undefined;
     const directorPose = camera.lastDirectorPose;
-    const selectedClip = selectedClipId ? motion.clip(selectedClipId) : undefined;
+    const selectedClip = authoring.selectedMotionClipId ? motion.clip(authoring.selectedMotionClipId) : undefined;
     const selectedSceneObject = selection.primaryId ? scene.manager.getEntity(selection.primaryId) : undefined;
     const focusTarget = selectedClip?.focus.target;
     const canBindFocusObject = selectedClip !== undefined && selectedSceneObject !== undefined;
     const canRestoreWorldFocus = selectedClip !== undefined && directorPose !== null;
-    const remainingSeconds = timeline.document.duration - clock.time;
+    const remainingSeconds = timeline.duration - clock.time;
     const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, remainingSeconds);
     const canCreateMotion =
         !clock.isPlaying && selectedCameraId !== null && selectedShot !== undefined && directorPose !== null && durationSeconds > 0;
@@ -262,14 +242,14 @@ const MotionSection = observer(function MotionSection({
                 },
             },
         });
-        setSelectedClipId(clipId);
+        authoring.selectMotionClip(clipId);
     };
 
     const appendAnchor = () => {
         if (!selectedClip || !directorPose) return;
         dispatch("motion.set-clip-path", {
             id: selectedClip.id,
-            path: appendCurveAnchor(selectedClip.path.toJSON(), directorPose.position, crypto.randomUUID()),
+            path: appendCameraMotionPathAnchor(selectedClip.path.toJSON(), directorPose.position, crypto.randomUUID()),
         });
     };
 
@@ -319,7 +299,7 @@ const MotionSection = observer(function MotionSection({
                         size="small"
                         variant={selectedClip?.id === clip.id ? "contained" : "text"}
                         sx={{ justifyContent: "flex-start", overflow: "hidden", whiteSpace: "nowrap" }}
-                        onClick={() => setSelectedClipId(clip.id)}
+                        onClick={() => authoring.selectMotionClip(clip.id)}
                     >
                         {clip.cameraId} · {clip.startTimeSeconds.toFixed(2)}s — {clip.endTimeSeconds.toFixed(2)}s
                     </Button>
@@ -329,7 +309,7 @@ const MotionSection = observer(function MotionSection({
                         aria-label={`删除 ${clip.cameraId} 运镜片段`}
                         onClick={() => {
                             dispatch("motion.remove-clip", { id: clip.id });
-                            if (selectedClip?.id === clip.id) setSelectedClipId(null);
+                            if (selectedClip?.id === clip.id) authoring.selectMotionClip(null);
                         }}
                     >
                         删除
@@ -385,6 +365,20 @@ const MotionSection = observer(function MotionSection({
                     </Typography>
                     <Button size="small" fullWidth disabled={!canAppendAnchor} onClick={appendAnchor} sx={{ mt: 0.5 }}>
                         当前视角追加曲线路径点
+                    </Button>
+                    <Button
+                        size="small"
+                        fullWidth
+                        variant={authoring.pathEditState === PATH_EDIT_STATE.EDITING_PATH ? "contained" : "outlined"}
+                        onClick={() =>
+                            authoring.setPathEditState(
+                                authoring.pathEditState === PATH_EDIT_STATE.EDITING_PATH
+                                    ? PATH_EDIT_STATE.IDLE
+                                    : PATH_EDIT_STATE.EDITING_PATH,
+                            )
+                        }
+                    >
+                        {authoring.pathEditState === PATH_EDIT_STATE.EDITING_PATH ? "退出视口路径编辑" : "在视口编辑路径"}
                     </Button>
                     {selectedClip.path.anchors.map((anchor, anchorIndex) => (
                         <Box key={anchor.id} sx={{ mt: 0.75 }}>

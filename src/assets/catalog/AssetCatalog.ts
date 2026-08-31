@@ -11,7 +11,7 @@ export interface AssetListFilter {
 
 /**
  * 资源目录(注册表):全来源条目的统一可观察视图。
- * 纪律:目录只存元数据纯数据;three 运行时仍在 ModelImporter/AnimationLibrary。
+ * 纪律:目录只存元数据纯数据;Three 模型运行时仍在 ModelImporter。
  * id 冲突即拒绝(后写不覆盖),保证 AI 读取的目录是确定性的。
  */
 export class AssetCatalog {

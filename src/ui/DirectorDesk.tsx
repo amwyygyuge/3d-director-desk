@@ -12,9 +12,10 @@ import { PROTOCOL_VERSION } from "../bridge/protocol";
 import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
+import { VIEWPORT_MODE } from "../store/CameraAuthoringStore";
 import { BonePicker } from "./scene/BonePicker";
-import { STAGE_DEFS } from "../workspace/stages";
 import { TransformGizmoController } from "./scene/TransformGizmoController";
+import { MotionPathEditor } from "./scene/MotionPathEditor";
 import { FlyDrive } from "./scene/FlyDrive";
 import { ShotNavigation } from "./scene/ShotNavigation";
 import type { AssetProvider } from "../assets/catalog/AssetProvider";
@@ -86,10 +87,9 @@ export const DirectorDesk = observer(function DirectorDesk({
     const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge, assetProviders }));
     const deskRef = useRef<HTMLDivElement>(null);
     const [motionPreviewVisible, setMotionPreviewVisible] = useState(initialMotionPreviewVisible);
-    // 掌镜视角下左右/底 Dock 自动收成细条(不压画布);退出即恢复用户原折叠态
-    const shotLive = stores.camera.activeShotId !== null;
-    const hasSelection = stores.selection.selectedIds.length > 0;
-    const stageDef = STAGE_DEFS[stores.ui.stage];
+    const isPreviewViewport = stores.authoring.viewportMode !== VIEWPORT_MODE.DIRECTOR;
+    const hasInspectorContent =
+        stores.selection.selectedIds.length > 0 || stores.authoring.selectedCameraId !== null || stores.authoring.selectedMotionClipId !== null;
 
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
@@ -104,9 +104,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                 stores.capture.detach();
                 stores.ui.dispose();
                 stores.assets.dispose();
-                stores.animations.dispose();
                 stores.playback.dispose();
-                stores.binder.dispose();
                 stores.models.dispose();
                 stores.skeletons.dispose();
                 stores.scene.manager.dispose();
@@ -161,11 +159,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                         {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
                         <div className="absolute inset-0">
                             <Canvas
-                                frameloop={
-                                    stores.clock.isPlaying || stores.actionPreview.isPlaying || stores.ui.flying
-                                        ? "always"
-                                        : "demand"
-                                }
+                                frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
                                 camera={{ position: STUDIO_CAMERA_POSITION, fov: STUDIO_CAMERA_FOV_DEGREES }}
                                 gl={{ antialias: true, preserveDrawingBuffer: false }}
                                 onCreated={(state) =>
@@ -177,8 +171,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     })
                                 }
                                 onPointerMissed={() => {
-                                    // 掌镜中拖拽转向的 mouseup 也算"点空",不该清选中
-                                    if (stores.camera.activeShotId !== null) return;
+                                    if (isPreviewViewport) return;
                                     // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
                                     if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
                                         stores.selection.clear();
@@ -194,7 +187,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 />
                                 <OrbitControls
                                     makeDefault
-                                    enableDamping={stores.camera.activeShotId === null}
+                                    enableDamping={!isPreviewViewport}
                                     minDistance={STUDIO_CAMERA_MIN_DISTANCE_METERS}
                                     maxDistance={STUDIO_CAMERA_MAX_DISTANCE_METERS}
                                 />
@@ -206,8 +199,9 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <PlaybackDriver />
                                 <ShotCameraRig />
                                 <CameraMotionRig />
-                                <MotionPathPreview visible={motionPreviewVisible && stageDef.helpers.motionPaths} />
+                                <MotionPathPreview visible={motionPreviewVisible && !isPreviewViewport} />
                                 <FlyDrive />
+                                <MotionPathEditor />
                                 <ShotNavigation />
                             </Canvas>
                             <ShotFrameOverlay />
@@ -220,38 +214,34 @@ export const DirectorDesk = observer(function DirectorDesk({
                         <Dock
                             side="left"
                             title="场景"
-                            collapsed={stores.ui.leftDockCollapsed || shotLive}
+                            collapsed={stores.ui.leftDockCollapsed || isPreviewViewport}
                             onToggle={() => stores.ui.toggleLeftDock()}
                         >
-                            {stores.ui.stage === "set" && <AssetLibraryPanel />}
+                            <AssetLibraryPanel />
                             <OutlinerPanel />
-                            {stores.ui.stage === "camera" && (
-                                <ShotPanel
-                                    motionPreviewVisible={motionPreviewVisible}
-                                    onMotionPreviewVisibleChange={setMotionPreviewVisible}
-                                />
-                            )}
+                            <ShotPanel
+                                motionPreviewVisible={motionPreviewVisible}
+                                onMotionPreviewVisibleChange={setMotionPreviewVisible}
+                            />
                         </Dock>
-                        {hasSelection && (
+                        {hasInspectorContent && (
                             <Dock
                                 side="right"
                                 title="属性"
-                                collapsed={stores.ui.rightDockCollapsed || shotLive}
+                                collapsed={stores.ui.rightDockCollapsed || isPreviewViewport}
                                 onToggle={() => stores.ui.toggleRightDock()}
                             >
                                 <Inspector />
                             </Dock>
                         )}
-                        {stageDef.timeline && (
-                            <Dock
-                                side="bottom"
-                                title="时间轴"
-                                collapsed={stores.ui.timelineCollapsed || shotLive}
-                                onToggle={() => stores.ui.toggleTimelineDock()}
-                            >
-                                <TimelinePanel />
-                            </Dock>
-                        )}
+                        <Dock
+                            side="bottom"
+                            title="镜头时间轴"
+                            collapsed={stores.ui.timelineCollapsed || isPreviewViewport}
+                            onToggle={() => stores.ui.toggleTimelineDock()}
+                        >
+                            <TimelinePanel />
+                        </Dock>
                         <Hotkeys deskRef={deskRef} />
                         <HelpOverlay />
                     </div>

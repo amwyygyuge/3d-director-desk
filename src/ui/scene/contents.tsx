@@ -9,7 +9,7 @@ import type { LightParams, LightType } from "../../core/LightParams";
 import type { SceneObject } from "../../core/SceneObject";
 import type { ModelHandle } from "../../loaders/ModelImporter";
 import { measureModelBox } from "../../core/measureModelBox";
-import { STAGE_DEFS } from "../../workspace/stages";
+import { VIEWPORT_MODE } from "../../store/CameraAuthoringStore";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 
@@ -66,9 +66,8 @@ const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
     color,
     scene,
 }: SceneLightHelperRootProps) {
-    const { selection, ui } = useDirectorDeskStores();
-    // 阶段透镜:灯光标记只在布景阶段显示(打灯已并入布景)
-    if (!STAGE_DEFS[ui.stage].helpers.lightHelpers) return null;
+    const { authoring, selection } = useDirectorDeskStores();
+    if (authoring.viewportMode !== VIEWPORT_MODE.DIRECTOR) return null;
     return createPortal(
         <group ref={rootRef} userData={{ helper: true }}>
             <mesh
@@ -404,7 +403,7 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
     useEffect(() => {
         if (!shell) return;
         skeletons.register(entity.id, shell);
-        playback.sampleObject(entity.id);
+        playback.sampleObject();
         return () => skeletons.unregister(entity.id);
     }, [skeletons, playback, entity.id, shell]);
     if (shell) return <primitive object={shell} />;

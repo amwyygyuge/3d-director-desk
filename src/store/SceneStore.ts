@@ -64,12 +64,6 @@ export class SceneStore {
         this.revision += 1;
     }
 
-    setObjectAction(id: string, actionId: string | null): void {
-        const entity = this.manager.getEntity(id);
-        if (!entity) return;
-        entity.applyAction(actionId);
-    }
-
     setObjectPose(id: string, pose: PoseSnapshot | null): void {
         const entity = this.manager.getEntity(id);
         if (!entity) return;

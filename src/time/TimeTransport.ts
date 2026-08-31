@@ -8,7 +8,7 @@ import { makeAutoObservable } from "mobx";
  * - 拖动定位(阶段二时间轴 UI):seek(t) 直接设 playhead。
  *
  * playhead 是 observable(帧级写入),消费纪律:
- * - 引擎/渲染循环:reaction/autorun(AnimationBinder、PlaybackDriver);
+ * - 引擎/渲染循环:reaction/autorun(CameraMotionSampler、PlaybackDriver);
  * - UI 显示:经 PlayheadDisplay 节流为低频值后 observer 直读;
  * - 禁止 observer 组件渲染期直读 time(帧级写入会导致逐帧重渲)。
  */

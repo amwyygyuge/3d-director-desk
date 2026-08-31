@@ -121,9 +121,9 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
             groupRef.current = object3d;
             if (object3d) {
                 scene.manager.bindRuntime(entity.id, object3d);
-                playback.sampleObject(entity.id);
+                playback.sampleObject();
             } else {
-                playback.restoreObject(entity.id);
+                playback.restoreObject();
                 scene.manager.unbindRuntime(entity.id);
             }
         },
