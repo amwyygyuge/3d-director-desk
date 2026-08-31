@@ -151,6 +151,25 @@ button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .screening .viewport { grid-column: 2; grid-row: 2; }
 .screening .right { grid-column: 3; grid-row: 2; }
 .screening .timeline { grid-column: 1 / -1; grid-row: 3; }
+
+/* Canvas owns the full window. Every toolbar, side panel, and timeline is an absolute overlay. */
+.layout { position: relative; display: block; padding: 0; min-height: 100vh; overflow: hidden; }
+.layout .viewport { position: absolute; inset: 0; border-radius: 0; z-index: 0; }
+.layout .topbar { position: absolute; top: 14px; left: 14px; right: 14px; z-index: 8; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(10, 14, 16, .58); }
+.layout .panel, .layout .timeline { position: absolute; z-index: 4; }
+
+.cockpit .left { left: 14px; top: 70px; bottom: 240px; width: 276px; }
+.cockpit .right { right: 14px; top: 70px; bottom: 240px; width: 292px; }
+.cockpit .timeline { left: 14px; right: 14px; bottom: 14px; height: 216px; }
+
+.canvas-focus .left { left: 14px; top: 70px; bottom: 192px; width: 224px; }
+.canvas-focus .right { right: 14px; top: 70px; bottom: 192px; width: 316px; }
+.canvas-focus .timeline { left: 248px; right: 14px; bottom: 14px; height: 162px; }
+.canvas-focus .bottom-note { left: 14px; bottom: 14px; width: 224px; height: 162px; }
+
+.screening .left { left: 14px; top: 70px; bottom: 210px; width: 238px; }
+.screening .right { right: 14px; top: 70px; bottom: 210px; width: 254px; }
+.screening .timeline { left: 14px; right: 14px; bottom: 14px; height: 182px; }
 .screening .viewport-label { color: var(--cyan); }
 .screening .review-note { margin: 10px; }
 
