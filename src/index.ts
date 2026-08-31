@@ -46,15 +46,6 @@ export type {
 } from "./camera/CameraMotionPath";
 export { CameraMotionSampler } from "./camera/CameraMotionSampler";
 export type { CameraMotionSink } from "./camera/CameraMotionSampler";
-export { ContinuityChecker, CONTINUITY_ISSUE_KIND } from "./camera/ContinuityChecker";
-export type {
-    ContinuityAxis,
-    ContinuityCheckRequest,
-    ContinuityIssue,
-    ContinuityIssueKind,
-    ContinuityShot,
-    ContinuitySubject,
-} from "./camera/ContinuityChecker";
 export type { DirectorPose } from "./store/CameraStore";
 export { CaptureService } from "./capture/CaptureService";
 export type { CaptureHelperLifecycle, RenderHandles } from "./capture/CaptureService";
@@ -94,16 +85,6 @@ export {
     registerCameraMotionCommands,
     SetMotionKeyEasingCommand,
 } from "./command/cameraMotionCommands";
-export {
-    ContinuityCheckQuery,
-    ContinuitySelectionOptionsQuery,
-    registerContinuityQueries,
-} from "./command/continuityCommands";
-export type {
-    ContinuityCheckPayload,
-    ContinuitySelectionOption,
-    ContinuitySelectionOptions,
-} from "./command/continuityCommands";
 export { CommandHistory } from "./command/CommandHistory";
 export type { HistoryEntry } from "./command/CommandHistory";
 export { CommandDispatcher } from "./command/CommandDispatcher";
@@ -182,8 +163,6 @@ export type { ModelHandle } from "./loaders/ModelImporter";
 export { CameraStore } from "./store/CameraStore";
 export { CameraMotionStore } from "./store/CameraMotionStore";
 export { SceneStore } from "./store/SceneStore";
-export { ContinuityDiagnosticsStore } from "./store/ContinuityDiagnosticsStore";
-export type { ContinuityDiagnosticRequest } from "./store/ContinuityDiagnosticsStore";
 export { SelectionStore } from "./store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "./store/UiStore";
 export { TimelineStore } from "./store/TimelineStore";

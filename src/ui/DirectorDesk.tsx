@@ -38,7 +38,6 @@ import { CameraMotionRig } from "./scene/CameraMotionRig";
 import { MotionPathPreview } from "./scene/MotionPathPreview";
 import { ShotCameraRig } from "./scene/ShotCameraRig";
 import { ShotMarkers } from "./scene/ShotMarkers";
-import { ShotAxisOverlay } from "./scene/ShotAxisOverlay";
 import { ShotFrameOverlay } from "./ShotFrameOverlay";
 import { ViewportInteractionHints } from "./ViewportInteractionHints";
 import { ShotPanel } from "./ShotPanel";
@@ -102,7 +101,6 @@ export const DirectorDesk = observer(function DirectorDesk({
         stores.lifecycle.activate();
         return () => {
             stores.lifecycle.scheduleDispose(() => {
-                stores.continuity.dispose();
                 stores.capture.detach();
                 stores.ui.dispose();
                 stores.assets.dispose();
@@ -205,7 +203,6 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <BonePicker />
                                 <TransformGizmoController />
                                 <ShotMarkers />
-                                <ShotAxisOverlay />
                                 <PlaybackDriver />
                                 <ShotCameraRig />
                                 <CameraMotionRig />
