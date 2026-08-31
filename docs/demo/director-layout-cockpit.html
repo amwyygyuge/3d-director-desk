@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>导演台布局 A｜导演驾驶舱</title>
+  <link rel="stylesheet" href="director-layout.css" />
+</head>
+<body>
+  <main class="layout cockpit">
+    <header class="topbar">
+      <div class="project"><span class="project-mark"></span><span class="project-name">太平洋机甲追踪</span><span class="project-meta">镜头序列 · v12</span></div>
+      <nav class="view-switch" aria-label="视口模式"><button class="active">导演视角</button><button>机位预览</button><button>成片预览</button></nav>
+      <div class="top-actions"><button class="icon-button" aria-label="撤销">↶</button><button class="icon-button" aria-label="重做">↷</button><button class="icon-button" aria-label="设置">⋯</button></div>
+    </header>
+
+    <aside class="panel left glass">
+      <div class="panel-head"><strong>场景</strong><span>搜索</span></div>
+      <div class="panel-body">
+        <div class="section-label">场景对象</div>
+        <div class="list"><div class="list-row selected"><span><i class="row-icon">◇</i>机甲主角</span><span class="sub">角色</span></div><div class="list-row"><span><i class="row-icon">◇</i>废墟门框</span><span class="sub">道具</span></div><div class="list-row"><span><i class="row-icon">◇</i>环境灯</span><span class="sub">灯光</span></div></div>
+        <div class="section-label">机位</div>
+        <div class="list"><div class="list-row"><span><i class="row-icon">▣</i>主机位</span><span class="sub">35 mm</span></div><div class="list-row selected"><span><i class="row-icon">▣</i>侧机位</span><span class="sub">50 mm</span></div></div>
+        <div class="section-label">当前操作</div>
+        <div class="callout">已选中 <span class="choice">侧机位 / 环绕角色</span>。场景对象选择不会丢失当前运镜片段。</div>
+      </div>
+    </aside>
+
+    <section class="viewport glass">
+      <div class="viewport-label"><span class="live-dot"></span>导演视角 · 正在编辑：侧机位 / 环绕角色</div>
+      <svg class="path" viewBox="0 0 1000 650" preserveAspectRatio="none"><path d="M110 480 C310 590 470 180 720 330"/><path class="alt" d="M160 400 C410 160 570 510 860 280"/><circle cx="110" cy="480" r="7"/><circle cx="410" cy="365" r="7"/><circle cx="720" cy="330" r="7"/></svg>
+      <div class="camera-card"></div><div class="focus-line"></div><div class="focus-point"></div><div class="model"></div>
+      <div class="viewport-controls"><span class="tag active">路径编辑</span><span class="tag">吸附地面</span><span class="tag">显示焦点</span></div>
+    </section>
+
+    <aside class="panel right glass">
+      <div class="panel-head"><strong>运镜片段</strong><span>侧机位</span></div>
+      <div class="inspector-section"><div class="inspector-title">环绕角色 · 4.00s — 8.00s</div><div class="field-grid"><div class="field">开始<b>4.00 s</b></div><div class="field">时长<b>4.00 s</b></div><div class="field">缓动<b>平滑</b></div></div></div>
+      <div class="inspector-section"><div class="inspector-title">注视</div><div class="list-row selected"><span>机甲主角</span><span class="sub">对象绑定</span></div><div class="field-grid"><div class="field">偏移 X<b>0.0</b></div><div class="field">偏移 Y<b>1.4</b></div><div class="field">偏移 Z<b>0.0</b></div></div></div>
+      <div class="inspector-section"><div class="inspector-title">路径</div><div class="action-row"><button class="action primary">编辑锚点</button><button class="action">追加路径点</button></div><p class="project-meta">双击视口地面新增锚点；拖动锚点或切线后松手提交。</p></div>
+    </aside>
+
+    <section class="timeline glass">
+      <div class="timeline-top"><div class="transport"><button>▶</button><button>■</button></div><span class="time-readout">05.24 s / 08.00 s</span><div class="ruler"></div></div>
+      <div class="track"><div class="track-label">Program 输出</div><div class="track-space"><div class="clip program" style="left:0%;width:49%">主机位 / 推近角色</div><div class="clip program" style="left:50%;width:48%">侧机位 / 环绕角色</div><i class="playhead" style="left:65%"></i></div></div>
+      <div class="track"><div class="track-label">主机位 · 运镜</div><div class="track-space"><div class="clip motion" style="left:0%;width:49%">推近角色</div></div></div>
+      <div class="track"><div class="track-label">侧机位 · 运镜</div><div class="track-space"><div class="clip motion" style="left:50%;width:48%">环绕角色</div></div></div>
+    </section>
+  </main>
+</body>
+</html>
