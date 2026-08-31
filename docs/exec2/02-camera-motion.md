@@ -1,55 +1,78 @@
-# 02 · 运镜与轨迹
+# 02 · 机位运镜与 Program 输出
 
 ## 目标
 
-机位关键帧连成运动轨迹,播放时相机沿轨迹推拉摇移,预演从"照片"变"片子"。
+机位保持可复用的静态摄影配置；运镜成为时间轴片段。每个片段绘制一条可编辑 Bézier 路径、默认注视目标，并由唯一 Program 输出轨在时间上切换机位。
 
 ## 范围
 
-- 做:CameraMotionPath(时间+CameraShot 键序列)、轨迹预览线、运镜采样回放、轨迹编辑(增删键/调时间)
-- 不做:轨迹曲线编辑器(贝塞尔手柄)、跟拍约束(lookAt 对象追踪)、速度曲线
+- 做：每机位独立 `CameraMotionClip`、时间范围、空间 Bézier 路径、静态 Look-at 目标、Program 硬切轨、路径锚点/入出手柄编辑、自由编辑视口。
+- 做：播放只采样运行时相机；机位、路径和 Program 数据经命令层持久化、可撤销、可被 AI 查询。
+- 不做：对象跟拍绑定、目标关键帧、速度曲线编辑器、交叉淡化、多机位宫格或 Preview Monitor。
 
 ## 类设计
 
 ```mermaid
 classDiagram
-    class CameraMotionPath {
-        <<值对象,纯数据>>
+    class CameraShot {
+        +position: Vec3
+        +target: Vec3
+        +fov: number
+    }
+    class CameraMotionClip {
         +id: string
-        +name: string
-        +keys: MotionKey[]
+        +cameraId: string
+        +startTimeSeconds: number
+        +durationSeconds: number
+        +path: CameraMotionPath
+        +target: Vec3
     }
-    class MotionKey {
-        +id, time, shot: CameraShot, easing
+    class CameraMotionPath {
+        +anchors: MotionPathAnchor[]
+        +sample(progress, output)
     }
-    class MotionSampler {
-        <<领域服务>>
-        +evaluate(path, t): CameraShot 插值
+    class MotionPathAnchor {
+        +position: Vec3
+        +inHandle: Vec3
+        +outHandle: Vec3
     }
-    class MotionPathPreview {
-        <<R3F>>
-        轨迹折线 + 键位标记(userData.helper)
+    class CameraProgramTrack {
+        +clips: CameraProgramClip[]
+        +cameraAt(time): cameraId | null
     }
-    CameraMotionPath "1" o-- "*" MotionKey
-    MotionKey ..> CameraShot
+    class CameraMotionSampler {
+        +sampleCurrent(time): boolean
+    }
+    CameraMotionClip --> CameraShot : cameraId
+    CameraMotionClip *-- CameraMotionPath
+    CameraMotionPath *-- MotionPathAnchor
+    CameraProgramTrack --> CameraShot : cameraId
+    CameraMotionSampler --> CameraMotionClip
+    CameraMotionSampler --> CameraProgramTrack
 ```
 
-- 轨迹是 TimelineDoc 的兄弟而非成员:相机轨迹键值是 `CameraShot`(position+target+fov),采样插值直接产 shot;目标点平滑移动天然获得"摇"的效果。
-- 采样落地:播放时经 `CameraStore.requestDirectorPose` 逐帧请求(导演视角预览轨迹);掌镜轨迹(机位上挂轨迹)后置。
-- 预览线:CatmullRom 折线 + 键位小球,`userData.helper=true`(截图摘除纪律)。
+## 写入与回放规则
 
-## 实现步骤
+```mermaid
+flowchart LR
+    UI[路径面板 / Program 时间轴] --> CMD[DirectorCommand]
+    AI[发现与命令调用] --> CMD
+    CMD --> State[CameraMotionStore<br/>纯数据]
+    State --> Sampler[CameraMotionSampler]
+    Clock[TimeTransport] --> Sampler
+    Sampler --> Runtime[R3F Camera]
+```
 
-1. `src/camera/CameraMotionPath.ts`:值对象 + 插值采样(position 球面插值?否——位置线性/平滑,fov 线性)。
-2. 命令 `motion.add-path` / `motion.add-key` / `motion.move-key` / `motion.remove-key`(可撤销);「当前视角加为轨迹键」按钮(读 `lastDirectorPose`)。
-3. `src/camera/MotionSampler.ts`:挂 transport;播放期每帧产 CameraShot → requestDirectorPose。
-4. `MotionPathPreview.tsx`:轨迹线渲染;选中轨迹高亮。
-5. 运镜面板(并入 ShotPanel 新区块):轨迹列表 + 键时间列表 + 播放预览。
+- 同机位的运镜片段不得重叠；Program 片段也不得重叠；空白时间允许存在。
+- 路径在片段时间之外不采样；Program 没有机位时自由视口保持不受影响。
+- 出入手柄是相对于锚点的位置偏移。追加路径点时用相邻弦长的三分之一建立可继续调节的 Bézier 手柄。
+- UI 与 AI 均通过 `motion.*` / `program.*` 命令。错误携带稳定 code 与 payload path；查询不泄漏 Three 引用。
+- `CameraMotionSampler` 复用标量采样缓冲和路径采样缓冲，播放、seek 与停止均不写 MobX 或撤销栈。
 
 ## 验收清单
 
-- [ ] 4 个键的轨迹播放:相机平滑推拉摇移,目标点跟随
-- [ ] 轨迹线在场景中可见、可隐藏;截图不入镜
-- [ ] 轨迹编辑(加键/挪时间/删键)可撤销;播放不污染任何实体/机位数据
-- [ ] 暂停即静默(0 渲染帧);掌镜视角下轨迹请求被正确丢弃
-- [ ] `pnpm typecheck && pnpm lint && pnpm build` 全绿
+- [x] 两台机位可有各自的 Bézier 路径与不重叠时间段；删除机位时清理其路径和 Program 引用，Undo 可恢复。
+- [x] Program 时间轴同一时刻输出唯一机位；切到任意时间直接采样正确机位和路径。
+- [x] 运镜工作区保持自由编辑视口；成片工作区才把 Program pose 写入 R3F 相机，退出时恢复编辑视角。
+- [x] 面板可从机位到当前视角创建片段、追加路径点、调入/出手柄；辅助路径带 `userData.helper`，截图排除。
+- [x] `pnpm typecheck && pnpm lint && pnpm build` 通过；Storybook 走查 Program 片段、时间尺、路径曲线和锚点编辑。

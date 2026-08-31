@@ -13,6 +13,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
@@ -22,6 +23,9 @@ import { SHOT_SIZE } from "../camera/CameraShot";
 import type { ShotSize } from "../camera/CameraShot";
 import { CAMERA_MOTION_EASING } from "../camera/CameraMotionClip";
 import { ShotSizePresets } from "../camera/ShotSizePresets";
+import type { CameraMotionClip } from "../camera/CameraMotionClip";
+import type { CameraMotionPathJSON } from "../camera/CameraMotionPath";
+import type { Vec3 } from "../core/SceneObject";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
@@ -33,6 +37,53 @@ const SNACKBAR_DURATION_MS = 4000;
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
 const DEFAULT_MOTION_DURATION_SECONDS = 2;
+const BEZIER_CONTROL_DIVISOR = 3;
+const PATH_VECTOR_FIELDS = ["inHandle", "outHandle"] as const;
+const PATH_VECTOR_AXIS_LABELS = ["X", "Y", "Z"] as const;
+
+type PathVectorField = (typeof PATH_VECTOR_FIELDS)[number];
+
+function withVectorCoordinate(vector: Vec3, axis: number, value: number): Vec3 {
+    switch (axis) {
+        case 0:
+            return [value, vector[1], vector[2]];
+        case 1:
+            return [vector[0], value, vector[2]];
+        default:
+            return [vector[0], vector[1], value];
+    }
+}
+
+function appendCurveAnchor(path: CameraMotionPathJSON, position: Vec3, id: string): CameraMotionPathJSON {
+    const anchors = path.anchors;
+    const previous = anchors[anchors.length - 1];
+    if (!previous) return path;
+    const outgoingHandle: Vec3 = [
+        (position[0] - previous.position[0]) / BEZIER_CONTROL_DIVISOR,
+        (position[1] - previous.position[1]) / BEZIER_CONTROL_DIVISOR,
+        (position[2] - previous.position[2]) / BEZIER_CONTROL_DIVISOR,
+    ];
+    const incomingHandle: Vec3 = [-outgoingHandle[0], -outgoingHandle[1], -outgoingHandle[2]];
+    const updatedAnchors = anchors.map((anchor) =>
+        anchor.id === previous.id ? { ...anchor, outHandle: outgoingHandle } : anchor,
+    );
+    return { anchors: [...updatedAnchors, { id, position, inHandle: incomingHandle, outHandle: [0, 0, 0] }] };
+}
+
+function replaceAnchorVector(
+    clip: CameraMotionClip,
+    anchorId: string,
+    field: PathVectorField,
+    axis: number,
+    value: number,
+): CameraMotionPathJSON {
+    return {
+        anchors: clip.path.anchors.map((anchor) => {
+            const json = anchor.toJSON();
+            return anchor.id === anchorId ? { ...json, [field]: withVectorCoordinate(json[field], axis, value) } : json;
+        }),
+    };
+}
 
 const SHOT_SIZE_LABELS: Record<ShotSize, string> = {
     [SHOT_SIZE.EXTREME_LONG]: "大远景",
@@ -171,13 +222,16 @@ const MotionSection = observer(function MotionSection({
 }: MotionSectionProps) {
     const stores = useDirectorDeskStores();
     const { camera, clock, dispatcher, motion, selection, timeline } = stores;
+    const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
     const selectedCameraId = selection.primaryId;
     const selectedShot = selectedCameraId ? camera.director.getShot(selectedCameraId) : undefined;
     const directorPose = camera.lastDirectorPose;
+    const selectedClip = selectedClipId ? motion.clip(selectedClipId) : undefined;
     const remainingSeconds = timeline.document.duration - clock.time;
     const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, remainingSeconds);
     const canCreateMotion =
         !clock.isPlaying && selectedCameraId !== null && selectedShot !== undefined && directorPose !== null && durationSeconds > 0;
+    const canAppendAnchor = !clock.isPlaying && selectedClip !== undefined && directorPose !== null;
 
     const dispatch = (type: string, payload: unknown) => {
         const result = dispatcher.dispatch({ type, payload }, stores);
@@ -202,6 +256,24 @@ const MotionSection = observer(function MotionSection({
                     ],
                 },
             },
+        });
+        setSelectedClipId(clipId);
+    };
+
+    const appendAnchor = () => {
+        if (!selectedClip || !directorPose) return;
+        dispatch("motion.set-clip-path", {
+            id: selectedClip.id,
+            path: appendCurveAnchor(selectedClip.path.toJSON(), directorPose.position, crypto.randomUUID()),
+        });
+    };
+
+    const updateAnchorVector = (anchorId: string, field: PathVectorField, axis: number, rawValue: string) => {
+        const value = rawValue.length === 0 ? Number.NaN : Number(rawValue);
+        if (!selectedClip || !Number.isFinite(value)) return;
+        dispatch("motion.set-clip-path", {
+            id: selectedClip.id,
+            path: replaceAnchorVector(selectedClip, anchorId, field, axis, value),
         });
     };
 
@@ -238,19 +310,59 @@ const MotionSection = observer(function MotionSection({
                     key={clip.id}
                     sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 0.5, mt: 0.5, alignItems: "center" }}
                 >
-                    <Typography variant="caption" noWrap>
+                    <Button
+                        size="small"
+                        variant={selectedClip?.id === clip.id ? "contained" : "text"}
+                        sx={{ justifyContent: "flex-start", overflow: "hidden", whiteSpace: "nowrap" }}
+                        onClick={() => setSelectedClipId(clip.id)}
+                    >
                         {clip.cameraId} · {clip.startTimeSeconds.toFixed(2)}s — {clip.endTimeSeconds.toFixed(2)}s
-                    </Typography>
+                    </Button>
                     <Button
                         size="small"
                         color="error"
                         aria-label={`删除 ${clip.cameraId} 运镜片段`}
-                        onClick={() => dispatch("motion.remove-clip", { id: clip.id })}
+                        onClick={() => {
+                            dispatch("motion.remove-clip", { id: clip.id });
+                            if (selectedClip?.id === clip.id) setSelectedClipId(null);
+                        }}
                     >
                         删除
                     </Button>
                 </Box>
             ))}
+            {selectedClip && (
+                <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
+                    <Typography variant="caption" color="text.secondary">
+                        路径锚点({selectedClip.path.anchors.length}) · 手柄为相对坐标
+                    </Typography>
+                    <Button size="small" fullWidth disabled={!canAppendAnchor} onClick={appendAnchor} sx={{ mt: 0.5 }}>
+                        当前视角追加曲线路径点
+                    </Button>
+                    {selectedClip.path.anchors.map((anchor, anchorIndex) => (
+                        <Box key={anchor.id} sx={{ mt: 0.75 }}>
+                            <Typography variant="caption">
+                                锚点 {anchorIndex + 1} · {anchor.position.map((value) => value.toFixed(1)).join(", ")}
+                            </Typography>
+                            {PATH_VECTOR_FIELDS.map((field) => (
+                                <Box key={field} sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.5, mt: 0.25 }}>
+                                    {anchor[field].map((value, axis) => (
+                                        <TextField
+                                            key={`${field}-${axis}`}
+                                            size="small"
+                                            type="number"
+                                            label={`${field === "inHandle" ? "入" : "出"}${PATH_VECTOR_AXIS_LABELS[axis] ?? ""}`}
+                                            defaultValue={value}
+                                            slotProps={{ htmlInput: { step: 0.1 } }}
+                                            onBlur={(event) => updateAnchorVector(anchor.id, field, axis, event.currentTarget.value)}
+                                        />
+                                    ))}
+                                </Box>
+                            ))}
+                        </Box>
+                    ))}
+                </Box>
+            )}
         </>
     );
 });
