@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { DirectorDesk } from "./DirectorDesk";
+import { TEST_ASSETS } from "./stories/seeds";
 
 const VIEW_IDS = ["motion-push", "motion-pull", "motion-pan-left", "motion-pan-right"] as const;
 const KEY_IDS = ["motion-key-0", "motion-key-2", "motion-key-4", "motion-key-6"] as const;
@@ -100,7 +101,7 @@ function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
     VIEW_IDS.forEach((id, index) => {
         const transform = transforms[index];
         if (!transform) throw new Error(`运镜验收: ${id} 缺少摆位`);
-        dispatch(stores, "object.place", { id, kind: "primitive", transform });
+        dispatch(stores, "object.place", { id, kind: "model", sourceUrl: TEST_ASSETS.helmet, transform });
     });
     requestAnimationFrame(() => recordViewKeys(stores, 0));
 }

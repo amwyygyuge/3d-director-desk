@@ -12,13 +12,6 @@ import { measureModelBox } from "../../core/measureModelBox";
 import { STAGE_DEFS } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
-/** 每个 id 一个稳定区分色:走查时肉眼可辨,与选择态高亮解耦 */
-const PALETTE = ["#7e57c2", "#26a69a", "#ef6c00", "#5c6bc0", "#c0ca33", "#8d6e63"] as const;
-
-function colorOf(id: string): string {
-    const hash = [...id].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    return PALETTE[hash % PALETTE.length]!;
-}
 
 /** 导入模型归一化目标:最大边缩放到 2 个场景单位,底面贴地——游戏模型单位各异(cm/m),裸放会糊满屏 */
 const MODEL_TARGET_MAX_DIM = 2;
@@ -42,14 +35,6 @@ function fitShell(shell: Group): void {
     shell.position.set(-TMP_CENTER.x * factor, -TMP_BOX.min.y * factor, -TMP_CENTER.z * factor);
 }
 
-export function PrimitiveContent({ entity }: { entity: SceneObject }) {
-    return (
-        <mesh>
-            <boxGeometry />
-            <meshStandardMaterial color={colorOf(entity.id)} />
-        </mesh>
-    );
-}
 
 const LIGHT_MARKER_RADIUS = 0.14;
 const LIGHT_MARKER_SEGMENTS = 16;

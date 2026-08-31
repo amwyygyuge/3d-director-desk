@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { DirectorDesk } from "./DirectorDesk";
+import { TEST_ASSETS } from "./stories/seeds";
 
 const ACTOR_ID = "timeline-actor";
 const REMOVED_ACTOR_ID = "timeline-deleted";
@@ -16,13 +17,15 @@ function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): v
 function seedTimelineAcceptance(stores: DirectorDeskStores): void {
     dispatch(stores, "object.place", {
         id: ACTOR_ID,
-        kind: "primitive",
+        kind: "model",
+        sourceUrl: TEST_ASSETS.helmet,
         name: "时间轴主对象",
         transform: { position: [-2, 0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
     });
     dispatch(stores, "object.place", {
         id: REMOVED_ACTOR_ID,
-        kind: "primitive",
+        kind: "model",
+        sourceUrl: TEST_ASSETS.helmet,
         name: "删除轨道验收对象",
         transform: { position: [2, 0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
     });

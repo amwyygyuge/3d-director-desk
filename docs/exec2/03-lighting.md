@@ -14,7 +14,7 @@
 ```mermaid
 classDiagram
     class SceneObject {
-        +kind: "model" | "primitive" | "camera" | "light"
+        +kind: "model" | "camera" | "light"
         +light: LightParams | null
     }
     class LightParams {

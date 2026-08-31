@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ContinuityIssue } from "../camera/ContinuityChecker";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { DirectorDesk } from "./DirectorDesk";
+import { TEST_ASSETS } from "./stories/seeds";
 
 const SUBJECT_ID = "continuity-actor";
 const LEFT_SHOT_ID = "continuity-left";
@@ -137,7 +138,8 @@ function verifyContinuityAcceptance(stores: DirectorDeskStores): void {
 function seedContinuityAcceptance(stores: DirectorDeskStores): void {
     dispatch(stores, "object.place", {
         id: SUBJECT_ID,
-        kind: "primitive",
+        kind: "model",
+        sourceUrl: TEST_ASSETS.helmet,
         name: "演员",
         transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
     });

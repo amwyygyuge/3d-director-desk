@@ -1,5 +1,4 @@
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
-import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import DeleteIcon from "@mui/icons-material/Delete";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import VideocamIcon from "@mui/icons-material/Videocam";
@@ -22,7 +21,6 @@ import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const KIND_ICONS: Record<SceneObjectKind, ReactNode> = {
     model: <ViewInArIcon fontSize="small" />,
-    primitive: <CheckBoxOutlineBlankIcon fontSize="small" />,
     camera: <VideocamIcon fontSize="small" />,
     light: <LightbulbIcon fontSize="small" />,
 };
@@ -44,7 +42,7 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
             <Typography variant="subtitle2">场景对象({entities.length})</Typography>
             {entities.length === 0 ? (
                 <Typography variant="caption" color="text.secondary">
-                    场景为空,先添加几何体或导入模型
+                    场景为空,请导入模型
                 </Typography>
             ) : (
                 <List dense disablePadding aria-label="场景对象">

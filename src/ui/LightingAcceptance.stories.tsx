@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { DirectorDesk } from "./DirectorDesk";
+import { TEST_ASSETS } from "./stories/seeds";
 
 const SUBJECT_ID = "lighting-subject";
 const DIRECTIONAL_ID = "lighting-directional";
@@ -25,7 +26,8 @@ function seedLightingAcceptance(stores: DirectorDeskStores): void {
 
     dispatch(stores, "object.place", {
         id: SUBJECT_ID,
-        kind: "primitive",
+        kind: "model",
+        sourceUrl: TEST_ASSETS.helmet,
         name: "受光体",
         transform: { position: [0, 0.5, 0], rotation: [0, 0, 0], scale: [2, 2, 2] },
     });

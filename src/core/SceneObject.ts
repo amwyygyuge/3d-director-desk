@@ -32,8 +32,8 @@ export const IDENTITY_TRANSFORM: Transform = Object.freeze({
     scale: Object.freeze([1, 1, 1] as const),
 });
 
-export type SceneObjectKind = "model" | "primitive" | "camera" | "light";
-export const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "primitive", "camera", "light"];
+export type SceneObjectKind = "model" | "camera" | "light";
+export const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "camera", "light"];
 
 /** 空间幻觉围栏:一切来自外部(AI/宿主)的数值先过有限性检查(命令层共用,Rule of Two) */
 export function finiteVec3(value: unknown): value is Vec3 {
@@ -48,7 +48,6 @@ export function finiteTransform(value: unknown): value is Transform {
 
 const KIND_LABEL: Record<SceneObjectKind, string> = {
     model: "模型",
-    primitive: "几何体",
     camera: "机位对象",
     light: "灯光",
 };
@@ -74,7 +73,7 @@ export interface SceneObjectInit {
 export class SceneObject {
     readonly id: string;
     readonly kind: SceneObjectKind;
-    /** 模型来源 URL;primitive 为 null */
+    /** 模型来源 URL；非模型为 null */
     readonly sourceUrl: string | null;
     /** 模型格式(blob URL 无扩展名,必须显式携带);非 model 为 null */
     readonly format: ModelFormat | null;

@@ -25,24 +25,8 @@ export function placeModel(stores: DirectorDeskStores, url: string, position?: [
     );
 }
 
-export function placePrimitives(stores: DirectorDeskStores, count: number): void {
-    for (let i = 0; i < count; i++) {
-        stores.dispatcher.dispatch(
-            {
-                type: "object.place",
-                payload: {
-                    id: `prim-${crypto.randomUUID()}`,
-                    kind: "primitive",
-                    transform: {
-                        position: placementFor(stores.scene.objectCount),
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
-                },
-            },
-            stores,
-        );
-    }
+export function placeModels(stores: DirectorDeskStores, count: number): void {
+    Array.from({ length: count }, () => placeModel(stores, TEST_ASSETS.helmet));
 }
 
 /** 预置两个机位(纯数据,走命令层) */

@@ -1,4 +1,3 @@
-import AddBoxIcon from "@mui/icons-material/AddBox";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
@@ -92,32 +91,14 @@ const StageTabs = observer(function StageTabs() {
     );
 });
 
-/** 布景:放置几何体 + 导入模型 */
+/** 布景:导入模型 */
 const SectionPlace = observer(function SectionPlace() {
     const stores = useDirectorDeskStores();
-    const { scene, dispatcher, ui } = stores;
+    const { ui } = stores;
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const placePrimitive = () => {
-        const result = dispatcher.dispatch(
-            {
-                type: "object.place",
-                payload: {
-                    id: `prim-${crypto.randomUUID()}`,
-                    kind: "primitive",
-                    transform: { position: placementFor(scene.objectCount), rotation: [0, 0, 0], scale: [1, 1, 1] },
-                },
-            },
-            stores,
-        );
-        if (!result.ok) ui.setApplicationNotice(`放置被拒绝:${result.error}`);
-    };
 
     return (
         <>
-            <Button variant="contained" startIcon={<AddBoxIcon />} onClick={placePrimitive}>
-                添加几何体
-            </Button>
             <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileInputRef.current?.click()}>
                 导入模型
             </Button>

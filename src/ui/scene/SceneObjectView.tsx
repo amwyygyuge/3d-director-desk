@@ -7,7 +7,7 @@ import { Box3, Box3Helper, BufferGeometry, Matrix4 } from "three";
 
 import type { SceneObject, SceneObjectKind } from "../../core/SceneObject";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
-import { LightContent, ModelContent, PrimitiveContent } from "./contents";
+import { LightContent, ModelContent } from "./contents";
 
 const HIGHLIGHT_COLOR = "#ffd54f";
 
@@ -96,7 +96,6 @@ function updateWorldBounds(index: LocalBoundsIndex, object: Group, helper: Box3H
 
 /** kind → 渲染内容查表(纪律:禁 if 链)。 */
 const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject }>> = {
-    primitive: PrimitiveContent,
     model: ModelContent,
     camera: () => null,
     light: LightContent,
