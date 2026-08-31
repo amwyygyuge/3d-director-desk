@@ -7,6 +7,12 @@ import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
 import { registerPoseCommands } from "./poseCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
+import { PoseKeyframe } from "../pose/PoseKeyframe";
+import type { PoseKeyframeInit } from "../pose/PoseKeyframe";
+import { registerKeyframeCodec } from "../timeline/keyframeCodecs";
+import { TransformKeyframe } from "../timeline/TransformKeyframe";
+import type { TransformKeyframeInit } from "../timeline/TransformKeyframe";
+import { TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
 import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
 import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "../core/LightParams";
@@ -303,6 +309,23 @@ export class SceneDescribeQuery implements DirectorQuery<Record<string, never>> 
     execute(ctx: DirectorContext): unknown {
         return ctx.scene.manager.list().map((entity) => describeEntity(ctx, entity));
     }
+}
+
+/**
+ * 内置关键帧种类装配:时间轴轨道容器的唯一种类注册点。
+ * 每实例 stores 工厂都会调用,幂等(见 keyframeCodecs);新增种类在此加一行,轨道零改动。
+ */
+export function registerBuiltinKeyframeCodecs(): void {
+    registerKeyframeCodec({
+        kind: TIMELINE_TRACK_KIND.TRANSFORM,
+        owns: (keyframe): keyframe is TransformKeyframe => keyframe instanceof TransformKeyframe,
+        fromInit: (init) => new TransformKeyframe(init as TransformKeyframeInit),
+    });
+    registerKeyframeCodec({
+        kind: TIMELINE_TRACK_KIND.POSE,
+        owns: (keyframe): keyframe is PoseKeyframe => keyframe instanceof PoseKeyframe,
+        fromInit: (init) => new PoseKeyframe(init as PoseKeyframeInit),
+    });
 }
 
 /** 内置命令注册:Dispatcher 实例化后调一次,AI 工具 schema 由此派生 */

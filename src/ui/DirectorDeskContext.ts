@@ -12,7 +12,7 @@ import { InertHostAdapter, PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { CaptureService } from "../capture/CaptureService";
 import { CommandDispatcher } from "../command/CommandDispatcher";
-import { registerBuiltinCommands } from "../command/commands";
+import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "../command/commands";
 import { CommandHistory } from "../command/CommandHistory";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
@@ -112,6 +112,7 @@ export function createDirectorDeskStores(options?: {
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
+    registerBuiltinKeyframeCodecs();
     const history = new CommandHistory();
     history.bindDispatcher(dispatcher);
     dispatcher.attachHistory(history);

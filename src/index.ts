@@ -212,6 +212,8 @@ export { TimeTransport } from "./time/TimeTransport";
 export { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "./timeline/TimelineDoc";
 export type { TimelineDocInit } from "./timeline/TimelineDoc";
 export { TimelineTrack, TIMELINE_TRACK_KIND } from "./timeline/TimelineTrack";
+export { registerKeyframeCodec, keyframeCodecFor } from "./timeline/keyframeCodecs";
+export type { KeyframeCodec } from "./timeline/keyframeCodecs";
 export type { TimelineTrackInit, TimelineTrackKind } from "./timeline/TimelineTrack";
 export { TransformKeyframe, TIMELINE_EASING } from "./timeline/TransformKeyframe";
 export type { TimelineEasing, TransformKeyframeInit } from "./timeline/TransformKeyframe";
