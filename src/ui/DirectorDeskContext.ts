@@ -11,6 +11,7 @@ import type { HostBridgeConfiguration } from "../bridge/HostBridge";
 import { InertHostAdapter, PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { CaptureService } from "../capture/CaptureService";
+import { FrameRateMonitor } from "../core/FrameRateMonitor";
 import { CommandDispatcher } from "../command/CommandDispatcher";
 import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "../command/commands";
 import { CommandHistory } from "../command/CommandHistory";
@@ -69,6 +70,8 @@ export interface DirectorDeskStores {
     camera: CameraStore;
     selection: SelectionStore;
     clock: TimeTransport;
+    /** 真实 R3F render 的低频帧率读数；只作性能观测，绝不进入文档状态。 */
+    frameRate: FrameRateMonitor;
     /** 可序列化 TimelineDoc 的每实例状态容器 */
     timeline: TimelineStore;
     /** 单条导演运镜路径的每实例可序列化状态容器 */
@@ -144,6 +147,7 @@ export function createDirectorDeskStores(options?: {
         camera,
         clock,
         capture: new CaptureService(),
+        frameRate: new FrameRateMonitor(),
         dispatcher,
         assets: new AssetLibrary(),
         models: new ModelImporter(),

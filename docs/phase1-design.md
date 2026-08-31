@@ -107,3 +107,9 @@ classDiagram
 - 静态场景静置 0 渲染帧(React DevTools + rAF 计数)
 - 加载/卸载 50 次模型,内存回落(dispose 纪律)
 - 动画播放期 `AnimationBinder.update` 零分配(模块级临时变量复用)
+
+### 帧率回归原则
+
+- 每次功能迭代必须在受影响的交互路径（缩放、旋转、拖拽、播放）对比上一条绿基线；中位 FPS 不得下降超过 **10%**，P95 帧时不得上升超过 **20%**。
+- 超过任一阈值即阻断交付：先定位根因、收紧资源或渲染预算，再继续功能开发；禁止把掉帧当作可接受的功能代价。
+- `FrameRateMonitor` 只采样已发生的 R3F render，并在右上角显示低频 FPS；监测本身不得调用 `invalidate()`、创建 RAF 或使 `frameloop="demand"` 常驻渲染。
