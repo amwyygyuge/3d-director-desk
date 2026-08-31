@@ -3,9 +3,9 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 
-import { isEditingText } from "../shortcuts/ShortcutRegistry";
-import { useDirectorDeskStores } from "../ui/DirectorDeskContext";
-import { useOrbitControls } from "./orbit";
+import { isEditingText } from "../../shortcuts/ShortcutRegistry";
+import { useDirectorDeskStores } from "../DirectorDeskContext";
+import { useOrbitControls } from "../../navigation/orbit";
 
 /** 飞行速度(单位/秒) */
 const FLY_SPEED = 5;

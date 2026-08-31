@@ -3,9 +3,9 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera, Spherical, Vector3 } from "three";
 
-import { FOV_MAX, FOV_MIN } from "../command/commands";
-import { useDirectorDeskStores } from "../ui/DirectorDeskContext";
-import { useOrbitControls } from "./orbit";
+import { FOV_MAX, FOV_MIN } from "../../command/commands";
+import { useDirectorDeskStores } from "../DirectorDeskContext";
+import { useOrbitControls } from "../../navigation/orbit";
 
 /** 转向灵敏度:每像素弧度 */
 const TURN_SPEED_RAD_PER_PX = 0.003;

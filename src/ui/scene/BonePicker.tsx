@@ -6,9 +6,9 @@ import type { ComponentRef } from "react";
 import type { InstancedMesh } from "three";
 import { Matrix4, MeshBasicMaterial, SphereGeometry } from "three";
 
-import type { BoneKey } from "./PoseSnapshot";
-import type { BoneTreeNodeDto } from "./SkeletonRuntimeRegistry";
-import { useDirectorDeskStores } from "../ui/DirectorDeskContext";
+import type { BoneKey } from "../../pose/PoseSnapshot";
+import type { BoneTreeNodeDto } from "../../pose/SkeletonRuntimeRegistry";
+import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 const HIT_RADIUS = 0.055;
 const HIT_COLOR = "#ffca28";

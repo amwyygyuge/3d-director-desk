@@ -4,7 +4,7 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
 
-import { useDirectorDeskStores } from "../ui/DirectorDeskContext";
+import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 /**
  * gizmo 控制器:封装 drei TransformControls,挂主选对象或机位标记的运行时。

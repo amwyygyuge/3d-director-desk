@@ -12,11 +12,11 @@ import { PROTOCOL_VERSION } from "../bridge/protocol";
 import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
-import { BonePicker } from "../pose/BonePicker";
+import { BonePicker } from "./scene/BonePicker";
 import { STAGE_DEFS } from "../workspace/stages";
-import { TransformGizmoController } from "../transform/TransformGizmoController";
-import { FlyDrive } from "../navigation/FlyDrive";
-import { ShotNavigation } from "../navigation/ShotNavigation";
+import { TransformGizmoController } from "./scene/TransformGizmoController";
+import { FlyDrive } from "./scene/FlyDrive";
+import { ShotNavigation } from "./scene/ShotNavigation";
 import type { AssetProvider } from "../assets/catalog/AssetProvider";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
@@ -25,6 +25,7 @@ import { CapturePreview } from "./CapturePreview";
 import { Dock } from "./Dock";
 import { HelpOverlay } from "./HelpOverlay";
 import { Hotkeys } from "./Hotkeys";
+import { FrameRateIndicator } from "./FrameRateIndicator";
 import { placementFor } from "./importFiles";
 import { Inspector } from "./Inspector";
 import { LoadingChip } from "./LoadingChip";
@@ -198,6 +199,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                             <ShotFrameOverlay />
                             <CapturePreview />
                             <LoadingChip />
+                            <FrameRateIndicator />
                         </div>
                         <Toolbar />
                         <Dock
