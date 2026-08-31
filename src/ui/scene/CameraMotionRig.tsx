@@ -4,12 +4,13 @@ import { useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
 import type { CameraMotionSink } from "../../camera/CameraMotionSampler";
-import type { CameraMotionSample } from "../../camera/CameraMotionPath";
+import type { CameraMotionSample } from "../../camera/CameraMotionClip";
 import type { OrbitLike } from "../../navigation/orbit";
 import { useOrbitControls } from "../../navigation/orbit";
+import { WORKSPACE_STAGE } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
-/** R3F runtime owner for the free-director pose that motion playback may temporarily replace. */
+/** Runtime owner for temporary Program output poses. Editor camera values are restored on output exit. */
 class CameraMotionRuntimeSink implements CameraMotionSink {
     private camera: PerspectiveCamera | null = null;
     private controls: OrbitLike | null = null;
@@ -73,32 +74,29 @@ class CameraMotionRuntimeSink implements CameraMotionSink {
     }
 }
 
-/** Binds the motion sampler to R3F camera and OrbitControls without any MobX pose writes. */
+/** Binds Program playback only in the output workspace; camera and motion authoring retain a free editor viewport. */
 export const CameraMotionRig = observer(function CameraMotionRig() {
-    const { playback, camera: cameraStore, clock } = useDirectorDeskStores();
-    const activeShotId = cameraStore.activeShotId;
-    const isPlaying = clock.isPlaying;
+    const { playback, ui } = useDirectorDeskStores();
+    const isProgramOutput = ui.stage === WORKSPACE_STAGE.OUTPUT;
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const sinkRef = useRef<CameraMotionRuntimeSink | null>(null);
     sinkRef.current ??= new CameraMotionRuntimeSink();
-    const previousActiveShotId = useRef(activeShotId);
 
     useEffect(() => {
         const sink = sinkRef.current;
-        if (!sink || !controls || !(camera instanceof PerspectiveCamera)) return;
+        if (!sink || !controls || !(camera instanceof PerspectiveCamera) || !isProgramOutput) {
+            playback.restoreCameraMotion();
+            return;
+        }
         sink.attach(camera, controls);
         playback.bindMotionSink(sink);
+        playback.sampleCurrent();
         return () => {
             playback.unbindMotionSink(sink);
             sink.detach();
         };
-    }, [camera, controls, playback]);
-    useEffect(() => {
-        const wasStaticShotActive = previousActiveShotId.current !== null;
-        previousActiveShotId.current = activeShotId;
-        if (wasStaticShotActive && activeShotId === null && !isPlaying) playback.restoreCameraMotion();
-    }, [activeShotId, isPlaying, playback]);
+    }, [camera, controls, isProgramOutput, playback]);
 
     return null;
 });

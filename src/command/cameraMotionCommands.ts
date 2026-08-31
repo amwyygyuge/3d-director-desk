@@ -1,6 +1,9 @@
-import { CameraShot } from "../camera/CameraShot";
-import { CAMERA_MOTION_EASING, MotionKey } from "../camera/CameraMotionPath";
-import type { CameraMotionEasing } from "../camera/CameraMotionPath";
+import { CAMERA_MOTION_EASING, CameraMotionClip } from "../camera/CameraMotionClip";
+import type { CameraMotionClipJSON, CameraMotionEasing } from "../camera/CameraMotionClip";
+import { CameraMotionPath } from "../camera/CameraMotionPath";
+import type { CameraMotionPathJSON } from "../camera/CameraMotionPath";
+import { CameraProgramClip } from "../camera/CameraProgramTrack";
+import type { CameraProgramClipJSON } from "../camera/CameraProgramTrack";
 import type { Vec3 } from "../core/SceneObject";
 import { DirectorCommand } from "./DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
@@ -10,107 +13,110 @@ const MOTION_COMMAND_VERSION = "1" as const;
 const MOTION_PERMISSION = "motion:edit";
 const MOTION_READ_PERMISSION = "motion:read";
 const EMPTY_PAYLOAD: Record<string, never> = {};
-
 const ISSUE_CODE = {
     PAYLOAD: "motion-invalid-payload",
-    TIME: "motion-invalid-time",
+    CAMERA: "motion-camera-not-found",
+    CLIP: "motion-clip-not-found",
     DURATION: "motion-time-outside-duration",
-    DUPLICATE_TIME: "motion-duplicate-time",
-    KEY: "motion-key-not-found",
-    PATH: "motion-path-not-found",
-    PLAYING: "motion-transport-playing",
-    ACTIVE_SHOT: "motion-active-static-shot",
-    DIRECTOR_POSE: "motion-director-pose-unavailable",
+    OVERLAP: "motion-overlapping-clip",
+    PROGRAM_OVERLAP: "program-overlapping-clip",
+    PROGRAM_CLIP: "program-clip-not-found",
 } as const;
 
-interface AddMotionKeyPayload {
+interface CreateMotionClipPayload {
+    readonly clip: CameraMotionClipJSON;
+}
+
+interface SetMotionClipRangePayload {
     readonly id: string;
-    readonly timeSeconds: number;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
+
+interface SetMotionClipPathPayload {
+    readonly id: string;
+    readonly path: CameraMotionPathJSON;
+}
+
+interface SetMotionClipTargetPayload {
+    readonly id: string;
+    readonly target: Vec3;
+}
+
+interface SetMotionClipEasingPayload {
+    readonly id: string;
     readonly easing: CameraMotionEasing;
-    /** Undo replays the original immutable snapshot; interactive authoring omits this field. */
-    readonly shot?: { readonly position: Vec3; readonly target: Vec3; readonly fov: number };
 }
 
-interface MoveMotionKeyPayload {
-    readonly id: string;
-    readonly timeSeconds: number;
-}
-
-interface RemoveMotionKeyPayload {
+interface RemoveMotionClipPayload {
     readonly id: string;
 }
 
-interface SetMotionKeyEasingPayload {
+interface SetProgramClipPayload {
+    readonly clip: CameraProgramClipJSON;
+}
+
+interface RemoveProgramClipPayload {
     readonly id: string;
-    readonly easing: CameraMotionEasing;
 }
 
 function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
 }
 
-function isFiniteVec3(value: unknown): value is Vec3 {
-    return Array.isArray(value) && value.length === 3 && value.every((component) => Number.isFinite(component));
-}
-
-function isEasing(value: unknown): value is CameraMotionEasing {
-    return value === CAMERA_MOTION_EASING.LINEAR || value === CAMERA_MOTION_EASING.SMOOTH;
-}
-
 function issueMessages(issues: readonly CommandIssue[]): string[] {
     return issues.map((current) => current.message);
 }
 
-function keyAtDifferentTimeIssue(
-    ctx: DirectorContext,
-    timeSeconds: number,
-    excludedId: string | null,
-): CommandIssue | null {
-    const duplicate = ctx.motion.path?.keys.find((key) => key.id !== excludedId && key.timeSeconds === timeSeconds);
-    return duplicate ? issue(ISSUE_CODE.DUPLICATE_TIME, "timeSeconds", "运镜关键帧时间必须唯一") : null;
+function finiteVector(value: unknown): value is Vec3 {
+    return Array.isArray(value) && value.length === 3 && value.every((component) => Number.isFinite(component));
 }
 
-function timeIssue(ctx: DirectorContext, timeSeconds: unknown): CommandIssue | null {
-    if (typeof timeSeconds !== "number" || !Number.isFinite(timeSeconds) || timeSeconds < 0) {
-        return issue(ISSUE_CODE.TIME, "timeSeconds", "运镜关键帧时间必须是非负有限秒数");
+function motionClipFrom(payload: CreateMotionClipPayload): CameraMotionClip | null {
+    try {
+        return new CameraMotionClip(payload.clip);
+    } catch {
+        return null;
     }
-    return timeSeconds > ctx.timeline.document.duration
-        ? issue(ISSUE_CODE.DURATION, "timeSeconds", "运镜关键帧时间不能超过时间轴时长")
-        : null;
 }
 
-function canAuthorCurrentViewIssues(ctx: DirectorContext): readonly CommandIssue[] {
-    if (ctx.clock.isPlaying) return [issue(ISSUE_CODE.PLAYING, "", "播放中不能记录运镜关键帧")];
-    if (ctx.camera.activeShotId !== null)
-        return [issue(ISSUE_CODE.ACTIVE_SHOT, "", "掌镜机位激活时不能记录运镜关键帧")];
-    return ctx.camera.lastDirectorPose === null
-        ? [issue(ISSUE_CODE.DIRECTOR_POSE, "", "等待导演自由视角稳定后再记录运镜关键帧")]
-        : [];
-}
-
-function shotIssue(shot: unknown): CommandIssue | null {
-    if (typeof shot !== "object" || shot === null || Array.isArray(shot)) {
-        return issue(ISSUE_CODE.PAYLOAD, "shot", "运镜快照格式无效");
+function programClipFrom(payload: SetProgramClipPayload): CameraProgramClip | null {
+    try {
+        return new CameraProgramClip(payload.clip);
+    } catch {
+        return null;
     }
-    const snapshot = shot as { position?: unknown; target?: unknown; fov?: unknown };
-    const fov = snapshot.fov;
-    if (
-        !isFiniteVec3(snapshot.position) ||
-        !isFiniteVec3(snapshot.target) ||
-        typeof fov !== "number" ||
-        !Number.isFinite(fov)
-    ) {
-        return issue(ISSUE_CODE.PAYLOAD, "shot", "运镜快照格式无效");
-    }
-    return fov < 1 || fov > 179 ? issue(ISSUE_CODE.PAYLOAD, "shot.fov", "运镜 fov 须在 1~179 之间") : null;
 }
 
-/** Add the settled free-director view at one absolute timeline time. */
-export class AddMotionKeyCommand extends DirectorCommand<AddMotionKeyPayload> {
-    static readonly TYPE = "motion.add-key";
-    readonly type = AddMotionKeyCommand.TYPE;
+function clipRangeIssue(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): CommandIssue | null {
+    const isOutsideDuration = clip.endTimeSeconds > ctx.timeline.document.duration;
+    if (isOutsideDuration) return issue(ISSUE_CODE.DURATION, "clip", "运镜片段不能超出时间轴时长");
+    const overlaps = ctx.motion
+        .clipsForCamera(clip.cameraId)
+        .some((current) => current.id !== excludedId && current.startTimeSeconds < clip.endTimeSeconds && clip.startTimeSeconds < current.endTimeSeconds);
+    return overlaps ? issue(ISSUE_CODE.OVERLAP, "clip", "同一机位的运镜片段不能重叠") : null;
+}
 
-    constructor(readonly payload: AddMotionKeyPayload) {
+function existingClip(ctx: DirectorContext, id: unknown): CameraMotionClip | null {
+    return typeof id === "string" && id.length > 0 ? (ctx.motion.clip(id) ?? null) : null;
+}
+
+function clipIssues(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): readonly CommandIssue[] {
+    const camera = ctx.camera.director.getShot(clip.cameraId);
+    const range = clipRangeIssue(ctx, clip, excludedId);
+    return camera ? (range ? [range] : []) : [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "运镜引用的机位不存在")];
+}
+
+function restoreMotionClipPayload(clip: CameraMotionClip): CreateMotionClipPayload {
+    return { clip: clip.toJSON() };
+}
+
+/** Creates a serialized, camera-owned time segment. Path geometry and temporal range remain independently editable. */
+export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPayload> {
+    static readonly TYPE = "motion.create-clip";
+    readonly type = CreateMotionClipCommand.TYPE;
+
+    constructor(readonly payload: CreateMotionClipPayload) {
         super();
     }
 
@@ -119,54 +125,29 @@ export class AddMotionKeyCommand extends DirectorCommand<AddMotionKeyPayload> {
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const payload = this.payload;
-        if (
-            typeof payload !== "object" ||
-            payload === null ||
-            Array.isArray(payload) ||
-            typeof payload.id !== "string" ||
-            payload.id.length === 0
-        ) {
-            return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
-        }
-        const invalidTime = timeIssue(ctx, payload.timeSeconds);
-        if (invalidTime) return [invalidTime];
-        if (!isEasing(payload.easing)) return [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
-        if (ctx.motion.path?.key(payload.id)) return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 已存在")];
-        const duplicate = keyAtDifferentTimeIssue(ctx, payload.timeSeconds, null);
-        if (duplicate) return [duplicate];
-        if (payload.shot !== undefined) {
-            const invalidShot = shotIssue(payload.shot);
-            return invalidShot ? [invalidShot] : [];
-        }
-        return canAuthorCurrentViewIssues(ctx);
+        const clip = motionClipFrom(this.payload);
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段格式无效")];
+        if (ctx.motion.clip(clip.id)) return [issue(ISSUE_CODE.PAYLOAD, "clip.id", "运镜片段 id 已存在")];
+        return clipIssues(ctx, clip, null);
     }
 
     execute(ctx: DirectorContext): void {
-        const pose = this.payload.shot ?? ctx.camera.lastDirectorPose;
-        if (!pose) return;
-        ctx.motion.addKey(
-            new MotionKey({
-                id: this.payload.id,
-                timeSeconds: this.payload.timeSeconds,
-                easing: this.payload.easing,
-                shot: new CameraShot(pose),
-            }),
-        );
+        const clip = motionClipFrom(this.payload);
+        if (clip) ctx.motion.replaceClip(clip);
         ctx.playback.sampleCurrent();
     }
 
     override invert(): readonly SerializedCommand[] {
-        return [{ type: RemoveMotionKeyCommand.TYPE, payload: { id: this.payload.id } }];
+        return [{ type: RemoveMotionClipCommand.TYPE, payload: { id: this.payload.clip.id } }];
     }
 }
 
-/** Move a key by absolute seconds; the path remains strictly time ordered. */
-export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> {
-    static readonly TYPE = "motion.move-key";
-    readonly type = MoveMotionKeyCommand.TYPE;
+/** Retimes one clip without reauthoring its spatial path. */
+export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRangePayload> {
+    static readonly TYPE = "motion.set-clip-range";
+    readonly type = SetMotionClipRangeCommand.TYPE;
 
-    constructor(readonly payload: MoveMotionKeyPayload) {
+    constructor(readonly payload: SetMotionClipRangePayload) {
         super();
     }
 
@@ -175,41 +156,51 @@ export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> 
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        if (
-            typeof this.payload !== "object" ||
-            this.payload === null ||
-            Array.isArray(this.payload) ||
-            typeof this.payload.id !== "string" ||
-            this.payload.id.length === 0
-        ) {
-            return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
+        const current = existingClip(ctx, this.payload.id);
+        if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        try {
+            const candidate = new CameraMotionClip({
+                ...current.toJSON(),
+                startTimeSeconds: this.payload.startTimeSeconds,
+                durationSeconds: this.payload.durationSeconds,
+            });
+            return clipIssues(ctx, candidate, current.id);
+        } catch {
+            return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围必须是有限正数")];
         }
-        const invalidTime = timeIssue(ctx, this.payload.timeSeconds);
-        if (invalidTime) return [invalidTime];
-        if (!ctx.motion.path) return [issue(ISSUE_CODE.PATH, "", "运镜路径不存在")];
-        if (!ctx.motion.path.key(this.payload.id)) return [issue(ISSUE_CODE.KEY, "id", "运镜关键帧不存在")];
-        const duplicate = keyAtDifferentTimeIssue(ctx, this.payload.timeSeconds, this.payload.id);
-        return duplicate ? [duplicate] : [];
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.motion.moveKey(this.payload.id, this.payload.timeSeconds);
+        const current = existingClip(ctx, this.payload.id);
+        if (current) {
+            ctx.motion.replaceClip(current.withTimeRange(this.payload.startTimeSeconds, this.payload.durationSeconds));
+        }
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const key = ctx.motion.path?.key(this.payload.id);
-        return key
-            ? [{ type: MoveMotionKeyCommand.TYPE, payload: { id: key.id, timeSeconds: key.timeSeconds } }]
+        const current = existingClip(ctx, this.payload.id);
+        return current
+            ? [
+                  {
+                      type: SetMotionClipRangeCommand.TYPE,
+                      payload: {
+                          id: current.id,
+                          startTimeSeconds: current.startTimeSeconds,
+                          durationSeconds: current.durationSeconds,
+                      },
+                  },
+              ]
             : null;
     }
 }
 
-export class RemoveMotionKeyCommand extends DirectorCommand<RemoveMotionKeyPayload> {
-    static readonly TYPE = "motion.remove-key";
-    readonly type = RemoveMotionKeyCommand.TYPE;
+/** Replaces a clip path atomically; control handles remain pure data and are safe for AI tooling. */
+export class SetMotionClipPathCommand extends DirectorCommand<SetMotionClipPathPayload> {
+    static readonly TYPE = "motion.set-clip-path";
+    readonly type = SetMotionClipPathCommand.TYPE;
 
-    constructor(readonly payload: RemoveMotionKeyPayload) {
+    constructor(readonly payload: SetMotionClipPathPayload) {
         super();
     }
 
@@ -218,35 +209,36 @@ export class RemoveMotionKeyCommand extends DirectorCommand<RemoveMotionKeyPaylo
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        if (
-            typeof this.payload !== "object" ||
-            this.payload === null ||
-            Array.isArray(this.payload) ||
-            typeof this.payload.id !== "string" ||
-            this.payload.id.length === 0
-        ) {
-            return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
+        const current = existingClip(ctx, this.payload.id);
+        if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        try {
+            new CameraMotionPath(this.payload.path);
+            return [];
+        } catch {
+            return [issue(ISSUE_CODE.PAYLOAD, "path", "路径必须含两个以上有限 Bézier 锚点")];
         }
-        if (!ctx.motion.path) return [issue(ISSUE_CODE.PATH, "", "运镜路径不存在")];
-        return ctx.motion.path.key(this.payload.id) ? [] : [issue(ISSUE_CODE.KEY, "id", "运镜关键帧不存在")];
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.motion.removeKey(this.payload.id);
+        const current = existingClip(ctx, this.payload.id);
+        if (current) ctx.motion.replaceClip(current.withPath(new CameraMotionPath(this.payload.path)));
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const key = ctx.motion.path?.key(this.payload.id);
-        return key ? [{ type: AddMotionKeyCommand.TYPE, payload: key.toJSON() }] : null;
+        const current = existingClip(ctx, this.payload.id);
+        return current
+            ? [{ type: SetMotionClipPathCommand.TYPE, payload: { id: current.id, path: current.path.toJSON() } }]
+            : null;
     }
 }
 
-export class SetMotionKeyEasingCommand extends DirectorCommand<SetMotionKeyEasingPayload> {
-    static readonly TYPE = "motion.set-key-easing";
-    readonly type = SetMotionKeyEasingCommand.TYPE;
+/** Changes the default world-space look-at target. Object binding is intentionally a later strategy. */
+export class SetMotionClipTargetCommand extends DirectorCommand<SetMotionClipTargetPayload> {
+    static readonly TYPE = "motion.set-clip-target";
+    readonly type = SetMotionClipTargetCommand.TYPE;
 
-    constructor(readonly payload: SetMotionKeyEasingPayload) {
+    constructor(readonly payload: SetMotionClipTargetPayload) {
         super();
     }
 
@@ -255,33 +247,158 @@ export class SetMotionKeyEasingCommand extends DirectorCommand<SetMotionKeyEasin
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        if (
-            typeof this.payload !== "object" ||
-            this.payload === null ||
-            Array.isArray(this.payload) ||
-            typeof this.payload.id !== "string" ||
-            this.payload.id.length === 0
-        ) {
-            return [issue(ISSUE_CODE.PAYLOAD, "id", "运镜关键帧 id 格式无效")];
-        }
-        if (!isEasing(this.payload.easing))
-            return [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
-        if (!ctx.motion.path) return [issue(ISSUE_CODE.PATH, "", "运镜路径不存在")];
-        return ctx.motion.path.key(this.payload.id) ? [] : [issue(ISSUE_CODE.KEY, "id", "运镜关键帧不存在")];
+        const current = existingClip(ctx, this.payload.id);
+        if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        return finiteVector(this.payload.target) ? [] : [issue(ISSUE_CODE.PAYLOAD, "target", "注视目标必须是有限三维坐标")];
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.motion.setKeyEasing(this.payload.id, this.payload.easing);
+        const current = existingClip(ctx, this.payload.id);
+        if (current) ctx.motion.replaceClip(current.withTarget(this.payload.target));
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const key = ctx.motion.path?.key(this.payload.id);
-        return key ? [{ type: SetMotionKeyEasingCommand.TYPE, payload: { id: key.id, easing: key.easing } }] : null;
+        const current = existingClip(ctx, this.payload.id);
+        return current ? [{ type: SetMotionClipTargetCommand.TYPE, payload: { id: current.id, target: current.target } }] : null;
     }
 }
 
-/** Read-only discovery payload; contains only serialized domain data and authoring conditions. */
+export class SetMotionClipEasingCommand extends DirectorCommand<SetMotionClipEasingPayload> {
+    static readonly TYPE = "motion.set-clip-easing";
+    readonly type = SetMotionClipEasingCommand.TYPE;
+
+    constructor(readonly payload: SetMotionClipEasingPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const current = existingClip(ctx, this.payload.id);
+        if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        const isAllowed =
+            this.payload.easing === CAMERA_MOTION_EASING.LINEAR || this.payload.easing === CAMERA_MOTION_EASING.SMOOTH;
+        return isAllowed ? [] : [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const current = existingClip(ctx, this.payload.id);
+        if (current) ctx.motion.replaceClip(current.withEasing(this.payload.easing));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const current = existingClip(ctx, this.payload.id);
+        return current
+            ? [{ type: SetMotionClipEasingCommand.TYPE, payload: { id: current.id, easing: current.easing } }]
+            : null;
+    }
+}
+
+export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPayload> {
+    static readonly TYPE = "motion.remove-clip";
+    readonly type = RemoveMotionClipCommand.TYPE;
+
+    constructor(readonly payload: RemoveMotionClipPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        return existingClip(ctx, this.payload.id) ? [] : [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.motion.removeClip(this.payload.id);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const current = existingClip(ctx, this.payload.id);
+        return current ? [{ type: CreateMotionClipCommand.TYPE, payload: restoreMotionClipPayload(current) }] : null;
+    }
+}
+
+/** Updates the sole Program output track. A program segment may reference a static or moving camera. */
+export class SetProgramClipCommand extends DirectorCommand<SetProgramClipPayload> {
+    static readonly TYPE = "program.set-clip";
+    readonly type = SetProgramClipCommand.TYPE;
+
+    constructor(readonly payload: SetProgramClipPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const clip = programClipFrom(this.payload);
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "输出片段格式无效")];
+        if (!ctx.camera.director.getShot(clip.cameraId)) {
+            return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "输出片段引用的机位不存在")];
+        }
+        if (clip.endTimeSeconds > ctx.timeline.document.duration) {
+            return [issue(ISSUE_CODE.DURATION, "clip", "输出片段不能超出时间轴时长")];
+        }
+        try {
+            ctx.motion.program.withClip(clip);
+            return [];
+        } catch {
+            return [issue(ISSUE_CODE.PROGRAM_OVERLAP, "clip", "Program 输出片段不能重叠")];
+        }
+    }
+
+    execute(ctx: DirectorContext): void {
+        const clip = programClipFrom(this.payload);
+        if (clip) ctx.motion.replaceProgram(ctx.motion.program.withClip(clip));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const prior = ctx.motion.program.clip(this.payload.clip.id);
+        return prior
+            ? [{ type: SetProgramClipCommand.TYPE, payload: { clip: prior.toJSON() } }]
+            : [{ type: RemoveProgramClipCommand.TYPE, payload: { id: this.payload.clip.id } }];
+    }
+}
+
+export class RemoveProgramClipCommand extends DirectorCommand<RemoveProgramClipPayload> {
+    static readonly TYPE = "program.remove-clip";
+    readonly type = RemoveProgramClipCommand.TYPE;
+
+    constructor(readonly payload: RemoveProgramClipPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        return ctx.motion.program.clip(this.payload.id)
+            ? []
+            : [issue(ISSUE_CODE.PROGRAM_CLIP, "id", "Program 输出片段不存在")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.motion.replaceProgram(ctx.motion.program.withoutClip(this.payload.id));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const current = ctx.motion.program.clip(this.payload.id);
+        return current ? [{ type: SetProgramClipCommand.TYPE, payload: { clip: current.toJSON() } }] : null;
+    }
+}
+
+/** Read-only AI discovery and inspection endpoint. No Three references cross this boundary. */
 export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "motion.get";
     readonly type = CameraMotionGetQuery.TYPE;
@@ -289,57 +406,38 @@ export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>
     constructor(readonly payload: Record<string, never> = EMPTY_PAYLOAD) {}
 
     validate(): readonly string[] {
-        return this.validateIssues().map((current) => current.message);
-    }
-
-    validateIssues(): readonly CommandIssue[] {
-        return typeof this.payload === "object" &&
-            this.payload !== null &&
-            !Array.isArray(this.payload) &&
-            Object.getPrototypeOf(this.payload) === Object.prototype &&
-            Object.keys(this.payload).length === 0
-            ? []
-            : [issue(ISSUE_CODE.PAYLOAD, "", "motion.get payload 必须是空对象")];
+        return Object.keys(this.payload).length === 0 ? [] : ["motion.get payload 必须是空对象"];
     }
 
     execute(ctx: DirectorContext): unknown {
-        const hasDirectorPose = ctx.camera.lastDirectorPose !== null;
-        const isShotActive = ctx.camera.activeShotId !== null;
         return {
-            path: ctx.motion.path?.toJSON() ?? null,
-            hasDirectorPose,
-            isShotActive,
-            canAddCurrentView: hasDirectorPose && !isShotActive && !ctx.clock.isPlaying,
+            clips: ctx.motion.clips.map((clip) => clip.toJSON()),
+            program: ctx.motion.program.toJSON(),
+            activeProgramCameraId: ctx.motion.program.cameraAt(ctx.clock.time),
+            timelineDurationSeconds: ctx.timeline.document.duration,
         };
     }
 }
 
 function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: MOTION_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.camera-motion-v1" };
+    return { type, version: MOTION_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.camera-motion-v2" };
 }
 
-/** motion.* command, query, and discovery metadata share the Dispatcher registry. */
+/** Motion and Program commands share one discovery namespace while retaining independent write permissions. */
 export function registerCameraMotionCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(
-        AddMotionKeyCommand.TYPE,
-        (payload: AddMotionKeyPayload) => new AddMotionKeyCommand(payload),
-        capability(AddMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]),
-    );
-    dispatcher.register(
-        MoveMotionKeyCommand.TYPE,
-        (payload: MoveMotionKeyPayload) => new MoveMotionKeyCommand(payload),
-        capability(MoveMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]),
-    );
-    dispatcher.register(
-        RemoveMotionKeyCommand.TYPE,
-        (payload: RemoveMotionKeyPayload) => new RemoveMotionKeyCommand(payload),
-        capability(RemoveMotionKeyCommand.TYPE, "command", [MOTION_PERMISSION]),
-    );
-    dispatcher.register(
-        SetMotionKeyEasingCommand.TYPE,
-        (payload: SetMotionKeyEasingPayload) => new SetMotionKeyEasingCommand(payload),
-        capability(SetMotionKeyEasingCommand.TYPE, "command", [MOTION_PERMISSION]),
-    );
+    const commands = [
+        CreateMotionClipCommand,
+        SetMotionClipRangeCommand,
+        SetMotionClipPathCommand,
+        SetMotionClipTargetCommand,
+        SetMotionClipEasingCommand,
+        RemoveMotionClipCommand,
+        SetProgramClipCommand,
+        RemoveProgramClipCommand,
+    ] as const;
+    for (const Command of commands) {
+        dispatcher.register(Command.TYPE, (payload) => new Command(payload), capability(Command.TYPE, "command", [MOTION_PERMISSION]));
+    }
     dispatcher.registerQuery(
         CameraMotionGetQuery.TYPE,
         (payload: Record<string, never>) => new CameraMotionGetQuery(payload),

@@ -390,9 +390,10 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
         const oversizedTrack = ctx.timeline.document.tracks.find((track) =>
             track.keyframes.some((keyframe) => keyframe.time > payload.duration),
         );
-        const oversizedMotionKey = ctx.motion.path?.keys.find((key) => key.timeSeconds > payload.duration);
-        return oversizedTrack || oversizedMotionKey
-            ? [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长不能截断已有关键帧")]
+        const oversizedMotionClip = ctx.motion.clips.some((clip) => clip.endTimeSeconds > payload.duration);
+        const oversizedProgramClip = ctx.motion.program.clips.some((clip) => clip.endTimeSeconds > payload.duration);
+        return oversizedTrack || oversizedMotionClip || oversizedProgramClip
+            ? [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长不能截断已有关键帧或机位片段")]
             : [];
     }
 

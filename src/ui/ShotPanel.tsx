@@ -13,7 +13,6 @@ import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
@@ -21,7 +20,7 @@ import { Box3, Vector3 } from "three";
 
 import { SHOT_SIZE } from "../camera/CameraShot";
 import type { ShotSize } from "../camera/CameraShot";
-import { CAMERA_MOTION_EASING } from "../camera/CameraMotionPath";
+import { CAMERA_MOTION_EASING } from "../camera/CameraMotionClip";
 import { ShotSizePresets } from "../camera/ShotSizePresets";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
@@ -33,6 +32,7 @@ const ROW_ACTIONS_GAP = 0.25;
 const SNACKBAR_DURATION_MS = 4000;
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
+const DEFAULT_MOTION_DURATION_SECONDS = 2;
 
 const SHOT_SIZE_LABELS: Record<ShotSize, string> = {
     [SHOT_SIZE.EXTREME_LONG]: "大远景",
@@ -163,45 +163,65 @@ interface MotionSectionProps {
     readonly onNotice: (message: string) => void;
 }
 
-/** 运镜编辑只发 dispatcher 命令；预览开关是本桌局部 UI 状态。 */
+/** Motion authoring starts from a selected static camera and a settled free editor view. */
 const MotionSection = observer(function MotionSection({
     previewVisible,
     onPreviewVisibleChange,
     onNotice,
 }: MotionSectionProps) {
     const stores = useDirectorDeskStores();
-    const { camera, clock, dispatcher, motion } = stores;
-    const path = motion.path;
-    const canAddCurrentView = !clock.isPlaying && camera.activeShotId === null && camera.lastDirectorPose !== null;
+    const { camera, clock, dispatcher, motion, selection, timeline } = stores;
+    const selectedCameraId = selection.primaryId;
+    const selectedShot = selectedCameraId ? camera.director.getShot(selectedCameraId) : undefined;
+    const directorPose = camera.lastDirectorPose;
+    const remainingSeconds = timeline.document.duration - clock.time;
+    const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, remainingSeconds);
+    const canCreateMotion =
+        !clock.isPlaying && selectedCameraId !== null && selectedShot !== undefined && directorPose !== null && durationSeconds > 0;
 
     const dispatch = (type: string, payload: unknown) => {
         const result = dispatcher.dispatch({ type, payload }, stores);
         if (!result.ok) onNotice(result.issues?.join(";") ?? result.error);
     };
 
+    const createMotionClip = () => {
+        if (!selectedCameraId || !selectedShot || !directorPose) return;
+        const clipId = crypto.randomUUID();
+        dispatch("motion.create-clip", {
+            clip: {
+                id: clipId,
+                cameraId: selectedCameraId,
+                startTimeSeconds: clock.time,
+                durationSeconds,
+                target: directorPose.target,
+                easing: CAMERA_MOTION_EASING.SMOOTH,
+                path: {
+                    anchors: [
+                        { id: `${clipId}-start`, position: selectedShot.position },
+                        { id: `${clipId}-end`, position: directorPose.position },
+                    ],
+                },
+            },
+        });
+    };
+
     return (
         <>
-            <Typography variant="subtitle2">运镜({path?.keys.length ?? 0})</Typography>
+            <Typography variant="subtitle2">运镜片段({motion.clips.length})</Typography>
             <Button
                 size="small"
                 variant="outlined"
                 startIcon={<VideocamIcon />}
                 fullWidth
-                disabled={!canAddCurrentView}
-                aria-describedby={canAddCurrentView ? undefined : "director-desk-motion-add-status"}
-                onClick={() =>
-                    dispatch("motion.add-key", {
-                        id: crypto.randomUUID(),
-                        timeSeconds: clock.time,
-                        easing: CAMERA_MOTION_EASING.SMOOTH,
-                    })
-                }
+                disabled={!canCreateMotion}
+                aria-describedby={canCreateMotion ? undefined : "director-desk-motion-create-status"}
+                onClick={createMotionClip}
             >
-                当前视角加关键帧
+                从机位到当前视角创建运镜
             </Button>
-            {!canAddCurrentView && (
-                <Typography id="director-desk-motion-add-status" role="status" variant="caption" color="text.secondary">
-                    需暂停、回到导演自由视角并等待视角稳定
+            {!canCreateMotion && (
+                <Typography id="director-desk-motion-create-status" role="status" variant="caption" color="text.secondary">
+                    选择机位，暂停播放后在自由视口确定终点
                 </Typography>
             )}
             <Button
@@ -211,47 +231,23 @@ const MotionSection = observer(function MotionSection({
                 aria-pressed={previewVisible}
                 onClick={() => onPreviewVisibleChange(!previewVisible)}
             >
-                {previewVisible ? "隐藏运镜轨迹" : "显示运镜轨迹"}
+                {previewVisible ? "隐藏运镜路径" : "显示运镜路径"}
             </Button>
-            {path?.keys.map((key) => (
+            {motion.clips.map((clip) => (
                 <Box
-                    key={`${key.id}:${key.timeSeconds}`}
+                    key={clip.id}
                     sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 0.5, mt: 0.5, alignItems: "center" }}
                 >
-                    <TextField
-                        size="small"
-                        type="number"
-                        label="时间(秒)"
-                        defaultValue={key.timeSeconds}
-                        aria-label={`运镜关键帧 ${key.id} 时间`}
-                        slotProps={{ htmlInput: { min: 0, max: stores.timeline.document.duration, step: 0.1 } }}
-                        onBlur={(event) => {
-                            const rawTime = event.currentTarget.value;
-                            const timeSeconds = rawTime.length === 0 ? Number.NaN : Number(rawTime);
-                            if (Number.isFinite(timeSeconds) && timeSeconds !== key.timeSeconds) {
-                                dispatch("motion.move-key", { id: key.id, timeSeconds });
-                            }
-                        }}
-                    />
-                    <Select
-                        size="small"
-                        value={key.easing}
-                        aria-label={`运镜关键帧 ${key.id} 缓动`}
-                        onChange={(event) =>
-                            dispatch("motion.set-key-easing", { id: key.id, easing: event.target.value })
-                        }
-                    >
-                        <MenuItem value={CAMERA_MOTION_EASING.LINEAR}>linear</MenuItem>
-                        <MenuItem value={CAMERA_MOTION_EASING.SMOOTH}>smooth</MenuItem>
-                    </Select>
+                    <Typography variant="caption" noWrap>
+                        {clip.cameraId} · {clip.startTimeSeconds.toFixed(2)}s — {clip.endTimeSeconds.toFixed(2)}s
+                    </Typography>
                     <Button
                         size="small"
                         color="error"
-                        sx={{ gridColumn: "1 / -1" }}
-                        aria-label={`删除运镜关键帧 ${key.id}，${key.timeSeconds.toFixed(2)} 秒`}
-                        onClick={() => dispatch("motion.remove-key", { id: key.id })}
+                        aria-label={`删除 ${clip.cameraId} 运镜片段`}
+                        onClick={() => dispatch("motion.remove-clip", { id: clip.id })}
                     >
-                        删除关键帧
+                        删除
                     </Button>
                 </Box>
             ))}

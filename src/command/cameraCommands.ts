@@ -1,5 +1,7 @@
-import { sampleCameraMotionPath } from "../camera/CameraMotionPath";
-import type { CameraMotionSample } from "../camera/CameraMotionPath";
+import { sampleCameraMotionClip } from "../camera/CameraMotionClip";
+import type { CameraMotionSample } from "../camera/CameraMotionClip";
+import type { PathPositionSample } from "../camera/CameraMotionPath";
+import { CreateMotionClipCommand, SetProgramClipCommand } from "./cameraMotionCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
 import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
@@ -15,6 +17,7 @@ const TMP_MOTION_SAMPLE: CameraMotionSample = {
     targetZ: 0,
     fov: 45,
 };
+const TMP_PATH_SAMPLE: PathPositionSample = { x: 0, y: 0, z: 0 };
 
 const CAMERA_POSE_CAPABILITY: CommandCapability = {
     type: "camera.get-pose",
@@ -39,11 +42,16 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
     }
 
     execute(ctx: DirectorContext): unknown {
-        const path = ctx.motion.path;
+        const programCameraId = ctx.motion.program.cameraAt(ctx.clock.time);
+        const shot = programCameraId ? ctx.camera.director.getShot(programCameraId) : undefined;
+        const clip = programCameraId ? ctx.motion.clipAt(programCameraId, ctx.clock.time) : null;
         const sampled =
-            path && sampleCameraMotionPath(path, ctx.clock.time, TMP_MOTION_SAMPLE) ? TMP_MOTION_SAMPLE : null;
+            clip && shot && sampleCameraMotionClip(clip, ctx.clock.time, shot, TMP_PATH_SAMPLE, TMP_MOTION_SAMPLE)
+                ? TMP_MOTION_SAMPLE
+                : null;
         return {
             activeShotId: ctx.camera.activeShotId,
+            programCameraId,
             live: ctx.capture.readCameraPose(),
             motionSampled: sampled
                 ? {
@@ -122,16 +130,25 @@ export class RemoveShotCommand extends DirectorCommand<ShotIdPayload> {
     }
 
     execute(ctx: DirectorContext): void {
+        ctx.motion.removeCamera(this.payload.id);
         ctx.camera.removeShot(this.payload.id);
     }
 
-    /** 机位快照回放;若删的是激活机位,回放后恢复激活态 */
+    /** Restores the static camera before its dependent temporal data, preserving command invariants on redo. */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const prev = ctx.camera.director.getShot(this.payload.id);
-        if (!prev) return null;
+        const previousShot = ctx.camera.director.getShot(this.payload.id);
+        if (!previousShot) return null;
         const wasActive = ctx.camera.activeShotId === this.payload.id;
+        const motionCommands = ctx.motion
+            .clipsForCamera(this.payload.id)
+            .map((clip) => ({ type: CreateMotionClipCommand.TYPE, payload: { clip: clip.toJSON() } }));
+        const programCommands = ctx.motion.program.clips
+            .filter((clip) => clip.cameraId === this.payload.id)
+            .map((clip) => ({ type: SetProgramClipCommand.TYPE, payload: { clip: clip.toJSON() } }));
         return [
-            { type: "camera.set-shot", payload: { id: this.payload.id, shot: prev.toJSON() } },
+            { type: "camera.set-shot", payload: { id: this.payload.id, shot: previousShot.toJSON() } },
+            ...motionCommands,
+            ...programCommands,
             ...(wasActive ? [{ type: ActivateShotCommand.TYPE, payload: { id: this.payload.id } }] : []),
         ];
     }

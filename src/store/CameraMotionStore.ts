@@ -1,41 +1,58 @@
-import { makeAutoObservable } from "mobx";
+import { makeAutoObservable, observable, values } from "mobx";
 
-import { CameraMotionPath } from "../camera/CameraMotionPath";
-import type { MotionKey } from "../camera/CameraMotionPath";
+import type { CameraMotionClip } from "../camera/CameraMotionClip";
+import { CameraProgramTrack } from "../camera/CameraProgramTrack";
 
-/** Per-DirectorDesk serializable motion state; a desk has at most one director path. */
+/** Per-desk motion timeline state. Cameras remain static entities; clips and Program output live here. */
 export class CameraMotionStore {
-    private currentPath: CameraMotionPath | null = null;
+    private readonly clipsById = observable.map<string, CameraMotionClip>();
+    private currentProgram = new CameraProgramTrack();
 
     constructor() {
         makeAutoObservable(this);
     }
 
-    get path(): CameraMotionPath | null {
-        return this.currentPath;
+    get clips(): readonly CameraMotionClip[] {
+        return [...values(this.clipsById)].sort((left, right) => left.startTimeSeconds - right.startTimeSeconds);
     }
 
-    addKey(key: MotionKey): void {
-        this.currentPath = (this.currentPath ?? new CameraMotionPath({ keys: [] })).withKey(key);
+    get program(): CameraProgramTrack {
+        return this.currentProgram;
     }
 
-    moveKey(keyId: string, timeSeconds: number): void {
-        const key = this.currentPath?.key(keyId);
-        if (!key || !this.currentPath) return;
-        this.currentPath = this.currentPath.withKey(key.withTime(timeSeconds));
+    clip(clipId: string): CameraMotionClip | undefined {
+        return this.clipsById.get(clipId);
     }
 
-    setKeyEasing(keyId: string, easing: MotionKey["easing"]): void {
-        const key = this.currentPath?.key(keyId);
-        if (!key || !this.currentPath) return;
-        this.currentPath = this.currentPath.withKey(key.withEasing(easing));
+    clipsForCamera(cameraId: string): readonly CameraMotionClip[] {
+        return this.clips.filter((clip) => clip.cameraId === cameraId);
+    }
+    clipAt(cameraId: string, timeSeconds: number): CameraMotionClip | null {
+        for (const clip of this.clipsById.values()) {
+            if (clip.cameraId === cameraId && clip.covers(timeSeconds)) return clip;
+        }
+        return null;
     }
 
-    removeKey(keyId: string): void {
-        this.currentPath = this.currentPath?.withoutKey(keyId) ?? null;
+    replaceClip(clip: CameraMotionClip): void {
+        this.clipsById.set(clip.id, clip);
     }
-    /** 文档导入的整树恢复(同 TimelineStore.restoreTracks 先例) */
-    restorePath(path: CameraMotionPath | null): void {
-        this.currentPath = path;
+
+    removeClip(clipId: string): void {
+        this.clipsById.delete(clipId);
+    }
+
+    removeCamera(cameraId: string): void {
+        for (const clip of this.clipsForCamera(cameraId)) this.clipsById.delete(clip.id);
+        this.currentProgram = this.currentProgram.withoutCamera(cameraId);
+    }
+
+    replaceProgram(program: CameraProgramTrack): void {
+        this.currentProgram = program;
+    }
+
+    restore(clips: readonly CameraMotionClip[], program: CameraProgramTrack): void {
+        this.clipsById.replace(clips.map((clip) => [clip.id, clip]));
+        this.currentProgram = program;
     }
 }

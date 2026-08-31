@@ -1,7 +1,8 @@
 import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { CameraStore } from "../store/CameraStore";
-import { sampleCameraMotionPath } from "./CameraMotionPath";
-import type { CameraMotionSample } from "./CameraMotionPath";
+import { sampleCameraMotionClip } from "./CameraMotionClip";
+import type { CameraMotionSample } from "./CameraMotionClip";
+import type { PathPositionSample } from "./CameraMotionPath";
 
 /** R3F-owned runtime bridge; no Three references ever enter MobX state. */
 export interface CameraMotionSink {
@@ -10,11 +11,12 @@ export interface CameraMotionSink {
 }
 
 /**
- * Runtime-only motion evaluator. The reusable scalar sample keeps every playback tick allocation-free;
- * the enclosing PlaybackCoordinator owns reactions and invalidation ordering.
+ * Runtime-only Program evaluator. It reads every time-varying value from immutable data and writes
+ * only caller-owned scalars into the current R3F camera, preserving free editor camera state.
  */
 export class CameraMotionSampler {
     private sink: CameraMotionSink | null = null;
+    private readonly pathSample: PathPositionSample = { x: 0, y: 0, z: 0 };
     private readonly sample: CameraMotionSample = {
         positionX: 0,
         positionY: 0,
@@ -41,17 +43,29 @@ export class CameraMotionSampler {
     }
 
     sampleCurrent(timeSeconds: number): boolean {
-        if (this.camera.activeShotId !== null) return false;
-        const path = this.motion.path;
-        if (!path || !sampleCameraMotionPath(path, timeSeconds, this.sample)) {
+        const cameraId = this.motion.program.cameraAt(timeSeconds);
+        const shot = cameraId ? this.camera.director.getShot(cameraId) : undefined;
+        if (!cameraId || !shot) {
             this.sink?.restoreFreeDirectorPose();
             return false;
         }
+        const clip = this.motion.clipAt(cameraId, timeSeconds);
+        if (clip && sampleCameraMotionClip(clip, timeSeconds, shot, this.pathSample, this.sample)) {
+            this.sink?.applyMotion(this.sample);
+            return true;
+        }
+        this.sample.positionX = shot.position[0];
+        this.sample.positionY = shot.position[1];
+        this.sample.positionZ = shot.position[2];
+        this.sample.targetX = shot.target[0];
+        this.sample.targetY = shot.target[1];
+        this.sample.targetZ = shot.target[2];
+        this.sample.fov = shot.fov;
         this.sink?.applyMotion(this.sample);
         return true;
     }
 
     restore(): void {
-        if (this.camera.activeShotId === null) this.sink?.restoreFreeDirectorPose();
+        this.sink?.restoreFreeDirectorPose();
     }
 }

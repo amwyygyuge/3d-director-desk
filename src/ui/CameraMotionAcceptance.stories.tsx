@@ -2,10 +2,16 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { DirectorDesk } from "./DirectorDesk";
-import { TEST_ASSETS } from "./stories/seeds";
+import { WORKSPACE_STAGE } from "../workspace/stages";
 
-const VIEW_IDS = ["motion-push", "motion-pull", "motion-pan-left", "motion-pan-right"] as const;
-const KEY_IDS = ["motion-key-0", "motion-key-2", "motion-key-4", "motion-key-6"] as const;
+const PRIMARY_CAMERA_ID = "主机位";
+const SIDE_CAMERA_ID = "侧机位";
+const PRIMARY_MOTION_ID = "motion-main-push";
+const SIDE_MOTION_ID = "motion-side-arc";
+const PROGRAM_PRIMARY_ID = "program-main";
+const PROGRAM_SIDE_ID = "program-side";
+const TIMELINE_DURATION_SECONDS = 8;
+const FIRST_CUT_DURATION_SECONDS = 4;
 
 function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): void {
     const result = stores.dispatcher.dispatch({ type, payload }, stores);
@@ -16,94 +22,89 @@ function assertAcceptance(condition: unknown, message: string): asserts conditio
     if (!condition) throw new Error(`运镜验收: ${message}`);
 }
 
-function recordViewKeys(stores: DirectorDeskStores, index: number): void {
-    const id = VIEW_IDS[index];
-    const keyId = KEY_IDS[index];
-    if (!id || !keyId) return;
-    dispatch(stores, "view.frame", { ids: [id] });
-    requestAnimationFrame(() => {
-        dispatch(stores, "motion.add-key", {
-            id: keyId,
-            timeSeconds: index * 2,
-            easing: index % 2 === 0 ? "smooth" : "linear",
-        });
-        if (index + 1 < VIEW_IDS.length) {
-            recordViewKeys(stores, index + 1);
-            return;
-        }
-        verifyMotionAcceptance(stores);
-    });
+function createMotionPayload(id: string, cameraId: string, startTimeSeconds: number, durationSeconds: number) {
+    const isPrimary = cameraId === PRIMARY_CAMERA_ID;
+    const start = isPrimary ? [-6, 3, 6] : [6, 3, 6];
+    const midpoint = isPrimary ? [-2, 2.5, 3] : [3, 2, 1];
+    const end = isPrimary ? [0, 2, 2] : [0, 2.5, 3];
+    return {
+        clip: {
+            id,
+            cameraId,
+            startTimeSeconds,
+            durationSeconds,
+            target: [0, 1.5, 0],
+            easing: "smooth",
+            path: {
+                anchors: [
+                    { id: `${id}-start`, position: start, outHandle: [1, 0, -2] },
+                    { id: `${id}-middle`, position: midpoint, inHandle: [-1, 0, 1], outHandle: [1, 0, -1] },
+                    { id: `${id}-end`, position: end, inHandle: [-1, 0, 1] },
+                ],
+            },
+        },
+    };
 }
 
 function verifyMotionAcceptance(stores: DirectorDeskStores): void {
-    const capabilityTypes = stores.dispatcher.listCapabilities().map((capability) => capability.type);
-    for (const type of [
-        "motion.add-key",
-        "motion.move-key",
-        "motion.remove-key",
-        "motion.set-key-easing",
+    const capabilities = stores.dispatcher.listCapabilities().map((capability) => capability.type);
+    const expectedCapabilities = [
+        "motion.create-clip",
+        "motion.set-clip-range",
+        "motion.set-clip-path",
+        "motion.set-clip-target",
+        "motion.remove-clip",
+        "program.set-clip",
+        "program.remove-clip",
         "motion.get",
-    ]) {
-        assertAcceptance(capabilityTypes.includes(type), `${type} capability 未注册`);
+    ];
+    for (const type of expectedCapabilities) {
+        assertAcceptance(capabilities.includes(type), `${type} capability 未注册`);
     }
-
     const motion = stores.dispatcher.query({ type: "motion.get", payload: {} }, stores);
     assertAcceptance(motion.ok, "motion.get 查询失败");
-    const value = motion.ok ? (motion.value as { path: { keys: unknown[] } | null }) : null;
-    assertAcceptance(value?.path?.keys.length === 4, "四个推拉摇移关键帧未建立");
+    const value = motion.ok ? (motion.value as { clips: unknown[]; program: { clips: unknown[] } }) : null;
+    assertAcceptance(value?.clips.length === 2, "双机位运镜片段未建立");
+    assertAcceptance(value?.program.clips.length === 2, "Program 输出片段未建立");
 
-    dispatch(stores, "motion.set-key-easing", { id: KEY_IDS[1], easing: "smooth" });
-    assertAcceptance(stores.history.undo(stores).ok, "缓动撤销失败");
-    assertAcceptance(stores.history.redo(stores).ok, "缓动重做失败");
-    dispatch(stores, "motion.remove-key", { id: KEY_IDS[3] });
-    assertAcceptance(stores.history.undo(stores).ok, "删除关键帧撤销失败");
-
-    const timingFailure = stores.dispatcher.dispatch(
-        { type: "motion.move-key", payload: { id: KEY_IDS[0], timeSeconds: 99 } },
+    const conflict = stores.dispatcher.dispatch(
+        {
+            type: "motion.create-clip",
+            payload: createMotionPayload("motion-overlap", PRIMARY_CAMERA_ID, 1, FIRST_CUT_DURATION_SECONDS),
+        },
         stores,
     );
-    const timingIssue = timingFailure.ok ? undefined : timingFailure.issueDetails?.[0];
-    assertAcceptance(
-        timingIssue?.code === "motion-time-outside-duration" && timingIssue.path === "timeSeconds",
-        "时间越界未返回结构化失败",
-    );
+    const conflictIssue = conflict.ok ? undefined : conflict.issueDetails?.[0];
+    assertAcceptance(conflictIssue?.code === "motion-overlapping-clip", "同机位片段重叠未被拒绝");
 
-    dispatch(stores, "camera.set-shot", {
-        id: "motion-suppression-shot",
-        shot: { position: [7, 5, 7], target: [0, 1, 0], fov: 45 },
-    });
-    dispatch(stores, "camera.activate", { id: "motion-suppression-shot" });
-    const activeShotFailure = stores.dispatcher.dispatch(
-        { type: "motion.add-key", payload: { id: "motion-blocked", timeSeconds: 8, easing: "linear" } },
-        stores,
-    );
-    const activeShotIssue = activeShotFailure.ok ? undefined : activeShotFailure.issueDetails?.[0];
-    assertAcceptance(
-        activeShotIssue?.code === "motion-active-static-shot" && activeShotIssue.path === "",
-        "掌镜抑制未返回结构化失败",
-    );
-    dispatch(stores, "camera.deactivate", {});
-
-    dispatch(stores, "transport.play", {});
-    dispatch(stores, "transport.seek", { time: 3 });
-    dispatch(stores, "transport.pause", {});
-    dispatch(stores, "transport.stop", {});
-    requestAnimationFrame(() => dispatch(stores, "capture.frame", { hideHelpers: true }));
+    dispatch(stores, "motion.set-clip-easing", { id: SIDE_MOTION_ID, easing: "linear" });
+    assertAcceptance(stores.history.undo(stores).ok, "运镜缓动撤销失败");
+    assertAcceptance(stores.history.redo(stores).ok, "运镜缓动重做失败");
+    dispatch(stores, "transport.seek", { time: 5 });
+    const cameraPose = stores.dispatcher.query({ type: "camera.get-pose", payload: {} }, stores);
+    assertAcceptance(cameraPose.ok, "输出机位位姿查询失败");
 }
 
 function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
-    const transforms = [
-        { position: [-5, 1, 0], rotation: [0, 0, 0], scale: [0.8, 0.8, 0.8] },
-        { position: [-1, 1, -2], rotation: [0, 0, 0], scale: [1.6, 1.6, 1.6] },
-        { position: [2, 1, -1], rotation: [0, 0, 0], scale: [1, 1, 1] },
-        { position: [5, 1, 2], rotation: [0, 0, 0], scale: [0.65, 0.65, 0.65] },
-    ] as const;
-    VIEW_IDS.forEach((id, index) => {
-        const transform = transforms[index];
-        if (!transform) throw new Error(`运镜验收: ${id} 缺少摆位`);
-        dispatch(stores, "object.place", { id, kind: "model", sourceUrl: TEST_ASSETS.helmet, transform });
+    dispatch(stores, "timeline.set-duration", { duration: TIMELINE_DURATION_SECONDS });
+    dispatch(stores, "camera.set-shot", {
+        id: PRIMARY_CAMERA_ID,
+        shot: { position: [-6, 3, 6], target: [0, 1.5, 0], fov: 45 },
     });
-    requestAnimationFrame(() => recordViewKeys(stores, 0));
+    dispatch(stores, "camera.set-shot", {
+        id: SIDE_CAMERA_ID,
+        shot: { position: [6, 3, 6], target: [0, 1.5, 0], fov: 50 },
+    });
+    dispatch(stores, "motion.create-clip", createMotionPayload(PRIMARY_MOTION_ID, PRIMARY_CAMERA_ID, 0, FIRST_CUT_DURATION_SECONDS));
+    dispatch(stores, "motion.create-clip", createMotionPayload(SIDE_MOTION_ID, SIDE_CAMERA_ID, FIRST_CUT_DURATION_SECONDS, FIRST_CUT_DURATION_SECONDS));
+    dispatch(stores, "program.set-clip", {
+        clip: { id: PROGRAM_PRIMARY_ID, cameraId: PRIMARY_CAMERA_ID, startTimeSeconds: 0, durationSeconds: FIRST_CUT_DURATION_SECONDS },
+    });
+    dispatch(stores, "program.set-clip", {
+        clip: { id: PROGRAM_SIDE_ID, cameraId: SIDE_CAMERA_ID, startTimeSeconds: FIRST_CUT_DURATION_SECONDS, durationSeconds: FIRST_CUT_DURATION_SECONDS },
+    });
+    stores.ui.setStage(WORKSPACE_STAGE.OUTPUT);
+    verifyMotionAcceptance(stores);
 }
 
 const meta: Meta<typeof DirectorDesk> = {
@@ -112,14 +113,10 @@ const meta: Meta<typeof DirectorDesk> = {
 };
 
 export default meta;
-
 type Story = StoryObj<typeof DirectorDesk>;
 
-/**
- * 验收：仅经 dispatcher 播种四个关键帧（推拉摇移）、查询能力、CRUD/撤销/重做及结构化失败。
- * 轨迹预览默认可见；播放到 3 秒、暂停并停止后应还原自由导演视角；截图应排除轨迹 helper。
- */
-export const 运镜轨迹命令验收: Story = {
+/** 双机位独立 Bézier 运镜在单一 Program 输出轨硬切；Storybook 人工走查路径、时间与自由编辑视口边界。 */
+export const 双机位Program运镜验收: Story = {
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk initialMotionPreviewVisible onReady={seedCameraMotionAcceptance} />

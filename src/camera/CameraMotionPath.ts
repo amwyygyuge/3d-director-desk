@@ -1,169 +1,163 @@
-import { CameraShot } from "./CameraShot";
 import type { Vec3 } from "../core/SceneObject";
 
-export const DIRECTOR_CAMERA_MOTION_ID = "director-camera-motion";
-export const CAMERA_MOTION_EASING = {
-    LINEAR: "linear",
-    SMOOTH: "smooth",
-} as const;
-export type CameraMotionEasing = (typeof CAMERA_MOTION_EASING)[keyof typeof CAMERA_MOTION_EASING];
-
-export interface CameraShotSnapshot {
+export interface MotionPathAnchorInit {
+    readonly id: string;
     readonly position: Vec3;
-    readonly target: Vec3;
-    readonly fov: number;
+    readonly inHandle?: Vec3;
+    readonly outHandle?: Vec3;
 }
 
-export interface MotionKeyInit {
+export interface MotionPathAnchorJSON {
     readonly id: string;
-    readonly timeSeconds: number;
-    readonly shot: CameraShot | CameraShotSnapshot;
-    readonly easing: CameraMotionEasing;
-}
-
-export interface MotionKeyJSON {
-    readonly id: string;
-    readonly timeSeconds: number;
-    readonly shot: CameraShotSnapshot;
-    readonly easing: CameraMotionEasing;
+    readonly position: Vec3;
+    readonly inHandle: Vec3;
+    readonly outHandle: Vec3;
 }
 
 export interface CameraMotionPathInit {
-    readonly id?: string;
-    readonly keys: readonly (MotionKey | MotionKeyInit)[];
+    readonly anchors: readonly (MotionPathAnchor | MotionPathAnchorInit)[];
 }
 
 export interface CameraMotionPathJSON {
-    readonly id: string;
-    readonly keys: readonly MotionKeyJSON[];
+    readonly anchors: readonly MotionPathAnchorJSON[];
 }
 
-/** Immutable camera-motion key: absolute timeline time plus a complete camera snapshot. */
-export class MotionKey {
-    readonly id: string;
-    readonly timeSeconds: number;
-    readonly shot: CameraShot;
-    readonly easing: CameraMotionEasing;
+export interface PathPositionSample {
+    x: number;
+    y: number;
+    z: number;
+}
+const MINIMUM_PATH_ANCHORS = 2;
+const CUBIC_BEZIER_CONTROL_WEIGHT = 3;
 
-    constructor(init: MotionKeyInit) {
+const ZERO_VECTOR: Vec3 = [0, 0, 0];
+
+function copyVector(vector: Vec3): Vec3 {
+    return [vector[0], vector[1], vector[2]];
+}
+
+function isFiniteVector(vector: Vec3): boolean {
+    return vector.every((component) => Number.isFinite(component));
+}
+
+/** Immutable Bézier anchor. Handles are offsets from the anchor position, never Three vectors. */
+export class MotionPathAnchor {
+    readonly id: string;
+    readonly position: Vec3;
+    readonly inHandle: Vec3;
+    readonly outHandle: Vec3;
+
+    constructor(init: MotionPathAnchorInit) {
+        const inHandle = init.inHandle ?? ZERO_VECTOR;
+        const outHandle = init.outHandle ?? ZERO_VECTOR;
+        if (init.id.length === 0 || !isFiniteVector(init.position) || !isFiniteVector(inHandle) || !isFiniteVector(outHandle)) {
+            throw new Error("MotionPathAnchor requires a stable id and finite vectors");
+        }
         this.id = init.id;
-        this.timeSeconds = init.timeSeconds;
-        this.shot = init.shot instanceof CameraShot ? init.shot : new CameraShot(init.shot);
-        this.easing = init.easing;
+        this.position = copyVector(init.position);
+        this.inHandle = copyVector(inHandle);
+        this.outHandle = copyVector(outHandle);
         Object.freeze(this);
     }
 
-    withTime(timeSeconds: number): MotionKey {
-        return new MotionKey({ ...this.toJSON(), timeSeconds });
+    withPosition(position: Vec3): MotionPathAnchor {
+        return new MotionPathAnchor({ ...this.toJSON(), position });
     }
 
-    withEasing(easing: CameraMotionEasing): MotionKey {
-        return new MotionKey({ ...this.toJSON(), easing });
+    withHandle(kind: "in" | "out", value: Vec3): MotionPathAnchor {
+        const handles = kind === "in" ? { inHandle: value } : { outHandle: value };
+        return new MotionPathAnchor({ ...this.toJSON(), ...handles });
     }
 
-    toJSON(): MotionKeyJSON {
-        return { id: this.id, timeSeconds: this.timeSeconds, shot: this.shot.toJSON(), easing: this.easing };
+    toJSON(): MotionPathAnchorJSON {
+        return {
+            id: this.id,
+            position: copyVector(this.position),
+            inHandle: copyVector(this.inHandle),
+            outHandle: copyVector(this.outHandle),
+        };
     }
 }
 
-/** Immutable, serializable single director-camera path. */
+/** Immutable spatial path. Time belongs to CameraMotionClip, so one path can be retimed without redrawing it. */
 export class CameraMotionPath {
-    readonly id: string;
-    readonly keys: readonly MotionKey[];
+    readonly anchors: readonly MotionPathAnchor[];
 
     constructor(init: CameraMotionPathInit) {
-        this.id = DIRECTOR_CAMERA_MOTION_ID;
-        this.keys = Object.freeze(
-            init.keys
-                .map((key) => (key instanceof MotionKey ? key : new MotionKey(key)))
-                .sort((left, right) => left.timeSeconds - right.timeSeconds),
+        const anchors = init.anchors.map((anchor) =>
+            anchor instanceof MotionPathAnchor ? anchor : new MotionPathAnchor(anchor),
         );
+        if (anchors.length < MINIMUM_PATH_ANCHORS) throw new Error("CameraMotionPath requires at least two anchors");
+        const ids = new Set(anchors.map((anchor) => anchor.id));
+        if (ids.size !== anchors.length) throw new Error("CameraMotionPath anchor ids must be unique");
+        this.anchors = Object.freeze(anchors);
         Object.freeze(this);
     }
 
-    key(keyId: string): MotionKey | undefined {
-        return this.keys.find((current) => current.id === keyId);
+    anchor(anchorId: string): MotionPathAnchor | undefined {
+        return this.anchors.find((anchor) => anchor.id === anchorId);
     }
 
-    withKey(key: MotionKey): CameraMotionPath {
-        return new CameraMotionPath({
-            id: this.id,
-            keys: [...this.keys.filter((current) => current.id !== key.id), key],
-        });
+    withAnchor(anchor: MotionPathAnchor): CameraMotionPath {
+        const existing = this.anchor(anchor.id);
+        const anchors = existing
+            ? this.anchors.map((current) => (current.id === anchor.id ? anchor : current))
+            : [...this.anchors, anchor];
+        return new CameraMotionPath({ anchors });
     }
 
-    withoutKey(keyId: string): CameraMotionPath | null {
-        const keys = this.keys.filter((current) => current.id !== keyId);
-        return keys.length === 0 ? null : new CameraMotionPath({ id: this.id, keys });
+    withoutAnchor(anchorId: string): CameraMotionPath | null {
+        const anchors = this.anchors.filter((anchor) => anchor.id !== anchorId);
+        return anchors.length < MINIMUM_PATH_ANCHORS ? null : new CameraMotionPath({ anchors });
     }
 
     toJSON(): CameraMotionPathJSON {
-        return { id: this.id, keys: this.keys.map((key) => key.toJSON()) };
+        return { anchors: this.anchors.map((anchor) => anchor.toJSON()) };
     }
 }
 
-/** Reusable scalar output; callers own it so interpolation allocates nothing. */
-export interface CameraMotionSample {
-    positionX: number;
-    positionY: number;
-    positionZ: number;
-    targetX: number;
-    targetY: number;
-    targetZ: number;
-    fov: number;
+function cubicPoint(
+    from: MotionPathAnchor,
+    to: MotionPathAnchor,
+    progress: number,
+    sample: PathPositionSample,
+): void {
+    const inverse = 1 - progress;
+    const inverseSquared = inverse * inverse;
+    const progressSquared = progress * progress;
+    const fromOutX = from.position[0] + from.outHandle[0];
+    const fromOutY = from.position[1] + from.outHandle[1];
+    const fromOutZ = from.position[2] + from.outHandle[2];
+    const toInX = to.position[0] + to.inHandle[0];
+    const toInY = to.position[1] + to.inHandle[1];
+    const toInZ = to.position[2] + to.inHandle[2];
+    sample.x =
+        inverseSquared * inverse * from.position[0] +
+        CUBIC_BEZIER_CONTROL_WEIGHT * inverseSquared * progress * fromOutX +
+        CUBIC_BEZIER_CONTROL_WEIGHT * inverse * progressSquared * toInX +
+        progressSquared * progress * to.position[0];
+    sample.y =
+        inverseSquared * inverse * from.position[1] +
+        CUBIC_BEZIER_CONTROL_WEIGHT * inverseSquared * progress * fromOutY +
+        CUBIC_BEZIER_CONTROL_WEIGHT * inverse * progressSquared * toInY +
+        progressSquared * progress * to.position[1];
+    sample.z =
+        inverseSquared * inverse * from.position[2] +
+        CUBIC_BEZIER_CONTROL_WEIGHT * inverseSquared * progress * fromOutZ +
+        CUBIC_BEZIER_CONTROL_WEIGHT * inverse * progressSquared * toInZ +
+        progressSquared * progress * to.position[2];
 }
 
-function easedProgress(easing: CameraMotionEasing, progress: number): number {
-    return easing === CAMERA_MOTION_EASING.SMOOTH ? progress * progress * (3 - 2 * progress) : progress;
-}
-
-function writeShot(sample: CameraMotionSample, shot: CameraShot): void {
-    sample.positionX = shot.position[0];
-    sample.positionY = shot.position[1];
-    sample.positionZ = shot.position[2];
-    sample.targetX = shot.target[0];
-    sample.targetY = shot.target[1];
-    sample.targetZ = shot.target[2];
-    sample.fov = shot.fov;
-}
-
-/**
- * Exact shared interpolation for playback and preview. It intentionally rejects samples outside
- * the authored range so the runtime can restore the free director pose rather than clamp.
- */
-export function sampleCameraMotionPath(
-    path: CameraMotionPath,
-    timeSeconds: number,
-    sample: CameraMotionSample,
-): boolean {
-    const first = path.keys[0];
-    const last = path.keys[path.keys.length - 1];
-    if (!first || !last || timeSeconds < first.timeSeconds || timeSeconds > last.timeSeconds) return false;
-    if (timeSeconds === first.timeSeconds || first === last) {
-        writeShot(sample, first.shot);
-        return true;
-    }
-    if (timeSeconds === last.timeSeconds) {
-        writeShot(sample, last.shot);
-        return true;
-    }
-
-    for (let index = 0; index < path.keys.length - 1; index += 1) {
-        const from = path.keys[index];
-        const to = path.keys[index + 1];
-        if (!from || !to || timeSeconds < from.timeSeconds || timeSeconds > to.timeSeconds) continue;
-        const progress = easedProgress(
-            from.easing,
-            (timeSeconds - from.timeSeconds) / (to.timeSeconds - from.timeSeconds),
-        );
-        sample.positionX = from.shot.position[0] + (to.shot.position[0] - from.shot.position[0]) * progress;
-        sample.positionY = from.shot.position[1] + (to.shot.position[1] - from.shot.position[1]) * progress;
-        sample.positionZ = from.shot.position[2] + (to.shot.position[2] - from.shot.position[2]) * progress;
-        sample.targetX = from.shot.target[0] + (to.shot.target[0] - from.shot.target[0]) * progress;
-        sample.targetY = from.shot.target[1] + (to.shot.target[1] - from.shot.target[1]) * progress;
-        sample.targetZ = from.shot.target[2] + (to.shot.target[2] - from.shot.target[2]) * progress;
-        sample.fov = from.shot.fov + (to.shot.fov - from.shot.fov) * progress;
-        return true;
-    }
-    return false;
+/** Samples a spatial Bézier path into caller-owned scalars; suitable for every playback frame. */
+export function sampleCameraMotionPath(path: CameraMotionPath, progress: number, sample: PathPositionSample): boolean {
+    if (!Number.isFinite(progress)) return false;
+    const segmentCount = path.anchors.length - 1;
+    const clamped = Math.min(Math.max(progress, 0), 1);
+    const scaled = clamped * segmentCount;
+    const segmentIndex = Math.min(Math.floor(scaled), segmentCount - 1);
+    const from = path.anchors[segmentIndex];
+    const to = path.anchors[segmentIndex + 1];
+    if (!from || !to) return false;
+    cubicPoint(from, to, scaled - segmentIndex, sample);
+    return true;
 }

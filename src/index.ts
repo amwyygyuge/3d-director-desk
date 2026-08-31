@@ -28,22 +28,23 @@ export { CameraShot, SHOT_SIZE } from "./camera/CameraShot";
 export type { ShotSize } from "./camera/CameraShot";
 export { ShotSizePresets } from "./camera/ShotSizePresets";
 export { FramingService } from "./camera/FramingService";
-export {
-    CameraMotionPath,
-    CAMERA_MOTION_EASING,
-    DIRECTOR_CAMERA_MOTION_ID,
-    MotionKey,
-    sampleCameraMotionPath,
-} from "./camera/CameraMotionPath";
+export { CameraMotionPath, MotionPathAnchor, sampleCameraMotionPath } from "./camera/CameraMotionPath";
 export type {
-    CameraMotionEasing,
     CameraMotionPathInit,
     CameraMotionPathJSON,
-    CameraMotionSample,
-    CameraShotSnapshot,
-    MotionKeyInit,
-    MotionKeyJSON,
+    MotionPathAnchorInit,
+    MotionPathAnchorJSON,
+    PathPositionSample,
 } from "./camera/CameraMotionPath";
+export { CAMERA_MOTION_EASING, CameraMotionClip, sampleCameraMotionClip } from "./camera/CameraMotionClip";
+export type { CameraMotionClipInit, CameraMotionClipJSON, CameraMotionEasing, CameraMotionSample } from "./camera/CameraMotionClip";
+export { CameraProgramClip, CameraProgramTrack } from "./camera/CameraProgramTrack";
+export type {
+    CameraProgramClipInit,
+    CameraProgramClipJSON,
+    CameraProgramTrackInit,
+    CameraProgramTrackJSON,
+} from "./camera/CameraProgramTrack";
 export { CameraMotionSampler } from "./camera/CameraMotionSampler";
 export type { CameraMotionSink } from "./camera/CameraMotionSampler";
 export type { DirectorPose } from "./store/CameraStore";
@@ -68,7 +69,7 @@ export {
     AssetsPlaceCommand,
     registerAssetCatalogCommands,
 } from "./command/assetCatalogCommands";
-export type { DeskDocument, DeskDocumentAction } from "./document/DeskDocument";
+export type { DeskDocument, DeskDocumentAction, DeskDocumentMotion } from "./document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
 export {
     AdjustLightCommand,
@@ -78,12 +79,16 @@ export {
 } from "./command/lightingCommands";
 export type { LightingObjectSnapshot } from "./command/lightingCommands";
 export {
-    AddMotionKeyCommand,
     CameraMotionGetQuery,
-    MoveMotionKeyCommand,
-    RemoveMotionKeyCommand,
+    CreateMotionClipCommand,
+    RemoveMotionClipCommand,
+    RemoveProgramClipCommand,
     registerCameraMotionCommands,
-    SetMotionKeyEasingCommand,
+    SetMotionClipEasingCommand,
+    SetMotionClipPathCommand,
+    SetMotionClipRangeCommand,
+    SetMotionClipTargetCommand,
+    SetProgramClipCommand,
 } from "./command/cameraMotionCommands";
 export { CommandHistory } from "./command/CommandHistory";
 export type { HistoryEntry } from "./command/CommandHistory";

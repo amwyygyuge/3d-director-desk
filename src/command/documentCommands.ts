@@ -1,5 +1,6 @@
+import { CameraMotionClip } from "../camera/CameraMotionClip";
+import { CameraProgramTrack } from "../camera/CameraProgramTrack";
 import { CameraShot } from "../camera/CameraShot";
-import { CameraMotionPath } from "../camera/CameraMotionPath";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "../core/SceneObject";
 import { mountWhenReady, provisionAction } from "./actionProvisioning";
 import { TimelineTrack } from "../timeline/TimelineTrack";
@@ -50,6 +51,19 @@ function validateShotEntry(entry: unknown): boolean {
     );
 }
 
+function hasValidMotion(value: unknown): boolean {
+    if (typeof value !== "object" || value === null || !("clips" in value) || !("program" in value)) return false;
+    const motion = value as { clips: unknown; program: unknown };
+    if (!Array.isArray(motion.clips) || typeof motion.program !== "object" || motion.program === null) return false;
+    try {
+        const clips = motion.clips.map((clip) => new CameraMotionClip(clip as ConstructorParameters<typeof CameraMotionClip>[0]));
+        new CameraProgramTrack(motion.program as ConstructorParameters<typeof CameraProgramTrack>[0]);
+        return clips.every((clip) => clip.cameraId.length > 0);
+    } catch {
+        return false;
+    }
+}
+
 /**
  * 导入整桌文档(替换式):清空现有实体/机位/运镜,按文档重建。
  * 动作 clip 是运行时资源——按 URL 异步重取注册后恢复挂载,失败经 applicationNotice 上报。
@@ -74,6 +88,7 @@ export class ImportDocumentCommand extends DirectorCommand<ImportDocumentPayload
         if (typeof doc.timeline !== "object" || doc.timeline === null || !Number.isFinite(doc.timeline.duration)) {
             issues.push("文档时间轴无效");
         }
+        if (!hasValidMotion(doc.motion)) issues.push("文档运镜数据无效");
         for (const entity of doc.entities ?? []) {
             if (typeof entity.id !== "string" || entity.id.length === 0 || !SCENE_OBJECT_KINDS.includes(entity.kind)) {
                 issues.push(`实体参数无效: ${String(entity.id)}`);
@@ -92,14 +107,16 @@ export class ImportDocumentCommand extends DirectorCommand<ImportDocumentPayload
         const doc = this.payload.document;
         for (const entity of [...ctx.scene.manager.list()]) ctx.scene.removeObject(entity.id);
         for (const [id] of ctx.camera.director.listShots()) ctx.camera.removeShot(id);
-        ctx.motion.restorePath(null);
         ctx.timeline.setDuration(doc.timeline.duration);
         ctx.timeline.restoreTracks(
             doc.timeline.tracks.map((track) => (track instanceof TimelineTrack ? track : new TimelineTrack(track))),
         );
         for (const init of doc.entities) ctx.scene.addObject(init);
         for (const shot of doc.shots) ctx.camera.addShot(shot.id, new CameraShot(shot.shot));
-        ctx.motion.restorePath(doc.motion ? new CameraMotionPath(doc.motion) : null);
+        ctx.motion.restore(
+            doc.motion.clips.map((clip) => new CameraMotionClip(clip)),
+            new CameraProgramTrack(doc.motion.program),
+        );
         void this.restoreActions(ctx, doc);
         ctx.playback.sampleCurrent();
     }
