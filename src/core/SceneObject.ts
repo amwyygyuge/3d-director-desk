@@ -80,6 +80,7 @@ export class SceneObject {
     /** 显示名(Outliner/Inspector);缺省按 kind + id 尾缀派生(确定性,undo/redo 回放不漂移) */
     readonly name: string;
     private currentTransform: Transform;
+    private mountedActionId: string | null = null;
     /** 灯光参数值对象；仅 light 实体有值，Three 光源仍由运行时树拥有。 */
     private currentLight: LightParams | null;
     private currentPose: PoseSnapshot | null;
@@ -143,4 +144,12 @@ export class SceneObject {
         };
     }
 
+    /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
+    get actionId(): string | null {
+        return this.mountedActionId;
+    }
+
+    applyAction(actionId: string | null): void {
+        this.mountedActionId = actionId;
+    }
 }

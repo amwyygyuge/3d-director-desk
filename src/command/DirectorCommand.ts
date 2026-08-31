@@ -1,3 +1,6 @@
+import type { AnimationBinder } from "../animation/AnimationBinder";
+import type { ActionPreviewController } from "../animation/ActionPreviewController";
+import type { AnimationLibrary } from "../assets/AnimationLibrary";
 import type { AssetCatalog } from "../assets/catalog/AssetCatalog";
 import type { HostAdapter } from "../host/HostAdapter";
 import type { ModelImporter } from "../loaders/ModelImporter";
@@ -25,13 +28,17 @@ export interface DirectorContext {
     /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;
-    /** 模型加载/缓存。 */
+    /** 模型加载/缓存(文档导入时重取动作 clip) */
     readonly models: ModelImporter;
+    /** 模型级局部动作预览，独立于 Timeline 的全局 playhead。 */
+    readonly actionPreview: ActionPreviewController;
+    readonly binder: AnimationBinder;
     /** Per-desk Three skeleton index; command/query boundary returns serializable DTOs only. */
     readonly skeletons: SkeletonRuntimeRegistry;
     /** Converts an evaluated static pose into a grounded serializable transform. */
     readonly poseGrounding: PoseGroundingService;
-    /** 资源目录(内置/注入条目的统一注册表) */
+    readonly animations: AnimationLibrary;
+    /** 资源目录(内置/注入/远程条目的统一注册表) */
     readonly catalog: AssetCatalog;
     /** 宿主适配器(截图回传/模型导入;iframe 与直嵌两形态一契约) */
     readonly host: HostAdapter;

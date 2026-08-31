@@ -1,6 +1,12 @@
 // 公共出口:宿主(Monet 插件壳)只从这里消费
 import "./styles/index.css";
 
+export { AnimationBinder } from "./animation/AnimationBinder";
+export { BoneCompatibilityChecker, BONE_MATCH_THRESHOLD } from "./animation/BoneCompatibilityChecker";
+export type { BoneCheckResult } from "./animation/BoneCompatibilityChecker";
+export { AssetLibrary } from "./assets/AssetLibrary";
+export { AnimationLibrary } from "./assets/AnimationLibrary";
+export { ActionAsset } from "./assets/ActionAsset";
 export { formatFromFileName, formatFromUrl, ModelAsset, MODEL_FORMAT } from "./assets/ModelAsset";
 export type { ModelFormat } from "./assets/ModelAsset";
 export { HostBridge, HostBridgeConfiguration, HostBridgeSession } from "./bridge/HostBridge";
@@ -69,8 +75,13 @@ export { BuiltinAssetProvider } from "./assets/catalog/AssetProvider";
 export type { AssetProvider } from "./assets/catalog/AssetProvider";
 export { ASSET_CATEGORY, ASSET_KIND, ASSET_SOURCE } from "./assets/catalog/AssetEntry";
 export type { AssetEntry, AssetKind, AssetSource } from "./assets/catalog/AssetEntry";
-export { AssetsListQuery, AssetsPlaceCommand, registerAssetCatalogCommands } from "./command/assetCatalogCommands";
-export type { DeskDocument, DeskDocumentMotion } from "./document/DeskDocument";
+export {
+    AssetsListQuery,
+    AssetsMountCommand,
+    AssetsPlaceCommand,
+    registerAssetCatalogCommands,
+} from "./command/assetCatalogCommands";
+export type { DeskDocument, DeskDocumentAction, DeskDocumentMotion } from "./document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "./command/navigationCommands";
 export {
     AdjustLightCommand,
@@ -101,16 +112,31 @@ export {
     RemoveObjectCommand,
     SetCameraShotCommand,
 } from "./command/commands";
-export { CameraSequenceGetQuery, SetTimelineDurationCommand, registerTimelineCommands } from "./command/timelineCommands";
-export { DirectorCommand } from "./command/DirectorCommand";
-export { registerCameraCommands, RemoveShotCommand } from "./command/cameraCommands";
 export {
+    AddTimelineKeyCommand,
+    MoveTimelineKeyCommand,
+    RemoveTimelineKeyCommand,
+    RestoreTimelineTracksCommand,
+    SetTimelineDurationCommand,
+    SetTimelineKeyEasingCommand,
+    registerTimelineCommands,
+} from "./command/timelineCommands";
+export { DirectorCommand } from "./command/DirectorCommand";
+export {
+    ActivateShotCommand,
+    DeactivateShotCommand,
+    registerCameraCommands,
+    RemoveShotCommand,
+} from "./command/cameraCommands";
+export {
+    MountActionCommand,
+    registerActionCommands,
     TransportPauseCommand,
     TransportPlayCommand,
     TransportSeekCommand,
+    UnmountActionCommand,
     TransportStopCommand,
-    registerTransportCommands,
-} from "./command/transportCommands";
+} from "./command/actionCommands";
 export type {
     CommandIssue,
     CommandIssueOption,
@@ -156,7 +182,7 @@ export { CameraMotionStore } from "./store/CameraMotionStore";
 export { SceneStore } from "./store/SceneStore";
 export { SelectionStore } from "./store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "./store/UiStore";
-export { DEFAULT_CAMERA_SEQUENCE_DURATION_SECONDS, TimelineStore } from "./store/TimelineStore";
+export { TimelineStore } from "./store/TimelineStore";
 export type { GizmoMode } from "./store/UiStore";
 export { ShortcutChord } from "./shortcuts/ShortcutChord";
 export { ShortcutRegistry } from "./shortcuts/ShortcutRegistry";
@@ -171,6 +197,16 @@ export {
 export type { ShortcutId } from "./shortcuts/builtinShortcuts";
 export type { GizmoAxis } from "./store/UiStore";
 export { TimeTransport } from "./time/TimeTransport";
+export { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "./timeline/TimelineDoc";
+export type { TimelineDocInit } from "./timeline/TimelineDoc";
+export { TimelineTrack, TIMELINE_TRACK_KIND } from "./timeline/TimelineTrack";
+export { registerKeyframeCodec, keyframeCodecFor } from "./timeline/keyframeCodecs";
+export type { KeyframeCodec } from "./timeline/keyframeCodecs";
+export type { TimelineTrackInit, TimelineTrackKind } from "./timeline/TimelineTrack";
+export { TransformKeyframe, TIMELINE_EASING } from "./timeline/TransformKeyframe";
+export type { TimelineEasing, TransformKeyframeInit } from "./timeline/TransformKeyframe";
+export { TimelineSampler, evaluateTimelineTransform, evaluateTransformTrack } from "./timeline/TimelineSampler";
+export type { TransformSample } from "./timeline/TimelineSampler";
 export { PlaybackCoordinator } from "./timeline/PlaybackCoordinator";
 export type { TimelineInvalidator } from "./timeline/PlaybackCoordinator";
 export { createDirectorDeskStores, DirectorDeskProvider, useDirectorDeskStores } from "./ui/DirectorDeskContext";

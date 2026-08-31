@@ -4,6 +4,9 @@ import { AssetCatalog } from "../assets/catalog/AssetCatalog";
 import { BuiltinAssetProvider } from "../assets/catalog/AssetProvider";
 import type { AssetProvider } from "../assets/catalog/AssetProvider";
 
+import { AnimationBinder } from "../animation/AnimationBinder";
+import { ActionPreviewController } from "../animation/ActionPreviewController";
+import { AnimationLibrary } from "../assets/AnimationLibrary";
 import { AssetLibrary } from "../assets/AssetLibrary";
 import type { HostBridgeConfiguration } from "../bridge/HostBridge";
 import { InertHostAdapter, PostMessageAdapter } from "../host/HostAdapter";
@@ -11,14 +14,13 @@ import type { HostAdapter } from "../host/HostAdapter";
 import { CaptureService } from "../capture/CaptureService";
 import { FrameRateMonitor } from "../core/FrameRateMonitor";
 import { CommandDispatcher } from "../command/CommandDispatcher";
-import { registerBuiltinCommands } from "../command/commands";
+import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "../command/commands";
 import { CommandHistory } from "../command/CommandHistory";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
 import { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
 import { PoseGroundingService } from "../pose/PoseGroundingService";
 import { CameraStore } from "../store/CameraStore";
-import { CameraAuthoringStore } from "../store/CameraAuthoringStore";
 import { CameraMotionStore } from "../store/CameraMotionStore";
 import { SceneStore } from "../store/SceneStore";
 import { SelectionStore } from "../store/SelectionStore";
@@ -71,13 +73,11 @@ export interface DirectorDeskStores {
     clock: TimeTransport;
     /** 真实 R3F render 的低频帧率读数；只作性能观测，绝不进入文档状态。 */
     frameRate: FrameRateMonitor;
-    /** Camera sequence duration state; scene object animation tracks are intentionally absent. */
+    /** 可序列化 TimelineDoc 的每实例状态容器 */
     timeline: TimelineStore;
-    /** Per-desk serializable camera motion and Program output state. */
+    /** 单条导演运镜路径的每实例可序列化状态容器 */
     motion: CameraMotionStore;
-    /** Per-desk camera/editor selection; separate from scene-object selection and document state. */
-    authoring: CameraAuthoringStore;
-    /** Camera playback plus static pose application. */
+    /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
     /** 命令层唯一入口:UI/宿主/AI 的一切写操作经此分发 */
@@ -96,6 +96,12 @@ export interface DirectorDeskStores {
     host: HostAdapter;
     /** 撤销/重做历史(命令层红利;回放经 dispatcher record:false) */
     history: CommandHistory;
+    /** 动作库(纯数据表 + clip 运行时表) */
+    animations: AnimationLibrary;
+    /** 动作挂载协调器;创建时即接入统一时钟 */
+    binder: AnimationBinder;
+    /** 当前 Inspector 选中模型的非持久动作预览；不驱动全局时间线。 */
+    actionPreview: ActionPreviewController;
     /** 骨骼 Three 运行时索引；只存于本桌实例，绝不进入 MobX。 */
     skeletons: SkeletonRuntimeRegistry;
     /** 静态预设姿势的地面贴合运行时服务；输出仍经命令写回 Transform。 */
@@ -112,20 +118,23 @@ export function createDirectorDeskStores(options?: {
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
+    registerBuiltinKeyframeCodecs();
     const history = new CommandHistory();
     history.bindDispatcher(dispatcher);
     dispatcher.attachHistory(history);
     const host =
         options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
     const clock = new TimeTransport();
+    const binder = new AnimationBinder();
+    const actionPreview = new ActionPreviewController(binder);
     const scene = new SceneStore();
     const poseGrounding = new PoseGroundingService(scene.manager);
     const timeline = new TimelineStore();
     const skeletons = new SkeletonRuntimeRegistry();
     const motion = new CameraMotionStore();
+    binder.bindTransport(clock);
     const camera = new CameraStore();
-    const authoring = new CameraAuthoringStore();
-    const playback = new PlaybackCoordinator(scene.manager, clock, motion, camera, skeletons);
+    const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera, binder, skeletons);
     const catalog = new AssetCatalog();
     const lifecycle = new DeskLifecycleGuard();
     // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
@@ -138,7 +147,6 @@ export function createDirectorDeskStores(options?: {
         selection: new SelectionStore(),
         timeline,
         motion,
-        authoring,
         playback,
         camera,
         clock,
@@ -151,8 +159,11 @@ export function createDirectorDeskStores(options?: {
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,
         history,
+        animations: new AnimationLibrary(),
         skeletons,
         poseGrounding,
+        binder,
+        actionPreview,
         catalog,
         lifecycle,
     };

@@ -19,6 +19,8 @@ import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
@@ -30,9 +32,11 @@ import type { ComponentType } from "react";
 import { createDefaultLightParams } from "../core/LightParams";
 import type { LightType } from "../core/LightParams";
 import { GIZMO_MODE } from "../store/UiStore";
-import { VIEWPORT_MODE } from "../store/CameraAuthoringStore";
 import type { GizmoMode } from "../store/UiStore";
 import { formatShortcutHint, SHORTCUT_ID } from "../shortcuts/builtinShortcuts";
+import type { ShortcutId } from "../shortcuts/builtinShortcuts";
+import { STAGE_DEFS, STAGE_ORDER } from "../workspace/stages";
+import type { WorkspaceStage } from "../workspace/stages";
 import { requestFrameCapture } from "../command/captureCommands";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { LightModeToggle } from "./LightModeToggle";
@@ -50,23 +54,41 @@ const PLAY_INDICATOR_COLOR = "success.main";
 const PLAY_INDICATOR_SIZE = 8;
 const PLAY_INDICATOR_GAP = 0.5;
 
+/** 阶段切换页签:点击 + 数字键直切(SHORTCUT_SPECS),提示同源 */
+const STAGE_SHORTCUT_ID: Record<WorkspaceStage, ShortcutId> = {
+    set: SHORTCUT_ID.STAGE_SET,
+    camera: SHORTCUT_ID.STAGE_CAMERA,
+    output: SHORTCUT_ID.STAGE_OUTPUT,
+};
 
-const ViewportModeSwitch = observer(function ViewportModeSwitch() {
-    const { authoring } = useDirectorDeskStores();
+const StageTabs = observer(function StageTabs() {
+    const { ui } = useDirectorDeskStores();
     return (
-        <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={authoring.viewportMode}
-            aria-label="视口模式"
-            onChange={(_, mode) => {
-                if (mode) authoring.setViewportMode(mode);
-            }}
+        <Tabs
+            value={ui.stage}
+            onChange={(_, stage: WorkspaceStage) => ui.setStage(stage)}
+            aria-label="工作区阶段"
+            sx={{ minHeight: 0, "& .MuiTab-root": { minHeight: 0, py: 0.5 } }}
         >
-            <ToggleButton value={VIEWPORT_MODE.DIRECTOR}>导演视角</ToggleButton>
-            <ToggleButton value={VIEWPORT_MODE.CAMERA}>机位预览</ToggleButton>
-            <ToggleButton value={VIEWPORT_MODE.PROGRAM}>成片预览</ToggleButton>
-        </ToggleButtonGroup>
+            {STAGE_ORDER.map((stage) => {
+                const def = STAGE_DEFS[stage];
+                const StageIcon = def.icon;
+                return (
+                    <Tab
+                        key={stage}
+                        value={stage}
+                        label={
+                            <Tooltip title={`${def.label}(${formatShortcutHint(STAGE_SHORTCUT_ID[stage])})`}>
+                                <Box className="flex items-center" sx={{ gap: 0.5 }}>
+                                    <StageIcon fontSize="small" />
+                                    {def.label}
+                                </Box>
+                            </Tooltip>
+                        }
+                    />
+                );
+            })}
+        </Tabs>
     );
 });
 
@@ -197,7 +219,7 @@ const SectionCapture = observer(function SectionCapture() {
             >
                 截图
             </Button>
-            <Tooltip title={`录制镜头序列(0~${stores.timeline.duration}s)为 WebM`}>
+            <Tooltip title={`录制时间轴(0~${stores.timeline.document.duration}s)为 WebM`}>
                 <Button
                     variant={ui.videoRecording ? "contained" : "outlined"}
                     color={ui.videoRecording ? "error" : "inherit"}
@@ -330,9 +352,16 @@ const SECTION_COMPONENTS = {
     clear: SectionClear,
 } satisfies Record<string, ComponentType>;
 
-const TOOLBAR_SECTIONS: readonly (keyof typeof SECTION_COMPONENTS)[] = ["place", "light", "capture", "clear"];
+const STAGE_SECTIONS: Record<WorkspaceStage, readonly (keyof typeof SECTION_COMPONENTS)[]> = {
+    set: ["place", "light", "clear"],
+    camera: [],
+    output: ["capture"],
+};
 
-/** Top-level actions stay available; viewport mode replaces phase tabs. */
+/**
+ * 顶部工具条:阶段 Tabs + 当前阶段工具组 + 全局组(历史/gizmo/播放态)。
+ * 阶段只是聚焦透镜:不重置选中/视角/场景数据;一切写操作经 dispatcher 分发。
+ */
 export const Toolbar = observer(function Toolbar() {
     const stores = useDirectorDeskStores();
     const { ui } = stores;
@@ -348,9 +377,9 @@ export const Toolbar = observer(function Toolbar() {
                 sx={{ overflowX: "auto", px: 1, py: 0.5 }}
             >
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <ViewportModeSwitch />
+                    <StageTabs />
                     <Divider orientation="vertical" flexItem />
-                    {TOOLBAR_SECTIONS.map((key) => {
+                    {STAGE_SECTIONS[ui.stage].map((key) => {
                         const Section = SECTION_COMPONENTS[key];
                         return <Section key={key} />;
                     })}

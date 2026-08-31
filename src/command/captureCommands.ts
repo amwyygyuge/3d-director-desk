@@ -83,7 +83,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     validate(ctx: DirectorContext): string[] {
         if (!ctx.capture.isAttached) return ["渲染器未就绪(Canvas 尚未 onCreated)"];
         if (ctx.capture.isRecording) return ["已有录制进行中(先 capture.video-cancel 或等待完成)"];
-        const duration = this.payload.durationSeconds ?? ctx.timeline.duration;
+        const duration = this.payload.durationSeconds ?? ctx.timeline.document.duration;
         if (!Number.isFinite(duration) || duration <= 0 || duration > VIDEO_MAX_DURATION_SECONDS) {
             return [`录制时长须在 0~${VIDEO_MAX_DURATION_SECONDS} 秒之间`];
         }
@@ -91,7 +91,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     }
 
     execute(ctx: DirectorContext): void {
-        const durationSeconds = this.payload.durationSeconds ?? ctx.timeline.duration;
+        const durationSeconds = this.payload.durationSeconds ?? ctx.timeline.document.duration;
         void (async () => {
             ctx.clock.pause();
             ctx.clock.seek(0);

@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
 import type { DirectorPose } from "../../store/CameraStore";
-import { VIEWPORT_MODE } from "../../store/CameraAuthoringStore";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 import { useOrbitControls } from "../../navigation/orbit";
 import type { OrbitLike } from "../../navigation/orbit";
@@ -25,17 +24,17 @@ function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPo
  * 激活后机位参数被改(FOV 滑杆等)会重跑 effect 重新钉参——activeShot computed 锚定 shots 表该 key,替换即触发。
  */
 export const ShotCameraRig = observer(function ShotCameraRig() {
-    const { authoring, camera: cameraStore } = useDirectorDeskStores();
+    const { camera: cameraStore } = useDirectorDeskStores();
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const invalidate = useThree((state) => state.invalidate);
     const savedDirectorPose = useRef<DirectorPose | null>(null);
     const consumedDirectorPoseNonce = useRef<number | null>(null);
 
-    const activeShotId = authoring.viewportMode === VIEWPORT_MODE.CAMERA ? authoring.selectedCameraId : null;
+    const activeShotId = cameraStore.activeShotId;
     const directorPoseNonce = cameraStore.directorPoseNonce;
     const directorPoseTarget = cameraStore.directorPoseTarget;
-    const shot = activeShotId ? (cameraStore.director.getShot(activeShotId) ?? null) : null;
+    const shot = activeShotId ? cameraStore.activeShot : null;
 
     // 导演视角的 pose 记录:初始一次 + 每次轨道交互结束
     useEffect(() => {

@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { TEST_ASSETS } from "./stories/seeds";
 import { DirectorDesk } from "./DirectorDesk";
-import { VIEWPORT_MODE } from "../store/CameraAuthoringStore";
+import { WORKSPACE_STAGE } from "../workspace/stages";
 
 const PRIMARY_CAMERA_ID = "主机位";
 const SIDE_CAMERA_ID = "侧机位";
@@ -96,7 +96,7 @@ function verifyMotionAcceptance(stores: DirectorDeskStores): void {
 }
 
 function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
-    dispatch(stores, "sequence.set-duration", { duration: TIMELINE_DURATION_SECONDS });
+    dispatch(stores, "timeline.set-duration", { duration: TIMELINE_DURATION_SECONDS });
     dispatch(stores, "camera.set-shot", {
         id: PRIMARY_CAMERA_ID,
         shot: { position: [-6, 3, 6], target: [0, 1.5, 0], fov: 45 },
@@ -126,7 +126,7 @@ function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
     const removeFocusedObject = stores.dispatcher.dispatch({ type: "object.remove", payload: { id: FOCUS_OBJECT_ID } }, stores);
     const removeIssue = removeFocusedObject.ok ? undefined : removeFocusedObject.issueDetails?.[0];
     assertAcceptance(removeIssue?.code === "focus-target-in-use", "删除被跟拍对象未被结构化拒绝");
-    stores.authoring.setViewportMode(VIEWPORT_MODE.PROGRAM);
+    stores.ui.setStage(WORKSPACE_STAGE.OUTPUT);
     verifyMotionAcceptance(stores);
 }
 

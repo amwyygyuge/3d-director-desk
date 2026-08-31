@@ -19,7 +19,6 @@ flowchart LR
     Binding --> Speed[速度曲线编辑器]
     Binding --> Transition[镜头转场]
     Binding --> Monitor[Program / Preview / 多机位宫格]
-    Binding --> ModelAnimation[模型动画恢复]
     TargetKeys --> Transition
     Monitor --> Transition
 ```
@@ -31,11 +30,6 @@ flowchart LR
 | 镜头转场 | Program 从 A 机位到 B 机位的硬切、叠化或匹配切 | 新建 `CameraTransitionClip`；硬切保持默认；叠化需要两个渲染输入和受限 RenderTarget 生命周期 | ⬜ 未开始 |
 | Preview Monitor | Program 外同时监看下一机位或选中机位 | 编辑器局部 UI 状态，不入工程文档；低分辨率、按需刷新、`DisposeBag` 管理 RenderTarget | ⬜ 未开始 |
 | 多机位宫格 | 同时监看多个机位的运行画面 | 视图数线性增加 GPU 重绘与纹理内存；只渲染可见面板，不在默认工作区启用 | ⬜ 未开始 |
-| 模型动画恢复 | 为模型重新引入动作资产、兼容校验、运行时 Mixer 与局部预览 | 必须与静态姿势分层；不得重新把对象 transform 或骨骼动作混进镜头时间轴；需重新定义导入、暂停、取消和 AI 契约 | ⬜ 未开始 |
-
-## 模型动画恢复的预留边界
-
-当前版本仅支持静态 `PoseSnapshot`。模型 ActionMixer、动作资产、动作挂载命令、动作预览控制和对象 transform 关键帧均已移除；恢复时必须以独立 `ModelAnimationTrack` 或独立局部预览为起点，不得复活旧的通用对象时间轴。
 
 ## 目标关键帧的预留契约
 

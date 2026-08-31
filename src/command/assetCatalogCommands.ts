@@ -2,6 +2,7 @@ import { ASSET_KIND, isAssetKind } from "../assets/catalog/AssetEntry";
 import { finiteTransform } from "../core/SceneObject";
 import type { Transform } from "../core/SceneObject";
 import { DirectorCommand } from "./DirectorCommand";
+import { mountWhenReady, provisionAction } from "./actionProvisioning";
 import type { DirectorContext } from "./DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
 
@@ -66,9 +67,9 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
 
     validate(ctx: DirectorContext): string[] {
         const entry = ctx.catalog.get(this.payload.assetId);
-        const id = this.payload.id;
         if (!entry) return [`资源 "${this.payload.assetId}" 不在目录(先 assets.list 发现)`];
-        if (entry.kind !== ASSET_KIND.MODEL) return [`资源 "${this.payload.assetId}" 不是可放置模型`];
+        if (entry.kind !== ASSET_KIND.MODEL) return [`资源 "${this.payload.assetId}" 不是模型(动作用 assets.mount)`];
+        const id = this.payload.id;
         if (ctx.scene.manager.getEntity(id)) return [`id "${id}" 已存在`];
         if (this.payload.transform !== undefined && !finiteTransform(this.payload.transform)) {
             return ["transform 含非法数值"];
@@ -94,12 +95,58 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
     }
 }
 
+interface AssetsMountPayload {
+    readonly assetId: string;
+    readonly objectId: string;
+}
+
+/** 按目录条目挂载动作资产(clip 置备 + 运行时就绪等待;骨骼不兼容由动作挂载校验拦截) */
+export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
+    static readonly TYPE = "assets.mount";
+    readonly type = AssetsMountCommand.TYPE;
+
+    constructor(readonly payload: AssetsMountPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        const entry = ctx.catalog.get(this.payload.assetId);
+        if (!entry) return [`资源 "${this.payload.assetId}" 不在目录(先 assets.list 发现)`];
+        if (entry.kind !== ASSET_KIND.ACTION) return [`资源 "${this.payload.assetId}" 不是动作(模型用 assets.place)`];
+        if (!ctx.scene.manager.getEntity(this.payload.objectId)) return [`对象 "${this.payload.objectId}" 不存在`];
+        return [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const entry = ctx.catalog.get(this.payload.assetId);
+        if (!entry) return;
+        void (async () => {
+            try {
+                const action = await provisionAction(ctx, {
+                    name: entry.name,
+                    url: entry.url,
+                    clipName: entry.clipName,
+                });
+                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id);
+                if (!mounted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${this.payload.objectId}`);
+                ctx.playback.sampleCurrent();
+            } catch {
+                ctx.ui.setApplicationNotice(`动作资产加载失败:${entry.name}`);
+            }
+        })();
+    }
+}
 
 export function registerAssetCatalogCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         AssetsPlaceCommand.TYPE,
         (payload: AssetsPlacePayload) => new AssetsPlaceCommand(payload),
         capability(AssetsPlaceCommand.TYPE, "command", [ASSETS_EDIT_PERMISSION]),
+    );
+    dispatcher.register(
+        AssetsMountCommand.TYPE,
+        (payload: AssetsMountPayload) => new AssetsMountCommand(payload),
+        capability(AssetsMountCommand.TYPE, "command", [ASSETS_EDIT_PERMISSION]),
     );
     dispatcher.registerQuery(
         AssetsListQuery.TYPE,

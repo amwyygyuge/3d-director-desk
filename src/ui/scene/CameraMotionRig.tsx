@@ -7,7 +7,7 @@ import type { CameraMotionSink } from "../../camera/CameraMotionSampler";
 import type { CameraMotionSample } from "../../camera/CameraMotionClip";
 import type { OrbitLike } from "../../navigation/orbit";
 import { useOrbitControls } from "../../navigation/orbit";
-import { VIEWPORT_MODE } from "../../store/CameraAuthoringStore";
+import { WORKSPACE_STAGE } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 /** Runtime owner for temporary Program output poses. Editor camera values are restored on output exit. */
@@ -76,8 +76,8 @@ class CameraMotionRuntimeSink implements CameraMotionSink {
 
 /** Binds Program playback only in the output workspace; camera and motion authoring retain a free editor viewport. */
 export const CameraMotionRig = observer(function CameraMotionRig() {
-    const { authoring, playback } = useDirectorDeskStores();
-    const isProgramOutput = authoring.viewportMode === VIEWPORT_MODE.PROGRAM;
+    const { playback, ui } = useDirectorDeskStores();
+    const isProgramOutput = ui.stage === WORKSPACE_STAGE.OUTPUT;
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const sinkRef = useRef<CameraMotionRuntimeSink | null>(null);

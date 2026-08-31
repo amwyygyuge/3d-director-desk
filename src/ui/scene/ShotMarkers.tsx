@@ -5,7 +5,7 @@ import type { Group } from "three";
 import { BufferGeometry, Float32BufferAttribute, Quaternion, Vector3 } from "three";
 
 import type { CameraShot } from "../../camera/CameraShot";
-import { VIEWPORT_MODE } from "../../store/CameraAuthoringStore";
+import { STAGE_DEFS } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 const BODY_WIDTH = 0.3;
@@ -161,9 +161,12 @@ export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: strin
 export const ShotMarkers = observer(function ShotMarkers() {
     const stores = useDirectorDeskStores();
     const { camera: cameraStore } = stores;
+    const activeShotId = cameraStore.activeShotId;
     const shots = cameraStore.director.listShots();
 
-    if (stores.authoring.viewportMode !== VIEWPORT_MODE.DIRECTOR) return null;
+    // 阶段透镜:机位标记只在运镜阶段显示(布景/动作/成片阶段保持画面干净)
+    if (!STAGE_DEFS[stores.ui.stage].helpers.shotMarkers) return null;
+    if (activeShotId !== null) return null;
     return (
         <>
             {shots.map(([id, shot]) => (

@@ -29,7 +29,6 @@ export interface PathPositionSample {
 }
 const MINIMUM_PATH_ANCHORS = 2;
 const CUBIC_BEZIER_CONTROL_WEIGHT = 3;
-const APPEND_HANDLE_DIVISOR = 3;
 
 const ZERO_VECTOR: Vec3 = [0, 0, 0];
 
@@ -112,25 +111,9 @@ export class CameraMotionPath {
         return anchors.length < MINIMUM_PATH_ANCHORS ? null : new CameraMotionPath({ anchors });
     }
 
-
     toJSON(): CameraMotionPathJSON {
         return { anchors: this.anchors.map((anchor) => anchor.toJSON()) };
     }
-}
-/** Appends a smoothable Bézier anchor using one-third chord handles; callers still commit the returned pure data through commands. */
-export function appendCameraMotionPathAnchor(path: CameraMotionPathJSON, position: Vec3, id: string): CameraMotionPathJSON {
-    const previous = path.anchors[path.anchors.length - 1];
-    if (!previous) return path;
-    const outgoingHandle: Vec3 = [
-        (position[0] - previous.position[0]) / APPEND_HANDLE_DIVISOR,
-        (position[1] - previous.position[1]) / APPEND_HANDLE_DIVISOR,
-        (position[2] - previous.position[2]) / APPEND_HANDLE_DIVISOR,
-    ];
-    const incomingHandle: Vec3 = [-outgoingHandle[0], -outgoingHandle[1], -outgoingHandle[2]];
-    const anchors = path.anchors.map((anchor) =>
-        anchor.id === previous.id ? { ...anchor, outHandle: outgoingHandle } : anchor,
-    );
-    return { anchors: [...anchors, { id, position, inHandle: incomingHandle, outHandle: [0, 0, 0] }] };
 }
 
 function cubicPoint(

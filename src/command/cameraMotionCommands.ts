@@ -88,7 +88,7 @@ function programClipFrom(payload: SetProgramClipPayload): CameraProgramClip | nu
 }
 
 function clipRangeIssue(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): CommandIssue | null {
-    const isOutsideDuration = clip.endTimeSeconds > ctx.timeline.duration;
+    const isOutsideDuration = clip.endTimeSeconds > ctx.timeline.document.duration;
     if (isOutsideDuration) return issue(ISSUE_CODE.DURATION, "clip", "运镜片段不能超出时间轴时长");
     const overlaps = ctx.motion
         .clipsForCamera(clip.cameraId)
@@ -358,7 +358,7 @@ export class SetProgramClipCommand extends DirectorCommand<SetProgramClipPayload
         if (!ctx.camera.director.getShot(clip.cameraId)) {
             return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "输出片段引用的机位不存在")];
         }
-        if (clip.endTimeSeconds > ctx.timeline.duration) {
+        if (clip.endTimeSeconds > ctx.timeline.document.duration) {
             return [issue(ISSUE_CODE.DURATION, "clip", "输出片段不能超出时间轴时长")];
         }
         try {
@@ -428,7 +428,7 @@ export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>
             clips: ctx.motion.clips.map((clip) => clip.toJSON()),
             program: ctx.motion.program.toJSON(),
             activeProgramCameraId: ctx.motion.program.cameraAt(ctx.clock.time),
-            timelineDurationSeconds: ctx.timeline.duration,
+            timelineDurationSeconds: ctx.timeline.document.duration,
         };
     }
 }

@@ -7,6 +7,10 @@ import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
 import { registerPoseCommands } from "./poseCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
+import { registerKeyframeCodec } from "../timeline/keyframeCodecs";
+import { TransformKeyframe } from "../timeline/TransformKeyframe";
+import type { TransformKeyframeInit } from "../timeline/TransformKeyframe";
+import { TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
 import { formatFromUrl, MODEL_FORMAT } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
 import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "../core/LightParams";
@@ -14,12 +18,12 @@ import type { LightParams } from "../core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "../core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "../core/SceneObject";
 import type { CommandDispatcher } from "./CommandDispatcher";
+import { registerActionCommands } from "./actionCommands";
 import { registerCameraCommands, RemoveShotCommand } from "./cameraCommands";
 import { registerCaptureCommands } from "./captureCommands";
 import { registerLightingCommands } from "./lightingCommands";
 import { registerNavigationCommands } from "./navigationCommands";
-import { registerTimelineCommands } from "./timelineCommands";
-import { registerTransportCommands } from "./transportCommands";
+import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timelineCommands";
 import { registerCameraMotionCommands } from "./cameraMotionCommands";
 import { registerAssetCatalogCommands } from "./assetCatalogCommands";
 import { registerDocumentCommands } from "./documentCommands";
@@ -186,16 +190,29 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.playback.restoreObject();
+        ctx.playback.restoreObject(this.payload.id);
+        ctx.timeline.removeObjectTracks(this.payload.id);
+        ctx.binder.unmount(this.payload.id);
         ctx.scene.removeObject(this.payload.id);
         ctx.selection.remove(this.payload.id);
         if (ctx.ui.posePickingObjectId === this.payload.id) ctx.ui.setPosePicking(null, null);
+        if (ctx.binder.isEmpty) ctx.clock.pause();
     }
 
     /** 实体与时间轴轨道快照必须同次回放恢复，确保对象删除的轨道清理可撤销。 */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.id);
-        return entity ? [{ type: PlaceObjectCommand.TYPE, payload: entity.toJSON() }] : null;
+        if (!entity) return null;
+        const tracks = ctx.timeline.document.tracks
+            .filter((track) => track.targetId === entity.id)
+            .map((track) => track.toJSON());
+        const restoreObject: SerializedCommand = {
+            type: PlaceObjectCommand.TYPE,
+            payload: entity.toJSON(),
+        };
+        return tracks.length === 0
+            ? [restoreObject]
+            : [restoreObject, { type: RestoreTimelineTracksCommand.TYPE, payload: { tracks } }];
     }
 }
 
@@ -313,6 +330,18 @@ export class SceneDescribeQuery implements DirectorQuery<Record<string, never>> 
     }
 }
 
+/**
+ * 内置关键帧种类装配:时间轴轨道容器的唯一种类注册点。
+ * 每实例 stores 工厂都会调用,幂等(见 keyframeCodecs);新增种类在此加一行,轨道零改动。
+ */
+export function registerBuiltinKeyframeCodecs(): void {
+    registerKeyframeCodec({
+        kind: TIMELINE_TRACK_KIND.TRANSFORM,
+        owns: (keyframe): keyframe is TransformKeyframe => keyframe instanceof TransformKeyframe,
+        fromInit: (init) => new TransformKeyframe(init as TransformKeyframeInit),
+    });
+}
+
 /** 内置命令注册:Dispatcher 实例化后调一次,AI 工具 schema 由此派生 */
 export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(PlaceObjectCommand.TYPE, (payload) => new PlaceObjectCommand(payload));
@@ -324,11 +353,11 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
         (payload: Record<string, never>) => new SceneDescribeQuery(payload),
         SCENE_DESCRIBE_CAPABILITY,
     );
+    registerActionCommands(dispatcher);
     registerCameraCommands(dispatcher);
     registerCaptureCommands(dispatcher);
     registerNavigationCommands(dispatcher);
     registerTimelineCommands(dispatcher);
-    registerTransportCommands(dispatcher);
     registerLightingCommands(dispatcher);
     registerCameraMotionCommands(dispatcher);
     registerPoseCommands(dispatcher);
