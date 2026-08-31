@@ -5,6 +5,7 @@ import { BuiltinAssetProvider } from "../assets/catalog/AssetProvider";
 import type { AssetProvider } from "../assets/catalog/AssetProvider";
 
 import { AnimationBinder } from "../animation/AnimationBinder";
+import { ActionPreviewController } from "../animation/ActionPreviewController";
 import { AnimationLibrary } from "../assets/AnimationLibrary";
 import { AssetLibrary } from "../assets/AssetLibrary";
 import type { HostBridgeConfiguration } from "../bridge/HostBridge";
@@ -18,6 +19,7 @@ import { CommandHistory } from "../command/CommandHistory";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
 import { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
+import { PoseGroundingService } from "../pose/PoseGroundingService";
 import { CameraStore } from "../store/CameraStore";
 import { CameraMotionStore } from "../store/CameraMotionStore";
 import { ContinuityDiagnosticsStore } from "../store/ContinuityDiagnosticsStore";
@@ -101,8 +103,12 @@ export interface DirectorDeskStores {
     animations: AnimationLibrary;
     /** 动作挂载协调器;创建时即接入统一时钟 */
     binder: AnimationBinder;
+    /** 当前 Inspector 选中模型的非持久动作预览；不驱动全局时间线。 */
+    actionPreview: ActionPreviewController;
     /** 骨骼 Three 运行时索引；只存于本桌实例，绝不进入 MobX。 */
     skeletons: SkeletonRuntimeRegistry;
+    /** 静态预设姿势的地面贴合运行时服务；输出仍经命令写回 Transform。 */
+    poseGrounding: PoseGroundingService;
     /** 生命周期守卫与异步工作取消域 */
     lifecycle: DeskLifecycleGuard;
 }
@@ -123,7 +129,9 @@ export function createDirectorDeskStores(options?: {
         options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
     const clock = new TimeTransport();
     const binder = new AnimationBinder();
+    const actionPreview = new ActionPreviewController(binder);
     const scene = new SceneStore();
+    const poseGrounding = new PoseGroundingService(scene.manager);
     const timeline = new TimelineStore();
     const skeletons = new SkeletonRuntimeRegistry();
     const motion = new CameraMotionStore();
@@ -157,7 +165,9 @@ export function createDirectorDeskStores(options?: {
         history,
         animations: new AnimationLibrary(),
         skeletons,
+        poseGrounding,
         binder,
+        actionPreview,
         catalog,
         lifecycle,
     };

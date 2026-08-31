@@ -11,6 +11,7 @@ export const SHORTCUT_ID = {
     AXIS_Z: "gizmo.axis.z",
     REMOVE_SELECTION: "selection.remove",
     CLEAR_SELECTION: "selection.clear",
+    SHOT_ENTER: "shot.enter",
     SHOT_EXIT: "shot.exit",
     FRAME_SELECTED: "view.frame-selected",
     FRAME_ALL: "view.frame-all",
@@ -18,7 +19,6 @@ export const SHORTCUT_ID = {
     EDIT_REDO: "edit.redo",
     HELP_TOGGLE: "help.toggle",
     STAGE_SET: "stage.set",
-    STAGE_ACTION: "stage.action",
     STAGE_CAMERA: "stage.camera",
     STAGE_OUTPUT: "stage.output",
 } as const;
@@ -39,12 +39,8 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
     { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
-    {
-        id: SHORTCUT_ID.SHOT_EXIT,
-        chords: ["escape"],
-        scope: "shot",
-        label: "退出掌镜(Pointer Lock 下首按先解锁,再按退出)",
-    },
+    { id: SHORTCUT_ID.SHOT_ENTER, chords: ["enter"], scope: "shot-selected", label: "进入掌镜" },
+    { id: SHORTCUT_ID.SHOT_EXIT, chords: ["escape"], scope: "shot", label: "退出掌镜" },
     { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
     { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "gizmo", label: "聚焦选中对象" },
     { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
@@ -52,9 +48,8 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
     { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
     { id: SHORTCUT_ID.STAGE_SET, chords: ["1"], scope: "global", label: "布景阶段" },
-    { id: SHORTCUT_ID.STAGE_ACTION, chords: ["2"], scope: "global", label: "动作阶段" },
-    { id: SHORTCUT_ID.STAGE_CAMERA, chords: ["3"], scope: "global", label: "运镜阶段" },
-    { id: SHORTCUT_ID.STAGE_OUTPUT, chords: ["4"], scope: "global", label: "成片阶段" },
+    { id: SHORTCUT_ID.STAGE_CAMERA, chords: ["2"], scope: "global", label: "运镜阶段" },
+    { id: SHORTCUT_ID.STAGE_OUTPUT, chords: ["3"], scope: "global", label: "成片阶段" },
 ];
 
 function removeSelection(stores: DirectorDeskStores): void {
@@ -64,11 +59,18 @@ function removeSelection(stores: DirectorDeskStores): void {
     stores.selection.clear();
 }
 
+function activateSelectedShot(stores: DirectorDeskStores): void {
+    const shotId = stores.selection.primaryId;
+    if (!shotId || stores.camera.director.getShot(shotId) === undefined) return;
+    stores.dispatcher.dispatch({ type: "camera.activate", payload: { id: shotId } }, stores);
+}
+
 const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void> = {
     [SHORTCUT_ID.AXIS_X]: (s) => s.ui.toggleGizmoAxis("x"),
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
+    [SHORTCUT_ID.SHOT_ENTER]: activateSelectedShot,
     [SHORTCUT_ID.SHOT_EXIT]: (s) => s.dispatcher.dispatch({ type: "camera.deactivate", payload: {} }, s),
     [SHORTCUT_ID.CLEAR_SELECTION]: (s) => s.selection.clear(),
     [SHORTCUT_ID.FRAME_SELECTED]: (s) =>
@@ -78,7 +80,6 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.EDIT_REDO]: (s) => s.history.redo(s),
     [SHORTCUT_ID.HELP_TOGGLE]: (s) => s.ui.toggleHelp(),
     [SHORTCUT_ID.STAGE_SET]: (s) => s.ui.setStage(WORKSPACE_STAGE.SET),
-    [SHORTCUT_ID.STAGE_ACTION]: (s) => s.ui.setStage(WORKSPACE_STAGE.ACTION),
     [SHORTCUT_ID.STAGE_CAMERA]: (s) => s.ui.setStage(WORKSPACE_STAGE.CAMERA),
     [SHORTCUT_ID.STAGE_OUTPUT]: (s) => s.ui.setStage(WORKSPACE_STAGE.OUTPUT),
 };
@@ -100,12 +101,19 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
     };
 }
 
-/** 当前激活作用域:global 常驻;有选中激活 gizmo 域;掌镜激活 shot 域(注册顺序保证 Esc 先退掌镜再清选中) */
+/** 当前激活作用域:global 常驻;机位选择与掌镜分别有精确 scope,避免 Enter 作用于普通对象 */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
-    const scopes = new Set<ShortcutScope>(["global"]);
-    if (stores.selection.primaryId) scopes.add("gizmo");
-    if (stores.camera.activeShotId) scopes.add("shot");
-    return scopes;
+    const primaryId = stores.selection.primaryId;
+    const hasSelectedInactiveShot =
+        primaryId !== null &&
+        stores.camera.activeShotId === null &&
+        stores.camera.director.getShot(primaryId) !== undefined;
+    return new Set<ShortcutScope>([
+        "global",
+        ...(primaryId ? ["gizmo" as const] : []),
+        ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
+        ...(stores.camera.activeShotId ? ["shot" as const] : []),
+    ]);
 }
 /** UI 提示:同 id 多 chord 用 / 连接;平台格式化后同形的去重(Mac 上 Delete 与 Backspace 都是 ⌫) */
 export function formatShortcutHint(id: ShortcutId): string {

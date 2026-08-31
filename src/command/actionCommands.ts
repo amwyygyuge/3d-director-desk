@@ -44,6 +44,23 @@ interface MountActionPayload {
     actionId: string;
 }
 
+interface PreviewActionPayload {
+    readonly objectId: string;
+}
+
+interface PreviewSeekPayload extends PreviewActionPayload {
+    readonly timeSeconds: number;
+}
+
+function previewTargetFor(
+    ctx: DirectorContext,
+    objectId: string,
+): { readonly durationSeconds: number; readonly objectId: string } | null {
+    const actionId = ctx.scene.manager.getEntity(objectId)?.actionId;
+    const action = actionId ? ctx.animations.actions.find((candidate) => candidate.id === actionId) : undefined;
+    return action ? { objectId, durationSeconds: action.duration } : null;
+}
+
 /** 动作挂载:骨骼预检不过 → 结构化诊断(匹配率/缺失轨道/可用动作清单),AI 可据此重试 */
 export class MountActionCommand extends DirectorCommand<MountActionPayload> {
     static readonly TYPE = "action.mount";
@@ -83,7 +100,8 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         if (!runtime || !clip) return;
         ctx.binder.mount(this.payload.objectId, runtime, clip);
         ctx.scene.setObjectAction(this.payload.objectId, this.payload.actionId);
-        ctx.playback.sampleCurrent();
+        ctx.actionPreview.prepare({ objectId: this.payload.objectId, durationSeconds: clip.duration });
+        ctx.playback.requestRender();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
@@ -117,9 +135,10 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
 
     execute(ctx: DirectorContext): void {
         ctx.binder.unmount(this.payload.objectId);
+        ctx.actionPreview.clear(this.payload.objectId);
         ctx.scene.setObjectAction(this.payload.objectId, null);
-        // 最后一个动作卸下后仍空转 always 渲染是浪费——回收时钟
         if (ctx.binder.isEmpty) ctx.clock.pause();
+        ctx.playback.requestRender();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
@@ -127,6 +146,69 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
         return actionId
             ? [{ type: MountActionCommand.TYPE, payload: { objectId: this.payload.objectId, actionId } }]
             : null;
+    }
+}
+
+/** Plays only the selected model's mounted action; global Timeline playback is intentionally untouched. */
+export class ActionPreviewPlayCommand extends DirectorCommand<PreviewActionPayload> {
+    static readonly TYPE = "action.preview.play";
+    readonly type = ActionPreviewPlayCommand.TYPE;
+
+    constructor(readonly payload: PreviewActionPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return previewTargetFor(ctx, this.payload.objectId) ? [] : ["对象没有可播放的已挂载动作"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const target = previewTargetFor(ctx, this.payload.objectId);
+        if (!target) return;
+        ctx.actionPreview.play(target);
+        ctx.playback.requestRender();
+    }
+}
+
+/** Pauses the local action preview without stopping Timeline playback. */
+export class ActionPreviewPauseCommand extends DirectorCommand<Record<string, never>> {
+    static readonly TYPE = "action.preview.pause";
+    readonly type = ActionPreviewPauseCommand.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {
+        super();
+    }
+
+    validate(): string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.actionPreview.pause();
+        ctx.playback.requestRender();
+    }
+}
+
+/** Seeks only the selected model's mounted action. */
+export class ActionPreviewSeekCommand extends DirectorCommand<PreviewSeekPayload> {
+    static readonly TYPE = "action.preview.seek";
+    readonly type = ActionPreviewSeekCommand.TYPE;
+
+    constructor(readonly payload: PreviewSeekPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        if (!Number.isFinite(this.payload.timeSeconds) || this.payload.timeSeconds < 0)
+            return ["预览时间必须是非负有限秒数"];
+        return previewTargetFor(ctx, this.payload.objectId) ? [] : ["对象没有可定位的已挂载动作"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const target = previewTargetFor(ctx, this.payload.objectId);
+        if (!target) return;
+        ctx.actionPreview.seek(target, this.payload.timeSeconds);
+        ctx.playback.requestRender();
     }
 }
 
@@ -209,6 +291,15 @@ export function registerActionCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         UnmountActionCommand.TYPE,
         (payload: UnmountActionPayload) => new UnmountActionCommand(payload),
+    );
+    dispatcher.register(
+        ActionPreviewPlayCommand.TYPE,
+        (payload: PreviewActionPayload) => new ActionPreviewPlayCommand(payload),
+    );
+    dispatcher.register(ActionPreviewPauseCommand.TYPE, () => new ActionPreviewPauseCommand());
+    dispatcher.register(
+        ActionPreviewSeekCommand.TYPE,
+        (payload: PreviewSeekPayload) => new ActionPreviewSeekCommand(payload),
     );
     dispatcher.register(TransportPlayCommand.TYPE, () => new TransportPlayCommand());
     dispatcher.register(TransportPauseCommand.TYPE, () => new TransportPauseCommand());

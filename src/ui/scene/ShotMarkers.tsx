@@ -25,10 +25,6 @@ const FRUSTUM_COLOR = "#42a5f5";
 const BODY_SCREEN_FRACTION = 0.15;
 /** 近处像平面框:机身本地单位(随机身恒屏占缩放),只表达朝向与张角——Blender 式 */
 const NEAR_FRAME_LENGTH = 0.9;
-/** 覆盖射线:贯通到目标点,虚线细权重 */
-const RAY_DASH_SIZE = 0.35;
-const RAY_GAP_SIZE = 0.25;
-const RAY_COLOR = "#64b5f6";
 const FRUSTUM_ASPECT_RATIO = 16 / 9;
 const DEGREES_PER_TURN = 360;
 const POSITION_ATTRIBUTE = "position";
@@ -92,23 +88,6 @@ function createNearFrameGeometry(shot: CameraShot): BufferGeometry {
     return geometry;
 }
 
-/** 覆盖射线(世界尺度,贯通到目标点;只画 4 条边线,不画远端大框) */
-function createRayGeometry(shot: CameraShot): BufferGeometry {
-    const position = new Vector3(...shot.position);
-    const length = position.distanceTo(new Vector3(...shot.target));
-    const { halfWidth, halfHeight } = frameDims(shot, length);
-    const corners = [
-        [-halfWidth, halfHeight, -length],
-        [halfWidth, halfHeight, -length],
-        [halfWidth, -halfHeight, -length],
-        [-halfWidth, -halfHeight, -length],
-    ] as const;
-    const vertices = corners.flatMap((corner) => [0, 0, 0, ...corner]);
-    const geometry = new BufferGeometry();
-    geometry.setAttribute(POSITION_ATTRIBUTE, new Float32BufferAttribute(vertices, 3));
-    return geometry;
-}
-
 export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: string; shot: CameraShot }) {
     const stores = useDirectorDeskStores();
     const { camera: cameraStore, selection, dispatcher } = stores;
@@ -118,7 +97,6 @@ export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: strin
     const bodyRef = useRef<Group | null>(null);
     const rotation = useMemo(() => shotRotation(shot), [shot]);
     const nearFrameGeometry = useMemo(() => createNearFrameGeometry(shot), [shot]);
-    const rayGeometry = useMemo(() => createRayGeometry(shot), [shot]);
 
     /** 机身恒屏占:渲染前按相机距离缩放(demand 下只在渲染帧执行,零分配) */
     const keepBodyScreenSize = useCallback(() => {
@@ -131,11 +109,8 @@ export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: strin
 
     useEffect(() => {
         invalidate();
-        return () => {
-            nearFrameGeometry.dispose();
-            rayGeometry.dispose();
-        };
-    }, [nearFrameGeometry, rayGeometry, invalidate]);
+        return () => nearFrameGeometry.dispose();
+    }, [nearFrameGeometry, invalidate]);
 
     const bindMarker = useCallback(
         (object3d: Group | null) => {
@@ -178,10 +153,6 @@ export const ShotMarker = observer(function ShotMarker({ id, shot }: { id: strin
                     <lineBasicMaterial color={FRUSTUM_COLOR} />
                 </lineSegments>
             </group>
-            {/* 覆盖射线:贯通到目标点,虚线细权重,不画远端大框 */}
-            <lineSegments geometry={rayGeometry} onUpdate={(line) => line.computeLineDistances()}>
-                <lineDashedMaterial color={RAY_COLOR} dashSize={RAY_DASH_SIZE} gapSize={RAY_GAP_SIZE} />
-            </lineSegments>
         </group>
     );
 });

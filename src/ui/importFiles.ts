@@ -1,4 +1,4 @@
-import { formatFromFileName, MODEL_FORMAT } from "../assets/ModelAsset";
+import { formatFromFileName } from "../assets/ModelAsset";
 import type { ModelFormat } from "../assets/ModelAsset";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 
@@ -55,54 +55,4 @@ export function importModelFile(stores: DirectorDeskStores, file: File, notify: 
         stores,
     );
     if (!result.ok) notify(`放置被拒绝:${result.error}`);
-}
-
-/**
- * 动作文件导入:复用 ModelImporter 解析管线只取 animations,clip 入动作库。
- * OBJ 无骨骼轨道,直接拒绝;解析后无轨道同样拒绝并回收 URL。
- */
-export async function importActionFile(
-    stores: DirectorDeskStores,
-    file: File,
-    notify: (message: string) => void,
-): Promise<void> {
-    const source = fileToSource(file, notify);
-    if (!source) return;
-    if (source.format === MODEL_FORMAT.OBJ) {
-        URL.revokeObjectURL(source.url);
-        notify(`OBJ 不含骨骼动作:${file.name}`);
-        return;
-    }
-    try {
-        const handle = await stores.models.acquire(source.url, source.format, { signal: stores.lifecycle.signal });
-        if (stores.lifecycle.signal.aborted) {
-            handle.release();
-            URL.revokeObjectURL(source.url);
-            return;
-        }
-        const clips = [...handle.animations];
-        handle.release();
-        if (clips.length === 0) {
-            URL.revokeObjectURL(source.url);
-            notify(`文件中没有动作轨道:${file.name}`);
-            return;
-        }
-        // 多 clip 文件(如 Fox 的 Survey/Walk/Run)逐条入库,名称带 clip 后缀;全部重复说明重复导入,回收新 URL;部分重复则保留给新条目
-        const outcomes = clips.map(
-            (clip) =>
-                stores.animations.register({
-                    name: clips.length > 1 ? `${file.name}#${clip.name}` : file.name,
-                    url: source.url,
-                    clip,
-                }).duplicate,
-        );
-        if (outcomes.every(Boolean)) URL.revokeObjectURL(source.url);
-        const freshCount = outcomes.filter((d) => !d).length;
-        notify(`动作入库:${file.name} 新增 ${freshCount} 条 / 共 ${clips.length} 条`);
-    } catch (error) {
-        URL.revokeObjectURL(source.url);
-        if (stores.lifecycle.signal.aborted) return;
-        console.warn(`[importActionFile] 解析失败 ${file.name}`, error);
-        notify(`动作解析失败:${file.name}`);
-    }
 }

@@ -41,6 +41,11 @@ export class AnimationBinder {
         for (const mixer of this.mixers.values()) mixer.setTime(timeSeconds);
     }
 
+    /** 模型级动作预览只推进目标 mixer，避免多个模型被同一预览按钮联动。 */
+    setTimeFor(objectId: string, timeSeconds: number): void {
+        this.mixers.get(objectId)?.setTime(timeSeconds);
+    }
+
     has(objectId: string): boolean {
         return this.mixers.has(objectId);
     }

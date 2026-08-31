@@ -4,7 +4,6 @@ import type { AnimationBinder } from "../animation/AnimationBinder";
 import { CameraMotionSampler } from "../camera/CameraMotionSampler";
 import type { CameraMotionSink } from "../camera/CameraMotionSampler";
 import { PoseLayer } from "../pose/PoseLayer";
-import { PoseTimelineSampler } from "../pose/PoseTimelineSampler";
 import type { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
 import { TIMELINE_TRACK_KIND } from "./TimelineTrack";
 import type { SceneManager } from "../core/SceneManager";
@@ -24,7 +23,6 @@ export class PlaybackCoordinator {
     private readonly sampler = new TimelineSampler();
     private readonly motionSampler: CameraMotionSampler;
     private readonly poseLayer: PoseLayer;
-    private readonly poseSampler: PoseTimelineSampler;
     private invalidator: TimelineInvalidator | null = null;
     private readonly stopTransportReaction: () => void;
     private readonly stopStoppedReaction: () => void;
@@ -40,7 +38,6 @@ export class PlaybackCoordinator {
     ) {
         this.motionSampler = new CameraMotionSampler(motion, camera);
         this.poseLayer = new PoseLayer(skeletons);
-        this.poseSampler = new PoseTimelineSampler(this.poseLayer);
         // A single reaction owns deterministic binder → transform → camera → pose sampling order.
         this.stopTransportReaction = reaction(
             () => transport.time,
@@ -77,24 +74,29 @@ export class PlaybackCoordinator {
         this.invalidate();
     }
 
+    /** 非时间线的局部动作预览复用唯一 Canvas invalidator，不采样全局 playhead。 */
+    requestRender(): void {
+        this.invalidate();
+    }
+
     sampleObject(targetId: string): void {
         const runtime = this.scene.getRuntime(targetId);
         const entity = this.scene.getEntity(targetId);
+
         if (!runtime || !entity) return;
         this.skeletons.restoreRotations(targetId);
         this.binder.setTime(this.currentTime());
         const transformTrack = this.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.currentTime(), runtime))
             this.restoreObject(targetId, false);
-        this.applyPose(targetId, this.currentTime());
+        this.applyPose(targetId);
         this.invalidate();
     }
     restoreAll(): void {
         this.restorePoseBaselines();
         this.binder.setTime(this.currentTime());
         for (const entity of this.scene.list()) {
-            this.restoreObject(entity.id, false);
-            this.poseLayer.apply(entity.id, entity.pose, entity.poseWeight);
+            this.poseLayer.apply(entity.id, entity.pose);
         }
         this.motionSampler.restore();
         this.invalidate();
@@ -134,18 +136,15 @@ export class PlaybackCoordinator {
         this.motionSampler.sampleCurrent(timeSeconds);
         for (let index = 0; index < entities.length; index += 1) {
             const entity = entities[index];
-            if (entity) this.applyPose(entity.id, timeSeconds);
+            if (entity) this.applyPose(entity.id);
         }
         this.invalidate();
     }
 
-    private applyPose(targetId: string, timeSeconds: number): void {
+    private applyPose(targetId: string): void {
         const entity = this.scene.getEntity(targetId);
         if (!entity || entity.kind !== "model") return;
-        const poseTrack = this.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.POSE);
-        if (!poseTrack || !this.poseSampler.evaluateTrack(poseTrack, timeSeconds, entity.poseWeight)) {
-            this.poseLayer.apply(targetId, entity.pose, entity.poseWeight);
-        }
+        this.poseLayer.apply(targetId, entity.pose);
     }
     private restorePoseBaselines(): void {
         this.skeletons.restoreAllRotations();

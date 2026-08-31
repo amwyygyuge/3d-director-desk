@@ -76,12 +76,6 @@ export class SceneStore {
         entity.applyPose(pose);
     }
 
-    setObjectPoseWeight(id: string, weight: number): void {
-        const entity = this.manager.getEntity(id);
-        if (!entity) return;
-        entity.applyPoseWeight(weight);
-    }
-
     get objectCount(): number {
         return this.manager.list().length;
     }

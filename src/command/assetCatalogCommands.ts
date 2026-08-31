@@ -16,8 +16,10 @@ function capability(type: string, kind: "command" | "query", permissions: readon
 
 interface AssetsListPayload {
     readonly kind?: string;
+
     readonly category?: string;
 }
+const ASSET_ENTITY_ID_PREFIX = "asset-";
 
 /** 资源目录查询:AI 发现面的主入口(过滤 kind/category;许可与骨骼家族随条目返回) */
 export class AssetsListQuery implements DirectorQuery<AssetsListPayload> {
@@ -38,9 +40,17 @@ export class AssetsListQuery implements DirectorQuery<AssetsListPayload> {
 
 interface AssetsPlacePayload {
     readonly assetId: string;
-    /** 场景内实体 id;缺省由资产 id 派生 */
+    /** 场景内实体 id;缺省时命令创建稳定 UUID，允许同一资产重复放置。 */
     readonly id?: string;
     readonly transform?: Transform;
+}
+
+interface ResolvedAssetsPlacePayload extends AssetsPlacePayload {
+    readonly id: string;
+}
+
+function createAssetEntityId(assetId: string): string {
+    return `${ASSET_ENTITY_ID_PREFIX}${assetId}-${crypto.randomUUID()}`;
 }
 
 /** 按目录条目放置模型资产(格式/定位符由条目携带,AI 不猜 URL) */
@@ -48,15 +58,18 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
     static readonly TYPE = "assets.place";
     readonly type = AssetsPlaceCommand.TYPE;
 
-    constructor(readonly payload: AssetsPlacePayload) {
+    readonly payload: ResolvedAssetsPlacePayload;
+
+    constructor(payload: AssetsPlacePayload) {
         super();
+        this.payload = { ...payload, id: payload.id ?? createAssetEntityId(payload.assetId) };
     }
 
     validate(ctx: DirectorContext): string[] {
         const entry = ctx.catalog.get(this.payload.assetId);
         if (!entry) return [`资源 "${this.payload.assetId}" 不在目录(先 assets.list 发现)`];
         if (entry.kind !== ASSET_KIND.MODEL) return [`资源 "${this.payload.assetId}" 不是模型(动作用 assets.mount)`];
-        const id = this.payload.id ?? `asset-${entry.id}`;
+        const id = this.payload.id;
         if (ctx.scene.manager.getEntity(id)) return [`id "${id}" 已存在`];
         if (this.payload.transform !== undefined && !finiteTransform(this.payload.transform)) {
             return ["transform 含非法数值"];
@@ -68,7 +81,7 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
         const entry = ctx.catalog.get(this.payload.assetId);
         if (!entry) return;
         ctx.scene.addObject({
-            id: this.payload.id ?? `asset-${entry.id}`,
+            id: this.payload.id,
             kind: "model",
             sourceUrl: entry.url,
             format: entry.format,
@@ -78,7 +91,7 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
     }
 
     override invert(): readonly { readonly type: string; readonly payload: unknown }[] {
-        return [{ type: "object.remove", payload: { id: this.payload.id ?? `asset-${this.payload.assetId}` } }];
+        return [{ type: "object.remove", payload: { id: this.payload.id } }];
     }
 }
 

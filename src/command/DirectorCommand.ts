@@ -1,4 +1,5 @@
 import type { AnimationBinder } from "../animation/AnimationBinder";
+import type { ActionPreviewController } from "../animation/ActionPreviewController";
 import type { AnimationLibrary } from "../assets/AnimationLibrary";
 import type { AssetCatalog } from "../assets/catalog/AssetCatalog";
 import type { HostAdapter } from "../host/HostAdapter";
@@ -7,6 +8,7 @@ import type { CameraStore } from "../store/CameraStore";
 import type { CameraMotionStore } from "../store/CameraMotionStore";
 import type { CaptureService } from "../capture/CaptureService";
 import type { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
+import type { PoseGroundingService } from "../pose/PoseGroundingService";
 import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
 import type { SelectionStore } from "../store/SelectionStore";
@@ -28,9 +30,13 @@ export interface DirectorContext {
     readonly capture: CaptureService;
     /** 模型加载/缓存(文档导入时重取动作 clip) */
     readonly models: ModelImporter;
+    /** 模型级局部动作预览，独立于 Timeline 的全局 playhead。 */
+    readonly actionPreview: ActionPreviewController;
     readonly binder: AnimationBinder;
     /** Per-desk Three skeleton index; command/query boundary returns serializable DTOs only. */
     readonly skeletons: SkeletonRuntimeRegistry;
+    /** Converts an evaluated static pose into a grounded serializable transform. */
+    readonly poseGrounding: PoseGroundingService;
     readonly animations: AnimationLibrary;
     /** 资源目录(内置/注入/远程条目的统一注册表) */
     readonly catalog: AssetCatalog;

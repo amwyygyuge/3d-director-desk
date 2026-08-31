@@ -3,7 +3,6 @@ import { makeAutoObservable } from "mobx";
 import { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "../timeline/TimelineDoc";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
 import type { TransformKeyframe } from "../timeline/TransformKeyframe";
-import type { PoseKeyframe } from "../pose/PoseKeyframe";
 
 /**
  * 每个 DirectorDesk 实例各自拥有的时间轴状态。仅保存 TimelineDoc 纯数据；
@@ -32,15 +31,7 @@ export class TimelineStore {
         this.currentDocument = this.currentDocument.withTrack(track);
     }
 
-    addPoseKey(trackId: string, targetId: string, keyframe: PoseKeyframe): void {
-        const existing = this.currentDocument.track(trackId);
-        const track = existing
-            ? existing.withKeyframe(keyframe)
-            : new TimelineTrack({ id: trackId, targetId, kind: TIMELINE_TRACK_KIND.POSE, keyframes: [keyframe] });
-        this.currentDocument = this.currentDocument.withTrack(track);
-    }
-
-    moveKey(trackId: string, keyframe: TransformKeyframe | PoseKeyframe): void {
+    moveKey(trackId: string, keyframe: TransformKeyframe): void {
         const track = this.currentDocument.track(trackId);
         if (!track) return;
         this.currentDocument = this.currentDocument.withTrack(track.withKeyframe(keyframe));

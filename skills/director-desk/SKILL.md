@@ -42,9 +42,9 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ### 资源目录(优先用目录,别手搓 URL)
 
-- `assets.list` 发现 → `assets.place { assetId, transform? }` 放模型 → `assets.mount { assetId, objectId }` 挂动作;
-- 动作↔模型兼容看 `skeletonFamily` 是否一致(如 mixamo↔mixamo);不一致大概率被骨骼校验拦,按 issue 换资产;
-- 内置资源已入库缓存(许可干净:CC0/MIT/CC-BY);宿主注入的条目 `source: "injected"`,远程的 `"remote"`,内置的 `"builtin"`;
+- `assets.list` 发现 → `assets.place { assetId, transform? }` 放模型；内置模型的姿势与动作来自自身 `embeddedClips`，不再提供独立内置动作条目；
+- 同一 `assetId` 可重复 `assets.place`，命令会固化一个新 UUID 场景实体 id；
+- 内置资源已入库缓存（许可随目录条目可审计）；宿主注入条目可标记 `source: "injected"`，远程条目用 `"remote"`；
 - 目录为空 → 内置 catalog.json 加载失败,停止并报告(别改用 URL 硬编)。
 
 ### 断言驱动验收协议
@@ -88,13 +88,12 @@ const { action } = desk.animations.register({ name: "出拳", url, clip });
 handle.release();
 // 挂载(命令层):
 dispatch({ type: "action.mount", payload: { objectId: "mecha", actionId: action.id } });
-// 播放/定位/暂停
-dispatch({ type: "transport.play", payload: {} });
-dispatch({ type: "transport.seek", payload: { time: 2.0 } }); // 秒
-dispatch({ type: "transport.pause", payload: {} });
+// 当前模型的局部预览；不驱动其他模型，也不改全局 Timeline playhead。
+dispatch({ type: "action.preview.play", payload: { objectId: "mecha" } });
+dispatch({ type: "action.preview.pause", payload: {} });
 ```
 
-### 时间轴(走位/姿态关键帧)
+### 时间轴（走位关键帧）
 
 ```js
 dispatch({ type: "timeline.set-duration", payload: { duration: 5 } });
@@ -111,7 +110,7 @@ dispatch({
         },
     },
 });
-// timeline.move-key / remove-key / set-key-easing 同族
+// timeline.move-key / remove-key / set-key-easing 同族；姿势是模型当前状态，不进入时间轴。
 ```
 
 easing 只有两档:`"linear"` / `"smooth"`。**节奏靠关键帧密度 + easing 组合表达**(见「运镜语言」)。
@@ -158,7 +157,7 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 
 1. **布景**:放模型 → 摆位(面对面 = 两实体 position 相对 + rotation 朝向对方)→ `view.frame` 取景;
 2. **动作**:挂 clip → 骨骼不兼容会收到 `bone-incompatible` 类 issue,换一个动作或换模型,别硬试;
-3. **时间轴**:set-duration → 打关键帧(走位用 timeline,姿态用 pose.add-key);
+3. **时间轴**:set-duration → 打关键帧（仅走位使用 timeline）；姿势是当前模型状态，不进入时间轴；
 4. **运镜**:motion.add-key 逐时间点写相机快照;
 5. **灯光**:studio 兜底,custom 微调;
 6. **验收**:播放/seek 逐段截图,多模态审构图;continuity.check 体检;

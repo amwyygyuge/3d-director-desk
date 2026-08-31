@@ -1,5 +1,5 @@
 import type { DirectorDeskStores } from "../DirectorDeskContext";
-import { importActionFile, placementFor } from "../importFiles";
+import { placementFor } from "../importFiles";
 
 /** 测试资产(public/test-assets,已入库,来源见该目录 README)的统一入口 */
 export const TEST_ASSETS = {
@@ -43,12 +43,6 @@ export function placePrimitives(stores: DirectorDeskStores, count: number): void
             stores,
         );
     }
-}
-
-/** 拉测试资产转 File 走真实动作导入管线(与文件选择同一路径) */
-export async function importActionFromUrl(stores: DirectorDeskStores, url: string, name: string): Promise<void> {
-    const blob = await (await fetch(url)).blob();
-    await importActionFile(stores, new File([blob], name), () => {});
 }
 
 /** 预置两个机位(纯数据,走命令层) */

@@ -9,4 +9,4 @@
 | furniture-armchair-01/ | Poly Haven `ArmChair_01`(1k gltf 多文件)                                           | CC0             |
 | plant-calathea/        | Poly Haven `calathea_orbifolia_01`(1k gltf 多文件)                                 | CC0             |
 
-设计取向:人物只保留**一个通用人形模型**,姿势与动作靠内嵌 clip 预设(语义滑杆层阶段一不做);动作挂载演示用 mixamo 系(desk-test.fbx ↔ humanoid-generic.glb)。模型面数是交互预算的一部分：人形资源不得以视觉细节换取缩放、旋转和拖拽帧率回退。
+设计取向:人物只保留**一个通用人形模型**,姿势与动作均来自模型内嵌 clip；资源库不提供独立动作条目。语义滑杆层阶段一不做，模型面数是交互预算的一部分：人形资源不得以视觉细节换取缩放、旋转和拖拽帧率回退。

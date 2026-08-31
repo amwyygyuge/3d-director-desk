@@ -148,16 +148,12 @@ export type {
 } from "./command/DirectorCommand";
 export type { CommandCapability, DirectorQuery, QueryResult } from "./command/CommandDispatcher";
 export {
-    AddPoseKeyCommand,
+    ApplyPosePresetCommand,
     ClearPoseCommand,
     DiscoverPoseBonesQuery,
     GetPoseQuery,
-    MovePoseKeyCommand,
-    RemovePoseKeyCommand,
     ReplacePoseCommand,
     SetPoseBoneCommand,
-    SetPoseKeyEasingCommand,
-    SetPoseWeightCommand,
     registerPoseCommands,
 } from "./command/poseCommands";
 export { DisposeBag } from "./core/DisposeBag";
@@ -177,10 +173,6 @@ export {
 export type { LightParams, LightType } from "./core/LightParams";
 export { PoseSnapshot } from "./pose/PoseSnapshot";
 export type { BoneKey, PoseSnapshotInit, QuaternionTuple } from "./pose/PoseSnapshot";
-export { PoseKeyframe } from "./pose/PoseKeyframe";
-export type { PoseKeyframeInit } from "./pose/PoseKeyframe";
-export { PoseLayer } from "./pose/PoseLayer";
-export { PoseTimelineSampler } from "./pose/PoseTimelineSampler";
 export { SkeletonRuntimeRegistry } from "./pose/SkeletonRuntimeRegistry";
 export type { BoneTreeNodeDto, SemanticBoneCandidateDto, SkeletonDiscoveryDto } from "./pose/SkeletonRuntimeRegistry";
 export { PostMessageAdapter } from "./host/HostAdapter";

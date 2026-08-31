@@ -6,7 +6,6 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
@@ -24,9 +23,10 @@ import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "../core/L
 import type { LightParams, LightType } from "../core/LightParams";
 import type { Vec3 } from "../core/SceneObject";
 import { createStaticPoseSnapshot, isStaticPoseClip } from "../pose/StaticPoseClip";
+import { POSE_PRESET_KIND, presentPosePreset } from "../pose/PosePresetCatalog";
+import type { PosePresetPresentation } from "../pose/PosePresetCatalog";
 import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "../pose/SkeletonRuntimeRegistry";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
-import { PlayheadDisplay } from "./PlayheadDisplay";
 import { TransformFields } from "./TransformFields";
 
 const DISPLAY_DECIMAL_PLACES = 4;
@@ -35,6 +35,9 @@ const AXIS_Y = 1;
 const AXIS_Z = 2;
 const FIELD_GROUP_GAP = 0.75;
 const FIELD_COLUMN_GAP = 0.5;
+
+const PRESET_GRID_TEMPLATE_COLUMNS = "repeat(2, minmax(0, 1fr))";
+const PRESET_BUTTON_MIN_HEIGHT_PX = 40;
 const FIELD_LABEL_WIDTH_PX = 32;
 const FOV_INPUT_WIDTH_PX = 80;
 const FOV_STEP = 1;
@@ -375,18 +378,35 @@ const LightIntensityControl = observer(function LightIntensityControl({
     );
 });
 
-interface ActionLibraryProps {
-    actionId: string | null;
-    objectId: string;
-    report: ReportCommandResult;
-}
-
 interface PlaybackControlsProps {
-    actionId: string | null;
-    report: ReportCommandResult;
+    readonly actionId: string | null;
+    readonly objectId: string;
+    readonly report: ReportCommandResult;
 }
 
-/** 预设姿势与动作：静态 clip 走可序列化 pose 层；动态 clip 才走 AnimationBinder。 */
+interface PresetGridProps {
+    readonly presets: readonly PosePresetPresentation[];
+    readonly onApply: (clipName: string) => void;
+}
+
+function renderPresetGrid({ presets, onApply }: PresetGridProps) {
+    return (
+        <Box sx={{ display: "grid", gap: 0.5, gridTemplateColumns: PRESET_GRID_TEMPLATE_COLUMNS }}>
+            {presets.map((preset) => (
+                <Button
+                    key={preset.clipName}
+                    size="small"
+                    variant="outlined"
+                    sx={{ minHeight: PRESET_BUTTON_MIN_HEIGHT_PX, px: 0.75, py: 0.5 }}
+                    onClick={() => onApply(preset.clipName)}
+                >
+                    {preset.labelZh}
+                </Button>
+            ))}
+        </Box>
+    );
+}
+
 const PosePresetSection = observer(function PosePresetSection({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
     const { animations, catalog, dispatcher, models, scene, skeletons, ui } = stores;
@@ -399,6 +419,9 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
             : undefined;
     if (!entity || !entry?.embeddedClips || !entry.format) return null;
     const clips = entry.embeddedClips;
+    const presets = clips.map(presentPosePreset);
+    const posePresets = presets.filter((preset) => preset.kind === POSE_PRESET_KIND.POSE);
+    const actionPresets = presets.filter((preset) => preset.kind === POSE_PRESET_KIND.ACTION);
     const format = entry.format;
 
     const applyPreset = async (clipName: string) => {
@@ -410,12 +433,9 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
                 if (isStaticPoseClip(clip)) {
                     const snapshot = createStaticPoseSnapshot(clip, skeletons.discover(objectId));
                     if (!snapshot) throw new Error(`预设姿势骨骼未就绪:${clipName}`);
-                    if (entity.actionId) {
-                        report(dispatcher.dispatch({ type: "action.unmount", payload: { objectId } }, stores));
-                    }
                     report(
                         dispatcher.dispatch(
-                            { type: "pose.replace", payload: { objectId, pose: snapshot.toJSON() } },
+                            { type: "pose.apply-preset", payload: { objectId, pose: snapshot.toJSON() } },
                             stores,
                         ),
                     );
@@ -440,114 +460,46 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
     return (
         <>
             <Typography variant="caption" color="text.secondary">
-                预设姿势与动作({clips.length})
+                姿势({posePresets.length})
             </Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                {clips.map((clipName) => (
-                    <Button key={clipName} size="small" variant="outlined" onClick={() => void applyPreset(clipName)}>
-                        {clipName}
-                    </Button>
-                ))}
-            </Box>
+            {renderPresetGrid({ presets: posePresets, onApply: applyPreset })}
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                动作({actionPresets.length})
+            </Typography>
+            {renderPresetGrid({ presets: actionPresets, onApply: applyPreset })}
             <Divider sx={{ my: 1 }} />
         </>
     );
 });
 
-const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, report }: ActionLibraryProps) {
+const PlaybackControls = observer(function PlaybackControls({ actionId, objectId, report }: PlaybackControlsProps) {
     const stores = useDirectorDeskStores();
-    const { animations, dispatcher } = stores;
-
-    return (
-        <>
-            <Typography variant="caption" color="text.secondary">
-                动作库({animations.actions.length})
-            </Typography>
-            <List dense disablePadding>
-                {animations.actions.map((action) => {
-                    const mounted = actionId === action.id;
-                    return (
-                        <ListItem
-                            key={action.id}
-                            disablePadding
-                            secondaryAction={
-                                <Button
-                                    size="small"
-                                    variant={mounted ? "outlined" : "contained"}
-                                    onClick={() =>
-                                        report(
-                                            dispatcher.dispatch(
-                                                {
-                                                    type: mounted ? "action.unmount" : "action.mount",
-                                                    payload: { objectId, actionId: action.id },
-                                                },
-                                                stores,
-                                            ),
-                                        )
-                                    }
-                                >
-                                    {mounted ? "卸载" : "挂载"}
-                                </Button>
-                            }
-                        >
-                            <ListItemText primary={action.name} secondary={`${action.duration.toFixed(1)}s`} />
-                        </ListItem>
-                    );
-                })}
-            </List>
-            {animations.actions.length === 0 && (
-                <Typography variant="caption" color="text.secondary">
-                    先经工具条「导入动作」入库
-                </Typography>
-            )}
-        </>
-    );
-});
-
-const PlaybackControls = observer(function PlaybackControls({ actionId, report }: PlaybackControlsProps) {
-    const stores = useDirectorDeskStores();
-    const { animations, clock, dispatcher } = stores;
-    const [playheadDisplay] = useState(() => new PlayheadDisplay(clock));
-    const playhead = playheadDisplay.value;
+    const { actionPreview, animations, dispatcher } = stores;
     const mountedAction = actionId ? animations.actions.find((action) => action.id === actionId) : undefined;
-    const duration = mountedAction?.duration ?? 0;
+    if (!mountedAction) return null;
+    const isPlaying = actionPreview.activeObjectId === objectId && actionPreview.isPlaying;
 
     return (
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                当前动作
+            </Typography>
             <IconButton
                 size="small"
-                disabled={!mountedAction}
-                aria-label={clock.isPlaying ? "暂停动作播放" : "播放动作"}
+                aria-label={isPlaying ? "暂停动作播放" : "播放动作"}
                 onClick={() =>
                     report(
                         dispatcher.dispatch(
-                            { type: clock.isPlaying ? "transport.pause" : "transport.play", payload: {} },
+                            isPlaying
+                                ? { type: "action.preview.pause", payload: {} }
+                                : { type: "action.preview.play", payload: { objectId } },
                             stores,
                         ),
                     )
                 }
             >
-                {clock.isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+                {isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
             </IconButton>
-            <Box sx={{ flex: 1 }}>
-                <Slider
-                    size="small"
-                    min={0}
-                    max={duration}
-                    step={0.01}
-                    value={Math.min(playhead, duration)}
-                    disabled={!mountedAction}
-                    aria-label="动作播放进度"
-                    onChange={(_, value) =>
-                        report(
-                            dispatcher.dispatch({ type: "transport.seek", payload: { time: value as number } }, stores),
-                        )
-                    }
-                />
-            </Box>
-            <Typography variant="caption" sx={{ minWidth: 64, textAlign: "right" }}>
-                {playhead.toFixed(2)}s
-            </Typography>
         </Stack>
     );
 });
@@ -561,9 +513,7 @@ const ModelActionControls = observer(function ModelActionControls({ objectId, re
         <>
             <Divider sx={{ my: 1 }} />
             <PosePresetSection objectId={objectId} report={report} />
-            <ActionLibrary actionId={entity.actionId} objectId={objectId} report={report} />
-            <Divider sx={{ my: 1 }} />
-            <PlaybackControls actionId={entity.actionId} report={report} />
+            <PlaybackControls actionId={entity.actionId} objectId={objectId} report={report} />
         </>
     );
 });
@@ -675,25 +625,6 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
         }
         setDiscovery(result.value as SkeletonDiscoveryDto);
     };
-    const addKey = () =>
-        report(
-            stores.dispatcher.dispatch(
-                {
-                    type: "pose.add-key",
-                    payload: {
-                        trackId: `pose-${entity.id}`,
-                        targetId: entity.id,
-                        keyframe: {
-                            id: `pose-key-${crypto.randomUUID()}`,
-                            time: stores.clock.time,
-                            value: entity.pose?.toJSON() ?? { bones: {} },
-                            easing: "linear",
-                        },
-                    },
-                },
-                stores,
-            ),
-        );
     return (
         <>
             <Divider sx={{ my: CONTROL_GAP }} />
@@ -735,41 +666,16 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
                         </Box>
                     </>
                 )}
-                <Typography variant="caption">姿态权重：{formatValue(entity.poseWeight)}</Typography>
-                <Slider
-                    value={entity.poseWeight}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    disabled={!editing}
-                    onChangeCommitted={(_, value) => {
-                        if (typeof value !== "number") return;
-                        report(
-                            stores.dispatcher.dispatch(
-                                {
-                                    type: "pose.set-weight",
-                                    payload: { objectId, weight: value },
-                                },
-                                stores,
-                            ),
-                        );
-                    }}
-                />
-                <Stack direction="row" spacing={CONTROL_GAP}>
-                    <Button size="small" variant="outlined" disabled={!editing} onClick={addKey}>
-                        当前姿态打关键帧
-                    </Button>
-                    <Button
-                        size="small"
-                        color="warning"
-                        disabled={!editing || entity.pose === null}
-                        onClick={() =>
-                            report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
-                        }
-                    >
-                        清除姿态
-                    </Button>
-                </Stack>
+                <Button
+                    size="small"
+                    color="warning"
+                    disabled={!editing || entity.pose === null}
+                    onClick={() =>
+                        report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
+                    }
+                >
+                    清除姿态
+                </Button>
                 {!editing && <Typography variant="caption">播放期间姿态编辑已禁用。</Typography>}
             </Stack>
         </>

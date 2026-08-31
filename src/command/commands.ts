@@ -7,8 +7,6 @@ import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
 import { registerPoseCommands } from "./poseCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
-import { PoseKeyframe } from "../pose/PoseKeyframe";
-import type { PoseKeyframeInit } from "../pose/PoseKeyframe";
 import { registerKeyframeCodec } from "../timeline/keyframeCodecs";
 import { TransformKeyframe } from "../timeline/TransformKeyframe";
 import type { TransformKeyframeInit } from "../timeline/TransformKeyframe";
@@ -140,6 +138,7 @@ export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
     }
 
     execute(ctx: DirectorContext): void {
+        // 局部动作预览只写骨骼；根 Transform 可在预览持续时安全编辑。
         ctx.scene.updateTransform(this.payload.id, this.payload.transform);
     }
 
@@ -320,11 +319,6 @@ export function registerBuiltinKeyframeCodecs(): void {
         kind: TIMELINE_TRACK_KIND.TRANSFORM,
         owns: (keyframe): keyframe is TransformKeyframe => keyframe instanceof TransformKeyframe,
         fromInit: (init) => new TransformKeyframe(init as TransformKeyframeInit),
-    });
-    registerKeyframeCodec({
-        kind: TIMELINE_TRACK_KIND.POSE,
-        owns: (keyframe): keyframe is PoseKeyframe => keyframe instanceof PoseKeyframe,
-        fromInit: (init) => new PoseKeyframe(init as PoseKeyframeInit),
     });
 }
 

@@ -40,9 +40,16 @@ import { ShotCameraRig } from "./scene/ShotCameraRig";
 import { ShotMarkers } from "./scene/ShotMarkers";
 import { ShotAxisOverlay } from "./scene/ShotAxisOverlay";
 import { ShotFrameOverlay } from "./ShotFrameOverlay";
+import { ViewportInteractionHints } from "./ViewportInteractionHints";
 import { ShotPanel } from "./ShotPanel";
 import { Toolbar } from "./Toolbar";
 import { TimelinePanel } from "./TimelinePanel";
+
+const STUDIO_CAMERA_FOV_DEGREES = 45;
+const STUDIO_CAMERA_POSITION: [number, number, number] = [6, 4, 8];
+const STUDIO_GRID_SIZE_METERS = 12;
+const STUDIO_CAMERA_MIN_DISTANCE_METERS = 2;
+const STUDIO_CAMERA_MAX_DISTANCE_METERS = 18;
 
 export interface DirectorDeskProps {
     /** 宿主可传 MUI theme 覆盖默认暗色主题 */
@@ -156,8 +163,12 @@ export const DirectorDesk = observer(function DirectorDesk({
                         {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
                         <div className="absolute inset-0">
                             <Canvas
-                                frameloop={stores.clock.isPlaying || stores.ui.flying ? "always" : "demand"}
-                                camera={{ position: [6, 4, 8], fov: 45 }}
+                                frameloop={
+                                    stores.clock.isPlaying || stores.actionPreview.isPlaying || stores.ui.flying
+                                        ? "always"
+                                        : "demand"
+                                }
+                                camera={{ position: STUDIO_CAMERA_POSITION, fov: STUDIO_CAMERA_FOV_DEGREES }}
                                 gl={{ antialias: true, preserveDrawingBuffer: false }}
                                 onCreated={(state) =>
                                     stores.capture.attach({
@@ -168,6 +179,8 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     })
                                 }
                                 onPointerMissed={() => {
+                                    // 掌镜中拖拽转向的 mouseup 也算"点空",不该清选中
+                                    if (stores.camera.activeShotId !== null) return;
                                     // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
                                     if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
                                         stores.selection.clear();
@@ -176,13 +189,17 @@ export const DirectorDesk = observer(function DirectorDesk({
                             >
                                 <color attach="background" args={["#171717"]} />
                                 <Grid
-                                    args={[40, 40]}
+                                    args={[STUDIO_GRID_SIZE_METERS, STUDIO_GRID_SIZE_METERS]}
                                     cellColor="#333333"
                                     sectionColor="#555555"
-                                    infiniteGrid
                                     userData={{ helper: true }}
                                 />
-                                <OrbitControls makeDefault enableDamping={stores.camera.activeShotId === null} />
+                                <OrbitControls
+                                    makeDefault
+                                    enableDamping={stores.camera.activeShotId === null}
+                                    minDistance={STUDIO_CAMERA_MIN_DISTANCE_METERS}
+                                    maxDistance={STUDIO_CAMERA_MAX_DISTANCE_METERS}
+                                />
                                 <StudioRig />
                                 <SceneRoot />
                                 <BonePicker />
@@ -200,6 +217,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                             <CapturePreview />
                             <LoadingChip />
                             <FrameRateIndicator />
+                            <ViewportInteractionHints />
                         </div>
                         <Toolbar />
                         <Dock

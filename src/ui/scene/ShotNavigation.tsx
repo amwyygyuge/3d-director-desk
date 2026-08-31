@@ -1,14 +1,15 @@
 import { useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { PerspectiveCamera, Spherical, Vector3 } from "three";
 
 import { FOV_MAX, FOV_MIN } from "../../command/commands";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 import { useOrbitControls } from "../../navigation/orbit";
+import { useFlyNavigation } from "./useFlyNavigation";
 
-/** 转向灵敏度:每像素弧度 */
-const TURN_SPEED_RAD_PER_PX = 0.003;
+/** 与正常导演视角 OrbitControls 一致:一次完整转向对应画布高度 */
+const ORBIT_TURN_RADIANS_PER_CANVAS_HEIGHT = Math.PI * 2;
 /** 俯仰角钳制(防万向锁翻转) */
 const PITCH_LIMIT_RAD = (85 * Math.PI) / 180;
 /** 滚轮变焦:每 deltaY 单位的 FOV 度数 */
@@ -20,13 +21,14 @@ const TMP_OFFSET = new Vector3();
 const TMP_SPHERICAL = new Spherical();
 
 /**
- * 掌镜导航(仅机位视角):三脚架转向 + 滚轮变焦 + Pointer Lock。
- * - 转向:Pointer Lock 成功则动鼠标即转(FPS 手感);被拒则退化为按住拖拽;
+ * 掌镜导航(仅机位视角):WASD+Space/Shift 位移 + 按住拖拽转向 + 滚轮变焦。
+ * - 位移:复用 useFlyNavigation(与导演视角 FlyDrive 同一实现),松开 settle 时落命令;
+ * - 转向:按住左键拖拽才转,方向与正常导演视角 OrbitControls 完全一致;
  *   俯仰钳制 ±85°,yaw 绕世界 Y——相机原位旋转,位置不变;
  * - 变焦:滚轮实时改 fov(仅视锥,不动机位数据);
- * - 持久化纪律:转向/变焦都是 transient,停止 COMMIT_DEBOUNCE_MS 后落一次
+ * - 持久化纪律:位移/转向/变焦都是 transient,停止 COMMIT_DEBOUNCE_MS 后落一次
  *   camera.set-shot 命令——可撤销、与 06 的 FOV 滑杆同源;
- * - 掌镜下 WASD 禁用(规格决策):FlyDrive 只在导演视角激活。
+ * - 退出:Esc 走 ShortcutRegistry shot 域(无 Pointer Lock,一击即退)。
  */
 export const ShotNavigation = observer(function ShotNavigation() {
     const stores = useDirectorDeskStores();
@@ -36,59 +38,51 @@ export const ShotNavigation = observer(function ShotNavigation() {
     const canvas = useThree((state) => state.gl.domElement);
 
     const activeShotId = stores.camera.activeShotId;
-    const locked = useRef(false);
     const dragging = useRef(false);
     const commitTimer = useRef<number | undefined>(undefined);
 
-    // 进入掌镜 → 请求鼠标锁定;退出掌镜 → 解锁兜底(规格:退出锁定后重新进入再锁)
-    useEffect(() => {
-        if (!activeShotId) return;
-        const request = canvas.requestPointerLock();
-        request?.catch(() => {
-            // 锁定被拒(无用户手势窗口等)→ 退化为按住拖拽,功能不缺失
-        });
-        return () => {
-            if (document.pointerLockElement === canvas) document.exitPointerLock();
-        };
-    }, [activeShotId, canvas]);
+    /** 把当前视口 pose 落成一次可撤销的 camera.set-shot(防抖合并连续手势) */
+    const commitShot = useCallback(() => {
+        if (!activeShotId || !controls || !(camera instanceof PerspectiveCamera)) return;
+        stores.dispatcher.dispatch(
+            {
+                type: "camera.set-shot",
+                payload: {
+                    id: activeShotId,
+                    shot: {
+                        position: [camera.position.x, camera.position.y, camera.position.z],
+                        target: [controls.target.x, controls.target.y, controls.target.z],
+                        fov: camera.fov,
+                    },
+                },
+            },
+            stores,
+        );
+    }, [activeShotId, camera, controls, stores]);
+    const scheduleCommit = useCallback(() => {
+        clearTimeout(commitTimer.current);
+        commitTimer.current = window.setTimeout(commitShot, COMMIT_DEBOUNCE_MS);
+    }, [commitShot]);
+
+    // 位移:掌镜激活时接管 WASD+Space/Shift,全松开(或失焦)时防抖落命令
+    useFlyNavigation({ active: activeShotId !== null, onSettled: scheduleCommit });
 
     useEffect(() => {
         if (!activeShotId || !controls || !(camera instanceof PerspectiveCamera)) return;
-        const shotId = activeShotId;
 
-        const commitShot = () => {
-            stores.dispatcher.dispatch(
-                {
-                    type: "camera.set-shot",
-                    payload: {
-                        id: shotId,
-                        shot: {
-                            position: [camera.position.x, camera.position.y, camera.position.z],
-                            target: [controls.target.x, controls.target.y, controls.target.z],
-                            fov: camera.fov,
-                        },
-                    },
-                },
-                stores,
-            );
-        };
-        const scheduleCommit = () => {
-            clearTimeout(commitTimer.current);
-            commitTimer.current = window.setTimeout(commitShot, COMMIT_DEBOUNCE_MS);
-        };
-
-        /** 原地转向:绕相机位置旋转移轴到 controls.target */
+        /** 原地转向:沿用 OrbitControls 的方向与按画布高度归一化的灵敏度 */
         const turn = (deltaX: number, deltaY: number) => {
+            const turnRadiansPerPixel = ORBIT_TURN_RADIANS_PER_CANVAS_HEIGHT / canvas.clientHeight;
             TMP_OFFSET.set(
                 controls.target.x - camera.position.x,
                 controls.target.y - camera.position.y,
                 controls.target.z - camera.position.z,
             );
             TMP_SPHERICAL.setFromVector3(TMP_OFFSET);
-            TMP_SPHERICAL.theta -= deltaX * TURN_SPEED_RAD_PER_PX;
+            TMP_SPHERICAL.theta -= deltaX * turnRadiansPerPixel;
             TMP_SPHERICAL.phi = Math.min(
                 Math.PI - (Math.PI / 2 - PITCH_LIMIT_RAD),
-                Math.max(Math.PI / 2 - PITCH_LIMIT_RAD, TMP_SPHERICAL.phi - deltaY * TURN_SPEED_RAD_PER_PX),
+                Math.max(Math.PI / 2 - PITCH_LIMIT_RAD, TMP_SPHERICAL.phi - deltaY * turnRadiansPerPixel),
             );
             TMP_OFFSET.setFromSpherical(TMP_SPHERICAL);
             controls.target.set(
@@ -101,15 +95,12 @@ export const ShotNavigation = observer(function ShotNavigation() {
             scheduleCommit();
         };
 
-        const onLockChange = () => {
-            locked.current = document.pointerLockElement === canvas;
-        };
         const onMouseMove = (event: MouseEvent) => {
-            if (!locked.current && !dragging.current) return;
+            if (!dragging.current) return;
             turn(event.movementX, event.movementY);
         };
         const onMouseDown = (event: MouseEvent) => {
-            if (event.target === canvas && !locked.current) dragging.current = true;
+            if (event.target === canvas) dragging.current = true;
         };
         const onMouseUp = () => {
             dragging.current = false;
@@ -122,20 +113,18 @@ export const ShotNavigation = observer(function ShotNavigation() {
             scheduleCommit();
         };
 
-        document.addEventListener("pointerlockchange", onLockChange);
         window.addEventListener("mousemove", onMouseMove);
         canvas.addEventListener("mousedown", onMouseDown);
         window.addEventListener("mouseup", onMouseUp);
         canvas.addEventListener("wheel", onWheel, { passive: false });
         return () => {
-            document.removeEventListener("pointerlockchange", onLockChange);
             window.removeEventListener("mousemove", onMouseMove);
             canvas.removeEventListener("mousedown", onMouseDown);
             window.removeEventListener("mouseup", onMouseUp);
             canvas.removeEventListener("wheel", onWheel);
             clearTimeout(commitTimer.current);
         };
-    }, [activeShotId, camera, controls, canvas, invalidate, stores]);
+    }, [activeShotId, camera, controls, canvas, invalidate, scheduleCommit]);
 
     return null;
 });

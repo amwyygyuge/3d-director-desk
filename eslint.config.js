@@ -31,6 +31,7 @@ const THREE_ADAPTER_FILES = [
     "src/pose/PoseLayer.ts",
     "src/pose/SkeletonRuntimeRegistry.ts",
     "src/pose/StaticPoseClip.ts",
+    "src/pose/PoseGroundingService.ts",
     "src/assets/AnimationLibrary.ts",
     "src/store/CameraStore.ts",
     "src/timeline/TimelineSampler.ts",

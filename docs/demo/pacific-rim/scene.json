@@ -12,9 +12,7 @@
                 "rotation": [0, 0, 0],
                 "scale": [1.4, 1.4, 1.4]
             },
-            "light": null,
-            "pose": null,
-            "poseWeight": 1
+            "pose": null
         },
         {
             "id": "kaiju",
@@ -27,9 +25,7 @@
                 "rotation": [0, 1.5707963267948966, 0],
                 "scale": [1.7, 1.7, 1.7]
             },
-            "light": null,
-            "pose": null,
-            "poseWeight": 1
+            "pose": null
         }
     ],
     "shots": [],

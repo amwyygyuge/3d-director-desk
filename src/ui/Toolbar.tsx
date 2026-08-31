@@ -40,7 +40,7 @@ import { STAGE_DEFS, STAGE_ORDER } from "../workspace/stages";
 import type { WorkspaceStage } from "../workspace/stages";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { LightModeToggle } from "./LightModeToggle";
-import { importActionFile, importModelFile, placementFor } from "./importFiles";
+import { importModelFile, placementFor } from "./importFiles";
 
 /** 模式三态查表:图标 + 文案(模式切换只走工具条;W/E/R 已让位给 WASD 飞行,见 navigation/FlyDrive) */
 const GIZMO_MODE_META: Record<GizmoMode, { label: string; icon: typeof OpenWithIcon }> = {
@@ -54,12 +54,9 @@ const PLAY_INDICATOR_COLOR = "success.main";
 const PLAY_INDICATOR_SIZE = 8;
 const PLAY_INDICATOR_GAP = 0.5;
 
-const ACTION_FILE_ACCEPT = ".glb,.gltf,.fbx";
-
 /** 阶段切换页签:点击 + 数字键直切(SHORTCUT_SPECS),提示同源 */
 const STAGE_SHORTCUT_ID: Record<WorkspaceStage, ShortcutId> = {
     set: SHORTCUT_ID.STAGE_SET,
-    action: SHORTCUT_ID.STAGE_ACTION,
     camera: SHORTCUT_ID.STAGE_CAMERA,
     output: SHORTCUT_ID.STAGE_OUTPUT,
 };
@@ -188,30 +185,6 @@ const SectionLight = observer(function SectionLight() {
                 <MenuItem onClick={() => placeLight("point")}>添加点光</MenuItem>
                 <MenuItem onClick={() => placeLight("spot")}>添加聚光</MenuItem>
             </Menu>
-        </>
-    );
-});
-
-/** 动作:导入动作 */
-const SectionAction = observer(function SectionAction() {
-    const stores = useDirectorDeskStores();
-    const actionInputRef = useRef<HTMLInputElement>(null);
-    return (
-        <>
-            <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => actionInputRef.current?.click()}>
-                导入动作
-            </Button>
-            <input
-                ref={actionInputRef}
-                type="file"
-                accept={ACTION_FILE_ACCEPT}
-                hidden
-                onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) void importActionFile(stores, file, (message) => stores.ui.setApplicationNotice(message));
-                }}
-            />
         </>
     );
 });
@@ -393,18 +366,15 @@ const SectionGizmo = observer(function SectionGizmo() {
     );
 });
 
-/** 工具组 key → 组件查表;阶段 → 工具组列表查表(禁 if 链) */
 const SECTION_COMPONENTS = {
     place: SectionPlace,
     light: SectionLight,
-    action: SectionAction,
     capture: SectionCapture,
     clear: SectionClear,
 } satisfies Record<string, ComponentType>;
 
 const STAGE_SECTIONS: Record<WorkspaceStage, readonly (keyof typeof SECTION_COMPONENTS)[]> = {
     set: ["place", "light", "clear"],
-    action: ["action"],
     camera: [],
     output: ["capture"],
 };

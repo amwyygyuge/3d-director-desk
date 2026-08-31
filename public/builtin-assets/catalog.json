@@ -65,19 +65,6 @@
             "license": "CC0 (Poly Haven)",
             "skeletonFamily": null,
             "tags": ["plant", "indoor", "potted"]
-        },
-        {
-            "id": "builtin.action.samba",
-            "kind": "action",
-            "category": "action.dance",
-            "name": "桑巴连击",
-            "source": "builtin",
-            "url": "/test-assets/desk-test.fbx",
-            "format": "fbx",
-            "license": "MIT (three.js examples)",
-            "skeletonFamily": "mixamo",
-            "clipName": "mixamo.com",
-            "tags": ["dance", "attack-standin", "humanoid"]
         }
     ]
 }

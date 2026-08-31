@@ -69,8 +69,6 @@ export interface SceneObjectInit {
     readonly light?: LightParams | null;
     /** 骨骼根相对的局部绝对旋转快照；仅模型可用，且始终是纯数据。 */
     readonly pose?: PoseSnapshot | PoseSnapshotInit | null;
-    /** 姿态层绝对旋转对混合器当前旋转的混合权重。 */
-    readonly poseWeight?: number;
 }
 
 export class SceneObject {
@@ -87,7 +85,6 @@ export class SceneObject {
     /** 灯光参数值对象；仅 light 实体有值，Three 光源仍由运行时树拥有。 */
     private currentLight: LightParams | null;
     private currentPose: PoseSnapshot | null;
-    private currentPoseWeight: number;
 
     constructor(init: SceneObjectInit) {
         this.id = init.id;
@@ -103,10 +100,6 @@ export class SceneObject {
         this.currentLight = hasLight ? normalizeLightParams(init.light as LightParams) : null;
         this.currentPose =
             init.pose instanceof PoseSnapshot ? init.pose : init.pose ? new PoseSnapshot(init.pose) : null;
-        if (!Number.isFinite(init.poseWeight ?? 1) || (init.poseWeight ?? 1) < 0 || (init.poseWeight ?? 1) > 1) {
-            throw new Error("SceneObject: poseWeight must be a finite value from 0 to 1");
-        }
-        this.currentPoseWeight = init.poseWeight ?? 1;
         makeAutoObservable<SceneObject, "currentLight" | "currentPose">(this, {
             currentLight: observableRef,
             currentPose: observableRef,
@@ -134,17 +127,8 @@ export class SceneObject {
         return this.currentPose;
     }
 
-    get poseWeight(): number {
-        return this.currentPoseWeight;
-    }
-
     applyPose(next: PoseSnapshot | null): void {
         this.currentPose = next;
-    }
-
-    applyPoseWeight(next: number): void {
-        if (!Number.isFinite(next) || next < 0 || next > 1) throw new Error("SceneObject: invalid pose weight");
-        this.currentPoseWeight = next;
     }
 
     /** JSON 往返保留 kind/light 的双向不变量，且不泄露 Three 运行时。 */
@@ -158,7 +142,6 @@ export class SceneObject {
             transform: copyTransform(this.currentTransform),
             light: this.currentLight,
             pose: this.currentPose?.toJSON() ?? null,
-            poseWeight: this.currentPoseWeight,
         };
     }
 
