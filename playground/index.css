@@ -1,0 +1,9 @@
+/*
+ * 库样式(src/styles)刻意关闭 Tailwind preflight,不替宿主页面做全局 reset。
+ * playground 作为宿主页自负其责:清掉浏览器默认 body margin(8px),
+ * 否则 100vw/100vh 画布被推出视口,四周露白并撑出滚动条。
+ */
+body {
+    margin: 0;
+    overflow: hidden;
+}

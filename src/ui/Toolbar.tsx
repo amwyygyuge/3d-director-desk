@@ -419,7 +419,14 @@ export const Toolbar = observer(function Toolbar() {
 
     return (
         <>
-            <Paper elevation={2} square role="toolbar" aria-label="导演工具" sx={{ overflowX: "auto", px: 1, py: 0.5 }}>
+            <Paper
+                elevation={2}
+                square
+                role="toolbar"
+                aria-label="导演工具"
+                className="absolute left-3 right-3 top-3 z-[2]"
+                sx={{ overflowX: "auto", px: 1, py: 0.5 }}
+            >
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                     <StageTabs />
                     <Divider orientation="vertical" flexItem />

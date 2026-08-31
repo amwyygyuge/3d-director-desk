@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { DirectorDesk } from "../src";
 import type { DirectorDeskStores } from "../src";
 import "../src/styles/index.css";
+import "./index.css";
 
 declare global {
     interface Window {
