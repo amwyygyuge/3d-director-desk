@@ -2,45 +2,32 @@
     "version": 1,
     "assets": [
         {
-            "id": "builtin.robot-expressive",
+            "id": "builtin.humanoid-generic",
             "kind": "model",
             "category": "character.human",
-            "name": "机器人侠客",
+            "name": "通用人形",
             "source": "builtin",
-            "url": "/builtin-assets/robot-expressive.glb",
+            "url": "/builtin-assets/humanoid-generic.glb",
             "format": "gltf",
-            "license": "CC0 (Quaternius)",
-            "skeletonFamily": "robot-expressive",
-            "embeddedClips": [
-                "Dance",
-                "Death",
-                "Idle",
-                "Jump",
-                "No",
-                "Punch",
-                "Running",
-                "Sitting",
-                "Standing",
-                "ThumbsUp",
-                "Walking",
-                "WalkJump",
-                "Wave",
-                "Yes"
-            ],
-            "tags": ["robot", "mecha", "animated", "humanoid"]
-        },
-        {
-            "id": "builtin.soldier",
-            "kind": "model",
-            "category": "character.human",
-            "name": "士兵",
-            "source": "builtin",
-            "url": "/builtin-assets/soldier.glb",
-            "format": "gltf",
-            "license": "MIT (three.js examples)",
+            "license": "TapNow 内部资产",
             "skeletonFamily": "mixamo",
-            "embeddedClips": ["Idle", "Walk", "Run", "TPose"],
-            "tags": ["human", "soldier", "animated", "humanoid"]
+            "embeddedClips": [
+                "Standing",
+                "Idle",
+                "Sitting",
+                "Sitting Floor",
+                "Crouching",
+                "Kneeling",
+                "Sleeping Side",
+                "Sleeping Supine",
+                "Lying Prone",
+                "Sleeping Supine Straight",
+                "Walking",
+                "Walking Backward",
+                "Jump",
+                "Running"
+            ],
+            "tags": ["human", "generic", "animated", "humanoid", "pose-presets"]
         },
         {
             "id": "builtin.fox",
@@ -91,19 +78,6 @@
             "skeletonFamily": "mixamo",
             "clipName": "mixamo.com",
             "tags": ["dance", "attack-standin", "humanoid"]
-        },
-        {
-            "id": "builtin.action.punch",
-            "kind": "action",
-            "category": "action.combat",
-            "name": "出拳",
-            "source": "builtin",
-            "url": "/builtin-assets/robot-expressive.glb",
-            "format": "gltf",
-            "license": "CC0 (Quaternius)",
-            "skeletonFamily": "robot-expressive",
-            "clipName": "Punch",
-            "tags": ["combat", "punch", "humanoid"]
         }
     ]
 }

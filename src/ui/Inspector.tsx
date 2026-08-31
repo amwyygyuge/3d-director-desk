@@ -23,6 +23,7 @@ import type { CommandResult } from "../command/DirectorCommand";
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "../core/LightParams";
 import type { LightParams, LightType } from "../core/LightParams";
 import type { Vec3 } from "../core/SceneObject";
+import { createStaticPoseSnapshot, isStaticPoseClip } from "../pose/StaticPoseClip";
 import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "../pose/SkeletonRuntimeRegistry";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { PlayheadDisplay } from "./PlayheadDisplay";
@@ -385,6 +386,74 @@ interface PlaybackControlsProps {
     report: ReportCommandResult;
 }
 
+/** 预设姿势与动作：静态 clip 走可序列化 pose 层；动态 clip 才走 AnimationBinder。 */
+const PosePresetSection = observer(function PosePresetSection({ objectId, report }: ObjectControlsProps) {
+    const stores = useDirectorDeskStores();
+    const { animations, catalog, dispatcher, models, scene, skeletons, ui } = stores;
+    const entity = scene.manager.getEntity(objectId);
+    const entry =
+        entity?.kind === "model" && entity.sourceUrl
+            ? catalog
+                  .list()
+                  .find((candidate) => candidate.url === entity.sourceUrl && (candidate.embeddedClips?.length ?? 0) > 0)
+            : undefined;
+    if (!entity || !entry?.embeddedClips || !entry.format) return null;
+    const clips = entry.embeddedClips;
+    const format = entry.format;
+
+    const applyPreset = async (clipName: string) => {
+        try {
+            const handle = await models.acquire(entry.url, format, { signal: stores.lifecycle.signal });
+            try {
+                const clip = handle.animations.find((candidate) => candidate.name === clipName);
+                if (!clip) throw new Error(`预设 clip 不存在:${clipName}`);
+                if (isStaticPoseClip(clip)) {
+                    const snapshot = createStaticPoseSnapshot(clip, skeletons.discover(objectId));
+                    if (!snapshot) throw new Error(`预设姿势骨骼未就绪:${clipName}`);
+                    if (entity.actionId) {
+                        report(dispatcher.dispatch({ type: "action.unmount", payload: { objectId } }, stores));
+                    }
+                    report(
+                        dispatcher.dispatch(
+                            { type: "pose.replace", payload: { objectId, pose: snapshot.toJSON() } },
+                            stores,
+                        ),
+                    );
+                    return;
+                }
+                if (entity.pose) {
+                    report(dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
+                }
+                const action = animations.register({ name: `${entry.name}#${clipName}`, url: entry.url, clip }).action;
+                report(
+                    dispatcher.dispatch({ type: "action.mount", payload: { objectId, actionId: action.id } }, stores),
+                );
+            } finally {
+                handle.release();
+            }
+        } catch (error) {
+            console.warn(`[PosePresetSection] 预设置备失败 ${clipName}`, error);
+            ui.setApplicationNotice(`预设姿势不可用:${clipName}`);
+        }
+    };
+
+    return (
+        <>
+            <Typography variant="caption" color="text.secondary">
+                预设姿势与动作({clips.length})
+            </Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                {clips.map((clipName) => (
+                    <Button key={clipName} size="small" variant="outlined" onClick={() => void applyPreset(clipName)}>
+                        {clipName}
+                    </Button>
+                ))}
+            </Box>
+            <Divider sx={{ my: 1 }} />
+        </>
+    );
+});
+
 const ActionLibrary = observer(function ActionLibrary({ actionId, objectId, report }: ActionLibraryProps) {
     const stores = useDirectorDeskStores();
     const { animations, dispatcher } = stores;
@@ -491,6 +560,7 @@ const ModelActionControls = observer(function ModelActionControls({ objectId, re
     return (
         <>
             <Divider sx={{ my: 1 }} />
+            <PosePresetSection objectId={objectId} report={report} />
             <ActionLibrary actionId={entity.actionId} objectId={objectId} report={report} />
             <Divider sx={{ my: 1 }} />
             <PlaybackControls actionId={entity.actionId} report={report} />
