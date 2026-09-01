@@ -20,6 +20,7 @@ const SHORTCUT_SCOPE_LABELS: Record<ShortcutScope, string> = {
     "shot-selected": "选中机位后",
     shot: "掌镜中",
     lens: "镜头视角",
+    "motion-key": "选中镜头关键帧时",
     presentation: "全屏预览中",
 };
 const SHORTCUT_SCOPE_ORDER = Object.keys(SHORTCUT_SCOPE_LABELS) as ShortcutScope[];

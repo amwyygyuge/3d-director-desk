@@ -54,7 +54,7 @@ export const SHORTCUT_SPECS: readonly {
 }[] = [
     { id: SHORTCUT_ID.PRESENTATION_EXIT, chords: ["escape"], scope: "presentation", label: "退出全屏预览" },
     { id: SHORTCUT_ID.LENS_EXIT, chords: ["escape"], scope: "lens", label: "退出镜头视角" },
-    { id: SHORTCUT_ID.MOTION_KEY_DELETE, chords: ["delete", "backspace"], scope: "lens", label: "删除选中镜头关键帧" },
+    { id: SHORTCUT_ID.MOTION_KEY_DELETE, chords: ["delete", "backspace"], scope: "motion-key", label: "删除选中镜头关键帧" },
     { id: SHORTCUT_ID.RAIL_CLOSE, chords: ["escape"], scope: "rail", label: "收起左栏面板" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
@@ -191,6 +191,7 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         "global",
         ...(stores.layout.railSection !== null ? ["rail" as const] : []),
         ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
+        ...(stores.motionAuthoring.selectedKeyId !== null ? ["motion-key" as const] : []),
         ...(primaryId ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
         ...(stores.camera.activeShotId ? ["shot" as const] : []),

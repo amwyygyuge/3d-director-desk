@@ -300,7 +300,9 @@ const MotionClipBar = observer(function MotionClipBar({ clipId }: { readonly cli
                     ignoreClick.current = false;
                     return;
                 }
+                // 运镜片段的属性面板挂在机位上:点片段即把右栏收敛到它所属机位
                 stores.motionAuthoring.selectClip(clipId);
+                stores.selection.select(clip.cameraId);
                 const result = stores.dispatcher.dispatch({ type: "motion.preview.enter", payload: { clipId } }, stores);
                 reportCommandFailure(stores, result);
             }}

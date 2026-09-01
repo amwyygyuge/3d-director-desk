@@ -1,8 +1,8 @@
 import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { BufferAttribute, BufferGeometry, Plane, Vector3 } from "three";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BufferAttribute, BufferGeometry, Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { Group } from "three";
 
 import type { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -10,8 +10,10 @@ import type { CameraKey } from "@/camera/CameraKey";
 import { AutoHandleSolver, createHandlePair } from "@/motion/AutoHandleSolver";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import type { Vec3 } from "@/core/SceneObject";
+import { useOrbitControls } from "@/navigation/orbit";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const PATH_SAMPLES_PER_SEGMENT = 24;
 const KEY_RADIUS_METERS = 0.11;
@@ -24,7 +26,18 @@ const MANUAL_HANDLE_COLOR = "#f5f3ff";
 const TMP_CAMERA_FORWARD = new Vector3();
 const TMP_INTERSECTION = new Vector3();
 const TMP_DRAG_PLANE = new Plane();
+const TMP_RAYCASTER = new Raycaster();
+const TMP_POINTER = new Vector2();
 const HANDLE_SOLVER = new AutoHandleSolver();
+/** 屏幕坐标 → NDC 的量程(0~1 映射到 -1~1) */
+const NDC_SPAN = 2;
+
+/** 选中一枚关键帧即把右栏收敛到它所属机位:运镜编辑与机位面板是同一个上下文。 */
+function selectMotionKey(stores: DirectorDeskStores, clipId: string, keyId: string): void {
+    const cameraId = stores.motion.clip(clipId)?.cameraId;
+    stores.motionAuthoring.selectKey(clipId, keyId);
+    if (cameraId) stores.selection.select(cameraId);
+}
 
 
 interface PreviewGeometry {
@@ -134,6 +147,8 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
     const inHandleRef = useRef<Group | null>(null);
     const outHandleRef = useRef<Group | null>(null);
     const dragRef = useRef<DragState | null>(null);
+    const controls = useOrbitControls();
+    const [dragging, setDragging] = useState(false);
     const handleOffsets = useMemo(() => {
         const offsets = createHandlePair();
         const keyIndex = clip?.trajectory.indexOf(keyId) ?? -1;
@@ -156,72 +171,100 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
         [inGeometry, outGeometry],
     );
 
-    const startDrag = useCallback(
-        (kind: DragState["kind"], target: Group | null, geometry: BufferGeometry | null, event: ThreeEvent<PointerEvent>): void => {
-            if (!target || !rootRef.current) return;
-            event.stopPropagation();
-            stores.motionAuthoring.selectKey(clipId, keyId);
-            camera.getWorldDirection(TMP_CAMERA_FORWARD);
-            TMP_DRAG_PLANE.setFromNormalAndCoplanarPoint(TMP_CAMERA_FORWARD, rootRef.current.position);
-            dragRef.current = { kind, target, geometry };
-            canvas.setPointerCapture(event.pointerId);
-        },
-        [camera, canvas, clipId, keyId, stores],
-    );
-    const moveDrag = useCallback(
-        (event: ThreeEvent<PointerEvent>): void => {
+    // 拖拽期把指针跟踪挂到 window:射线一旦脱离小球,R3F 的对象级 pointermove 就不再触发,
+    // 手感会「跟不上手」;同时必须停掉 OrbitControls,否则同一串指针事件既转轨道又拖点。
+    const runDrag = useCallback(
+        (clientX: number, clientY: number): void => {
             const drag = dragRef.current;
             const root = rootRef.current;
-            if (!drag || !root || !event.ray.intersectPlane(TMP_DRAG_PLANE, TMP_INTERSECTION)) return;
-            if (drag.kind === "key") drag.target.position.copy(TMP_INTERSECTION);
-            else drag.target.position.set(
-                TMP_INTERSECTION.x - root.position.x,
-                TMP_INTERSECTION.y - root.position.y,
-                TMP_INTERSECTION.z - root.position.z,
+            if (!drag || !root) return;
+            const bounds = canvas.getBoundingClientRect();
+            TMP_POINTER.set(
+                ((clientX - bounds.left) / bounds.width) * NDC_SPAN - 1,
+                -((clientY - bounds.top) / bounds.height) * NDC_SPAN + 1,
+            );
+            TMP_RAYCASTER.setFromCamera(TMP_POINTER, camera);
+            if (!TMP_RAYCASTER.ray.intersectPlane(TMP_DRAG_PLANE, TMP_INTERSECTION)) return;
+            const isKey = drag.kind === "key";
+            drag.target.position.set(
+                TMP_INTERSECTION.x - (isKey ? 0 : root.position.x),
+                TMP_INTERSECTION.y - (isKey ? 0 : root.position.y),
+                TMP_INTERSECTION.z - (isKey ? 0 : root.position.z),
             );
             if (drag.geometry) updateHandleGeometry(drag.geometry, drag.target);
             invalidate();
         },
-        [invalidate],
+        [camera, canvas, invalidate],
     );
-    const finishDrag = useCallback(
-        (event: ThreeEvent<PointerEvent>): void => {
-            const drag = dragRef.current;
-            if (!drag || !key) return;
-            dragRef.current = null;
-            canvas.releasePointerCapture(event.pointerId);
-            const result =
-                drag.kind === "key"
-                    ? stores.dispatcher.dispatch(
-                          { type: "motion.set-key", payload: { clipId, key: poseKeyPayload(key, drag.target) } },
-                          stores,
-                      )
-                    : stores.dispatcher.dispatch(
-                          {
-                              type: "motion.set-key-handle",
-                              payload: { clipId, keyId, kind: drag.kind, value: handlePayload(drag.target) },
-                          },
-                          stores,
-                      );
-            reportCommandFailure(stores, result);
+
+    const finishDrag = useCallback((): void => {
+        const drag = dragRef.current;
+        dragRef.current = null;
+        if (controls) controls.enabled = true;
+        if (!drag || !key) return;
+        const result =
+            drag.kind === "key"
+                ? stores.dispatcher.dispatch(
+                      { type: "motion.set-key", payload: { clipId, key: poseKeyPayload(key, drag.target) } },
+                      stores,
+                  )
+                : stores.dispatcher.dispatch(
+                      {
+                          type: "motion.set-key-handle",
+                          payload: { clipId, keyId, kind: drag.kind, value: handlePayload(drag.target) },
+                      },
+                      stores,
+                  );
+        reportCommandFailure(stores, result);
+    }, [clipId, controls, key, keyId, stores]);
+
+    // 监听器只在拖拽进行中存在:非拖拽期视口没有任何额外的全局指针开销
+    useEffect(() => {
+        if (!dragging) return undefined;
+        const onMove = (event: PointerEvent) => runDrag(event.clientX, event.clientY);
+        const onUp = () => {
+            finishDrag();
+            setDragging(false);
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+        };
+    }, [dragging, finishDrag, runDrag]);
+
+    const startDrag = useCallback(
+        (kind: DragState["kind"], target: Group | null, geometry: BufferGeometry | null, event: ThreeEvent<PointerEvent>): void => {
+            if (!target || !rootRef.current) return;
+            event.stopPropagation();
+            event.nativeEvent.stopPropagation();
+            selectMotionKey(stores, clipId, keyId);
+            camera.getWorldDirection(TMP_CAMERA_FORWARD);
+            TMP_DRAG_PLANE.setFromNormalAndCoplanarPoint(TMP_CAMERA_FORWARD, rootRef.current.position);
+            dragRef.current = { kind, target, geometry };
+            if (controls) controls.enabled = false;
+            setDragging(true);
         },
-        [canvas, clipId, key, keyId, stores],
+        [camera, clipId, controls, keyId, stores],
     );
 
     if (!key) return null;
     const handleColor = key.handleMode === MOTION_HANDLE_MODE.AUTO ? AUTO_HANDLE_COLOR : MANUAL_HANDLE_COLOR;
     const handleWireframe = key.handleMode === MOTION_HANDLE_MODE.AUTO;
     return (
-        <group ref={rootRef} position={key.position} userData={{ helper: true }} onPointerMove={moveDrag} onPointerUp={finishDrag}>
+        <group ref={rootRef} position={key.position} userData={{ helper: true }}>
             <mesh
                 onClick={(event) => {
                     event.stopPropagation();
-                    stores.motionAuthoring.selectKey(clipId, keyId);
+                    selectMotionKey(stores, clipId, keyId);
                 }}
                 onContextMenu={(event) => {
                     event.stopPropagation();
                     event.nativeEvent.preventDefault();
-                    stores.motionAuthoring.selectKey(clipId, keyId);
+                    selectMotionKey(stores, clipId, keyId);
                     onContextMenu({ clientX: event.nativeEvent.clientX, clientY: event.nativeEvent.clientY });
                 }}
                 onPointerDown={(event) => startDrag("key", rootRef.current, null, event)}

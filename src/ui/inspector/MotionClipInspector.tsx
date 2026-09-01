@@ -3,6 +3,9 @@ import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import { observer } from "mobx-react-lite";
 
 import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
@@ -11,6 +14,9 @@ import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { Vec3 } from "@/core/SceneObject";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
+import { RemoveMotionKeyCommand } from "@/command/cameraMotionCommands";
+import { MotionPresetControls } from "@/ui/inspector/MotionPresetControls";
+import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 
@@ -229,15 +235,32 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
                         >
                             {timeSeconds.toFixed(2)}s
                         </Button>
-                        <Button
-                            size="small"
-                            onClick={() => {
-                                const result = dispatcher.dispatch({ type: "transport.seek", payload: { time: timeSeconds } }, stores);
-                                reportCommandFailure(stores, result);
-                            }}
-                        >
-                            定位
-                        </Button>
+                        <Box sx={{ display: "flex", gap: FIELD_GAP }}>
+                            <Button
+                                size="small"
+                                onClick={() => {
+                                    const result = dispatcher.dispatch({ type: "transport.seek", payload: { time: timeSeconds } }, stores);
+                                    reportCommandFailure(stores, result);
+                                }}
+                            >
+                                定位
+                            </Button>
+                            <Tooltip title={`删除关键帧 (${formatShortcutHint(SHORTCUT_ID.MOTION_KEY_DELETE)})`}>
+                                <IconButton
+                                    size="small"
+                                    aria-label={`删除 ${timeSeconds.toFixed(2)} 秒的关键帧`}
+                                    onClick={() => {
+                                        const result = dispatcher.dispatch(
+                                            { type: RemoveMotionKeyCommand.TYPE, payload: { clipId: clip.id, keyId: key.id } },
+                                            stores,
+                                        );
+                                        reportCommandFailure(stores, result);
+                                    }}
+                                >
+                                    <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
                     </Box>
                 );
             })}
@@ -447,18 +470,47 @@ const ManualHandleFields = observer(function ManualHandleFields({ clipId, keyId 
     );
 });
 
-/** 右栏的运镜片段情境编辑器；所有写入经命令层。 */
-export const MotionClipInspector = observer(function MotionClipInspector({ clipId }: { clipId: string }) {
-    const { motion } = useDirectorDeskStores();
-    const clip = motion.clip(clipId);
-
-    if (!clip) return null;
+/**
+ * 机位面板里的运镜区:一台机位的全部片段与选中片段的编辑。
+ *
+ * 运镜不是独立的选中对象——它属于某台机位,故与机位属性同住一个右栏面板,
+ * 作者点机位标记就能顺势编排它的运镜,不必先在时间轴上找到片段。
+ */
+export const CameraMotionSection = observer(function CameraMotionSection({ cameraId }: { cameraId: string }) {
+    const { motion, motionAuthoring } = useDirectorDeskStores();
+    const clips = motion.clipsForCamera(cameraId);
+    const selectedClip = motionAuthoring.selectedClipId ? motion.clip(motionAuthoring.selectedClipId) : undefined;
+    const activeClip = selectedClip?.cameraId === cameraId ? selectedClip : undefined;
 
     return (
-        <Box className="min-h-0 flex-1 overflow-auto">
-            <MotionClipProperties clipId={clip.id} />
+        <Box sx={{ display: "grid", gap: FIELD_GAP, p: FIELD_GAP }}>
+            <MotionPresetControls cameraId={cameraId} />
             <Divider />
-            <MotionKeyList clipId={clip.id} />
+            <Typography variant="subtitle2">运镜片段 ({clips.length})</Typography>
+            {clips.length === 0 && (
+                <Typography variant="caption" color="text.secondary">
+                    该机位暂无运镜;用上方运镜预设或在时间线上创建。
+                </Typography>
+            )}
+            {clips.map((clip) => (
+                <Button
+                    key={clip.id}
+                    size="small"
+                    variant={activeClip?.id === clip.id ? "contained" : "text"}
+                    sx={{ justifyContent: "flex-start" }}
+                    onClick={() => motionAuthoring.selectClip(clip.id)}
+                >
+                    {clip.startTimeSeconds.toFixed(2)}s — {clip.endTimeSeconds.toFixed(2)}s · {clip.keys.length} 关键帧
+                </Button>
+            ))}
+            {activeClip && (
+                <>
+                    <Divider />
+                    <MotionClipProperties clipId={activeClip.id} />
+                    <Divider />
+                    <MotionKeyList clipId={activeClip.id} />
+                </>
+            )}
         </Box>
     );
 });

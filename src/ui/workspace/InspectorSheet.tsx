@@ -7,12 +7,11 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
 import type { SceneObjectKind } from "@/core/SceneObject";
-import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { Inspector } from "@/ui/inspector/Inspector";
-import { MotionClipInspector } from "@/ui/inspector/MotionClipInspector";
+import { CameraMotionSection } from "@/ui/inspector/MotionClipInspector";
 import { CHROME } from "@/ui/shell/theme";
 
 const INSPECTOR_TOP_PX = 80;
@@ -56,30 +55,20 @@ function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup):
 interface InspectorContextLookup {
     readonly stores: Pick<DirectorDeskStores, "camera" | "scene">;
     readonly primaryId: string | null;
-    readonly selectedClip: CameraMotionClip | undefined;
 }
 
-function inspectorContextFor({ stores, primaryId, selectedClip }: InspectorContextLookup): InspectorSelection | null {
-    if (selectedClip) {
-        return {
-            kind: "motion-clip",
-            name: `${selectedClip.cameraId} · ${selectedClip.startTimeSeconds.toFixed(2)}s`,
-            isSceneEntity: false,
-        };
-    }
-    if (primaryId === null) return null;
-    return inspectorSelectionFor({ stores, primaryId });
+/** 选中机位时把该机位的运镜一并交给右栏:运镜属于机位,不再另开一个选中上下文。 */
+function inspectorContextFor({ stores, primaryId }: InspectorContextLookup): InspectorSelection | null {
+    return primaryId === null ? null : inspectorSelectionFor({ stores, primaryId });
 }
 
 
 /** 仅在存在选中对象时出现的情境检查器，关闭操作复用全局清选中语义。 */
 export const InspectorSheet = observer(function InspectorSheet() {
     const stores = useDirectorDeskStores();
-    const { layout, motion, motionAuthoring, selection } = stores;
-    const selectedClipId = motionAuthoring.selectedClipId;
-    const selectedClip = selectedClipId ? motion.clip(selectedClipId) : undefined;
+    const { layout, selection } = stores;
     const primaryId = selection.primaryId;
-    const selected = inspectorContextFor({ stores, primaryId, selectedClip });
+    const selected = inspectorContextFor({ stores, primaryId });
 
     if (!layout.authoringVisible || selected === null) return null;
 
@@ -119,19 +108,16 @@ export const InspectorSheet = observer(function InspectorSheet() {
                     <IconButton
                         size="small"
                         aria-label="关闭检查器"
-                        onClick={() => (selectedClip ? motionAuthoring.selectClip(null) : selection.clear())}
+                        onClick={() => selection.clear()}
                     >
                         <CloseIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
             </Box>
-            {selectedClip ? (
-                <MotionClipInspector clipId={selectedClip.id} />
-            ) : (
-                <Box className="min-h-0 flex-1 overflow-auto">
-                    <Inspector />
-                </Box>
-            )}
+            <Box className="min-h-0 flex-1 overflow-auto">
+                <Inspector />
+                {selected.kind === "camera-shot" && primaryId !== null && <CameraMotionSection cameraId={primaryId} />}
+            </Box>
             {selected.isSceneEntity && (
                 <Paper
                     elevation={0}
