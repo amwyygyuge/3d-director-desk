@@ -55,6 +55,8 @@ export class UiStore {
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
     posePickingBoneKey: string | null = null;
+    /** 右栏检查器各上下文类型的激活 tab(按类型记忆;瞬时 UI 态,不序列化) */
+    readonly inspectorTabs = new Map<string, string>();
     private disposed = false;
 
     constructor() {
@@ -73,6 +75,13 @@ export class UiStore {
     setPosePicking(objectId: string | null, boneKey: string | null): void {
         this.posePickingObjectId = objectId;
         this.posePickingBoneKey = boneKey;
+    }
+    inspectorTabFor(kind: string): string | undefined {
+        return this.inspectorTabs.get(kind);
+    }
+
+    setInspectorTab(kind: string, tabId: string): void {
+        this.inspectorTabs.set(kind, tabId);
     }
 
     noteGizmoInteraction(): void {
@@ -115,6 +124,7 @@ export class UiStore {
         this.applicationNotice = null;
         this.posePickingObjectId = null;
         this.posePickingBoneKey = null;
+        this.inspectorTabs.clear();
     }
     toggleHelp(): void {
         this.helpOpen = !this.helpOpen;

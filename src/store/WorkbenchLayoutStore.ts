@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
-import type { RailSection } from "@/workspace/railSections";
+import { WORKSPACE_SECTION } from "@/workspace/workspaceSections";
+import type { WorkspaceSection } from "@/workspace/workspaceSections";
 
 /**
  * 渲染画质档:唯一影响 3D 输出质量的开关(截图与录制成片同样受它影响)。
@@ -27,8 +28,8 @@ export const RENDER_QUALITY_PROFILES: Record<
  * 每 DirectorDesk 实例一套(实例化纪律);Monet 画布可同时挂多个导演台节点。
  */
 export class WorkbenchLayoutStore {
-    /** 左栏当前钉住的二级面板;null = 只剩图标条(hover 展开标签是纯 CSS,不占状态) */
-    railSection: RailSection | null = null;
+    /** 左栏当前分区:tab 互斥单选;纯 UI 态,不入文档与撤销栈 */
+    activeSection: WorkspaceSection = WORKSPACE_SECTION.OUTLINE;
     /** 底部时间线展开态:点击把手开合;纯 UI 态,不入文档与撤销栈 */
     timelineExpanded = false;
     /** 全屏预览:悬浮壳层与场景辅助物一并隐去,Program 输出接管视口相机 */
@@ -49,14 +50,9 @@ export class WorkbenchLayoutStore {
         return !this.presentationMode;
     }
 
-    /** 再次点击同一图标收起抽屉(DCC 惯例的开合语义) */
-    toggleRailSection(section: RailSection): void {
-        this.railSection = this.railSection === section ? null : section;
-    }
-
-    /** Esc 收起二级面板;图标条本身常驻 */
-    closeRail(): void {
-        this.railSection = null;
+    /** 切换左栏分区:tab 单级直达,无中间态 */
+    activateWorkspaceSection(section: WorkspaceSection): void {
+        this.activeSection = section;
     }
 
     setRenderQuality(quality: RenderQuality): void {
@@ -70,6 +66,5 @@ export class WorkbenchLayoutStore {
     /** 仅供 presentation 命令调用:UI 与 AI 都经命令层进出预览,不直写本字段 */
     setPresentationMode(active: boolean): void {
         this.presentationMode = active;
-        if (active) this.railSection = null;
     }
 }

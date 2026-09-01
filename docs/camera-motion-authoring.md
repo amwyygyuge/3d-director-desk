@@ -237,12 +237,12 @@ stateDiagram-v2
 
 **三态的写入目标必须在 HUD 上说清楚**，这是本方案的防误操作核心：现状用户在掌镜里飞一圈就悄悄改了机位数据（`ShotNavigation` 400ms 后落 `camera.set-shot`），而他以为自己在做运镜。
 
-| 模式     | 取景框 | 角标文案                  | 视口手势写入                      |
-| -------- | ------ | ------------------------- | --------------------------------- |
-| 导演视角 | 无     | 无                        | 不写（仅 `rememberDirectorPose`） |
-| 掌镜     | 白     | `机位A · 静态默认姿态`    | `camera.set-shot`                 |
+| 模式     | 取景框 | 角标文案                  | 视口手势写入                                  |
+| -------- | ------ | ------------------------- | --------------------------------------------- |
+| 导演视角 | 无     | 无                        | 不写（仅 `rememberDirectorPose`）             |
+| 掌镜     | 白     | `机位A · 静态默认姿态`    | `camera.set-shot`                             |
 | 镜头视角 | Indigo | `镜头3 · 机位A · t=1.20s` | 拖拽/WASD 仅试镜，**K** 才落 `motion.set-key` |
-| 全屏预览 | 无     | 无                        | 只读                              |
+| 全屏预览 | 无     | 无                        | 只读                                          |
 
 **镜头视角的实现代价接近零**：`CameraMotionRig` 的 `isProgramOutput` 判据为 `layout.presentationMode || authoring.lensViewActive`；生效片段由 `CameraMotionStore.resolveOutputClipAt(time, previewClipId)` 裁决。sink、restore、定序全部复用。
 
@@ -252,11 +252,11 @@ stateDiagram-v2
 
 三条导航路径（`FlyDrive` / `ShotNavigation` / `LensNavigation`）与 `OrbitControls` 起初各自推断激活条件，判据互不互斥，镜头视角因此同时成立多个所有者：WASD 被两个飞行 hook 各推一次（实测 9.97 单位/秒 = 2×`FLY_SPEED`）、轨道公转叠加 pan/tilt、滚轮既推轨又变焦、阻尼惯性让 400ms 后落的 key 与松手画面不一致。所有权现收敛为单一派生：
 
-| 所有者     | 判据                                                | 轨道 | 收指针/按键                     | 写入                                     |
-| ---------- | --------------------------------------------------- | ---- | ------------------------------- | ---------------------------------------- |
-| `director` | 非成片接管且无激活机位                              | 开   | `FlyDrive` + `OrbitControls`    | 不写（仅 `rememberDirectorPose`）        |
-| `shot`     | `camera.activeShotId !== null`                      | 关   | `ShotNavigation`                | 手势终点 400ms 落 `camera.set-shot`      |
-| `program`  | `layout.presentationMode \|\| authoring.lensViewActive` | 关   | `LensNavigation`（全屏预览只读） | 手势不写；**K** 落 `motion.set-key`      |
+| 所有者     | 判据                                                    | 轨道 | 收指针/按键                      | 写入                                |
+| ---------- | ------------------------------------------------------- | ---- | -------------------------------- | ----------------------------------- |
+| `director` | 非成片接管且无激活机位                                  | 开   | `FlyDrive` + `OrbitControls`     | 不写（仅 `rememberDirectorPose`）   |
+| `shot`     | `camera.activeShotId !== null`                          | 关   | `ShotNavigation`                 | 手势终点 400ms 落 `camera.set-shot` |
+| `program`  | `layout.presentationMode \|\| authoring.lensViewActive` | 关   | `LensNavigation`（全屏预览只读） | 手势不写；**K** 落 `motion.set-key` |
 
 `OrbitAuthorityRig` 是 `controls.enabled` 的唯一写方；关键帧小球与 gizmo 拖拽经 `useOrbitSuspension` 计数让位（drei 的 `TransformControls` 在 `dragging-changed` 时会把默认控制器无条件置回 `enabled = true`，越权唤醒必须由本 rig 拨正）。摆位手势只接主键拖拽，右键留给关键帧上下文菜单。
 
@@ -268,12 +268,14 @@ stateDiagram-v2
 
 **`key.progress` 是轨迹参数，不是时间比例**。整段时间曲线 `easing` 把「归一化时间」映射成「轨迹参数」，因此两个方向的换算必须只有一个入口，全部挂在 `CameraMotionClip` 上：
 
-| 方向 | 入口 | 消费方 |
-| --- | --- | --- |
+| 方向            | 入口                      | 消费方                                       |
+| --------------- | ------------------------- | -------------------------------------------- |
 | 时刻 → 轨迹参数 | `trajectoryProgressAt(t)` | `sampleCameraMotionClip`、打点、菱形拖拽落点 |
-| 轨迹参数 → 时刻 | `timeAtProgress(p)` | 时间轴菱形、片段检查器、跳转、吸附候选 |
+| 轨迹参数 → 时刻 | `timeAtProgress(p)`       | 时间轴菱形、片段检查器、跳转、吸附候选       |
 
 曾经打点用线性 `progressAt(t)`、采样用 `easedProgress(...)`：`easing = smooth` 的片段上，落键瞬间画面就被重采样拉走（实测 z 3.68 → 3.86），且菱形显示的时刻不是它真正出画的时刻。闭环验收：t=1.4s 拖出画面 → key 落 `progress 0.282` / `timeAtProgress = 1.400s` → 走开再 seek 回来，画面精确复现。
+
+> 本节涉及的缺陷全表、未修的结构债(命令 payload 契约、视口输入层双事件流、轨道所有权、验收断言缺口)与逐条方案见 [`docs/architecture-debt.md`](./architecture-debt.md)。动这几块代码前先读。
 
 ---
 

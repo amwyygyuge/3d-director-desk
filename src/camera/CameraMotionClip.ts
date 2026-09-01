@@ -3,7 +3,12 @@ import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFoc
 import { cameraKeyFrom } from "@/camera/CameraKey";
 import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyInit, CameraKeyJSON } from "@/camera/CameraKey";
-import { CAMERA_MOTION_EASING, easedProgress, inverseEasedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
+import {
+    CAMERA_MOTION_EASING,
+    easedProgress,
+    inverseEasedProgress,
+    isCameraMotionEasing,
+} from "@/camera/CameraMotionEasing";
 import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraShot } from "@/camera/CameraShot";
 import { MotionTrajectory } from "@/motion/MotionTrajectory";

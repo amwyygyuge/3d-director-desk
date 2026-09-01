@@ -23,7 +23,7 @@ import { LensNavigation } from "@/ui/viewport/scene/LensNavigation";
 import type { AssetProvider } from "@/assets/catalog/AssetProvider";
 import { createDirectorDeskStores, DirectorDeskProvider } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { AssetRail } from "@/ui/workspace/AssetRail";
+import { WorkspaceNavigator } from "@/ui/workspace/WorkspaceNavigator";
 import { ApplicationNotice } from "@/ui/workspace/ApplicationNotice";
 import { InspectorSheet } from "@/ui/workspace/InspectorSheet";
 import { TimelineConsole } from "@/ui/workspace/TimelineConsole";
@@ -267,7 +267,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                         {/* 悬浮壳层:根容器放行指针事件,四区各自 pointer-events-auto 重新拦截 */}
                         <div className="pointer-events-none absolute inset-0">
                             <TopPillBar />
-                            <AssetRail />
+                            <WorkspaceNavigator />
                             <InspectorSheet />
                             <TimelineConsole />
                             <PresentationExitHint />

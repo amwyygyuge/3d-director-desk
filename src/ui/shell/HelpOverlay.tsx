@@ -15,7 +15,6 @@ const DIALOG_TITLE = "快捷键";
 const FIRST_GROUP_INDEX = 0;
 const SHORTCUT_SCOPE_LABELS: Record<ShortcutScope, string> = {
     global: "全局",
-    rail: "左栏面板展开时",
     gizmo: "选中对象后",
     "shot-selected": "选中机位后",
     shot: "掌镜中",

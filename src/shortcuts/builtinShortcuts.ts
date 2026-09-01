@@ -27,7 +27,6 @@ export const SHORTCUT_ID = {
     HELP_TOGGLE: "help.toggle",
     TRANSPORT_TOGGLE: "transport.toggle",
     TIMELINE_ADD_KEY: "timeline.add-key",
-    RAIL_CLOSE: "rail.close",
     PRESENTATION_ENTER: "presentation.enter",
     PRESENTATION_EXIT: "presentation.exit",
     LENS_TOGGLE: "lens.toggle",
@@ -60,7 +59,6 @@ export const SHORTCUT_SPECS: readonly {
         scope: "motion-key",
         label: "删除选中镜头关键帧",
     },
-    { id: SHORTCUT_ID.RAIL_CLOSE, chords: ["escape"], scope: "rail", label: "收起左栏面板" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
@@ -148,7 +146,6 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.TRANSPORT_TOGGLE]: (s) =>
         s.dispatcher.dispatch({ type: s.clock.isPlaying ? "transport.pause" : "transport.play", payload: {} }, s),
     [SHORTCUT_ID.PRESENTATION_ENTER]: enterPresentation,
-    [SHORTCUT_ID.RAIL_CLOSE]: (s) => s.layout.closeRail(),
     [SHORTCUT_ID.PRESENTATION_EXIT]: (s) =>
         s.dispatcher.dispatch({ type: ExitPresentationCommand.TYPE, payload: {} }, s),
     [SHORTCUT_ID.EDIT_UNDO]: (s) => s.history.undo(s),
@@ -182,7 +179,7 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
 /**
  * 当前激活作用域。
  * 全屏预览独占:壳层已隐、成片正在放,此时一切编辑键位都不该生效——只留退出键。
- * 其余情形 global 常驻;rail/gizmo/shot-selected/shot 各自按精确条件激活,
+ * 其余情形 global 常驻;gizmo/shot-selected/shot/lens/motion-key 各自按精确条件激活,
  * Esc 的归属由 SHORTCUT_SPECS 的顺序决定(注册表先命中先执行)。
  */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
@@ -194,7 +191,6 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         stores.camera.director.getShot(primaryId) !== undefined;
     return new Set<ShortcutScope>([
         "global",
-        ...(stores.layout.railSection !== null ? ["rail" as const] : []),
         ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
         ...(stores.motionAuthoring.selectedKeyId !== null ? ["motion-key" as const] : []),
         ...(primaryId ? ["gizmo" as const] : []),

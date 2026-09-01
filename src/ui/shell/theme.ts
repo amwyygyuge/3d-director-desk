@@ -38,15 +38,20 @@ export const MONO_FONT_STACK = '"SF Mono", "JetBrains Mono", ui-monospace, Menlo
 export const CHROME = {
     pillHeightPx: 48,
     edgeGapPx: 16,
-    railCollapsedPx: 56,
-    railExpandedPx: 240,
-    flyoutWidthPx: 288,
-    inspectorWidthPx: 288,
+    /** 左右侧栏同宽:几何镜像,禁单侧硬编码 */
+    sidePanelWidthPx: 288,
+    /** 侧栏上缘:给顶部药丸让位 */
+    sidePanelTopPx: 80,
     timelineMiniPx: 56,
     timelineExpandedPx: 264,
     /** 提示条压在一切壳层之上:它可能在时间线展开或检查器打开时出现 */
     toastZIndex: 40,
 } as const;
+
+/** 侧栏下缘让位量:骑在时间线控制台上方,随其开合联动;左右侧栏共用同一几何,禁各自拼表达式 */
+export function sidePanelBottomOffsetPx(timelineExpanded: boolean): number {
+    return (timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx;
+}
 
 declare module "@mui/material/Paper" {
     interface PaperPropsVariantOverrides {
@@ -113,6 +118,20 @@ export const directorDeskTheme = createTheme({
         },
         MuiListItemButton: {
             styleOverrides: { root: { borderRadius: 10 } },
+        },
+        MuiTabs: {
+            styleOverrides: {
+                // indicator 默认对 left/width 做过渡:无法合成器化,过渡期间每帧重排与画布渲染叠加;瞬时到位
+                indicator: { transition: "none" },
+            },
+        },
+        MuiTab: {
+            styleOverrides: {
+                // 288px 侧栏放 4 个 tab:默认 90px min-width 会把末位挤出面板;
+                // 默认横向 16px padding 把图标+文字挤成竖排,收窄后一行放下;
+                // 图标+文字并存时 v9 把 min-height 抬到 72px,压回标准 48 与顶部药丸同高
+                root: { minWidth: 0, minHeight: 48, padding: "6px 4px", whiteSpace: "nowrap" },
+            },
         },
     },
 });

@@ -70,7 +70,8 @@ function hasLensClip(stores: DirectorDeskStores): boolean {
 
 function resolveViewportInteractionHint(stores: DirectorDeskStores): ViewportInteractionHint | null {
     // 无片段时的提示条与「在此创建 1 秒片段」由 ShotFrameOverlay 承担,此处不重复一套
-    if (stores.motionAuthoring.lensViewActive) return hasLensClip(stores) ? VIEWPORT_INTERACTION_HINT.LENS_NAVIGATION : null;
+    if (stores.motionAuthoring.lensViewActive)
+        return hasLensClip(stores) ? VIEWPORT_INTERACTION_HINT.LENS_NAVIGATION : null;
     if (stores.camera.activeShotId !== null) return VIEWPORT_INTERACTION_HINT.SHOT_NAVIGATION;
     const primaryId = stores.selection.primaryId;
     const isShotSelected = primaryId !== null && stores.camera.director.getShot(primaryId) !== undefined;
