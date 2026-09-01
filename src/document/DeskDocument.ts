@@ -4,9 +4,10 @@ import type { CameraShotJSON } from "@/camera/CameraShot";
 import type { SceneObjectInit } from "@/core/SceneObject";
 import type { TimelineDocInit } from "@/timeline/TimelineDoc";
 import type { DirectorContext } from "@/command/DirectorCommand";
+import type { PosePresetJSON } from "@/pose/PosePreset";
 
-/** 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。 */
-export const DESK_DOCUMENT_VERSION = 4;
+/** 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。v5 起实体带人偶画像与自建姿势库。 */
+export const DESK_DOCUMENT_VERSION = 5;
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
 export interface DeskDocumentAction {
@@ -32,6 +33,7 @@ export interface DeskDocument {
     readonly motion: DeskDocumentMotion;
     readonly timeline: TimelineDocInit;
     readonly actions: readonly DeskDocumentAction[];
+    readonly posePresets: readonly PosePresetJSON[];
 }
 
 /** 装配当前状态为文档(单一事实源:各域 toJSON) */
@@ -52,5 +54,6 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
             clipName: ctx.animations.getClip(action.id)?.name ?? "",
             mountedOn: entities.find((entity) => entity.actionId === action.id)?.id ?? null,
         })),
+        posePresets: ctx.posePresets.customPresets().map((preset) => preset.toJSON()),
     };
 }

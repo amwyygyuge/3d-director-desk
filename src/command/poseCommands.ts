@@ -1,3 +1,9 @@
+import { BODY_PART, isBodyPart } from "@/actor/mixamoSkeleton";
+import type { BodyPart } from "@/actor/mixamoSkeleton";
+import { BoneKeyIndex } from "@/pose/BoneKeyIndex";
+import { PoseComposer } from "@/pose/PoseComposer";
+import { PosePreset, parsePosePreset } from "@/pose/PosePreset";
+import type { PosePresetJSON } from "@/pose/PosePreset";
 import { PoseSnapshot, isQuaternionTuple } from "@/pose/PoseSnapshot";
 import type { PoseSnapshotInit, QuaternionTuple } from "@/pose/PoseSnapshot";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -19,9 +25,34 @@ interface ReplacePosePayload {
     readonly pose: PoseSnapshotInit | null;
 }
 
+const APPLY_MODE = {
+    REPLACE: "replace",
+    MERGE: "merge",
+} as const;
+type ApplyMode = (typeof APPLY_MODE)[keyof typeof APPLY_MODE];
+
 interface ApplyPosePresetPayload {
     readonly objectId: string;
-    readonly pose: PoseSnapshotInit;
+    readonly presetId: string;
+    readonly mode?: ApplyMode;
+}
+
+interface SavePosePresetPayload {
+    readonly objectId: string;
+    readonly labelZh: string;
+    readonly part: BodyPart;
+}
+
+interface RemovePosePresetPayload {
+    readonly presetId: string;
+}
+
+interface RestorePosePresetPayload {
+    readonly preset: PosePresetJSON;
+}
+
+interface PosePresetsPayload {
+    readonly part?: BodyPart;
 }
 
 interface ClearPosePayload {
@@ -59,6 +90,33 @@ function editingIssue(ctx: DirectorContext): CommandIssue | null {
               { type: "transport.pause", label: "暂停播放" },
           ])
         : null;
+}
+
+function isApplyMode(value: unknown): value is ApplyMode {
+    return value === APPLY_MODE.REPLACE || value === APPLY_MODE.MERGE;
+}
+
+function resolvedApplyMode(preset: PosePreset, mode: ApplyMode | undefined): ApplyMode {
+    return mode ?? (preset.part === BODY_PART.FULL ? APPLY_MODE.REPLACE : APPLY_MODE.MERGE);
+}
+
+function actorIssue(ctx: DirectorContext, objectId: string): CommandIssue | null {
+    return ctx.scene.manager.getEntity(objectId)?.actor
+        ? null
+        : issue("not-an-actor", "objectId", "姿势预设只能应用到具有人偶画像的对象");
+}
+
+function runtimeNotReadyIssue(): CommandIssue {
+    return issue("runtime-not-ready", "objectId", "模型骨骼尚未就绪", [
+        { type: "wait-for-model", label: "等待模型加载" },
+    ]);
+}
+
+function skeletonFamilyIssue(ctx: DirectorContext, objectId: string, preset: PosePreset): CommandIssue | null {
+    const actor = ctx.scene.manager.getEntity(objectId)?.actor;
+    return actor?.skeletonFamily === preset.skeletonFamily
+        ? null
+        : issue("skeleton-family-mismatch", "presetId", "姿势预设与人偶骨架家族不兼容");
 }
 
 function parsePoseSnapshot(value: unknown): PoseSnapshot | null {
@@ -185,7 +243,7 @@ export class ReplacePoseCommand extends DirectorCommand<ReplacePosePayload> {
     }
 }
 
-/** Applies a static preset as a serializable pose and grounds its visual bounds in one undoable command. */
+/** Applies a named portable preset and grounds its visual bounds in one undoable command. */
 export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPayload> {
     static readonly TYPE = "pose.apply-preset";
     readonly type = ApplyPosePresetCommand.TYPE;
@@ -204,14 +262,48 @@ export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPaylo
         if (!isRecord(this.payload)) return [issue("pose-invalid-preset", "", "预设姿势参数无效")];
         const target = objectIssue(ctx, this.payload.objectId);
         if (target) return [target];
-        const invalid = snapshotIssue(this.payload.pose, "pose");
-        if (invalid) return [invalid];
-        const boneIssue = snapshotBoneIssue(ctx, this.payload.objectId, new PoseSnapshot(this.payload.pose));
-        return boneIssue ? [boneIssue] : [];
+        if (typeof this.payload.presetId !== "string" || this.payload.presetId.length === 0) {
+            return [issue("pose-invalid-preset", "presetId", "预设姿势 id 无效")];
+        }
+        if (this.payload.mode !== undefined && !isApplyMode(this.payload.mode)) {
+            return [issue("pose-invalid-mode", "mode", "姿势应用模式必须是 replace 或 merge")];
+        }
+        const preset = ctx.posePresets.get(this.payload.presetId);
+        if (!preset) {
+            return [
+                issue("pose-preset-not-found", "presetId", "未找到指定姿势预设", [
+                    { type: PosePresetsQuery.TYPE, label: "列出可用姿势" },
+                ]),
+            ];
+        }
+        const actor = actorIssue(ctx, this.payload.objectId);
+        if (actor) return [actor];
+        const compatible = skeletonFamilyIssue(ctx, this.payload.objectId, preset);
+        if (compatible) return [compatible];
+        const index = BoneKeyIndex.from(ctx.skeletons.discover(this.payload.objectId));
+        if (!index.isReady) return [runtimeNotReadyIssue()];
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const mode = resolvedApplyMode(preset, this.payload.mode);
+        const snapshot = PoseComposer.composeSnapshot({
+            base: mode === APPLY_MODE.MERGE ? (entity?.pose ?? null) : null,
+            preset,
+            index,
+        });
+        return snapshot ? [] : [issue("pose-preset-bones-not-found", "presetId", "预设姿势没有匹配当前骨骼")];
     }
 
     execute(ctx: DirectorContext): void {
-        const snapshot = new PoseSnapshot(this.payload.pose);
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const preset = ctx.posePresets.get(this.payload.presetId);
+        if (!entity || !preset) return;
+        const index = BoneKeyIndex.from(ctx.skeletons.discover(this.payload.objectId));
+        const mode = resolvedApplyMode(preset, this.payload.mode);
+        const snapshot = PoseComposer.composeSnapshot({
+            base: mode === APPLY_MODE.MERGE ? entity.pose : null,
+            preset,
+            index,
+        });
+        if (!snapshot) return;
         ctx.binder.unmount(this.payload.objectId);
         ctx.actionPreview.clear(this.payload.objectId);
         ctx.scene.setObjectAction(this.payload.objectId, null);
@@ -233,6 +325,128 @@ export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPaylo
             restore.push({ type: "action.mount", payload: { objectId: entity.id, actionId: entity.actionId } });
         }
         return restore;
+    }
+}
+
+/** Saves the current actor pose as a portable, document-owned preset. */
+export class SavePosePresetCommand extends DirectorCommand<SavePosePresetPayload> {
+    static readonly TYPE = "pose.preset.save";
+    readonly type = SavePosePresetCommand.TYPE;
+    private readonly presetId = `custom-${crypto.randomUUID()}`;
+
+    constructor(readonly payload: SavePosePresetPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return messages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const editing = editingIssue(ctx);
+        if (editing) return [editing];
+        if (!isRecord(this.payload)) return [issue("pose-invalid-save", "", "保存姿势参数无效")];
+        const target = objectIssue(ctx, this.payload.objectId);
+        if (target) return [target];
+        if (typeof this.payload.labelZh !== "string" || this.payload.labelZh.trim().length === 0) {
+            return [issue("pose-invalid-label", "labelZh", "姿势名称不能为空")];
+        }
+        if (!isBodyPart(this.payload.part)) return [issue("pose-invalid-part", "part", "姿势部位无效")];
+        const actor = actorIssue(ctx, this.payload.objectId);
+        if (actor) return [actor];
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        if (!entity?.pose) return [issue("pose-missing", "objectId", "当前对象没有可保存的姿势")];
+        const index = BoneKeyIndex.from(ctx.skeletons.discover(this.payload.objectId));
+        if (!index.isReady) return [runtimeNotReadyIssue()];
+        const bones = PoseComposer.extractPresetBones({ snapshot: entity.pose, index, part: this.payload.part });
+        return Object.keys(bones).length > 0
+            ? []
+            : [issue("pose-preset-empty", "part", "当前姿势不包含所选部位的可识别骨骼")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        if (!entity?.actor || !entity.pose) return;
+        const index = BoneKeyIndex.from(ctx.skeletons.discover(this.payload.objectId));
+        const bones = PoseComposer.extractPresetBones({ snapshot: entity.pose, index, part: this.payload.part });
+        ctx.posePresets.registerCustom(
+            new PosePreset({
+                id: this.presetId,
+                labelZh: this.payload.labelZh.trim(),
+                part: this.payload.part,
+                skeletonFamily: entity.actor.skeletonFamily,
+                bones,
+                custom: true,
+            }),
+        );
+    }
+
+    override invert(): readonly SerializedCommand[] {
+        return [{ type: RemovePosePresetCommand.TYPE, payload: { presetId: this.presetId } }];
+    }
+}
+
+/** Removes a document-owned preset while preserving the full payload for undo. */
+export class RemovePosePresetCommand extends DirectorCommand<RemovePosePresetPayload> {
+    static readonly TYPE = "pose.preset.remove";
+    readonly type = RemovePosePresetCommand.TYPE;
+
+    constructor(readonly payload: RemovePosePresetPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return messages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        if (
+            !isRecord(this.payload) ||
+            typeof this.payload.presetId !== "string" ||
+            this.payload.presetId.length === 0
+        ) {
+            return [issue("pose-invalid-preset", "presetId", "预设姿势 id 无效")];
+        }
+        const preset = ctx.posePresets.get(this.payload.presetId);
+        if (!preset) return [issue("pose-preset-not-found", "presetId", "未找到指定姿势预设")];
+        return preset.custom ? [] : [issue("pose-preset-builtin", "presetId", "内置姿势预设不能删除")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.posePresets.removeCustom(this.payload.presetId);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const preset = ctx.posePresets.get(this.payload.presetId);
+        return preset?.custom ? [{ type: RestorePosePresetCommand.TYPE, payload: { preset: preset.toJSON() } }] : null;
+    }
+}
+
+/** Internal undo companion for restoring a removed document-owned preset. */
+export class RestorePosePresetCommand extends DirectorCommand<RestorePosePresetPayload> {
+    static readonly TYPE = "pose.preset.restore";
+    readonly type = RestorePosePresetCommand.TYPE;
+
+    constructor(readonly payload: RestorePosePresetPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return messages(this.validateIssues());
+    }
+
+    override validateIssues(): readonly CommandIssue[] {
+        const preset = isRecord(this.payload) ? parsePosePreset(this.payload.preset) : null;
+        return preset?.custom ? [] : [issue("pose-invalid-preset", "preset", "恢复姿势预设参数无效")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const preset = parsePosePreset(this.payload.preset);
+        if (preset?.custom) ctx.posePresets.registerCustom(preset);
+    }
+
+    override invert(): readonly SerializedCommand[] {
+        return [{ type: RemovePosePresetCommand.TYPE, payload: { presetId: this.payload.preset.id } }];
     }
 }
 
@@ -298,6 +512,28 @@ export class GetPoseQuery implements DirectorQuery<ObjectPayload> {
     }
 }
 
+/** Lists preset metadata without exposing the full quaternion payload to command callers. */
+export class PosePresetsQuery implements DirectorQuery<PosePresetsPayload> {
+    static readonly TYPE = "pose.presets.list";
+    readonly type = PosePresetsQuery.TYPE;
+
+    constructor(readonly payload: PosePresetsPayload) {}
+
+    validate(): readonly string[] {
+        return !isRecord(this.payload) || (this.payload.part !== undefined && !isBodyPart(this.payload.part))
+            ? ["姿势列表参数无效"]
+            : [];
+    }
+
+    execute(
+        ctx: DirectorContext,
+    ): readonly { readonly id: string; readonly labelZh: string; readonly part: BodyPart; readonly custom: boolean }[] {
+        return ctx.posePresets
+            .list(this.payload.part)
+            .map((preset) => ({ id: preset.id, labelZh: preset.labelZh, part: preset.part, custom: preset.custom }));
+    }
+}
+
 function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
     return { type, version: POSE_VERSION, kind, permissions, appliesWhen: "director-desk.pose-v1" };
 }
@@ -320,6 +556,21 @@ export function registerPoseCommands(dispatcher: CommandDispatcher): void {
         capability(ApplyPosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
     );
     dispatcher.register(
+        SavePosePresetCommand.TYPE,
+        (payload: SavePosePresetPayload) => new SavePosePresetCommand(payload),
+        capability(SavePosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+    );
+    dispatcher.register(
+        RemovePosePresetCommand.TYPE,
+        (payload: RemovePosePresetPayload) => new RemovePosePresetCommand(payload),
+        capability(RemovePosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+    );
+    dispatcher.register(
+        RestorePosePresetCommand.TYPE,
+        (payload: RestorePosePresetPayload) => new RestorePosePresetCommand(payload),
+        capability(RestorePosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+    );
+    dispatcher.register(
         ClearPoseCommand.TYPE,
         (payload: ClearPosePayload) => new ClearPoseCommand(payload),
         capability(ClearPoseCommand.TYPE, "command", [EDIT_PERMISSION]),
@@ -333,5 +584,10 @@ export function registerPoseCommands(dispatcher: CommandDispatcher): void {
         GetPoseQuery.TYPE,
         (payload: ObjectPayload) => new GetPoseQuery(payload),
         capability(GetPoseQuery.TYPE, "query", [READ_PERMISSION]),
+    );
+    dispatcher.registerQuery(
+        PosePresetsQuery.TYPE,
+        (payload: PosePresetsPayload) => new PosePresetsQuery(payload),
+        capability(PosePresetsQuery.TYPE, "query", [READ_PERMISSION]),
     );
 }

@@ -3,35 +3,19 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { DirectionalLight, Mesh, Object3D, PointLight, Scene, SpotLight } from "three";
-import { ArrowHelper, Box3, DirectionalLightHelper, Group, PointLightHelper, SpotLightHelper, Vector3 } from "three";
+import { ArrowHelper, DirectionalLightHelper, Group, PointLightHelper, SpotLightHelper, Vector3 } from "three";
 
 import type { LightParams, LightType } from "@/core/LightParams";
 import type { SceneObject } from "@/core/SceneObject";
 import type { ModelHandle } from "@/loaders/ModelImporter";
-import { measureModelBox } from "@/core/measureModelBox";
+import { normalizationFor } from "@/actor/ModelNormalizationPolicy";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
-/** 导入模型归一化目标:最大边缩放到 2 个场景单位,底面贴地——游戏模型单位各异(cm/m),裸放会糊满屏 */
-const MODEL_TARGET_MAX_DIM = 2;
 const LOADING_START_PROGRESS = 0;
 
-const TMP_BOX = new Box3();
-const TMP_SIZE = new Vector3();
-const TMP_CENTER = new Vector3();
 const TMP_HELPER_LIGHT_POSITION = new Vector3();
 const TMP_HELPER_TARGET_POSITION = new Vector3();
 const TMP_HELPER_DIRECTION = new Vector3();
-
-/** 归一化壳的就地适配(首轮渲染后调用):等比缩放 + 水平居中 + 底面贴 y=0;实体 transform 仍是用户语义 */
-function fitShell(shell: Group): void {
-    measureModelBox(shell, TMP_BOX);
-    TMP_BOX.getSize(TMP_SIZE);
-    TMP_BOX.getCenter(TMP_CENTER);
-    const maxDim = Math.max(TMP_SIZE.x, TMP_SIZE.y, TMP_SIZE.z);
-    const factor = maxDim > 0 ? MODEL_TARGET_MAX_DIM / maxDim : 1;
-    shell.scale.setScalar(factor);
-    shell.position.set(-TMP_CENTER.x * factor, -TMP_BOX.min.y * factor, -TMP_CENTER.z * factor);
-}
 
 const LIGHT_MARKER_RADIUS = 0.14;
 const LIGHT_MARKER_SEGMENTS = 16;
@@ -324,7 +308,7 @@ export function ModelContent({ entity }: { entity: SceneObject }) {
 }
 
 function ModelRequestContent({ entity }: { entity: SceneObject }) {
-    const { models, playback, ui, skeletons } = useDirectorDeskStores();
+    const { actorRuntime, models, playback, ui, skeletons } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
     const sourceUrl = entity.sourceUrl;
@@ -394,16 +378,21 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
             return;
         }
         fittedRef.current = true;
-        fitShell(shell);
+        normalizationFor(entity).normalize(shell);
         invalidate();
     });
 
     useEffect(() => {
         if (!shell) return;
         skeletons.register(entity.id, shell);
+        // 人偶画像落到 Three(材质克隆 + 骨骼缩放)与骨骼索引同一时机,卸载时一并摘除
+        actorRuntime.attach(entity.id, shell);
         playback.sampleObject(entity.id);
-        return () => skeletons.unregister(entity.id);
-    }, [skeletons, playback, entity.id, shell]);
+        return () => {
+            actorRuntime.detach(entity.id);
+            skeletons.unregister(entity.id);
+        };
+    }, [actorRuntime, skeletons, playback, entity.id, shell]);
     if (shell) return <primitive object={shell} />;
     return (
         <mesh>

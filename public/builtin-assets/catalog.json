@@ -11,6 +11,7 @@
             "format": "gltf",
             "license": "TapNow 内部资产",
             "skeletonFamily": "mixamo",
+            "actor": { "defaultHeightMeters": 1.75 },
             "embeddedClips": [
                 "Standing",
                 "Idle",

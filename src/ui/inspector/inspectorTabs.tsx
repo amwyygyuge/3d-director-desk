@@ -4,12 +4,13 @@ import {
     EntityTransformSection,
     type InspectorSectionProps,
     LightEntitySection,
-    ModelActionSection,
     modelHasActionContent,
     ModelPoseSection,
     ShotCameraSection,
 } from "@/ui/inspector/Inspector";
 import { CameraMotionSection } from "@/ui/inspector/MotionClipInspector";
+import { ActorImageSection, hasActorProfile } from "@/ui/actor/ActorImageSection";
+import { PoseComposerSection } from "@/ui/pose/PoseComposerSection";
 import { TabSectionRegistry } from "@/ui/patterns/TabbedSections";
 import type { SceneObjectKind } from "@/core/SceneObject";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -39,11 +40,17 @@ inspectorTabs.register("camera-shot", { id: "shot", label: "机位", content: Sh
 inspectorTabs.register("camera-shot", { id: "motion", label: "运镜", content: CameraMotionTabContent });
 inspectorTabs.register("model", { id: "transform", label: "变换", content: EntityTransformSection });
 inspectorTabs.register("model", {
-    id: "action",
-    label: "动作",
-    content: ModelActionSection,
-    visible: ({ stores, primaryId }) => modelHasActionContent(stores, primaryId),
+    id: "image",
+    label: "形象",
+    content: ActorImageSection,
+    visible: ({ stores, primaryId }) => hasActorProfile(stores, primaryId),
 });
-inspectorTabs.register("model", { id: "pose", label: "姿态", content: ModelPoseSection });
+inspectorTabs.register("model", {
+    id: "pose",
+    label: "姿势",
+    content: PoseComposerSection,
+    visible: ({ stores, primaryId }) => hasActorProfile(stores, primaryId) || modelHasActionContent(stores, primaryId),
+});
+inspectorTabs.register("model", { id: "rig", label: "姿态", content: ModelPoseSection });
 inspectorTabs.register("light", { id: "properties", label: "属性", content: LightEntitySection });
 inspectorTabs.register("camera", { id: "transform", label: "变换", content: EntityTransformSection });

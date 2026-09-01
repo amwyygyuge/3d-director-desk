@@ -1,8 +1,9 @@
 import type { AnimationClip } from "three";
 
+import { BoneKeyIndex } from "@/pose/BoneKeyIndex";
 import { PoseSnapshot } from "@/pose/PoseSnapshot";
 import type { BoneKey, QuaternionTuple } from "@/pose/PoseSnapshot";
-import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "@/pose/SkeletonRuntimeRegistry";
+import type { SkeletonDiscoveryDto } from "@/pose/SkeletonRuntimeRegistry";
 
 const QUATERNION_COMPONENT_COUNT = 4;
 const QUATERNION_TRACK_SUFFIX = ".quaternion";
@@ -10,13 +11,6 @@ const STATIC_POSE_METADATA_KEY = "tapnowActorAnimation";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function collectBoneKeys(nodes: readonly BoneTreeNodeDto[], names: Map<string, BoneKey>): void {
-    for (const node of nodes) {
-        names.set(node.name, node.key);
-        collectBoneKeys(node.children, names);
-    }
 }
 
 function parseQuaternion(values: ArrayLike<number>): QuaternionTuple | null {
@@ -33,14 +27,14 @@ export function isStaticPoseClip(clip: AnimationClip): boolean {
 
 /** 将命名骨骼的常量 quaternion tracks 转成可 JSON 往返的 PoseSnapshot。 */
 export function createStaticPoseSnapshot(clip: AnimationClip, discovery: SkeletonDiscoveryDto): PoseSnapshot | null {
-    if (!discovery.ready || !isStaticPoseClip(clip)) return null;
-    const keysByName = new Map<string, BoneKey>();
-    collectBoneKeys(discovery.roots, keysByName);
+    if (!isStaticPoseClip(clip)) return null;
+    const index = BoneKeyIndex.from(discovery);
+    if (!index.isReady) return null;
     const bones: Record<BoneKey, QuaternionTuple> = {};
     for (const track of clip.tracks) {
         if (!track.name.endsWith(QUATERNION_TRACK_SUFFIX)) continue;
         const boneName = track.name.slice(0, -QUATERNION_TRACK_SUFFIX.length);
-        const boneKey = keysByName.get(boneName);
+        const boneKey = index.keyOf(boneName);
         const quaternion = boneKey ? parseQuaternion(track.values) : null;
         if (boneKey && quaternion) bones[boneKey] = quaternion;
     }

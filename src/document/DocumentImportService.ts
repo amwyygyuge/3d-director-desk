@@ -11,6 +11,9 @@ import { TimelineDoc } from "@/timeline/TimelineDoc";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import type { DeskDocument, DeskDocumentAction } from "@/document/DeskDocument";
+import { isActorProfileInit } from "@/actor/ActorProfile";
+import { parsePosePreset } from "@/pose/PosePreset";
+import type { PosePreset } from "@/pose/PosePreset";
 const SCENE_OBJECT_KIND_VALUES: readonly string[] = SCENE_OBJECT_KINDS;
 
 interface DocumentImportPlan {
@@ -20,6 +23,7 @@ interface DocumentImportPlan {
     readonly motionClips: readonly CameraMotionClip[];
     readonly program: CameraProgramTrack;
     readonly actions: readonly DeskDocumentAction[];
+    readonly posePresets: readonly PosePreset[];
 }
 
 interface DocumentImportPreparation {
@@ -65,6 +69,9 @@ function entityIssues(value: unknown): readonly string[] {
     if (typeof value.kind !== "string" || !SCENE_OBJECT_KIND_VALUES.includes(value.kind)) {
         return [`实体 "${value.id}" 类型无效`];
     }
+    if (value.actor !== undefined && value.actor !== null && !isActorProfileInit(value.actor)) {
+        return [`实体 "${value.id}" 的人偶画像无效`];
+    }
     return finiteTransform(value.transform) ? [] : [`实体 "${value.id}" 的 transform 含非法数值`];
 }
 
@@ -92,6 +99,11 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
         return [`动作 "${value.name}" 的挂载对象不存在`];
     }
     return value.url.length > 0 ? [] : [`动作 "${value.name}" 的 url 无效`];
+}
+
+function posePresetIssues(value: unknown): readonly string[] {
+    const preset = parsePosePreset(value);
+    return preset?.custom ? [] : ["自建姿势预设参数无效"];
 }
 
 function timelineIssues(timeline: TimelineDoc, entityIds: ReadonlySet<string>): readonly string[] {
@@ -173,8 +185,13 @@ function preparePlan(document: unknown): DocumentImportPreparation {
     if (document.version !== DESK_DOCUMENT_VERSION) {
         return { issues: [`文档版本不支持: ${String(document.version)}`], plan: null };
     }
-    if (!Array.isArray(document.entities) || !Array.isArray(document.shots) || !Array.isArray(document.actions)) {
-        return { issues: ["文档结构无效(entities/shots/actions 必须是数组)"], plan: null };
+    if (
+        !Array.isArray(document.entities) ||
+        !Array.isArray(document.shots) ||
+        !Array.isArray(document.actions) ||
+        !Array.isArray(document.posePresets)
+    ) {
+        return { issues: ["文档结构无效(entities/shots/actions/posePresets 必须是数组)"], plan: null };
     }
     if (!isTimelineDocument(document.timeline)) {
         return { issues: ["文档时间轴无效"], plan: null };
@@ -192,6 +209,8 @@ function preparePlan(document: unknown): DocumentImportPreparation {
         ...duplicateFieldIssues(document.shots, "id", "机位 id"),
         ...document.actions.flatMap((action) => actionIssues(action, entityIdSet)),
         ...duplicateFieldIssues(document.actions, "name", "动作名称"),
+        ...document.posePresets.flatMap(posePresetIssues),
+        ...duplicateFieldIssues(document.posePresets, "id", "姿势预设 id"),
     ];
     if (basicIssues.length > 0) return { issues: basicIssues, plan: null };
     try {
@@ -203,6 +222,10 @@ function preparePlan(document: unknown): DocumentImportPreparation {
             motionClips: typed.motion.clips.map((clip) => new CameraMotionClip(clip)),
             program: new CameraProgramTrack(typed.motion.program),
             actions: typed.actions,
+            posePresets: typed.posePresets.flatMap((value) => {
+                const preset = parsePosePreset(value);
+                return preset?.custom ? [preset] : [];
+            }),
         };
         const relationalIssues = [...timelineIssues(plan.timeline, entityIdSet), ...motionIssues(plan)];
         return relationalIssues.length > 0 ? { issues: relationalIssues, plan: null } : { issues: [], plan };
@@ -239,6 +262,7 @@ export class DocumentImportService {
 
     private commit(plan: DocumentImportPlan, ctx: DirectorContext): void {
         runInAction(() => {
+            ctx.posePresets.replaceCustom(plan.posePresets);
             ctx.clock.pause();
             ctx.actionPreview.reset();
             ctx.binder.clear();

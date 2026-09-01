@@ -1,5 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
+import type { ActorProfile } from "@/actor/ActorProfile";
 import { SceneManager } from "@/core/SceneManager";
 import { SceneObject } from "@/core/SceneObject";
 import type { LightParams } from "@/core/LightParams";
@@ -78,6 +79,12 @@ export class SceneStore {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
         entity.applyPose(pose);
+    }
+
+    setObjectActor(id: string, actor: ActorProfile | null): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyActor(actor);
     }
 
     get objectCount(): number {

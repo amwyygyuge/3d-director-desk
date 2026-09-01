@@ -18,6 +18,7 @@ import type { LightParams } from "@/core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "@/core/SceneObject";
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
+import { registerActorCommands } from "@/command/actorCommands";
 import { registerActionCommands } from "@/command/actionCommands";
 import { registerCameraCommands, RemoveShotCommand } from "@/command/cameraCommands";
 import { registerCaptureCommands } from "@/command/captureCommands";
@@ -386,6 +387,7 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerLightingCommands(dispatcher);
     registerCameraMotionCommands(dispatcher);
     registerPoseCommands(dispatcher);
+    registerActorCommands(dispatcher);
     registerDocumentCommands(dispatcher);
     registerPresentationCommands(dispatcher);
     registerAssetCatalogCommands(dispatcher);

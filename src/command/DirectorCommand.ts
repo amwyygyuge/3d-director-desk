@@ -10,6 +10,8 @@ import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { CaptureService } from "@/capture/CaptureService";
 import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import type { PoseGroundingService } from "@/pose/PoseGroundingService";
+import type { ActorRuntime } from "@/actor/ActorRuntime";
+import type { PosePresetLibrary } from "@/pose/PosePresetLibrary";
 import type { SceneStore } from "@/store/SceneStore";
 import type { TimeTransport } from "@/time/TimeTransport";
 import type { SelectionStore } from "@/store/SelectionStore";
@@ -42,6 +44,10 @@ export interface DirectorContext {
     readonly skeletons: SkeletonRuntimeRegistry;
     /** Converts an evaluated static pose into a grounded serializable transform. */
     readonly poseGrounding: PoseGroundingService;
+    /** 人偶外观与体型的 Three 写方；命令只交付纯数据，材质与骨骼缩放由它落地。 */
+    readonly actorRuntime: ActorRuntime;
+    /** 姿势预设注册表（内置 + 工程自建）；命令层只收 presetId，不收裸四元数。 */
+    readonly posePresets: PosePresetLibrary;
     readonly animations: AnimationLibrary;
     /** 资源目录(内置/注入/远程条目的统一注册表) */
     readonly catalog: AssetCatalog;

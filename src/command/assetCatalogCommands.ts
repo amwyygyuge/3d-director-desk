@@ -1,4 +1,6 @@
 import { ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
+import type { AssetEntry } from "@/assets/catalog/AssetEntry";
+import type { ActorProfileInit } from "@/actor/ActorProfile";
 import { finiteTransform } from "@/core/SceneObject";
 import type { Transform } from "@/core/SceneObject";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -53,6 +55,13 @@ function createAssetEntityId(assetId: string): string {
     return `${ASSET_ENTITY_ID_PREFIX}${assetId}-${crypto.randomUUID()}`;
 }
 
+/** 目录条目 → 人偶画像:仅声明了 actor 且有骨架家族的条目成为人偶,普通模型保持无画像。 */
+function actorProfileInitFor(entry: AssetEntry): ActorProfileInit | null {
+    return entry.actor && entry.skeletonFamily
+        ? { skeletonFamily: entry.skeletonFamily, build: { heightMeters: entry.actor.defaultHeightMeters } }
+        : null;
+}
+
 /** 按目录条目放置模型资产(格式/定位符由条目携带,AI 不猜 URL) */
 export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
     static readonly TYPE = "assets.place";
@@ -80,6 +89,7 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
     execute(ctx: DirectorContext): void {
         const entry = ctx.catalog.get(this.payload.assetId);
         if (!entry) return;
+        const actor = actorProfileInitFor(entry);
         ctx.scene.addObject({
             id: this.payload.id,
             kind: "model",
@@ -87,6 +97,7 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
             format: entry.format,
             name: entry.name,
             ...(this.payload.transform ? { transform: this.payload.transform } : {}),
+            ...(actor ? { actor } : {}),
         });
     }
 

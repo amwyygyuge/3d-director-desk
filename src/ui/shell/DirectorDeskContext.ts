@@ -4,6 +4,8 @@ import { AssetCatalog } from "@/assets/catalog/AssetCatalog";
 import { BuiltinAssetProvider } from "@/assets/catalog/AssetProvider";
 import type { AssetProvider } from "@/assets/catalog/AssetProvider";
 
+import { ActorRuntime } from "@/actor/ActorRuntime";
+import { PosePresetLibrary } from "@/pose/PosePresetLibrary";
 import { AnimationBinder } from "@/animation/AnimationBinder";
 import { ActionPreviewController } from "@/animation/ActionPreviewController";
 import { AnimationLibrary } from "@/assets/AnimationLibrary";
@@ -128,6 +130,10 @@ export interface DirectorDeskStores {
     skeletons: SkeletonRuntimeRegistry;
     /** 静态预设姿势的地面贴合运行时服务；输出仍经命令写回 Transform。 */
     poseGrounding: PoseGroundingService;
+    /** 人偶外观/体型的 Three 运行时写方；每桌一套，绝不进 MobX。 */
+    actorRuntime: ActorRuntime;
+    /** 姿势预设注册表：内置预设 + 工程自建预设（MobX 可观察，面板直读）。 */
+    posePresets: PosePresetLibrary;
     /** 工程快照替换应用服务：管理候选聚合提交与动作恢复取消域。 */
     documentImports: DocumentImportService;
     /** 生命周期守卫与异步工作取消域 */
@@ -160,8 +166,10 @@ export function createDirectorDeskStores(options?: {
     const binder = new AnimationBinder();
     const actionPreview = new ActionPreviewController(binder);
     const scene = new SceneStore();
-    const poseGrounding = new PoseGroundingService(scene.manager);
+    const actorRuntime = new ActorRuntime(scene.manager);
+    const poseGrounding = new PoseGroundingService(scene.manager, actorRuntime);
     const skeletons = new SkeletonRuntimeRegistry();
+    const posePresets = new PosePresetLibrary();
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);
     const camera = new CameraStore();
@@ -213,6 +221,8 @@ export function createDirectorDeskStores(options?: {
         animations: new AnimationLibrary(),
         skeletons,
         poseGrounding,
+        actorRuntime,
+        posePresets,
         binder,
         actionPreview,
         catalog,

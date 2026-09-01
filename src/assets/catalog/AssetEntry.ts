@@ -25,6 +25,20 @@ export const ASSET_CATEGORY = {
     PROP: "prop",
 } as const;
 
+/** 人偶资产声明:存在即表示该模型放置后带人偶画像(可改色/体型/姿势)。 */
+export interface AssetActorDefaults {
+    /** 放置时的真实身高(米);归一化策略据此等比缩放,替代通用模型的单位盒归一化。 */
+    readonly defaultHeightMeters: number;
+}
+
+function isAssetActorDefaults(value: unknown): value is AssetActorDefaults {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        Number.isFinite((value as AssetActorDefaults).defaultHeightMeters)
+    );
+}
+
 /**
  * 资源条目(值对象,纯数据可序列化):目录只存元数据 + 定位符,资源本体在 provider 侧——
  * 模块与资源完全解耦;license 随条目走(许可纪律,AI 可见)。
@@ -46,6 +60,8 @@ export interface AssetEntry {
     readonly clipName?: string | null;
     /** 模型资产:内嵌动作名清单(AI 选型可读) */
     readonly embeddedClips?: readonly string[];
+    /** 人偶资产:放置时注入默认画像;缺省即普通模型,不具备外观/体型/姿势能力 */
+    readonly actor?: AssetActorDefaults | null;
     readonly tags: readonly string[];
 }
 
@@ -72,5 +88,6 @@ export function parseAssetEntry(value: unknown): AssetEntry | null {
         return null;
     if (entry.skeletonFamily !== null && typeof entry.skeletonFamily !== "string") return null;
     if (!Array.isArray(entry.tags)) return null;
+    if (entry.actor !== undefined && entry.actor !== null && !isAssetActorDefaults(entry.actor)) return null;
     return entry;
 }

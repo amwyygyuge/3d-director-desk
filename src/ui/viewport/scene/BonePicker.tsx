@@ -9,6 +9,7 @@ import { Matrix4, MeshBasicMaterial, SphereGeometry } from "three";
 import type { BoneKey } from "@/pose/PoseSnapshot";
 import type { BoneTreeNodeDto } from "@/pose/SkeletonRuntimeRegistry";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { isEditingText } from "@/shortcuts/ShortcutRegistry";
 
 const HIT_RADIUS = 0.055;
 const HIT_COLOR = "#ffca28";
@@ -80,15 +81,18 @@ export const BonePicker = observer(function BonePicker() {
         };
     }, [hitGeometry, hitMaterial]);
 
+    // Esc 撤销骨骼拖拽的瞬时姿态:只在骨骼拾取激活时挂监听,
+    // 否则它是常驻的全局副作用——文本框/预览/帮助里的 Esc 都会触发全场景重采样
     useEffect(() => {
+        if (!objectId) return undefined;
         const restore = (event: KeyboardEvent) => {
-            if (event.key !== "Escape") return;
+            if (event.key !== "Escape" || isEditingText()) return;
             playback.sampleCurrent();
             invalidate();
         };
         window.addEventListener("keydown", restore);
         return () => window.removeEventListener("keydown", restore);
-    }, [playback, invalidate]);
+    }, [playback, invalidate, objectId]);
 
     useFrame(() => {
         const mesh = meshRef.current;

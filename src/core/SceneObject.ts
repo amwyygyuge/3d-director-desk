@@ -1,5 +1,7 @@
 import { makeAutoObservable, observableRef } from "mobx";
 
+import { ActorProfile } from "@/actor/ActorProfile";
+import type { ActorProfileInit } from "@/actor/ActorProfile";
 import type { ModelFormat } from "@/assets/ModelAsset";
 import { normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
@@ -68,6 +70,8 @@ export interface SceneObjectInit {
     readonly light?: LightParams | null;
     /** 骨骼根相对的局部绝对旋转快照；仅模型可用，且始终是纯数据。 */
     readonly pose?: PoseSnapshot | PoseSnapshotInit | null;
+    /** 人偶画像；仅模型可用，纯数据(骨架家族 + 外观 + 体型)，是「这是个人偶」的显式凭据。 */
+    readonly actor?: ActorProfile | ActorProfileInit | null;
 }
 
 export class SceneObject {
@@ -84,6 +88,7 @@ export class SceneObject {
     /** 灯光参数值对象；仅 light 实体有值，Three 光源仍由运行时树拥有。 */
     private currentLight: LightParams | null;
     private currentPose: PoseSnapshot | null;
+    private currentActor: ActorProfile | null;
 
     constructor(init: SceneObjectInit) {
         this.id = init.id;
@@ -99,9 +104,15 @@ export class SceneObject {
         this.currentLight = hasLight ? normalizeLightParams(init.light as LightParams) : null;
         this.currentPose =
             init.pose instanceof PoseSnapshot ? init.pose : init.pose ? new PoseSnapshot(init.pose) : null;
-        makeAutoObservable<SceneObject, "currentLight" | "currentPose">(this, {
+        this.currentActor =
+            init.actor instanceof ActorProfile ? init.actor : init.actor ? new ActorProfile(init.actor) : null;
+        if (this.currentActor && init.kind !== "model") {
+            throw new Error("SceneObject: 只有模型实体可以持有人偶画像");
+        }
+        makeAutoObservable<SceneObject, "currentLight" | "currentPose" | "currentActor">(this, {
             currentLight: observableRef,
             currentPose: observableRef,
+            currentActor: observableRef,
         });
     }
 
@@ -130,6 +141,15 @@ export class SceneObject {
         this.currentPose = next;
     }
 
+    get actor(): ActorProfile | null {
+        return this.currentActor;
+    }
+
+    applyActor(next: ActorProfile | null): void {
+        if (next && this.kind !== "model") throw new Error("SceneObject: 只有模型实体可以持有人偶画像");
+        this.currentActor = next;
+    }
+
     /** JSON 往返保留 kind/light 的双向不变量，且不泄露 Three 运行时。 */
     toJSON(): SceneObjectInit {
         return {
@@ -141,6 +161,7 @@ export class SceneObject {
             transform: copyTransform(this.currentTransform),
             light: this.currentLight,
             pose: this.currentPose?.toJSON() ?? null,
+            actor: this.currentActor?.toJSON() ?? null,
         };
     }
 

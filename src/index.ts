@@ -1,6 +1,32 @@
 // 公共出口:宿主(Monet 插件壳)只从这里消费
 import "@/styles/index.css";
 
+export { ACTOR_SURFACE, ACTOR_SURFACE_LABEL_ZH, ACTOR_SURFACE_PARAMS, ActorAppearance } from "@/actor/ActorAppearance";
+export type { ActorAppearanceInit, ActorSurface, ActorSurfaceParams } from "@/actor/ActorAppearance";
+export { ACTOR_GIRTH_SCALE, ACTOR_HEIGHT_METERS, ACTOR_SHOULDER_SCALE, ActorBuild } from "@/actor/ActorBuild";
+export type { ActorBuildInit, ActorBuildRange } from "@/actor/ActorBuild";
+export { ActorProfile } from "@/actor/ActorProfile";
+export type { ActorProfileInit } from "@/actor/ActorProfile";
+export { ACTOR_PALETTE, paletteHexFor } from "@/actor/ActorPalette";
+export type { ActorPaletteSwatch } from "@/actor/ActorPalette";
+export { BUILD_PRESETS, compileBuildPreset, matchBuildPreset } from "@/actor/BuildPresetCompiler";
+export type { BuildPreset } from "@/actor/BuildPresetCompiler";
+export { BodyBuildSolver } from "@/actor/BodyBuildSolver";
+export { BoneScalePlan } from "@/actor/BoneScalePlan";
+export type { BoneScaleEntry } from "@/actor/BoneScalePlan";
+export { ActorRuntime } from "@/actor/ActorRuntime";
+export { BODY_PART, MIXAMO_PART_BONES, SKELETON_FAMILY_MIXAMO, isBodyPart } from "@/actor/mixamoSkeleton";
+export type { BodyPart, BoneRotationsByName } from "@/actor/mixamoSkeleton";
+export {
+    ActorPresetsQuery,
+    ApplyBuildPresetCommand,
+    GetActorQuery,
+    registerActorCommands,
+    SetActorAppearanceCommand,
+    SetActorBuildCommand,
+} from "@/command/actorCommands";
+export { PosePreset, parsePosePreset } from "@/pose/PosePreset";
+export type { PosePresetJSON } from "@/pose/PosePreset";
 export { AnimationBinder } from "@/animation/AnimationBinder";
 export { BoneCompatibilityChecker, BONE_MATCH_THRESHOLD } from "@/animation/BoneCompatibilityChecker";
 export type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";

@@ -20,9 +20,8 @@ import { transformKeyCommandFor } from "@/command/timelineCommands";
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "@/core/LightParams";
 import type { LightParams, LightType } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
-import { createStaticPoseSnapshot, isStaticPoseClip } from "@/pose/StaticPoseClip";
-import { POSE_PRESET_KIND, presentPosePreset } from "@/pose/PosePresetCatalog";
-import type { PosePresetPresentation } from "@/pose/PosePresetCatalog";
+import { listActionClips } from "@/pose/PosePresetCatalog";
+import type { EmbeddedClipPresentation } from "@/pose/PosePresetCatalog";
 import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "@/pose/SkeletonRuntimeRegistry";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -379,7 +378,7 @@ const LightIntensityControl = observer(function LightIntensityControl({
 });
 
 interface PresetGridProps {
-    readonly presets: readonly PosePresetPresentation[];
+    readonly presets: readonly EmbeddedClipPresentation[];
     readonly onApply: (clipName: string) => void;
 }
 
@@ -416,38 +415,24 @@ export function modelHasActionContent(stores: DirectorDeskStores, objectId: stri
     return Boolean(entity.actionId) || embeddedClipEntryFor(stores, entity) !== undefined;
 }
 
-const PosePresetSection = observer(function PosePresetSection({ objectId, report }: ObjectControlsProps) {
+/** 动作分区:只呈现可播放动作,静态造型归「姿势」组合器,同一造型不再有两个入口。 */
+const ActionPresetSection = observer(function ActionPresetSection({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
-    const { animations, dispatcher, models, scene, skeletons, ui } = stores;
+    const { animations, dispatcher, models, scene, ui } = stores;
     const entity = scene.manager.getEntity(objectId);
     const entry = entity ? embeddedClipEntryFor(stores, entity) : undefined;
     if (!entity || !entry?.embeddedClips || !entry.format) return null;
-    const clips = entry.embeddedClips;
-    const presets = clips.map(presentPosePreset);
-    const posePresets = presets.filter((preset) => preset.kind === POSE_PRESET_KIND.POSE);
-    const actionPresets = presets.filter((preset) => preset.kind === POSE_PRESET_KIND.ACTION);
+    const actionPresets = listActionClips(entry.embeddedClips);
     const format = entry.format;
 
-    const applyPreset = async (clipName: string) => {
+    const mountAction = async (clipName: string) => {
         try {
             const handle = await models.acquire(entry.url, format, { signal: stores.lifecycle.signal });
             try {
                 const clip = handle.animations.find((candidate) => candidate.name === clipName);
-                if (!clip) throw new Error(`预设 clip 不存在:${clipName}`);
-                if (isStaticPoseClip(clip)) {
-                    const snapshot = createStaticPoseSnapshot(clip, skeletons.discover(objectId));
-                    if (!snapshot) throw new Error(`预设姿势骨骼未就绪:${clipName}`);
-                    report(
-                        dispatcher.dispatch(
-                            { type: "pose.apply-preset", payload: { objectId, pose: snapshot.toJSON() } },
-                            stores,
-                        ),
-                    );
-                    return;
-                }
-                if (entity.pose) {
-                    report(dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
-                }
+                if (!clip) throw new Error(`动作 clip 不存在:${clipName}`);
+                // 动作与姿势互斥:挂动作前先清姿势,否则姿势层会在每帧采样后覆盖动作结果
+                if (entity.pose) report(dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
                 const action = animations.register({ name: `${entry.name}#${clipName}`, url: entry.url, clip }).action;
                 report(
                     dispatcher.dispatch({ type: "action.mount", payload: { objectId, actionId: action.id } }, stores),
@@ -456,22 +441,16 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
                 handle.release();
             }
         } catch (error) {
-            console.warn(`[PosePresetSection] 预设置备失败 ${clipName}`, error);
-            ui.setApplicationNotice(`预设姿势不可用:${clipName}`);
+            console.warn(`[ActionPresetSection] 动作置备失败 ${clipName}`, error);
+            ui.setApplicationNotice(`动作不可用:${clipName}`);
         }
     };
 
     return (
-        <>
-            <Box sx={INSPECTOR_FIELD_SX}>
-                <Typography variant="overline">姿势 / POSE ({posePresets.length})</Typography>
-                {renderPresetGrid({ presets: posePresets, onApply: applyPreset })}
-                <Typography variant="overline" sx={{ display: "block", mt: CONTROL_GAP }}>
-                    动作 / MOTION ({actionPresets.length})
-                </Typography>
-                {renderPresetGrid({ presets: actionPresets, onApply: applyPreset })}
-            </Box>
-        </>
+        <Box sx={INSPECTOR_FIELD_SX}>
+            <Typography variant="overline">动作 / MOTION ({actionPresets.length})</Typography>
+            {renderPresetGrid({ presets: actionPresets, onApply: mountAction })}
+        </Box>
     );
 });
 
@@ -511,11 +490,11 @@ const PlaybackControls = observer(function PlaybackControls({ objectId, report }
     );
 });
 
-/** 动作 tab:姿势/动作预设 + 当前动作播放控制。 */
+/** 动作分区(嵌在「姿势」tab 内):可播放动作预设 + 当前动作播放控制。 */
 export const ModelActionSection = observer(function ModelActionSection({ primaryId, report }: InspectorSectionProps) {
     return (
         <>
-            <PosePresetSection objectId={primaryId} report={report} />
+            <ActionPresetSection objectId={primaryId} report={report} />
             <PlaybackControls objectId={primaryId} report={report} />
         </>
     );
