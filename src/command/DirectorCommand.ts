@@ -13,8 +13,10 @@ import type { SceneStore } from "../store/SceneStore";
 import type { TimeTransport } from "../time/TimeTransport";
 import type { SelectionStore } from "../store/SelectionStore";
 import type { UiStore } from "../store/UiStore";
+import type { WorkbenchLayoutStore } from "../store/WorkbenchLayoutStore";
 import type { PlaybackCoordinator } from "../timeline/PlaybackCoordinator";
 import type { TimelineStore } from "../store/TimelineStore";
+import type { DocumentImportService } from "../document/DocumentImportService";
 
 /**
  * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。
@@ -44,8 +46,12 @@ export interface DirectorContext {
     readonly host: HostAdapter;
     /** 截图预览等界面态 */
     readonly ui: UiStore;
+    /** 悬浮壳层编排态;预览模式命令的落点(纯 UI 态,不入文档与撤销栈) */
+    readonly layout: WorkbenchLayoutStore;
     /** 对象移除后由命令层收敛选中态，避免 UI 留下失效引用 */
     readonly selection: SelectionStore;
+    /** 工程快照替换应用服务：候选聚合校验、提交与异步动作恢复同属一个生命周期。 */
+    readonly documentImports: DocumentImportService;
 }
 
 export interface CommandIssueOption {

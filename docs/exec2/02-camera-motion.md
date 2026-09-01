@@ -85,6 +85,6 @@ flowchart LR
 
 - [x] 两台机位可有各自的 Bézier 路径与不重叠时间段；删除机位时清理其路径和 Program 引用，Undo 可恢复。
 - [x] Program 时间轴同一时刻输出唯一机位；切到任意时间直接采样正确机位和路径。
-- [x] 运镜工作区保持自由编辑视口；成片工作区才把 Program pose 写入 R3F 相机，退出时恢复编辑视角。
+- [x] 编辑期(含运镜编排)保持自由编辑视口；仅全屏预览(`desk.enter-presentation`)把 Program pose 写入 R3F 相机，退出时恢复编辑视角。
 - [x] 面板可从机位到当前视角创建片段、追加路径点、调入/出手柄，并可绑定当前选中场景对象或恢复为固定注视点；辅助路径带 `userData.helper`，截图排除。
 - [x] `pnpm typecheck && pnpm lint && pnpm build` 通过；Storybook 走查 Program 片段、时间尺、路径曲线、对象注视绑定与引用删除拒绝。

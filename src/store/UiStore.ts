@@ -1,8 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
 import type { LiveCameraPose } from "../capture/CaptureService";
-import { WORKSPACE_STAGE } from "../workspace/stages";
-import type { WorkspaceStage } from "../workspace/stages";
 /** gizmo 模式:三态查表,工具条与控制器共享 */
 export const GIZMO_MODE = {
     TRANSLATE: "translate",
@@ -57,12 +55,6 @@ export class UiStore {
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
     posePickingBoneKey: string | null = null;
-    /** 停靠栏折叠态:左 Dock(大纲+机位)、底 Dock(时间轴,默认折叠)、右 Dock(Inspector) */
-    leftDockCollapsed = false;
-    timelineCollapsed = true;
-    rightDockCollapsed = false;
-    /** 当前工作区阶段(布景/动作/运镜/成片);纯 UI 态,不入文档 */
-    stage: WorkspaceStage = WORKSPACE_STAGE.SET;
     private disposed = false;
 
     constructor() {
@@ -81,20 +73,6 @@ export class UiStore {
     setPosePicking(objectId: string | null, boneKey: string | null): void {
         this.posePickingObjectId = objectId;
         this.posePickingBoneKey = boneKey;
-    }
-    toggleLeftDock(): void {
-        this.leftDockCollapsed = !this.leftDockCollapsed;
-    }
-
-    toggleTimelineDock(): void {
-        this.timelineCollapsed = !this.timelineCollapsed;
-    }
-
-    toggleRightDock(): void {
-        this.rightDockCollapsed = !this.rightDockCollapsed;
-    }
-    setStage(stage: WorkspaceStage): void {
-        this.stage = stage;
     }
 
     noteGizmoInteraction(): void {

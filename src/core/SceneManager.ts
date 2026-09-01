@@ -49,6 +49,12 @@ export class SceneManager {
     list(): readonly SceneObject[] {
         return values(this.entities);
     }
+    /** 文档替换的提交边界：先摘除旧 Three 运行时，再整体替换已预校验的纯数据实体。 */
+    replaceEntities(entities: readonly SceneObject[]): void {
+        for (const runtime of this.runtimes.values()) runtime.removeFromParent();
+        this.runtimes.clear();
+        this.entities.replace(entities.map((entity) => [entity.id, entity]));
+    }
 
     unregister(id: string): void {
         const runtime = this.runtimes.get(id);

@@ -36,9 +36,9 @@ classDiagram
 
 ## 实现步骤
 
-1. `src/ui/scene/SceneObjectView.tsx`:按 `entity.kind` 渲染模型和灯光内容，`ref` 绑定/解绑运行时。
-2. `src/ui/scene/SceneRoot.tsx`:observer,`sceneStore.revision` → `manager.list()` → map 到 `SceneObjectView`;变更后 `invalidate()`。
-3. `DirectorDesk.tsx`:Canvas 内挂 `SceneRoot`;模型导入统一经 `importModelFile` 分发 `object.place` 命令。
+1. `src/ui/viewport/scene/SceneObjectView.tsx`:按 `entity.kind` 渲染模型和灯光内容，`ref` 绑定/解绑运行时。
+2. `src/ui/viewport/scene/SceneRoot.tsx`:observer,`sceneStore.revision` → `manager.list()` → map 到 `SceneObjectView`;变更后 `invalidate()`。
+3. `src/ui/shell/DirectorDesk.tsx`:Canvas 内挂 `SceneRoot`;模型导入统一经 `importModelFile` 分发 `object.place` 命令。
 4. 卸载清理:`DirectorDesk` unmount 已 dispose SceneManager(基建已做),本任务核对无遗漏。
 5. playground 场景:导入/删除模型,走查交互。
 

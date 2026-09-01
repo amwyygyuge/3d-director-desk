@@ -38,9 +38,9 @@ classDiagram
 
 1. `src/camera/ShotSizePresets.ts`:景别 → 构图参数查表(参考 storyai cameraGeometry 的景别系数思路,不搬代码)。
 2. 命令:`camera.activate` / `camera.deactivate`;`camera.set-shot` 基建已有。
-3. 机位面板(shadcn):机位列表(选中/删除)、「当前视角存为机位」(读相机当前 pose → CameraShot)、景别下拉 + FOV 滑杆。
+3. 机位管理:大纲(`OutlinerPanel`)统一列出「机位 / 对象」两组,承担选中、进出机位视图与删除;机位面板只留「当前视角存为机位」、景别下拉与运镜编排。
 4. 机位视角渲染:激活时相机写死 shot 参数;叠加画幅框/三分网格 overlay。
-5. 工具条双视角切换按钮(导演/机位)。
+5. 进出机位视图:大纲行的机位按钮、选中机位后 `Enter` / `Esc`,以及机位标记双击;顶部不再设视图二态开关。
 
 ## 验收清单
 

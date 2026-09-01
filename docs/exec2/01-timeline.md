@@ -46,7 +46,7 @@ classDiagram
 1. `src/timeline/Keyframe.ts` + `TimelineTrack.ts` + `TimelineDoc.ts`(纯数据类,可 JSON 往返)。
 2. `src/store/TimelineStore.ts` + 命令 `timeline.add-key` / `timeline.move-key` / `timeline.remove-key` / `timeline.set-duration`(invert 全部可实现,进撤销栈)。
 3. `src/timeline/TimelineSampler.ts`:以 reaction 订阅 `transport.time`;回放期写运行时;`stop()` 时把末帧 transform 写回实体(observable 字段),observer 视图自动恢复编辑态画面。
-4. `src/ui/TimelinePanel.tsx`:MUI 抽屉 + 关键帧打点;双击打点编辑数值(复用 TransformFields);拖播放头 → `transport.seek`。
+4. `src/ui/timeline/TimelinePanel.tsx`:MUI 抽屉 + 关键帧打点;双击打点编辑数值(复用 TransformFields);拖播放头 → `transport.seek`。
 5. 「打关键帧」入口:Inspector 加「在当前时间打关键帧」按钮(读实体当前 transform → `timeline.add-key`)。
 6. 走查:两个对象各打 3 个走位关键帧 → 播放/seek/停止恢复 → 撤销重做关键帧操作。
 

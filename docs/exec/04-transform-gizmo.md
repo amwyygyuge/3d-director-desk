@@ -27,8 +27,8 @@ sequenceDiagram
 
 - `TransformGizmoController`(新,`src/transform/`):封装 drei `TransformControls`;**拖拽中只写运行时**,`onMouseUp` 才 dispatch——对应 Monet 的 `undoManager.snapshot` 思路。
 - 选中:`SelectionStore`(已有);点击拾取走 R3F `onPointerDown` 事件(禁 raycast 自研)。
-- 模式切换:工具条三态按钮(translate/rotate/scale),MUI ToggleGroup。
-  注:W/E/R 快捷键曾分配给模式切换,后按规格决策让位给 WASD 飞行导航(navigation/FlyDrive),模式切换只走工具条。
+- 模式切换:视口药丸三态按钮(translate/rotate/scale),MUI ToggleGroup。
+  注:W/E/R 快捷键曾分配给模式切换,后按规格决策让位给 WASD 飞行导航(navigation/FlyDrive),模式切换只走视口药丸。
 
 ## 实现步骤
 

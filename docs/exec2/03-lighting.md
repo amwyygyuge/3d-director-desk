@@ -41,7 +41,7 @@ classDiagram
 1. `SceneObject` 加 `light: LightParams | null` 字段 + `applyLight` 方法;`SceneStore.setLightParams`。
 2. 命令 `object.place`(kind="light" 带 light 参数)+ `light.adjust { id, light }`(invert 可撤销)。
 3. `contents.tsx`:`LightContent` 渲染三种光源 + 可点选标记球;按参数响应式更新。
-4. 工具条「加灯光」三态菜单;Inspector 灯光区(类型 Select + 颜色 + 强度 Slider)。
+4. 左栏「灯光环境」分区的加灯光三态菜单;Inspector 灯光区(类型 Select + 颜色 + 强度 Slider)。
 5. 走查:8 盏灯场景帧率、截图摘除辅助标记、撤销灯光调整。
 
 ## 验收清单

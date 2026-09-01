@@ -59,6 +59,11 @@ export class CameraStore {
     addShot(id: string, shot: CameraShot): void {
         this.director.addShot(id, shot);
     }
+    /** 文档导入专用：CameraDirector 是机位聚合根，外部只经本 Store 置换。 */
+    replaceShots(shots: readonly { readonly id: string; readonly shot: CameraShot }[]): void {
+        this.markerRuntimes.clear();
+        this.director.replaceShots(shots.map(({ id, shot }) => [id, shot]));
+    }
 
     removeShot(id: string): void {
         this.director.removeShot(id);

@@ -88,7 +88,7 @@ classDiagram
 | #   | 任务               | 承载类/模块                                          | 验收                                                                    |
 | --- | ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------- |
 | 1   | 工程基建           | eslint/ts/prettier/vite/storybook                    | ✅ 已完成(typecheck/lint/build/storybook 全绿)                          |
-| 2   | 3D 场景画布        | `ui/DirectorDesk` + `SceneManager`                   | 网格/灯光/轨道相机;frameloop=demand;卸载零泄漏                          |
+| 2   | 3D 场景画布        | `ui/shell/DirectorDesk` + `SceneManager`             | 网格/灯光/轨道相机;frameloop=demand;卸载零泄漏                          |
 | 3   | 对象放置(游戏模型) | `loaders/ModelImporter`(新)+ `SceneObject`           | FBX/GLB/OBJ 导入入库;blob URL,禁 base64;大模型走 @dm/3d-viewer 快照缓存 |
 | 4   | 摆位操作           | `transform/TransformGizmoController`(新)             | 移动/旋转/缩放 gizmo;拖拽结束才写实体;多选站位                          |
 | 5   | 游戏动作挂载       | `AnimationBinder` + `animation/AnimationLibrary`(新) | GLB 动作 clip 挂到同构骨骼模型;播放/停止;Mixer 走渲染循环               |

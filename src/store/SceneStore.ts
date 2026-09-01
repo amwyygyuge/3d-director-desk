@@ -41,6 +41,10 @@ export class SceneStore {
         this.manager.register(object);
         return object;
     }
+    /** 文档导入专用：候选实体已在应用服务中构造并校验，此处只作单次替换提交。 */
+    replaceObjects(entities: readonly SceneObject[]): void {
+        this.manager.replaceEntities(entities);
+    }
 
     removeObject(id: string): void {
         this.manager.unregister(id);

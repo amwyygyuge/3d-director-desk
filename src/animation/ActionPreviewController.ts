@@ -48,6 +48,13 @@ export class ActionPreviewController {
         this.timeSeconds = Math.min(Math.max(INITIAL_PREVIEW_TIME_SECONDS, timeSeconds), target.durationSeconds);
         this.binder.setTimeFor(target.objectId, this.timeSeconds);
     }
+    /** 工程替换时清除瞬时预览态，避免新场景继续驱动旧对象。 */
+    reset(): void {
+        this.activeObjectId = null;
+        this.durationSeconds = INITIAL_PREVIEW_TIME_SECONDS;
+        this.isPlaying = false;
+        this.timeSeconds = INITIAL_PREVIEW_TIME_SECONDS;
+    }
 
     clear(objectId: string): void {
         if (this.activeObjectId !== objectId) return;

@@ -1,7 +1,9 @@
 import { FrameViewCommand } from "../command/navigationCommands";
-import { WORKSPACE_STAGE } from "../workspace/stages";
+import { transformKeyCommandFor } from "../command/timelineCommands";
+import { RemoveShotCommand } from "../command/cameraCommands";
+import { EnterPresentationCommand, ExitPresentationCommand } from "../command/presentationCommands";
 import { requestFrameCapture } from "../command/captureCommands";
-import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
+import type { DirectorDeskStores } from "../ui/shell/DirectorDeskContext";
 import { ShortcutChord } from "./ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
 
@@ -20,16 +22,22 @@ export const SHORTCUT_ID = {
     EDIT_UNDO: "edit.undo",
     EDIT_REDO: "edit.redo",
     HELP_TOGGLE: "help.toggle",
-    STAGE_SET: "stage.set",
-    STAGE_CAMERA: "stage.camera",
-    STAGE_OUTPUT: "stage.output",
+    TRANSPORT_TOGGLE: "transport.toggle",
+    TIMELINE_ADD_KEY: "timeline.add-key",
+    RAIL_CLOSE: "rail.close",
+    PRESENTATION_ENTER: "presentation.enter",
+    PRESENTATION_EXIT: "presentation.exit",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
 /**
  * 快捷键 SPECS(纯数据表,单一真相源):
  * - 行为在下方 ACTIONS,按 id 对齐(Record 全键约束,漏配编译期报错);
- * - UI 提示经 formatShortcutHint 从本表格式化,按钮提示与真实生效键永不分叉。
+ * - UI 提示经 formatShortcutHint 从本表格式化,按钮提示与真实生效键永不分叉;
+ * - 顺序即优先级(注册表先命中先执行):预览退出排在一切 Escape 之前。
+ *
+ * Space 不做播放/暂停:WASD+Space/Shift 的飞行导航已持续占用它(见 useFlyNavigation),
+ * 双绑会让抬升相机的同时启停时间轴。播放启停走 P,与 DCC 的传输键位习惯一致。
  */
 export const SHORTCUT_SPECS: readonly {
     id: ShortcutId;
@@ -37,27 +45,35 @@ export const SHORTCUT_SPECS: readonly {
     scope: ShortcutScope;
     label: string;
 }[] = [
+    { id: SHORTCUT_ID.PRESENTATION_EXIT, chords: ["escape"], scope: "presentation", label: "退出全屏预览" },
+    { id: SHORTCUT_ID.RAIL_CLOSE, chords: ["escape"], scope: "rail", label: "收起左栏面板" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
     { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
+    { id: SHORTCUT_ID.TIMELINE_ADD_KEY, chords: ["k"], scope: "gizmo", label: "在当前时间打关键帧" },
     { id: SHORTCUT_ID.SHOT_ENTER, chords: ["enter"], scope: "shot-selected", label: "进入掌镜" },
     { id: SHORTCUT_ID.SHOT_EXIT, chords: ["escape"], scope: "shot", label: "退出掌镜" },
     { id: SHORTCUT_ID.SHOT_PHOTO, chords: ["enter"], scope: "shot", label: "拍照" },
     { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
     { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "gizmo", label: "聚焦选中对象" },
     { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
+    { id: SHORTCUT_ID.TRANSPORT_TOGGLE, chords: ["p"], scope: "global", label: "播放/暂停时间轴" },
+    { id: SHORTCUT_ID.PRESENTATION_ENTER, chords: ["shift+p"], scope: "global", label: "全屏预览成片" },
     { id: SHORTCUT_ID.EDIT_UNDO, chords: ["mod+z"], scope: "global", label: "撤销" },
     { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
     { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
-    { id: SHORTCUT_ID.STAGE_SET, chords: ["1"], scope: "global", label: "布景阶段" },
-    { id: SHORTCUT_ID.STAGE_CAMERA, chords: ["2"], scope: "global", label: "运镜阶段" },
-    { id: SHORTCUT_ID.STAGE_OUTPUT, chords: ["3"], scope: "global", label: "成片阶段" },
 ];
 
 function removeSelection(stores: DirectorDeskStores): void {
+    // 机位不是场景实体,住在 CameraDirector 里;按 id 归属分派,否则 Delete 对机位是空操作
     for (const id of stores.selection.selectedIds) {
-        stores.dispatcher.dispatch({ type: "object.remove", payload: { id } }, stores);
+        const isShot = stores.camera.director.getShot(id) !== undefined;
+        const result = stores.dispatcher.dispatch(
+            { type: isShot ? RemoveShotCommand.TYPE : "object.remove", payload: { id } },
+            stores,
+        );
+        if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
     }
     stores.selection.clear();
 }
@@ -68,11 +84,26 @@ function activateSelectedShot(stores: DirectorDeskStores): void {
     stores.dispatcher.dispatch({ type: "camera.activate", payload: { id: shotId } }, stores);
 }
 
+function keyCurrentTransform(stores: DirectorDeskStores): void {
+    const objectId = stores.selection.primaryId;
+    if (!objectId) return;
+    const command = transformKeyCommandFor(stores, objectId);
+    if (!command) return;
+    const result = stores.dispatcher.dispatch(command, stores);
+    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+}
+
+function enterPresentation(stores: DirectorDeskStores): void {
+    const result = stores.dispatcher.dispatch({ type: EnterPresentationCommand.TYPE, payload: {} }, stores);
+    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+}
+
 const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void> = {
     [SHORTCUT_ID.AXIS_X]: (s) => s.ui.toggleGizmoAxis("x"),
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
+    [SHORTCUT_ID.TIMELINE_ADD_KEY]: keyCurrentTransform,
     [SHORTCUT_ID.SHOT_ENTER]: activateSelectedShot,
     [SHORTCUT_ID.SHOT_EXIT]: (s) => s.dispatcher.dispatch({ type: "camera.deactivate", payload: {} }, s),
     [SHORTCUT_ID.SHOT_PHOTO]: (s) => requestFrameCapture({ dispatcher: s.dispatcher, context: s }),
@@ -80,12 +111,15 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.FRAME_SELECTED]: (s) =>
         s.dispatcher.dispatch({ type: FrameViewCommand.TYPE, payload: { ids: [...s.selection.selectedIds] } }, s),
     [SHORTCUT_ID.FRAME_ALL]: (s) => s.dispatcher.dispatch({ type: FrameViewCommand.TYPE, payload: {} }, s),
+    [SHORTCUT_ID.TRANSPORT_TOGGLE]: (s) =>
+        s.dispatcher.dispatch({ type: s.clock.isPlaying ? "transport.pause" : "transport.play", payload: {} }, s),
+    [SHORTCUT_ID.PRESENTATION_ENTER]: enterPresentation,
+    [SHORTCUT_ID.RAIL_CLOSE]: (s) => s.layout.closeRail(),
+    [SHORTCUT_ID.PRESENTATION_EXIT]: (s) =>
+        s.dispatcher.dispatch({ type: ExitPresentationCommand.TYPE, payload: {} }, s),
     [SHORTCUT_ID.EDIT_UNDO]: (s) => s.history.undo(s),
     [SHORTCUT_ID.EDIT_REDO]: (s) => s.history.redo(s),
     [SHORTCUT_ID.HELP_TOGGLE]: (s) => s.ui.toggleHelp(),
-    [SHORTCUT_ID.STAGE_SET]: (s) => s.ui.setStage(WORKSPACE_STAGE.SET),
-    [SHORTCUT_ID.STAGE_CAMERA]: (s) => s.ui.setStage(WORKSPACE_STAGE.CAMERA),
-    [SHORTCUT_ID.STAGE_OUTPUT]: (s) => s.ui.setStage(WORKSPACE_STAGE.OUTPUT),
 };
 
 /** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */
@@ -105,8 +139,14 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
     };
 }
 
-/** 当前激活作用域:global 常驻;机位选择与掌镜分别有精确 scope,避免 Enter 作用于普通对象 */
+/**
+ * 当前激活作用域。
+ * 全屏预览独占:壳层已隐、成片正在放,此时一切编辑键位都不该生效——只留退出键。
+ * 其余情形 global 常驻;rail/gizmo/shot-selected/shot 各自按精确条件激活,
+ * Esc 的归属由 SHORTCUT_SPECS 的顺序决定(注册表先命中先执行)。
+ */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
+    if (stores.layout.presentationMode) return new Set<ShortcutScope>(["presentation"]);
     const primaryId = stores.selection.primaryId;
     const hasSelectedInactiveShot =
         primaryId !== null &&
@@ -114,6 +154,7 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         stores.camera.director.getShot(primaryId) !== undefined;
     return new Set<ShortcutScope>([
         "global",
+        ...(stores.layout.railSection !== null ? ["rail" as const] : []),
         ...(primaryId ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
         ...(stores.camera.activeShotId ? ["shot" as const] : []),

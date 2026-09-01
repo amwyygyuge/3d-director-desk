@@ -24,7 +24,7 @@ export function formatFromFileName(name: string): ModelFormat | null {
 
 /**
  * 从 URL 解析格式;blob: URL 无扩展名,返回 null——
- * 本地导入的格式必须由 File.name 侧显式带入(见 Toolbar/PlaceObjectCommand)。
+ * 本地导入的格式必须由 File.name 侧显式带入(见 importFiles/PlaceObjectCommand)。
  */
 export function formatFromUrl(url: string): ModelFormat | null {
     try {
