@@ -31,7 +31,7 @@ flowchart TB
 | 07  | [预演画面输出](./07-capture-output.md)     | ✅ 完成(待验收人签字)                                                   |        |
 | 08  | [无限画布接入](./08-canvas-integration.md) | ◐ 本仓侧完成(HostAdapter/PostMessageAdapter);Monet 节点壳暂缓(用户决策) |        |
 
-## Storybook 验收入口(`pnpm storybook` → 侧栏「验收」组)
+## Storybook 验收入口(`bun run storybook` → 侧栏「验收」组)
 
 | 任务 | Story                                             | 预置内容                                           |
 | ---- | ------------------------------------------------- | -------------------------------------------------- |
@@ -46,7 +46,7 @@ flowchart TB
 
 ## 验收通则(每个任务必查)
 
-- [ ] `pnpm typecheck` / `pnpm lint` / `pnpm build` 全绿
+- [ ] `bun run typecheck` / `bun run lint` / `bun run build` 全绿
 - [ ] 对应 Storybook story 或 playground 场景人工走查通过
 - [ ] 一切写操作经 `CommandDispatcher`(`grep -rn "sceneStore\." src/ui` 应无直写)
 - [ ] 性能核对:静态场景静置 0 渲染帧;卸载后无泄漏;渲染循环零分配

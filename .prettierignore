@@ -1,5 +1,4 @@
 node_modules
 dist
 storybook-static
-pnpm-lock.yaml
-package-lock.json
+bun.lock

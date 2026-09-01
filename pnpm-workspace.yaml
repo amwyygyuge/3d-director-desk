@@ -1,4 +1,0 @@
-allowBuilds:
-    esbuild: true
-minimumReleaseAgeExclude:
-    - "@vitejs/plugin-react@6.1.1"

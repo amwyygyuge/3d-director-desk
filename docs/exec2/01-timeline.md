@@ -56,4 +56,4 @@ classDiagram
 - [ ] 播放时对象平滑走位;暂停静置 0 渲染帧;停止后恢复实体数据姿态
 - [ ] 拖播放头 seek 立即成像(demand 下 sampler 写运行时 + invalidate)
 - [ ] 200 关键帧播放不掉帧(采样二分,evaluate 零分配)
-- [ ] `pnpm typecheck && pnpm lint && pnpm build` 全绿
+- [ ] `bun run typecheck && bun run lint && bun run build` 全绿

@@ -5,7 +5,7 @@ Embeddable React director desk for placing game models, mounting actions, compos
 ## Requirements
 
 - Node.js `^20.19.0 || >=22.12.0` (required by the Vite/Storybook toolchain).
-- pnpm and the package peers listed below.
+- Bun `>=1.3.14` and the package peers listed below.
 - A sized parent element: `DirectorDesk` fills its container.
 
 | Peer                                   | Supported range |
@@ -22,7 +22,7 @@ Embeddable React director desk for placing game models, mounting actions, compos
 ## Install and render
 
 ```sh
-pnpm add @dm/3d-director-desk
+bun add @dm/3d-director-desk
 ```
 
 Import the package stylesheet from its only supported subpath, then render the desk inside a container with a real height.
@@ -93,7 +93,7 @@ Use root named exports only; `@dm/3d-director-desk/style.css` is the only public
 Phase one has no unit-test command. Verify the package surface manually with Storybook:
 
 ```sh
-pnpm storybook
+bun run storybook
 ```
 
 At `http://localhost:6087`, open the **验收** stories and confirm model import, object selection and transform, action mounting/playback, camera shots, and capture output. For an iframe host integration, also send a correctly scoped `director-desk:import-model` message and confirm the matching desk imports it, while a different session or origin has no effect.
@@ -101,10 +101,10 @@ At `http://localhost:6087`, open the **验收** stories and confirm model import
 ## Release gate
 
 ```sh
-pnpm run release-check
-pnpm publish
+bun run release-check
+bun publish
 ```
 
-`release-check` runs static type checking, linting, a production Storybook build, the library/declaration build, artifact sanitation, and `pnpm pack --dry-run`. `prepublishOnly` runs that same gate, and `prepack` repeats artifact sanitation for direct pack workflows, so normal publishing cannot skip it. Do not publish or pack with lifecycle scripts disabled.
+`release-check` runs static type checking, linting, a production Storybook build, the library/declaration build, artifact sanitation, and `bun pm pack --dry-run`. `prepublishOnly` runs that same gate, and `prepack` repeats artifact sanitation for direct pack workflows, so normal publishing cannot skip it. Do not publish or pack with lifecycle scripts disabled.
 
 The publish allowlist contains only `dist` (plus npm-required package metadata and this README). `artifact:clean` removes generated fixture and Storybook declaration paths before packing. Source, Storybook support declarations, playground code, fixture assets, and the Storybook build output are excluded.

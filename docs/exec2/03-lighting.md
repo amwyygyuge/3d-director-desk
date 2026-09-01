@@ -50,4 +50,4 @@ classDiagram
 - [ ] 灯光可 gizmo 拖动、可 undo;数据可 JSON 往返
 - [ ] 8 盏灯帧率 ≥55;静置 0 渲染帧
 - [ ] 截图无灯光辅助标记,有灯光效果
-- [ ] `pnpm typecheck && pnpm lint && pnpm build` 全绿
+- [ ] `bun run typecheck && bun run lint && bun run build` 全绿

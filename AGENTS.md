@@ -54,8 +54,8 @@
 
 ## 工程命令
 
-- `pnpm dev` — playground 调试
-- `pnpm storybook` — 组件走查(代替单测的验证手段)
-- `pnpm typecheck` / `pnpm lint` / `pnpm format`
-- `pnpm build` — 发包构建(vite lib ESM + tsc 声明)
-- `pnpm pa/mi/ma` — 发版(patch/minor/major,直发内部 registry)
+- `bun run dev` — playground 调试
+- `bun run storybook` — 组件走查(代替单测的验证手段)
+- `bun run typecheck` / `bun run lint` / `bun run format`
+- `bun run build` — 发包构建(vite lib ESM + tsc 声明)
+- `bun run pa/mi/ma` — 发版(patch/minor/major,直发内部 registry)

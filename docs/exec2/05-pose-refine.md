@@ -47,4 +47,4 @@ classDiagram
 - [ ] 姿态快照与动作播放叠加正确(weight 0 纯动作,1 纯姿态)
 - [ ] 姿态数据 JSON 往返一致;快照在时间轴上衔接平滑
 - [ ] 暂停静置 0 渲染帧;采样链零分配
-- [ ] `pnpm typecheck && pnpm lint && pnpm build` 全绿
+- [ ] `bun run typecheck && bun run lint && bun run build` 全绿

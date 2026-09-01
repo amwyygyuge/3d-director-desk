@@ -49,4 +49,4 @@ classDiagram
 - [ ] React DevTools:静置时 DirectorDesk 无重渲染;拖轨道相机只渲染 three 帧
 - [ ] 添加 50 个对象后全部删除,内存面板无持续增长(Snapshot 对比)
 - [ ] 添加对象走 `dispatcher.dispatch`(grep 验证工具条无 store 直写)
-- [ ] `pnpm typecheck && pnpm lint && pnpm build` 全绿
+- [ ] `bun run typecheck && bun run lint && bun run build` 全绿
