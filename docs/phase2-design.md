@@ -9,6 +9,8 @@
 
 不做：目标关键帧、速度曲线编辑器、镜头转场、多机位宫格、并行 Program/Preview 监看、AI 生成分镜、导出/协作、动作重定向。后续镜头能力与依赖记录在 [`exec2/04-camera-future.md`](./exec2/04-camera-future.md)。
 
+运镜的交互层（编辑期预览、时间轴片段编排、镜头关键帧、语义预设）提案见 [`camera-motion-authoring.md`](./camera-motion-authoring.md)。
+
 ## 运镜架构决策
 
 - **机位领域**：`CameraShot` 是可复用机位的静态默认姿态与镜头参数，具有稳定 ID，不保存时间轴数据。
