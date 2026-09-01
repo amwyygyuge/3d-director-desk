@@ -13,24 +13,24 @@ import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
 import { BonePicker } from "./scene/BonePicker";
-import { STAGE_DEFS } from "../workspace/stages";
 import { TransformGizmoController } from "./scene/TransformGizmoController";
 import { FlyDrive } from "./scene/FlyDrive";
 import { ShotNavigation } from "./scene/ShotNavigation";
 import type { AssetProvider } from "../assets/catalog/AssetProvider";
 import { createDirectorDeskStores, DirectorDeskProvider } from "./DirectorDeskContext";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
-import { AssetLibraryPanel } from "./AssetLibraryPanel";
+import { AssetRail } from "./chrome/AssetRail";
+import { ApplicationNotice } from "./chrome/ApplicationNotice";
+import { InspectorSheet } from "./chrome/InspectorSheet";
+import { TimelineConsole } from "./chrome/TimelineConsole";
+import { PresentationExitHint, TopPillBar } from "./chrome/TopPillBar";
 import { CapturePreview } from "./CapturePreview";
-import { Dock } from "./Dock";
 import { HelpOverlay } from "./HelpOverlay";
 import { Hotkeys } from "./Hotkeys";
 import { FrameRateIndicator } from "./FrameRateIndicator";
 import { placementFor } from "./importFiles";
-import { Inspector } from "./Inspector";
 import { LoadingChip } from "./LoadingChip";
-import { OutlinerPanel } from "./OutlinerPanel";
-import { directorDeskTheme } from "./theme";
+import { directorDeskTheme, VIEWPORT_BACKGROUND } from "./theme";
 import { SceneRoot } from "./scene/SceneRoot";
 import { PlaybackDriver } from "./scene/PlaybackDriver";
 import { StudioRig } from "./scene/StudioRig";
@@ -40,9 +40,6 @@ import { ShotCameraRig } from "./scene/ShotCameraRig";
 import { ShotMarkers } from "./scene/ShotMarkers";
 import { ShotFrameOverlay } from "./ShotFrameOverlay";
 import { ViewportInteractionHints } from "./ViewportInteractionHints";
-import { ShotPanel } from "./ShotPanel";
-import { Toolbar } from "./Toolbar";
-import { TimelinePanel } from "./TimelinePanel";
 
 const STUDIO_CAMERA_FOV_DEGREES = 45;
 const STUDIO_CAMERA_POSITION: [number, number, number] = [6, 4, 8];
@@ -59,21 +56,23 @@ export interface DirectorDeskProps {
     assetProviders?: readonly AssetProvider[];
     /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
     hostBridge?: HostBridgeConfiguration;
-    /** Storybook/host initial local visibility for the non-persistent motion preview helper. */
+    /** 运镜轨迹预览的初始可见性(Storybook/宿主播种);运行时开关在左栏机位面板 */
     initialMotionPreviewVisible?: boolean;
     /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
     onReady?: (stores: DirectorDeskStores) => void;
 }
 
 /**
- * 导演台主组件(阶段一骨架)。
+ * 导演台主组件:全屏画布铺底 + 悬浮壳层覆盖其上(方案 D「液态悬浮界面」)。
  *
  * 每实例一套 stores:Monet 画布可同时存在多个导演台节点,禁全局单例。
  * ScopedCssBaseline:样式重置只作用于本组件子树,不污染宿主页面。
+ * 壳层纪律:overlay 根容器放行指针事件,四区各自重新拦截——
+ * 用户可在浮窗缝隙里直接拖拽镜头,面板折叠不再引起画布重排。
  * 性能铁律落实:
  * - frameloop="demand":静态场景不持续渲染,状态变更显式 invalidate;
  * - three 对象经 ref 注册进 SceneManager 运行时表,不进 observable;
- * - 面板订阅走 MobX 细粒度 observer；仅本桌局部的轨迹预览开关会重建对应 helper。
+ * - 面板订阅走 MobX 细粒度 observer,壳层显隐由 CSS transition 承担,不走 JS 重绘。
  */
 export const DirectorDesk = observer(function DirectorDesk({
     theme,
@@ -83,13 +82,15 @@ export const DirectorDesk = observer(function DirectorDesk({
     onReady,
     initialMotionPreviewVisible = false,
 }: DirectorDeskProps) {
-    const [stores] = useState<DirectorDeskStores>(() => createDirectorDeskStores({ host, hostBridge, assetProviders }));
+    const [stores] = useState<DirectorDeskStores>(() =>
+        createDirectorDeskStores({
+            host,
+            hostBridge,
+            assetProviders,
+            motionPathPreviewVisible: initialMotionPreviewVisible,
+        }),
+    );
     const deskRef = useRef<HTMLDivElement>(null);
-    const [motionPreviewVisible, setMotionPreviewVisible] = useState(initialMotionPreviewVisible);
-    // 掌镜视角下左右/底 Dock 自动收成细条(不压画布);退出即恢复用户原折叠态
-    const shotLive = stores.camera.activeShotId !== null;
-    const hasSelection = stores.selection.selectedIds.length > 0;
-    const stageDef = STAGE_DEFS[stores.ui.stage];
 
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
@@ -104,6 +105,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                 stores.capture.detach();
                 stores.ui.dispose();
                 stores.assets.dispose();
+                stores.documentImports.dispose();
                 stores.animations.dispose();
                 stores.playback.dispose();
                 stores.binder.dispose();
@@ -185,13 +187,15 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     }
                                 }}
                             >
-                                <color attach="background" args={["#171717"]} />
-                                <Grid
-                                    args={[STUDIO_GRID_SIZE_METERS, STUDIO_GRID_SIZE_METERS]}
-                                    cellColor="#333333"
-                                    sectionColor="#555555"
-                                    userData={{ helper: true }}
-                                />
+                                <color attach="background" args={[VIEWPORT_BACKGROUND]} />
+                                {stores.layout.authoringVisible && (
+                                    <Grid
+                                        args={[STUDIO_GRID_SIZE_METERS, STUDIO_GRID_SIZE_METERS]}
+                                        cellColor="#333333"
+                                        sectionColor="#555555"
+                                        userData={{ helper: true }}
+                                    />
+                                )}
                                 <OrbitControls
                                     makeDefault
                                     enableDamping={stores.camera.activeShotId === null}
@@ -206,7 +210,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <PlaybackDriver />
                                 <ShotCameraRig />
                                 <CameraMotionRig />
-                                <MotionPathPreview visible={motionPreviewVisible && stageDef.helpers.motionPaths} />
+                                <MotionPathPreview visible={stores.layout.motionPathPreviewActive} />
                                 <FlyDrive />
                                 <ShotNavigation />
                             </Canvas>
@@ -216,42 +220,15 @@ export const DirectorDesk = observer(function DirectorDesk({
                             <FrameRateIndicator />
                             <ViewportInteractionHints />
                         </div>
-                        <Toolbar />
-                        <Dock
-                            side="left"
-                            title="场景"
-                            collapsed={stores.ui.leftDockCollapsed || shotLive}
-                            onToggle={() => stores.ui.toggleLeftDock()}
-                        >
-                            {stores.ui.stage === "set" && <AssetLibraryPanel />}
-                            <OutlinerPanel />
-                            {stores.ui.stage === "camera" && (
-                                <ShotPanel
-                                    motionPreviewVisible={motionPreviewVisible}
-                                    onMotionPreviewVisibleChange={setMotionPreviewVisible}
-                                />
-                            )}
-                        </Dock>
-                        {hasSelection && (
-                            <Dock
-                                side="right"
-                                title="属性"
-                                collapsed={stores.ui.rightDockCollapsed || shotLive}
-                                onToggle={() => stores.ui.toggleRightDock()}
-                            >
-                                <Inspector />
-                            </Dock>
-                        )}
-                        {stageDef.timeline && (
-                            <Dock
-                                side="bottom"
-                                title="时间轴"
-                                collapsed={stores.ui.timelineCollapsed || shotLive}
-                                onToggle={() => stores.ui.toggleTimelineDock()}
-                            >
-                                <TimelinePanel />
-                            </Dock>
-                        )}
+                        {/* 悬浮壳层:根容器放行指针事件,四区各自 pointer-events-auto 重新拦截 */}
+                        <div className="pointer-events-none absolute inset-0">
+                            <TopPillBar />
+                            <AssetRail />
+                            <InspectorSheet />
+                            <TimelineConsole />
+                            <PresentationExitHint />
+                        </div>
+                        <ApplicationNotice />
                         <Hotkeys deskRef={deskRef} />
                         <HelpOverlay />
                     </div>

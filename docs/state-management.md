@@ -120,6 +120,33 @@ this.transportDisposer = reaction(() => transport.time, (t) => this.setTime(t));
 - 向非 observer 第三方组件(MUI)传 observable 值:解引用为原始值,或 function props(`getName={() => person.name}`),或 `<Observer>` 内联包裹;
 - effect 需要响应 observable 时用 `useEffect(() => autorun/reaction(...), [])`,disposer 作 cleanup 返回;依赖数组不为 observable 字段服务。
 
+## props 边界纪律(值型状态禁下传)
+
+**组件一律从 `useDirectorDeskStores()` 自取状态,禁止把状态当 props 一层层传。**
+
+props 只允许承载三类东西:
+
+| 允许 | 例子 | 理由 |
+|---|---|---|
+| 身份 id | `shotId` / `objectId` / `section` | 子组件据此自己 `get(id)`,是「传引用晚解引用」的落地形态 |
+| 回调 | `onCommit` / `onClose` / `report` | 行为注入,不是状态 |
+| DOM ref / children | `modelInputRef` / `children` | React 结构,与 MobX 无关 |
+
+禁止下传的是**值型状态**:数字、布尔、数组、快照对象——`duration`、`playhead`、`objectCount`、
+`programClips`、`actionId`、`fov`、`shot` 全部由子组件自取。
+
+两条硬理由:
+
+1. **正确性**:值型 props 把子组件的重渲染绑到父组件的读集合上,`observer` 的细粒度追踪当场失效;
+2. **性能**:父组件一旦读了帧级 observable(如 playhead)再下传,整棵子树跟着它的频率重建。
+   实测教训——`TimelineConsole` 曾在顶层读 `playheadDisplay.value` 再传给 `MiniTimeline`,
+   于是每 12Hz 重建全部片段与关键帧节点;拆出只读 playhead 的 `MiniPlayhead` / `TimecodeReadout`
+   后,重渲染面收敛到一个 2px 的盒子。
+
+唯一例外是**无领域身份的叶子控件**(`ShotNumberField`、`LightIntensityControl` 这类通用数值输入):
+它们没有可自取的身份,值必须由上一层 observer 解引用后传入。判据是——
+能用 id 换到状态的,一律自取;换不到的,才允许收值。
+
 ## Context 定位
 
 `createContext` 唯一合法用途:`DirectorDeskContext` 注入每实例 stores(红线 #5 禁全局单例)。value 必须是**稳定引用**(`useState(() => createDirectorDeskStores())`),context 里禁止放变化状态——响应式永远走 observable,不走 context 扩散。禁 mobx-react 遗留 `Provider`/`inject`。

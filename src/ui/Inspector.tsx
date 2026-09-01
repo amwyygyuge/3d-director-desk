@@ -7,7 +7,6 @@ import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
@@ -16,9 +15,10 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
-import type { CameraShot } from "../camera/CameraShot";
+import { DEFAULT_CAMERA_FOV } from "../camera/CameraShot";
 import { FOV_MAX, FOV_MIN } from "../command/commands";
 import type { CommandResult } from "../command/DirectorCommand";
+import { transformKeyCommandFor } from "../command/timelineCommands";
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "../core/LightParams";
 import type { LightParams, LightType } from "../core/LightParams";
 import type { Vec3 } from "../core/SceneObject";
@@ -26,8 +26,10 @@ import { createStaticPoseSnapshot, isStaticPoseClip } from "../pose/StaticPoseCl
 import { POSE_PRESET_KIND, presentPosePreset } from "../pose/PosePresetCatalog";
 import type { PosePresetPresentation } from "../pose/PosePresetCatalog";
 import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "../pose/SkeletonRuntimeRegistry";
+import { formatShortcutHint, SHORTCUT_ID } from "../shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
-import { TransformFields } from "./TransformFields";
+import { INSPECTOR_FIELD_SX, TransformFields } from "./TransformFields";
+import { MONO_FONT_STACK } from "./theme";
 
 const DISPLAY_DECIMAL_PLACES = 4;
 const AXIS_X = 0;
@@ -42,11 +44,9 @@ const FIELD_LABEL_WIDTH_PX = 32;
 const FOV_INPUT_WIDTH_PX = 80;
 const FOV_STEP = 1;
 const CONTROL_GAP = 1;
-const INSPECTOR_WIDTH_PX = 260;
 const PANEL_PADDING = 1.5;
 const SNACKBAR_DURATION_MS = 4000;
-const TIMELINE_TRACK_PREFIX = "transform-";
-const TIMELINE_KEY_PREFIX = "key-";
+const LIGHT_INTENSITY_STEP = 0.1;
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type ShotVectorKey = "position" | "target";
@@ -71,12 +71,12 @@ interface ShotInspectorProps {
 }
 
 interface ShotVectorFieldsProps {
-    shot: CameraShot;
+    shotId: string;
     onCommit: (group: ShotVectorKey, axis: AxisIndex, value: number) => void;
 }
 
 interface ShotFovFieldProps {
-    fov: number;
+    shotId: string;
     onCommit: (fov: number) => void;
 }
 
@@ -154,11 +154,16 @@ const ShotNumberField = observer(function ShotNumberField({
                 setInputValue(event.target.value);
             }}
             onKeyDown={handleKeyDown}
+            sx={{ "& .MuiInputBase-input": { fontFamily: MONO_FONT_STACK } }}
         />
     );
 });
 
-const ShotVectorFields = observer(function ShotVectorFields({ shot, onCommit }: ShotVectorFieldsProps) {
+/** props 只收机位身份与提交回调;向量值自取,父组件不因坐标改动整片重渲。 */
+const ShotVectorFields = observer(function ShotVectorFields({ shotId, onCommit }: ShotVectorFieldsProps) {
+    const { camera } = useDirectorDeskStores();
+    const shot = camera.director.getShot(shotId);
+    if (!shot) return null;
     return (
         <>
             {SHOT_VECTOR_GROUPS.map((group) => (
@@ -192,7 +197,10 @@ const ShotVectorFields = observer(function ShotVectorFields({ shot, onCommit }: 
     );
 });
 
-const ShotFovField = observer(function ShotFovField({ fov, onCommit }: ShotFovFieldProps) {
+/** props 只收机位身份与提交回调;fov 自取,滑杆草稿仍是一次拖拽的局部瞬时态。 */
+const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFovFieldProps) {
+    const { camera } = useDirectorDeskStores();
+    const fov = camera.director.getShot(shotId)?.fov ?? DEFAULT_CAMERA_FOV;
     const [draftFov, setDraftFov] = useState<number | null>(null);
 
     return (
@@ -204,7 +212,7 @@ const ShotFovField = observer(function ShotFovField({ fov, onCommit }: ShotFovFi
                 alignItems: "center",
             }}
         >
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="overline" color="text.secondary">
                 FOV
             </Typography>
             <Slider
@@ -283,10 +291,16 @@ const ShotFields = observer(function ShotFields({ shotId, report }: ShotFieldsPr
     };
 
     return (
-        <Box sx={{ display: "grid", gap: FIELD_GROUP_GAP }}>
-            <ShotVectorFields shot={shot} onCommit={commitVectorAxis} />
-            <ShotFovField fov={shot.fov} onCommit={commitFov} />
-        </Box>
+        <Stack spacing={FIELD_GROUP_GAP}>
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">变换 / TRANSFORM</Typography>
+                <ShotVectorFields shotId={shotId} onCommit={commitVectorAxis} />
+            </Box>
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">镜头 / LENS · FOV</Typography>
+                <ShotFovField shotId={shotId} onCommit={commitFov} />
+            </Box>
+        </Stack>
     );
 });
 
@@ -310,29 +324,17 @@ const ShotInspector = observer(function ShotInspector({ shotId, report }: ShotIn
         if (result.ok) selection.remove(shotId);
     };
     return (
-        <Paper
-            elevation={2}
-            sx={{
-                width: INSPECTOR_WIDTH_PX,
-                maxHeight: "100%",
-                overflowY: "auto",
-                p: PANEL_PADDING,
-            }}
-        >
-            <Typography variant="subtitle2" noWrap>
-                {shotId}
-            </Typography>
-            <Divider sx={{ my: CONTROL_GAP }} />
+        <Box sx={{ display: "grid", gap: CONTROL_GAP }}>
             <ShotFields shotId={shotId} report={report} />
-            <Stack direction="row" spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+            <Stack direction="row" spacing={CONTROL_GAP}>
                 <Button variant="contained" onClick={toggleShot} fullWidth>
-                    {active ? "回导演视角" : "掌镜"}
+                    {active ? "回自由视角" : "进入机位视图"}
                 </Button>
                 <Button variant="text" color="error" onClick={removeShot}>
                     删除机位
                 </Button>
             </Stack>
-        </Paper>
+        </Box>
     );
 });
 
@@ -357,14 +359,14 @@ const LightIntensityControl = observer(function LightIntensityControl({
 
     return (
         <Box>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: MONO_FONT_STACK }}>
                 强度 {draft}
             </Typography>
             <Slider
                 size="small"
                 min={LIGHT_INTENSITY_MIN}
                 max={LIGHT_INTENSITY_MAX}
-                step={0.1}
+                step={LIGHT_INTENSITY_STEP}
                 value={draft}
                 aria-label="灯光强度"
                 onChange={(_, value) => {
@@ -377,12 +379,6 @@ const LightIntensityControl = observer(function LightIntensityControl({
         </Box>
     );
 });
-
-interface PlaybackControlsProps {
-    readonly actionId: string | null;
-    readonly objectId: string;
-    readonly report: ReportCommandResult;
-}
 
 interface PresetGridProps {
     readonly presets: readonly PosePresetPresentation[];
@@ -459,30 +455,32 @@ const PosePresetSection = observer(function PosePresetSection({ objectId, report
 
     return (
         <>
-            <Typography variant="caption" color="text.secondary">
-                姿势({posePresets.length})
-            </Typography>
-            {renderPresetGrid({ presets: posePresets, onApply: applyPreset })}
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                动作({actionPresets.length})
-            </Typography>
-            {renderPresetGrid({ presets: actionPresets, onApply: applyPreset })}
-            <Divider sx={{ my: 1 }} />
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">姿势 / POSE ({posePresets.length})</Typography>
+                {renderPresetGrid({ presets: posePresets, onApply: applyPreset })}
+                <Typography variant="overline" sx={{ display: "block", mt: CONTROL_GAP }}>
+                    动作 / MOTION ({actionPresets.length})
+                </Typography>
+                {renderPresetGrid({ presets: actionPresets, onApply: applyPreset })}
+            </Box>
+            <Divider sx={{ my: CONTROL_GAP }} />
         </>
     );
 });
 
-const PlaybackControls = observer(function PlaybackControls({ actionId, objectId, report }: PlaybackControlsProps) {
+/** 挂载动作自取:模型换动作时只有本组件重渲,不牵动上层控制区。 */
+const PlaybackControls = observer(function PlaybackControls({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
-    const { actionPreview, animations, dispatcher } = stores;
+    const { actionPreview, animations, dispatcher, scene } = stores;
+    const actionId = scene.manager.getEntity(objectId)?.actionId ?? null;
     const mountedAction = actionId ? animations.actions.find((action) => action.id === actionId) : undefined;
     if (!mountedAction) return null;
     const isPlaying = actionPreview.activeObjectId === objectId && actionPreview.isPlaying;
 
     return (
         <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                当前动作
+            <Typography variant="overline" sx={{ flex: 1 }}>
+                当前动作 / CURRENT MOTION
             </Typography>
             <IconButton
                 size="small"
@@ -513,7 +511,7 @@ const ModelActionControls = observer(function ModelActionControls({ objectId, re
         <>
             <Divider sx={{ my: 1 }} />
             <PosePresetSection objectId={objectId} report={report} />
-            <PlaybackControls actionId={entity.actionId} objectId={objectId} report={report} />
+            <PlaybackControls objectId={objectId} report={report} />
         </>
     );
 });
@@ -539,35 +537,37 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
     return (
         <>
             <Divider sx={{ my: CONTROL_GAP }} />
-            <Typography variant="subtitle2">灯光</Typography>
-            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
-                <TextField
-                    select
-                    size="small"
-                    label="类型"
-                    value={light.type}
-                    onChange={(event) => adjust({ type: event.target.value as LightType })}
-                >
-                    {LIGHT_TYPES.map((type) => (
-                        <MenuItem key={type} value={type}>
-                            {type === "directional" ? "平行光" : type === "point" ? "点光" : "聚光"}
-                        </MenuItem>
-                    ))}
-                </TextField>
-                <TextField
-                    size="small"
-                    label="颜色"
-                    type="color"
-                    value={light.color}
-                    slotProps={{ htmlInput: { "aria-label": "灯光颜色" } }}
-                    onChange={(event) => adjust({ color: event.target.value })}
-                />
-                <LightIntensityControl
-                    key={`${objectId}-${light.intensity}`}
-                    intensity={light.intensity}
-                    onCommit={(intensity) => adjust({ intensity })}
-                />
-            </Stack>
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">灯光 / LIGHT</Typography>
+                <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+                    <TextField
+                        select
+                        size="small"
+                        label="类型"
+                        value={light.type}
+                        onChange={(event) => adjust({ type: event.target.value as LightType })}
+                    >
+                        {LIGHT_TYPES.map((type) => (
+                            <MenuItem key={type} value={type}>
+                                {type === "directional" ? "平行光" : type === "point" ? "点光" : "聚光"}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <TextField
+                        size="small"
+                        label="颜色"
+                        type="color"
+                        value={light.color}
+                        slotProps={{ htmlInput: { "aria-label": "灯光颜色" } }}
+                        onChange={(event) => adjust({ color: event.target.value })}
+                    />
+                    <LightIntensityControl
+                        key={`${objectId}-${light.intensity}`}
+                        intensity={light.intensity}
+                        onCommit={(intensity) => adjust({ intensity })}
+                    />
+                </Stack>
+            </Box>
         </>
     );
 });
@@ -628,56 +628,58 @@ const PoseControls = observer(function PoseControls({ objectId, report }: Object
     return (
         <>
             <Divider sx={{ my: CONTROL_GAP }} />
-            <Typography variant="subtitle2">姿态精修</Typography>
-            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
-                <Button size="small" variant="outlined" disabled={!editing} onClick={discover}>
-                    发现骨骼
-                </Button>
-                {stores.ui.posePickingObjectId === objectId && (
-                    <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>
-                        退出骨骼编辑
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">姿态精修 / POSE</Typography>
+                <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+                    <Button size="small" variant="outlined" disabled={!editing} onClick={discover}>
+                        发现骨骼
                     </Button>
-                )}
-                {discovery && !discovery.ready && (
-                    <Typography variant="caption">模型骨骼尚未就绪，请等待加载完成后重试。</Typography>
-                )}
-                {discovery?.ready && (
-                    <>
-                        {discovery.semanticCandidates.length > 0 && (
+                    {stores.ui.posePickingObjectId === objectId && (
+                        <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>
+                            退出骨骼编辑
+                        </Button>
+                    )}
+                    {discovery && !discovery.ready && (
+                        <Typography variant="caption">模型骨骼尚未就绪，请等待加载完成后重试。</Typography>
+                    )}
+                    {discovery?.ready && (
+                        <>
+                            {discovery.semanticCandidates.length > 0 && (
+                                <Box>
+                                    <Typography variant="caption">语义候选（唯一匹配）</Typography>
+                                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
+                                        {discovery.semanticCandidates.map((candidate) => (
+                                            <Button
+                                                key={candidate.label}
+                                                size="small"
+                                                disabled={!editing}
+                                                onClick={() => stores.ui.setPosePicking(objectId, candidate.boneKey)}
+                                            >
+                                                {candidate.label}
+                                            </Button>
+                                        ))}
+                                    </Stack>
+                                </Box>
+                            )}
                             <Box>
-                                <Typography variant="caption">语义候选（唯一匹配）</Typography>
-                                <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
-                                    {discovery.semanticCandidates.map((candidate) => (
-                                        <Button
-                                            key={candidate.label}
-                                            size="small"
-                                            disabled={!editing}
-                                            onClick={() => stores.ui.setPosePicking(objectId, candidate.boneKey)}
-                                        >
-                                            {candidate.label}
-                                        </Button>
-                                    ))}
-                                </Stack>
+                                <Typography variant="caption">原始骨骼树（歧义或未命名时请从此处选择）</Typography>
+                                <BoneTree objectId={objectId} nodes={discovery.roots} editing={editing} />
                             </Box>
-                        )}
-                        <Box>
-                            <Typography variant="caption">原始骨骼树（歧义或未命名时请从此处选择）</Typography>
-                            <BoneTree objectId={objectId} nodes={discovery.roots} editing={editing} />
-                        </Box>
-                    </>
-                )}
-                <Button
-                    size="small"
-                    color="warning"
-                    disabled={!editing || entity.pose === null}
-                    onClick={() =>
-                        report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
-                    }
-                >
-                    清除姿态
-                </Button>
-                {!editing && <Typography variant="caption">播放期间姿态编辑已禁用。</Typography>}
-            </Stack>
+                        </>
+                    )}
+                    <Button
+                        size="small"
+                        color="warning"
+                        disabled={!editing || entity.pose === null}
+                        onClick={() =>
+                            report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
+                        }
+                    >
+                        清除姿态
+                    </Button>
+                    {!editing && <Typography variant="caption">播放期间姿态编辑已禁用。</Typography>}
+                </Stack>
+            </Box>
         </>
     );
 });
@@ -687,37 +689,25 @@ const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, re
     const stores = useDirectorDeskStores();
     const entity = stores.scene.manager.getEntity(objectId);
     if (!entity) return null;
+    const addKey = () => {
+        const command = transformKeyCommandFor(stores, entity.id);
+        if (command) report(stores.dispatcher.dispatch(command, stores));
+    };
 
     return (
         <>
-            <Divider sx={{ my: 1 }} />
-            <Button
-                size="small"
-                variant="outlined"
-                fullWidth
-                onClick={() =>
-                    report(
-                        stores.dispatcher.dispatch(
-                            {
-                                type: "timeline.add-key",
-                                payload: {
-                                    trackId: `${TIMELINE_TRACK_PREFIX}${entity.id}`,
-                                    targetId: entity.id,
-                                    keyframe: {
-                                        id: `${TIMELINE_KEY_PREFIX}${crypto.randomUUID()}`,
-                                        time: stores.clock.time,
-                                        value: entity.transform,
-                                        easing: "linear",
-                                    },
-                                },
-                            },
-                            stores,
-                        ),
-                    )
-                }
-            >
-                在当前时间打关键帧
-            </Button>
+            <Divider sx={{ my: CONTROL_GAP }} />
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">关键帧 / KEYFRAME</Typography>
+                <Button
+                    size="small"
+                    variant="outlined"
+                    fullWidth
+                    onClick={addKey}
+                >
+                    在当前时间打关键帧 ({formatShortcutHint(SHORTCUT_ID.TIMELINE_ADD_KEY)})
+                </Button>
+            </Box>
         </>
     );
 });
@@ -727,54 +717,43 @@ export const Inspector = observer(function Inspector() {
     const stores = useDirectorDeskStores();
     const { camera, scene, selection } = stores;
     const [notice, setNotice] = useState<string | null>(null);
-
     const primaryId = selection.primaryId;
+
     useEffect(() => {
         if (stores.ui.posePickingObjectId !== null && stores.ui.posePickingObjectId !== primaryId) {
             stores.ui.setPosePicking(null, null);
         }
     }, [stores.ui, primaryId]);
-    const entity = primaryId ? scene.manager.getEntity(primaryId) : undefined;
-    const shot = primaryId && !entity ? camera.director.getShot(primaryId) : undefined;
+
+    if (primaryId === null) return null;
+    const entity = scene.manager.getEntity(primaryId);
+    const shot = entity ? undefined : camera.director.getShot(primaryId);
     const report = (result: CommandResult) => {
-        if (!result.ok) setNotice(result.issues?.join(";") ?? result.error);
+        if (result.ok) return;
+        const message = result.issues?.join(";") ?? result.error;
+        stores.ui.setApplicationNotice(message);
+        setNotice(message);
     };
-
-    if (shot && primaryId) {
-        return (
-            <>
-                <ShotInspector shotId={primaryId} report={report} />
-                <Snackbar
-                    open={notice !== null}
-                    autoHideDuration={SNACKBAR_DURATION_MS}
-                    onClose={() => setNotice(null)}
-                    message={notice}
-                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                />
-            </>
-        );
-    }
-    if (!entity) return null;
-
-    return (
-        <Paper
-            elevation={2}
-            sx={{
-                width: INSPECTOR_WIDTH_PX,
-                maxHeight: "100%",
-                overflowY: "auto",
-                p: PANEL_PADDING,
-            }}
-        >
-            <Typography variant="subtitle2" noWrap>
-                {entity.name}
-            </Typography>
-            <Divider sx={{ my: CONTROL_GAP }} />
-            <TransformFields objectId={entity.id} />
+    const content = shot ? (
+        <ShotInspector shotId={primaryId} report={report} />
+    ) : entity ? (
+        <>
+            <Box sx={INSPECTOR_FIELD_SX}>
+                <Typography variant="overline">变换 / TRANSFORM</Typography>
+                <TransformFields objectId={entity.id} />
+            </Box>
             {entity.kind === "light" && <LightControls objectId={entity.id} report={report} />}
             <TimelineKeyControls objectId={entity.id} report={report} />
             {entity.kind === "model" && <ModelActionControls objectId={entity.id} report={report} />}
             {entity.kind === "model" && <PoseControls objectId={entity.id} report={report} />}
+        </>
+    ) : null;
+
+    return (
+        <>
+            <Box sx={{ display: "grid", gap: CONTROL_GAP, p: PANEL_PADDING }}>
+                {content}
+            </Box>
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={SNACKBAR_DURATION_MS}
@@ -782,6 +761,6 @@ export const Inspector = observer(function Inspector() {
                 message={notice}
                 anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             />
-        </Paper>
+        </>
     );
 });

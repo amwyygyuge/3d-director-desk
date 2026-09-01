@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { TEST_ASSETS } from "./stories/seeds";
 import { DirectorDesk } from "./DirectorDesk";
-import { WORKSPACE_STAGE } from "../workspace/stages";
+import { EnterPresentationCommand } from "../command/presentationCommands";
 
 const PRIMARY_CAMERA_ID = "主机位";
 const SIDE_CAMERA_ID = "侧机位";
@@ -126,7 +126,7 @@ function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
     const removeFocusedObject = stores.dispatcher.dispatch({ type: "object.remove", payload: { id: FOCUS_OBJECT_ID } }, stores);
     const removeIssue = removeFocusedObject.ok ? undefined : removeFocusedObject.issueDetails?.[0];
     assertAcceptance(removeIssue?.code === "focus-target-in-use", "删除被跟拍对象未被结构化拒绝");
-    stores.ui.setStage(WORKSPACE_STAGE.OUTPUT);
+    dispatch(stores, EnterPresentationCommand.TYPE, {});
     verifyMotionAcceptance(stores);
 }
 
@@ -138,7 +138,10 @@ const meta: Meta<typeof DirectorDesk> = {
 export default meta;
 type Story = StoryObj<typeof DirectorDesk>;
 
-/** 双机位独立 Bézier 运镜在单一 Program 输出轨硬切；Storybook 人工走查路径、时间与自由编辑视口边界。 */
+/**
+ * 双机位独立 Bézier 运镜在单一 Program 输出轨硬切;
+ * 播种末尾进入全屏预览(Program 接管视口相机),走查硬切时机与路径,Esc 退出回编辑态。
+ */
 export const 双机位Program运镜验收: Story = {
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>

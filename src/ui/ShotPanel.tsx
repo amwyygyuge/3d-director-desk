@@ -10,7 +10,6 @@ import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import TextField from "@mui/material/TextField";
@@ -31,7 +30,6 @@ import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
-const OVERLAY_MAX_SIZE = "calc(100% - 24px)";
 const ROW_ACTIONS_PADDING = 10;
 const ROW_ACTIONS_GAP = 0.25;
 const SNACKBAR_DURATION_MS = 4000;
@@ -105,12 +103,8 @@ interface SaveCurrentViewControlProps {
     onSave: () => void;
 }
 
-interface ShotPanelProps {
-    readonly motionPreviewVisible: boolean;
-    readonly onMotionPreviewVisibleChange: (visible: boolean) => void;
-}
 
-/** 机位面板(左下):机位 CRUD、当前视角存机位与景别预设。 */
+/** 机位与运镜飞出面板:机位 CRUD、当前视角存机位与景别预设。 */
 const ShotList = observer(function ShotList() {
     const stores = useDirectorDeskStores();
     const { camera, dispatcher, selection } = stores;
@@ -137,7 +131,7 @@ const ShotList = observer(function ShotList() {
                                         size="small"
                                         edge="end"
                                         color={active ? "primary" : "default"}
-                                        aria-label={active ? `回导演视角 ${id}` : `掌镜 ${id}`}
+                                        aria-label={active ? `切换至自由视角 ${id}` : `切换至机位视图 ${id}`}
                                         onClick={() =>
                                             dispatcher.dispatch(
                                                 {
@@ -166,7 +160,7 @@ const ShotList = observer(function ShotList() {
                                 onClick={() => selection.select(id)}
                                 sx={{ pr: ROW_ACTIONS_PADDING }}
                             >
-                                <ListItemText primary={id} secondary={active ? "掌镜中" : undefined} />
+                                <ListItemText primary={id} secondary={active ? "机位视图中" : undefined} />
                             </ListItemButton>
                         </ListItem>
                     );
@@ -202,7 +196,7 @@ const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
                     color="text.secondary"
                     sx={{ display: "block", mt: STATUS_TEXT_MARGIN_TOP }}
                 >
-                    暂无可保存的导演视角
+                    暂无可保存的自由视角
                 </Typography>
             )}
         </>
@@ -210,19 +204,13 @@ const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
 });
 
 interface MotionSectionProps {
-    readonly previewVisible: boolean;
-    readonly onPreviewVisibleChange: (visible: boolean) => void;
     readonly onNotice: (message: string) => void;
 }
 
-/** Motion authoring starts from a selected static camera and a settled free editor view. */
-const MotionSection = observer(function MotionSection({
-    previewVisible,
-    onPreviewVisibleChange,
-    onNotice,
-}: MotionSectionProps) {
+/** 运镜从已选静态机位与稳定自由视角开始,避免将未稳定的编辑姿势写入路径。 */
+const MotionSection = observer(function MotionSection({ onNotice }: MotionSectionProps) {
     const stores = useDirectorDeskStores();
-    const { camera, clock, dispatcher, motion, scene, selection, timeline } = stores;
+    const { camera, clock, dispatcher, layout, motion, scene, selection, timeline } = stores;
     const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
     const selectedCameraId = selection.primaryId;
     const selectedShot = selectedCameraId ? camera.director.getShot(selectedCameraId) : undefined;
@@ -298,17 +286,17 @@ const MotionSection = observer(function MotionSection({
             </Button>
             {!canCreateMotion && (
                 <Typography id="director-desk-motion-create-status" role="status" variant="caption" color="text.secondary">
-                    选择机位，暂停播放后在自由视口确定终点
+                    选择机位，暂停播放后在自由视角确定终点
                 </Typography>
             )}
             <Button
                 size="small"
                 fullWidth
                 sx={{ mt: 0.5 }}
-                aria-pressed={previewVisible}
-                onClick={() => onPreviewVisibleChange(!previewVisible)}
+                aria-pressed={layout.motionPathPreviewVisible}
+                onClick={() => layout.setMotionPathPreviewVisible(!layout.motionPathPreviewVisible)}
             >
-                {previewVisible ? "隐藏运镜路径" : "显示运镜路径"}
+                {layout.motionPathPreviewVisible ? "隐藏运镜路径" : "显示运镜路径"}
             </Button>
             {motion.clips.map((clip) => (
                 <Box
@@ -462,10 +450,7 @@ const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSize
     );
 });
 
-export const ShotPanel = observer(function ShotPanel({
-    motionPreviewVisible,
-    onMotionPreviewVisibleChange,
-}: ShotPanelProps) {
+export const ShotPanel = observer(function ShotPanel() {
     const stores = useDirectorDeskStores();
     const { camera, dispatcher } = stores;
     const [notice, setNotice] = useState<string | null>(null);
@@ -489,27 +474,13 @@ export const ShotPanel = observer(function ShotPanel({
     };
 
     return (
-        <Paper
-            elevation={2}
-            sx={{
-                width: "100%",
-                maxWidth: OVERLAY_MAX_SIZE,
-                maxHeight: OVERLAY_MAX_SIZE,
-                overflowY: "auto",
-                p: 1.5,
-                zIndex: 1,
-            }}
-        >
+        <Box sx={{ p: 1.5 }}>
             <ShotList />
             <SaveCurrentViewControl available={canSaveCurrentView} onSave={saveCurrentView} />
             <Divider sx={{ my: PANEL_SECTION_GAP }} />
             <ShotSizeControl onNotice={setNotice} />
             <Divider sx={{ my: PANEL_SECTION_GAP }} />
-            <MotionSection
-                previewVisible={motionPreviewVisible}
-                onPreviewVisibleChange={onMotionPreviewVisibleChange}
-                onNotice={setNotice}
-            />
+            <MotionSection onNotice={setNotice} />
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={SNACKBAR_DURATION_MS}
@@ -517,6 +488,6 @@ export const ShotPanel = observer(function ShotPanel({
                 message={notice}
                 anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
             />
-        </Paper>
+        </Box>
     );
 });

@@ -70,6 +70,7 @@ export {
 } from "./command/captureCommands";
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "./command/documentCommands";
 export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "./document/DeskDocument";
+export { DocumentImportService } from "./document/DocumentImportService";
 export { AssetCatalog } from "./assets/catalog/AssetCatalog";
 export { BuiltinAssetProvider } from "./assets/catalog/AssetProvider";
 export type { AssetProvider } from "./assets/catalog/AssetProvider";
@@ -183,6 +184,10 @@ export { SceneStore } from "./store/SceneStore";
 export { SelectionStore } from "./store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "./store/UiStore";
 export { TimelineStore } from "./store/TimelineStore";
+export { WorkbenchLayoutStore } from "./store/WorkbenchLayoutStore";
+export { RAIL_SECTION, RAIL_SECTION_DEFS, RAIL_SECTION_ORDER } from "./workspace/railSections";
+export type { RailSection, RailSectionDef } from "./workspace/railSections";
+export { EnterPresentationCommand, ExitPresentationCommand } from "./command/presentationCommands";
 export type { GizmoMode } from "./store/UiStore";
 export { ShortcutChord } from "./shortcuts/ShortcutChord";
 export { ShortcutRegistry } from "./shortcuts/ShortcutRegistry";

@@ -35,6 +35,10 @@ export class AnimationBinder {
         mixer.stopAllAction();
         this.mixers.delete(objectId);
     }
+    /** 切换工程时释放全部 mixer，但保留每桌共享时钟绑定。 */
+    clear(): void {
+        for (const id of [...this.mixers.keys()]) this.unmount(id);
+    }
 
     /** 时间轴定位:把所有已挂载动作钉到绝对时间(订阅回调,逐帧调用须零分配) */
     setTime(timeSeconds: number): void {
@@ -54,7 +58,7 @@ export class AnimationBinder {
         return this.mixers.size === 0;
     }
     dispose(): void {
+        this.clear();
         this.transport = null;
-        for (const id of [...this.mixers.keys()]) this.unmount(id);
     }
 }

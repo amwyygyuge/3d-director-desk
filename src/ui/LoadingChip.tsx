@@ -8,7 +8,6 @@ import { observer } from "mobx-react-lite";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const EMPTY_LOADING_COUNT = 0;
-const LOADING_CHIP_ELEVATION = 2;
 const LOADING_ITEM_SPACING = 1;
 const PROGRESS_PERCENT_SCALE = 100;
 
@@ -19,8 +18,8 @@ export const LoadingChip = observer(function LoadingChip() {
 
     return (
         <Paper
-            elevation={LOADING_CHIP_ELEVATION}
-            className="absolute bottom-3 left-1/2 z-[1] max-h-[calc(100%-1.5rem)] w-72 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-y-auto px-3 py-2"
+            variant="panel"
+            className="absolute bottom-[88px] left-1/2 z-[1] max-h-[calc(100%-9rem)] w-72 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-y-auto px-3 py-2"
         >
             <Stack spacing={LOADING_ITEM_SPACING}>
                 {Array.from(ui.loading, ([label, progress01]) => {

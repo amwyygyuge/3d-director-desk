@@ -44,7 +44,7 @@ classDiagram
 1. `AssetLibrary.register({ name, url, format, sizeBytes })` 注册纯数据资产，并基于返回的 `duplicate` 决定是否回收新建 object URL。
 2. `ModelImporter.acquire(url, format, { signal, onProgress })` 负责格式查表、并发复用和取消；渲染或动作消费者完成后必须调用 handle 的 `release()`。
 3. `object.place` 命令为模型提供 `sourceUrl`、`format`、`name` 与初始 transform；命令验证后将对象加入场景。
-4. 工具条「导入模型」:文件选择 → `URL.createObjectURL` → 资产注册 → `object.place` 命令。
+4. 项目药丸菜单「导入模型文件」:文件选择 → `URL.createObjectURL` → 资产注册 → `object.place` 命令。
 5. 加载纪律:异步不阻塞交互；组件卸载或请求被替换时用 `AbortSignal` 取消；最后一个消费者释放 handle 后回收 three 资源。
 6. playground 走查:导入 `public/test-assets` 的测试 GLB/FBX；这些 Storybook 验收资产不属于发布产物。
 

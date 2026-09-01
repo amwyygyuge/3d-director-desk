@@ -18,6 +18,10 @@ export class TimelineStore {
     get document(): TimelineDoc {
         return this.currentDocument;
     }
+    /** 文档导入专用：替换整个不可变时间轴，而非在旧文档上合并轨道。 */
+    replaceDocument(document: TimelineDoc): void {
+        this.currentDocument = document;
+    }
 
     setDuration(duration: number): void {
         this.currentDocument = this.currentDocument.withDuration(duration);

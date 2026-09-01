@@ -455,6 +455,33 @@ class TimelineDocumentQuery implements DirectorQuery<Record<string, never>> {
     }
 }
 
+const TRANSFORM_TRACK_PREFIX = "transform-";
+const TRANSFORM_KEY_PREFIX = "key-";
+
+/**
+ * 在当前 playhead 把实体权威变换固化为关键帧的命令信封。
+ *
+ * 由 Inspector 按钮与 K 快捷键共用(Rule of Two):轨道 id 约定与 keyframe 装配
+ * 只在这里出现一次,任何一方改动都不会与另一方分叉。
+ */
+export function transformKeyCommandFor(ctx: DirectorContext, objectId: string): SerializedCommand | null {
+    const entity = ctx.scene.manager.getEntity(objectId);
+    if (!entity) return null;
+    return {
+        type: AddTimelineKeyCommand.TYPE,
+        payload: {
+            trackId: `${TRANSFORM_TRACK_PREFIX}${entity.id}`,
+            targetId: entity.id,
+            keyframe: {
+                id: `${TRANSFORM_KEY_PREFIX}${crypto.randomUUID()}`,
+                time: ctx.clock.time,
+                value: entity.transform,
+                easing: TIMELINE_EASING.LINEAR,
+            },
+        },
+    };
+}
+
 function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
     return { type, version: TIMELINE_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.timeline-v1" };
 }

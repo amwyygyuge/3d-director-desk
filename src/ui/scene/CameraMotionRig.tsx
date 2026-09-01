@@ -7,7 +7,6 @@ import type { CameraMotionSink } from "../../camera/CameraMotionSampler";
 import type { CameraMotionSample } from "../../camera/CameraMotionClip";
 import type { OrbitLike } from "../../navigation/orbit";
 import { useOrbitControls } from "../../navigation/orbit";
-import { WORKSPACE_STAGE } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 /** Runtime owner for temporary Program output poses. Editor camera values are restored on output exit. */
@@ -74,10 +73,13 @@ class CameraMotionRuntimeSink implements CameraMotionSink {
     }
 }
 
-/** Binds Program playback only in the output workspace; camera and motion authoring retain a free editor viewport. */
+/**
+ * Program 输出只在全屏预览期接管视口相机;编辑期(含运镜编排)始终保留自由编辑视角。
+ * 预览退出时 restoreCameraMotion 把编辑相机的位姿放回去。
+ */
 export const CameraMotionRig = observer(function CameraMotionRig() {
-    const { playback, ui } = useDirectorDeskStores();
-    const isProgramOutput = ui.stage === WORKSPACE_STAGE.OUTPUT;
+    const { layout, playback } = useDirectorDeskStores();
+    const isProgramOutput = layout.presentationMode;
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const sinkRef = useRef<CameraMotionRuntimeSink | null>(null);

@@ -16,6 +16,7 @@ import { FrameRateMonitor } from "../core/FrameRateMonitor";
 import { CommandDispatcher } from "../command/CommandDispatcher";
 import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "../command/commands";
 import { CommandHistory } from "../command/CommandHistory";
+import { DocumentImportService } from "../document/DocumentImportService";
 import { ModelImporter } from "../loaders/ModelImporter";
 import { ShortcutRegistry } from "../shortcuts/ShortcutRegistry";
 import { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
@@ -24,6 +25,8 @@ import { CameraStore } from "../store/CameraStore";
 import { CameraMotionStore } from "../store/CameraMotionStore";
 import { SceneStore } from "../store/SceneStore";
 import { SelectionStore } from "../store/SelectionStore";
+import { WorkbenchLayoutStore } from "../store/WorkbenchLayoutStore";
+import { PlayheadDisplay } from "./PlayheadDisplay";
 import { UiStore } from "../store/UiStore";
 import { TimelineStore } from "../store/TimelineStore";
 import { PlaybackCoordinator } from "../timeline/PlaybackCoordinator";
@@ -90,6 +93,10 @@ export interface DirectorDeskStores {
     models: ModelImporter;
     /** gizmo 模式等纯界面状态 */
     ui: UiStore;
+    /** 悬浮壳层编排态(左栏抽屉、时间线钉住、预览模式) */
+    layout: WorkbenchLayoutStore;
+    /** playhead 的低频显示值:全桌唯一一份,避免多个面板各挂一条帧级 reaction */
+    playheadDisplay: PlayheadDisplay;
     /** 快捷键注册表(机制层;语义在 shortcuts/builtinShortcuts) */
     shortcuts: ShortcutRegistry<DirectorDeskStores>;
     /** 宿主适配器:注入直嵌适配器，或由 hostBridge 配置可信 postMessage；无配置时惰性无通信 */
@@ -106,6 +113,8 @@ export interface DirectorDeskStores {
     skeletons: SkeletonRuntimeRegistry;
     /** 静态预设姿势的地面贴合运行时服务；输出仍经命令写回 Transform。 */
     poseGrounding: PoseGroundingService;
+    /** 工程快照替换应用服务：管理候选聚合提交与动作恢复取消域。 */
+    documentImports: DocumentImportService;
     /** 生命周期守卫与异步工作取消域 */
     lifecycle: DeskLifecycleGuard;
 }
@@ -115,6 +124,8 @@ export function createDirectorDeskStores(options?: {
     hostBridge?: HostBridgeConfiguration | undefined;
     /** 宿主注入的资源 provider(直嵌形态);内置资源始终加载 */
     assetProviders?: readonly AssetProvider[] | undefined;
+    /** 运镜轨迹预览的初始可见性(Storybook/宿主播种) */
+    motionPathPreviewVisible?: boolean | undefined;
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
@@ -137,6 +148,7 @@ export function createDirectorDeskStores(options?: {
     const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera, binder, skeletons);
     const catalog = new AssetCatalog();
     const lifecycle = new DeskLifecycleGuard();
+    const documentImports = new DocumentImportService();
     // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
     void catalog.loadProvider(new BuiltinAssetProvider(), "builtin", lifecycle.signal);
     for (const provider of options?.assetProviders ?? []) {
@@ -156,6 +168,8 @@ export function createDirectorDeskStores(options?: {
         assets: new AssetLibrary(),
         models: new ModelImporter(),
         ui: new UiStore(),
+        layout: new WorkbenchLayoutStore({ motionPathPreviewVisible: options?.motionPathPreviewVisible }),
+        playheadDisplay: new PlayheadDisplay(clock),
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,
         history,
@@ -166,6 +180,7 @@ export function createDirectorDeskStores(options?: {
         actionPreview,
         catalog,
         lifecycle,
+        documentImports,
     };
 }
 

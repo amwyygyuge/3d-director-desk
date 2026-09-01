@@ -12,7 +12,7 @@ function fileToSource(file: File, notify: (message: string) => void): { url: str
     return { url: URL.createObjectURL(file), format };
 }
 
-/** 黄金角螺旋落位(与 Toolbar 放置共用语义);index 为当前对象数 */
+/** 黄金角螺旋落位(资源库放置与本地导入共用语义);index 为当前对象数 */
 const GOLDEN_ANGLE_RAD = Math.PI * (3 - Math.sqrt(5));
 const PLACEMENT_SPREAD = 1.5;
 const OBJECT_BASE_HEIGHT = 0.5;

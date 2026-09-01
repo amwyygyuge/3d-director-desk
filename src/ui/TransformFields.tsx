@@ -3,9 +3,11 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { type KeyboardEvent, useState } from "react";
-
+import type { CommandResult } from "../command/DirectorCommand";
 import type { Transform, Vec3 } from "../core/SceneObject";
+import type { DirectorDeskStores } from "./DirectorDeskContext";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
+import { MONO_FONT_STACK } from "./theme";
 
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
@@ -14,8 +16,18 @@ const AXIS_Y = 1;
 const AXIS_Z = 2;
 const DISPLAY_DECIMAL_PLACES = 4;
 const FIELD_GROUP_GAP = 0.75;
+const INSPECTOR_FIELD_RADIUS = 1;
+const INSPECTOR_FIELD_PADDING = 1;
 const FIELD_COLUMN_GAP = 0.5;
 const FIELD_GRID_TEMPLATE = "32px repeat(3, 1fr)";
+
+/** 检查器所有字段组共享深色内嵌表面，避免各分区视觉漂移。 */
+export const INSPECTOR_FIELD_SX = {
+    bgcolor: "rgba(0,0,0,0.22)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    borderRadius: INSPECTOR_FIELD_RADIUS,
+    p: INSPECTOR_FIELD_PADDING,
+} as const;
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type TransformKey = keyof Transform;
@@ -64,6 +76,11 @@ function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     }
 }
 
+function reportCommandFailure({ stores, result }: { readonly stores: DirectorDeskStores; readonly result: CommandResult }): void {
+    if (result.ok) return;
+    stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+}
+
 const TransformField = observer(function TransformField({ axisLabel, label, value, onCommit }: TransformFieldProps) {
     const [inputValue, setInputValue] = useState(() => formatValue(value));
 
@@ -94,6 +111,7 @@ const TransformField = observer(function TransformField({ axisLabel, label, valu
             onBlur={commit}
             onChange={(event) => setInputValue(event.target.value)}
             onKeyDown={handleKeyDown}
+            sx={{ "& .MuiInputBase-input": { fontFamily: MONO_FONT_STACK } }}
         />
     );
 });
@@ -121,7 +139,8 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
                     : currentTransform.rotation,
             scale: key === "scale" ? replaceAxis(currentTransform.scale, axis, storedValue) : currentTransform.scale,
         };
-        dispatcher.dispatch({ type: "object.move", payload: { id: objectId, transform } }, stores);
+        const result = dispatcher.dispatch({ type: "object.move", payload: { id: objectId, transform } }, stores);
+        reportCommandFailure({ stores, result });
     };
 
     return (
@@ -136,7 +155,7 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
                         alignItems: "center",
                     }}
                 >
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="overline" color="text.secondary">
                         {group.label}
                     </Typography>
                     {AXES.map((axis) => {

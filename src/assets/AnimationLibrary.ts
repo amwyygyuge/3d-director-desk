@@ -35,11 +35,15 @@ export class AnimationLibrary {
     getClip(actionId: string): AnimationClip | undefined {
         return this.clips.get(actionId);
     }
-
-    /** 卸载时回收动作文件创建的 blob URL */
-    dispose(): void {
+    /** 切换工程时释放当前动作仓储，避免旧动作条目与运行时 clip 残留。 */
+    clear(): void {
         for (const action of this.actions) URL.revokeObjectURL(action.url);
         this.actions.length = 0;
         this.clips.clear();
+    }
+
+    /** 卸载时回收动作文件创建的 blob URL */
+    dispose(): void {
+        this.clear();
     }
 }

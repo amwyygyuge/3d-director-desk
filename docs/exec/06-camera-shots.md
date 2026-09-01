@@ -40,7 +40,7 @@ classDiagram
 2. 命令:`camera.activate` / `camera.deactivate`;`camera.set-shot` 基建已有。
 3. 机位面板(shadcn):机位列表(选中/删除)、「当前视角存为机位」(读相机当前 pose → CameraShot)、景别下拉 + FOV 滑杆。
 4. 机位视角渲染:激活时相机写死 shot 参数;叠加画幅框/三分网格 overlay。
-5. 工具条双视角切换按钮(导演/机位)。
+5. 视口药丸双视角切换按钮(机位视图/自由视角)。
 
 ## 验收清单
 

@@ -22,6 +22,11 @@ export class CameraDirector {
     addShot(id: string, shot: CameraShot): void {
         this.shots.set(id, shot);
     }
+    /** 文档导入专用：替换整个机位聚合并退出旧掌镜态。 */
+    replaceShots(shots: readonly [string, CameraShot][]): void {
+        this.currentActiveId = null;
+        this.shots.replace(shots);
+    }
     getShot(id: string): CameraShot | undefined {
         return this.shots.get(id);
     }

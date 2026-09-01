@@ -27,6 +27,7 @@ import { registerTimelineCommands, RestoreTimelineTracksCommand } from "./timeli
 import { registerCameraMotionCommands } from "./cameraMotionCommands";
 import { registerAssetCatalogCommands } from "./assetCatalogCommands";
 import { registerDocumentCommands } from "./documentCommands";
+import { registerPresentationCommands } from "./presentationCommands";
 import { DirectorCommand } from "./DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
 
@@ -362,5 +363,6 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerCameraMotionCommands(dispatcher);
     registerPoseCommands(dispatcher);
     registerDocumentCommands(dispatcher);
+    registerPresentationCommands(dispatcher);
     registerAssetCatalogCommands(dispatcher);
 }

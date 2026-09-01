@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>方案一：经典控制台 (Classic Studio)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #111; background-image: radial-gradient(circle at center, #222 0%, #000 100%); }
+        .glass { background: rgba(24, 24, 27, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden text-gray-200 font-sans relative select-none">
+
+    <!-- 伪3D视图背景 -->
+    <div class="absolute inset-x-8 inset-y-16 flex items-center justify-center border border-dashed border-gray-700/50 rounded-3xl">
+        <span class="text-gray-600 text-2xl font-light">3D 视口渲染区</span>
+    </div>
+
+    <!-- 左上角：全局/项目信息 -->
+    <div class="absolute top-4 left-4 glass rounded-xl px-4 py-2 flex items-center gap-3">
+        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+        <span class="font-medium text-sm">Main Scene</span>
+    </div>
+
+    <!-- 中间上面：视角选项 (透明悬浮工具栏) -->
+    <div class="absolute top-4 left-1/2 -translate-x-1/2 glass rounded-full px-2 py-1 flex items-center gap-1 z-10">
+        <button class="px-4 py-1.5 text-xs font-medium rounded-full bg-white/10 hover:bg-white/20 transition">主相机 (Render)</button>
+        <button class="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition">透视视角 (Free)</button>
+        <div class="w-px h-4 bg-gray-600 mx-1"></div>
+        <button class="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition">线框模式</button>
+        <button class="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition">光照模式</button>
+    </div>
+
+    <!-- 右上角：Undo/Redo & 输出 -->
+    <div class="absolute top-4 right-4 flex gap-2 z-10">
+        <div class="glass rounded-full flex items-center p-1">
+            <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400" title="Undo">↶</button>
+            <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400" title="Redo">↷</button>
+        </div>
+        <button class="glass rounded-full px-4 py-2 text-xs font-medium hover:bg-white/10 flex items-center gap-2">
+            <span>📷</span> 截图
+        </button>
+        <button class="glass rounded-full px-6 py-2 text-xs font-semibold bg-blue-600/80 hover:bg-blue-600 border-blue-500/50 text-white flex items-center gap-2">
+            <span>▶</span> 预览
+        </button>
+    </div>
+
+    <!-- 左侧靠边：大纲树与资产库 -->
+    <div class="absolute top-20 left-4 bottom-56 w-64 glass rounded-2xl flex flex-col z-10">
+        <div class="p-3 border-b border-white/10 flex gap-2">
+            <button class="flex-1 text-xs py-1 bg-white/10 rounded">图层大纲</button>
+            <button class="flex-1 text-xs py-1 hover:bg-white/5 text-gray-400 rounded">资产库</button>
+        </div>
+        <div class="flex-1 p-3 overflow-y-auto space-y-2 text-sm">
+            <div class="text-gray-400 text-xs mb-2">Cameras (机位)</div>
+            <div class="pl-2 border-l border-gray-600 py-1 text-blue-400 cursor-pointer">▪ 主摄像机01</div>
+            <div class="pl-2 border-l border-gray-600 py-1 hover:bg-white/5 cursor-pointer">▪ 特写机位02</div>
+            
+            <div class="text-gray-400 text-xs mt-4 mb-2">Models (模型)</div>
+            <div class="pl-2 border-l border-gray-600 py-1 hover:bg-white/5 cursor-pointer">▪ 主角_A</div>
+            <div class="pl-2 border-l border-gray-600 py-1 hover:bg-white/5 cursor-pointer">▪ 场景_街道</div>
+
+            <div class="text-gray-400 text-xs mt-4 mb-2">Lights (灯光)</div>
+            <div class="pl-2 border-l border-gray-600 py-1 hover:bg-white/5 cursor-pointer">▪ 主光源 (聚光)</div>
+        </div>
+        <div class="p-3 border-t border-white/10">
+            <button class="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs">+ 添加对象</button>
+        </div>
+    </div>
+
+    <!-- 右侧靠边：上下文属性面板 (Inspector) -->
+    <div class="absolute top-20 right-4 bottom-56 w-72 glass rounded-2xl flex flex-col z-10">
+        <div class="p-3 border-b border-white/10">
+            <div class="text-sm font-semibold">主摄像机01</div>
+            <div class="text-xs text-gray-400">相机属性</div>
+        </div>
+        <div class="flex-1 p-4 space-y-4 overflow-y-auto">
+            <!-- 变换属性 -->
+            <div>
+                <div class="text-xs text-gray-400 mb-2">Transform</div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-black/30 rounded p-1.5 text-xs text-center border border-white/5">X: 1.2</div>
+                    <div class="bg-black/30 rounded p-1.5 text-xs text-center border border-white/5">Y: 5.0</div>
+                    <div class="bg-black/30 rounded p-1.5 text-xs text-center border border-white/5">Z: -3.5</div>
+                </div>
+            </div>
+            <!-- 当选中相机时的特有属性 -->
+            <div class="pt-4 border-t border-white/10">
+                <div class="text-xs text-gray-400 mb-2">Camera Lens</div>
+                <div class="bg-black/30 rounded p-2 text-xs border border-white/5 flex justify-between items-center">
+                    <span>FOV (视野)</span>
+                    <span class="text-blue-400">45°</span>
+                </div>
+                <div class="mt-2 text-xs flex gap-2">
+                    <button class="flex-1 py-1.5 bg-white/5 rounded">设定寻像器</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 下方靠边：动作与时间线编排区 -->
+    <div class="absolute bottom-4 left-4 right-4 h-48 glass rounded-2xl flex flex-col z-10">
+        <div class="px-4 py-2 border-b border-white/10 flex justify-between items-center">
+            <div class="flex gap-4 items-center">
+                <button class="w-8 h-8 rounded-full bg-white text-black pl-1 flex items-center justify-center active:scale-95">▶</button>
+                <span class="text-xl font-mono">00:04:12</span>
+            </div>
+            <div class="flex gap-2 text-xs">
+                <button class="px-3 py-1 bg-white/10 rounded">动作片段(Action)</button>
+                <button class="px-3 py-1 bg-white/10 rounded text-blue-400">运镜轨迹(Camera)</button>
+            </div>
+        </div>
+        <div class="flex-1 relative bg-black/20 p-2 overflow-hidden flex flex-col gap-1">
+            <!-- 时间标尺 -->
+            <div class="h-6 border-b border-white/10 flex text-[10px] text-gray-500 mb-2">
+                <div class="flex-1 relative"><span class="absolute left-0">0s</span><span class="absolute left-1/4">1s</span><span class="absolute left-1/2">2s</span><span class="absolute left-3/4">3s</span></div>
+            </div>
+            <!-- 轨道示例 1 -->
+            <div class="h-8 bg-white/5 rounded flex items-center relative">
+                <div class="w-24 px-2 text-xs text-gray-400 border-r border-white/10">主摄像机01</div>
+                <!-- 关键帧节点 (运镜) -->
+                <div class="absolute left-32 w-2 h-2 rotate-45 bg-amber-400 cursor-pointer"></div>
+                <div class="absolute left-[30%] h-0.5 w-[20%] bg-amber-400/30"></div>
+                <div class="absolute left-[50%] w-2 h-2 rotate-45 bg-amber-400 cursor-pointer"></div>
+            </div>
+            <!-- 轨道示例 2 -->
+            <div class="h-8 bg-white/5 rounded flex items-center relative mt-1">
+                <div class="w-24 px-2 text-xs text-gray-400 border-r border-white/10">主角_A</div>
+                <!-- 动作片段 -->
+                <div class="absolute left-64 w-40 h-5 bg-blue-500/50 rounded flex items-center px-2 text-[10px] border border-blue-500">Walk_Cycle</div>
+            </div>
+            <!-- 播放头 -->
+            <div class="absolute top-0 bottom-0 left-[35%] w-px bg-red-500 z-20 pointer-events-none">
+                <div class="w-3 h-3 -mt-1.5 -ml-1.5 rounded-full bg-red-500"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

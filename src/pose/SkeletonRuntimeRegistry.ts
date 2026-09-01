@@ -148,10 +148,14 @@ export class SkeletonRuntimeRegistry {
         }
         return helpers;
     }
-
-    dispose(): void {
+    /** 工程替换时释放旧模型骨骼索引；新模型就绪后会重新注册。 */
+    clear(): void {
         this.runtimes.clear();
         this.indexedRuntimes.length = 0;
+    }
+
+    dispose(): void {
+        this.clear();
     }
 
     private restoreRuntimeRotations(runtime: SkeletonRuntime): void {

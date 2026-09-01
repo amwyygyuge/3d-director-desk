@@ -9,7 +9,6 @@ import type { LightParams, LightType } from "../../core/LightParams";
 import type { SceneObject } from "../../core/SceneObject";
 import type { ModelHandle } from "../../loaders/ModelImporter";
 import { measureModelBox } from "../../core/measureModelBox";
-import { STAGE_DEFS } from "../../workspace/stages";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 
 
@@ -66,9 +65,9 @@ const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
     color,
     scene,
 }: SceneLightHelperRootProps) {
-    const { selection, ui } = useDirectorDeskStores();
-    // 阶段透镜:灯光标记只在布景阶段显示(打灯已并入布景)
-    if (!STAGE_DEFS[ui.stage].helpers.lightHelpers) return null;
+    const { layout, selection } = useDirectorDeskStores();
+    // 灯光标记属编辑期辅助物:全屏预览时画面只留成片内容
+    if (!layout.authoringVisible) return null;
     return createPortal(
         <group ref={rootRef} userData={{ helper: true }}>
             <mesh

@@ -3,13 +3,13 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
+import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
@@ -25,6 +25,8 @@ const KIND_ICONS: Record<SceneObjectKind, ReactNode> = {
     light: <LightbulbIcon fontSize="small" />,
 };
 
+const OUTLINER_DENSE_ITEM_PADDING_Y = 0.25;
+
 /** 场景大纲(左侧):实体列表、共享选中态与逐项取景/删除。 */
 export const OutlinerPanel = observer(function OutlinerPanel() {
     const stores = useDirectorDeskStores();
@@ -33,16 +35,10 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
     const entities = scene.manager.list();
 
     return (
-        <Paper
-            elevation={0}
-            sx={{
-                p: 1.5,
-            }}
-        >
-            <Typography variant="subtitle2">场景对象({entities.length})</Typography>
+        <Box sx={{ p: 1.5 }}>
             {entities.length === 0 ? (
                 <Typography variant="caption" color="text.secondary">
-                    场景为空,请导入模型
+                    场景为空(0),请导入模型
                 </Typography>
             ) : (
                 <List dense disablePadding aria-label="场景对象">
@@ -87,6 +83,14 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
                                 onClick={(event) =>
                                     selection.select(entity.id, { additive: event.metaKey || event.ctrlKey })
                                 }
+                                sx={{
+                                    py: OUTLINER_DENSE_ITEM_PADDING_Y,
+                                    "&.Mui-selected": {
+                                        bgcolor: "primary.main",
+                                        color: "primary.contrastText",
+                                        "& .MuiListItemIcon-root": { color: "inherit" },
+                                    },
+                                }}
                             >
                                 <ListItemIcon className="min-w-8">{KIND_ICONS[entity.kind]}</ListItemIcon>
                                 <ListItemText
@@ -99,6 +103,6 @@ export const OutlinerPanel = observer(function OutlinerPanel() {
                     ))}
                 </List>
             )}
-        </Paper>
+        </Box>
     );
 });

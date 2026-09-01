@@ -4,13 +4,13 @@ import GestureIcon from "@mui/icons-material/Gesture";
 import GrassIcon from "@mui/icons-material/Grass";
 import PersonIcon from "@mui/icons-material/Person";
 import PetsIcon from "@mui/icons-material/Pets";
+import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
@@ -46,8 +46,7 @@ export const AssetLibraryPanel = observer(function AssetLibraryPanel() {
     };
 
     return (
-        <Paper elevation={0} sx={{ p: 1.5 }}>
-            <Typography variant="subtitle2">资源库({entries.length})</Typography>
+        <Box sx={{ p: 1.5 }}>
             {entries.length === 0 ? (
                 <Typography variant="caption" color="text.secondary">
                     目录为空(内置资源加载失败或宿主未注入)
@@ -90,6 +89,6 @@ export const AssetLibraryPanel = observer(function AssetLibraryPanel() {
                     })}
                 </List>
             )}
-        </Paper>
+        </Box>
     );
 });
