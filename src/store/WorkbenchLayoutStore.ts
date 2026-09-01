@@ -29,8 +29,8 @@ export const RENDER_QUALITY_PROFILES: Record<
 export class WorkbenchLayoutStore {
     /** 左栏当前钉住的二级面板;null = 只剩图标条(hover 展开标签是纯 CSS,不占状态) */
     railSection: RailSection | null = null;
-    /** 底部时间线由把手钉住展开;hover 意图展开属组件局部瞬时态,不入本聚合 */
-    timelinePinned = false;
+    /** 底部时间线展开态:点击把手开合;纯 UI 态,不入文档与撤销栈 */
+    timelineExpanded = false;
     /** 全屏预览:悬浮壳层与场景辅助物一并隐去,Program 输出接管视口相机 */
     presentationMode = false;
     /** 渲染画质档:高性能 */
@@ -63,10 +63,9 @@ export class WorkbenchLayoutStore {
         this.renderQuality = quality;
     }
 
-    toggleTimelinePin(): void {
-        this.timelinePinned = !this.timelinePinned;
+    toggleTimelineExpanded(): void {
+        this.timelineExpanded = !this.timelineExpanded;
     }
-
 
     /** 仅供 presentation 命令调用:UI 与 AI 都经命令层进出预览,不直写本字段 */
     setPresentationMode(active: boolean): void {

@@ -10,9 +10,11 @@ import { createTheme } from "@mui/material/styles";
  * 240 次全尺寸模糊。改用不透明底色后这项开销归零,画布重绘不再牵动壳层合成。
  * 阴影也压到贴边的小半径——大半径 box-shadow 同样按层重绘计价。
  */
+/** 面板圆角对外可见:通栏停靠壳层(时间线控制台)只保留上侧两角时需要引用同一半径 */
+export const SURFACE_PANEL_RADIUS_PX = 14;
 const SURFACE = {
     pill: { background: "#1e1f22", radius: 9999 },
-    panel: { background: "#161719", radius: 14 },
+    panel: { background: "#161719", radius: SURFACE_PANEL_RADIUS_PX },
     shadow: "0 2px 8px rgba(0,0,0,.55)",
 } as const;
 /** 描边宽度对外可见:壳层做像素级对齐(如左栏图标列宽)时必须把它算进去 */

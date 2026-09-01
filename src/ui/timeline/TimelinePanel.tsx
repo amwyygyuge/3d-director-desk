@@ -34,7 +34,8 @@ const RULER_DECIMAL_PRECISION = [
 const ZOOM_IN_FACTOR = 0.8;
 const ZOOM_OUT_FACTOR = 1.25;
 const TRACK_HEADER_BACKGROUND = "rgba(0,0,0,0.3)";
-const TRACK_GRID_BACKGROUND = "repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px)";
+const TRACK_GRID_BACKGROUND =
+    "repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px)";
 const TRACK_BORDER_COLOR = "divider";
 
 type TransformKeySelection = { readonly trackId: string; readonly keyframeId: string };
@@ -54,11 +55,15 @@ function timePercent(viewport: TimelineViewport, timeSeconds: number): string {
 
 function rulerTickStep(viewport: TimelineViewport): number {
     const targetStep = viewport.visibleSeconds / RULER_TARGET_TICK_COUNT;
-    return RULER_TICK_STEPS_SECONDS.find((step) => step >= targetStep) ?? viewport.visibleSeconds / RULER_MAX_TICK_COUNT;
+    return (
+        RULER_TICK_STEPS_SECONDS.find((step) => step >= targetStep) ?? viewport.visibleSeconds / RULER_MAX_TICK_COUNT
+    );
 }
 
 function rulerDecimalPlaces(stepSeconds: number): number {
-    return RULER_DECIMAL_PRECISION.find((precision) => stepSeconds <= precision.maximumStep)?.places ?? TIME_START_SECONDS;
+    return (
+        RULER_DECIMAL_PRECISION.find((precision) => stepSeconds <= precision.maximumStep)?.places ?? TIME_START_SECONDS
+    );
 }
 
 function rulerTicks(viewport: TimelineViewport): readonly number[] {
@@ -71,8 +76,17 @@ function rulerTicks(viewport: TimelineViewport): readonly number[] {
 function wheelMode(event: WheelEvent<HTMLDivElement>): WheelMode {
     return event.shiftKey ? "pan" : "zoom";
 }
+/** 首末刻度贴边:居中位移会把恰好落在窗口两端的刻度推出去半个字宽 */
+function tickLabelTransform(viewport: TimelineViewport, timeSeconds: number): string {
+    const ratio = viewport.ratioAt(timeSeconds);
+    if (ratio <= TIME_START_SECONDS) return "none";
+    return ratio >= TIME_END_RATIO ? "translateX(-100%)" : "translateX(-50%)";
+}
 
-function reportFailure(stores: DirectorDeskStores, result: { readonly ok: boolean; readonly error?: string; readonly issues?: readonly string[] }): void {
+function reportFailure(
+    stores: DirectorDeskStores,
+    result: { readonly ok: boolean; readonly error?: string; readonly issues?: readonly string[] },
+): void {
     if (result.ok) return;
     stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error ?? "命令执行失败");
 }
@@ -105,10 +119,17 @@ const ProgramCutInButton = observer(function ProgramCutInButton() {
     const playhead = Math.min(stores.playheadDisplay.value, duration);
     const cameraId = stores.selection.primaryId;
     const isShotSelected = cameraId !== null && stores.camera.director.getShot(cameraId) !== undefined;
-    const programRow = stores.timelineLayout.project(viewportFor(stores)).find((row) => row.kind === TIMELINE_ROW_KIND.PROGRAM);
+    const programRow = stores.timelineLayout
+        .project(viewportFor(stores))
+        .find((row) => row.kind === TIMELINE_ROW_KIND.PROGRAM);
     const nextClipStart = programRow?.bars.find((bar) => bar.startSeconds > playhead)?.startSeconds;
     const clipDuration = Math.min(PROGRAM_DEFAULT_DURATION_SECONDS, (nextClipStart ?? duration) - playhead);
-    const canCutIn = isShotSelected && !programRow?.bars.some((bar) => playhead >= bar.startSeconds && playhead <= bar.startSeconds + bar.durationSeconds) && clipDuration > TIME_START_SECONDS;
+    const canCutIn =
+        isShotSelected &&
+        !programRow?.bars.some(
+            (bar) => playhead >= bar.startSeconds && playhead <= bar.startSeconds + bar.durationSeconds,
+        ) &&
+        clipDuration > TIME_START_SECONDS;
     const cutIn = (): void => {
         if (!canCutIn || cameraId === null) return;
         const result = stores.dispatcher.dispatch(
@@ -127,7 +148,11 @@ const ProgramCutInButton = observer(function ProgramCutInButton() {
         );
         reportFailure(stores, result);
     };
-    return <Button startIcon={<VideocamIcon />} disabled={!canCutIn} onClick={cutIn}>切入选中机位</Button>;
+    return (
+        <Button startIcon={<VideocamIcon />} disabled={!canCutIn} onClick={cutIn}>
+            切入选中机位
+        </Button>
+    );
 });
 
 /** 运镜、Program 与 transform 轨共享 TimelineLayout 投影与可缩放可平移窗口。 */
@@ -139,7 +164,9 @@ export const TimelinePanel = observer(function TimelinePanel() {
     const duration = stores.timeline.document.duration;
     const viewport = viewportFor(stores);
     const rows = stores.timelineLayout.project(viewport);
-    const selectedTrack = selectedTransformKey ? stores.timeline.document.track(selectedTransformKey.trackId) : undefined;
+    const selectedTrack = selectedTransformKey
+        ? stores.timeline.document.track(selectedTransformKey.trackId)
+        : undefined;
     const selectedFrame = selectedTransformKey ? selectedTrack?.keyframe(selectedTransformKey.keyframeId) : undefined;
     const selectedProgramClip = selectedProgramClipId ? stores.motion.program.clip(selectedProgramClipId) : undefined;
     const dispatchCommand = (command: { readonly type: string; readonly payload: unknown }): void => {
@@ -157,26 +184,52 @@ export const TimelinePanel = observer(function TimelinePanel() {
     const applyWheel = (event: WheelEvent<HTMLDivElement>): void => {
         const ruler = rulerRef.current;
         if (!ruler) return;
-        event.preventDefault();
+        // 浏览器默认行为由 DirectorDesk 根节点的非 passive 守卫拦截;React onWheel 是 passive,这里 preventDefault 无效
         const bounds = ruler.getBoundingClientRect();
-        const anchorRatio = bounds.width > TIME_START_SECONDS ? Math.min(Math.max((event.clientX - bounds.left) / bounds.width, TIME_START_SECONDS), TIME_END_RATIO) : TIME_START_SECONDS;
+        const anchorRatio =
+            bounds.width > TIME_START_SECONDS
+                ? Math.min(Math.max((event.clientX - bounds.left) / bounds.width, TIME_START_SECONDS), TIME_END_RATIO)
+                : TIME_START_SECONDS;
         const mode = wheelMode(event);
         const nextViewport: Record<WheelMode, TimelineViewport> = {
             pan: viewport.pannedBy(event.deltaY * viewport.secondsPerPixel(bounds.width), duration),
-            zoom: viewport.zoomedAt(event.deltaY > TIME_START_SECONDS ? ZOOM_OUT_FACTOR : ZOOM_IN_FACTOR, anchorRatio, duration),
+            zoom: viewport.zoomedAt(
+                event.deltaY > TIME_START_SECONDS ? ZOOM_OUT_FACTOR : ZOOM_IN_FACTOR,
+                anchorRatio,
+                duration,
+            ),
         };
         stores.motionAuthoring.setTimelineViewport(nextViewport[mode]);
     };
     return (
         <Box aria-label="时间轴" sx={{ height: "100%", display: "flex", flexDirection: "column", p: 1 }}>
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 0.5, borderBottom: 1, borderColor: TRACK_BORDER_COLOR }}>
+            <Box
+                sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    pb: 0.5,
+                    borderBottom: 1,
+                    borderColor: TRACK_BORDER_COLOR,
+                }}
+            >
                 <Typography variant="overline">TIMELINE</Typography>
                 <ProgramCutInButton />
             </Box>
-            <Box onWheel={applyWheel} sx={{ flex: 1, minHeight: TIME_START_SECONDS, overflowY: "auto", overflowX: "auto" }}>
+            <Box
+                onWheel={applyWheel}
+                sx={{ flex: 1, minHeight: TIME_START_SECONDS, overflowY: "auto", overflowX: "auto" }}
+            >
                 <Box sx={{ minWidth: "100%" }}>
                     <Box sx={{ display: "grid", gridTemplateColumns: `${TRACK_LABEL_WIDTH_PX}px minmax(0, 1fr)` }}>
-                        <Box sx={{ height: RULER_HEIGHT_PX, bgcolor: TRACK_HEADER_BACKGROUND, borderRight: 1, borderColor: TRACK_BORDER_COLOR }} />
+                        <Box
+                            sx={{
+                                height: RULER_HEIGHT_PX,
+                                bgcolor: TRACK_HEADER_BACKGROUND,
+                                borderRight: 1,
+                                borderColor: TRACK_BORDER_COLOR,
+                            }}
+                        />
                         <Box
                             ref={rulerRef}
                             role="slider"
@@ -201,7 +254,7 @@ export const TimelinePanel = observer(function TimelinePanel() {
                                     sx={{
                                         position: "absolute",
                                         left: timePercent(viewport, timeSeconds),
-                                        transform: "translateX(-50%)",
+                                        transform: tickLabelTransform(viewport, timeSeconds),
                                         color: "text.secondary",
                                         fontFamily: MONO_FONT_STACK,
                                     }}
@@ -228,11 +281,21 @@ export const TimelinePanel = observer(function TimelinePanel() {
                         <>
                             <Typography variant="caption">关键帧缓动</Typography>
                             {[TIMELINE_EASING.LINEAR, TIMELINE_EASING.SMOOTH].map((easing) => (
-                                <Button key={easing} variant={selectedFrame.easing === easing ? "contained" : "outlined"} onClick={() => setEasing(easing)}>
+                                <Button
+                                    key={easing}
+                                    variant={selectedFrame.easing === easing ? "contained" : "outlined"}
+                                    onClick={() => setEasing(easing)}
+                                >
                                     {easing}
                                 </Button>
                             ))}
-                            <Button size="small" color="error" onClick={() => dispatchCommand({ type: "timeline.remove-key", payload: selectedTransformKey })}>
+                            <Button
+                                size="small"
+                                color="error"
+                                onClick={() =>
+                                    dispatchCommand({ type: "timeline.remove-key", payload: selectedTransformKey })
+                                }
+                            >
                                 删除关键帧
                             </Button>
                         </>
@@ -242,7 +305,10 @@ export const TimelinePanel = observer(function TimelinePanel() {
                             size="small"
                             color="error"
                             onClick={() => {
-                                dispatchCommand({ type: "program.remove-clip", payload: { id: selectedProgramClip.id } });
+                                dispatchCommand({
+                                    type: "program.remove-clip",
+                                    payload: { id: selectedProgramClip.id },
+                                });
                                 setSelectedProgramClipId(null);
                             }}
                         >

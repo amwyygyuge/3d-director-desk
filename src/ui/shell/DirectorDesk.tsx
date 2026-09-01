@@ -113,8 +113,6 @@ export const DirectorDesk = observer(function DirectorDesk({
     const selectedClip = selectedClipId ? stores.motion.clip(selectedClipId) : undefined;
     const selectedKey = selectedClip && selectedKeyId ? selectedClip.key(selectedKeyId) : undefined;
 
-
-
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
         onReady?.(stores);
@@ -139,6 +137,20 @@ export const DirectorDesk = observer(function DirectorDesk({
             });
         };
     }, [stores]);
+
+    // React 18 把 wheel 以 passive 挂在根容器,onWheel 里的 preventDefault 是静默无效调用;
+    // 触控板捏合(ctrl+wheel)因此会穿透成浏览器页面缩放。在导演台根节点用原生非 passive
+    // 监听拦掉缩放手势——只拦 ctrl+wheel,普通滚动与面板的 overflow 滚动不受影响。
+    useEffect(() => {
+        const element = deskRef.current;
+        if (!element) return;
+        const blockPageZoom = (event: WheelEvent): void => {
+            if (event.ctrlKey) event.preventDefault();
+        };
+        element.addEventListener("wheel", blockPageZoom, { passive: false });
+        return () => element.removeEventListener("wheel", blockPageZoom);
+    }, []);
+
     // 宿主入站:import-model → 命令层;ready 握手(adapter 内部决定是否有意义)
     useEffect(() => {
         if (stores.host instanceof PostMessageAdapter) stores.host.activate();
@@ -276,10 +288,14 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 onClick={() => {
                                     if (!selectedClipId || !selectedKeyId) return;
                                     const result = stores.dispatcher.dispatch(
-                                        { type: "motion.remove-key", payload: { clipId: selectedClipId, keyId: selectedKeyId } },
+                                        {
+                                            type: "motion.remove-key",
+                                            payload: { clipId: selectedClipId, keyId: selectedKeyId },
+                                        },
                                         stores,
                                     );
-                                    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+                                    if (!result.ok)
+                                        stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
                                     else stores.motionAuthoring.selectKey(selectedClipId, null);
                                     closeMotionKeyMenu();
                                 }}
@@ -291,10 +307,14 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 onClick={() => {
                                     if (!selectedClipId || !selectedKeyId) return;
                                     const result = stores.dispatcher.dispatch(
-                                        { type: "motion.reset-key-handles", payload: { clipId: selectedClipId, keyId: selectedKeyId } },
+                                        {
+                                            type: "motion.reset-key-handles",
+                                            payload: { clipId: selectedClipId, keyId: selectedKeyId },
+                                        },
                                         stores,
                                     );
-                                    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+                                    if (!result.ok)
+                                        stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
                                     closeMotionKeyMenu();
                                 }}
                             >
@@ -305,10 +325,14 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 onClick={() => {
                                     if (!selectedClip || !selectedKey) return;
                                     const result = stores.dispatcher.dispatch(
-                                        { type: "transport.seek", payload: { timeSeconds: selectedClip.timeAt(selectedKey.progress) } },
+                                        {
+                                            type: "transport.seek",
+                                            payload: { timeSeconds: selectedClip.timeAt(selectedKey.progress) },
+                                        },
                                         stores,
                                     );
-                                    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+                                    if (!result.ok)
+                                        stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
                                     closeMotionKeyMenu();
                                 }}
                             >

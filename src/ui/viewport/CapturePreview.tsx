@@ -3,10 +3,11 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { CHROME } from "@/ui/shell/theme";
 
 /** 最近截图预览角标:点击新窗口打开 blob;证明 capture-produced 产物可用 */
 export const CapturePreview = observer(function CapturePreview() {
-    const { ui } = useDirectorDeskStores();
+    const { layout, ui } = useDirectorDeskStores();
     if (!ui.lastCaptureUrl) return null;
 
     return (
@@ -18,8 +19,10 @@ export const CapturePreview = observer(function CapturePreview() {
             rel="noreferrer"
             sx={{
                 position: "absolute",
-                right: 12,
-                bottom: 12,
+                right: CHROME.edgeGapPx,
+                // 与检查器同一让位规则:骑在通栏时间线控制台上方,随其开合联动
+                bottom:
+                    (layout.timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx,
                 p: 0.5,
                 zIndex: 1,
                 display: "block",

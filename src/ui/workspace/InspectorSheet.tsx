@@ -15,7 +15,6 @@ import { CameraMotionSection } from "@/ui/inspector/MotionClipInspector";
 import { CHROME } from "@/ui/shell/theme";
 
 const INSPECTOR_TOP_PX = 80;
-const INSPECTOR_BOTTOM_PX = 88;
 const HEADER_BACKGROUND = "rgba(0,0,0,0.22)";
 const HEADER_PADDING_X = 1.5;
 const HEADER_PADDING_Y = 1;
@@ -62,7 +61,6 @@ function inspectorContextFor({ stores, primaryId }: InspectorContextLookup): Ins
     return primaryId === null ? null : inspectorSelectionFor({ stores, primaryId });
 }
 
-
 /** 仅在存在选中对象时出现的情境检查器，关闭操作复用全局清选中语义。 */
 export const InspectorSheet = observer(function InspectorSheet() {
     const stores = useDirectorDeskStores();
@@ -78,7 +76,9 @@ export const InspectorSheet = observer(function InspectorSheet() {
             className="pointer-events-auto absolute right-[16px] z-20 flex flex-col"
             sx={{
                 top: INSPECTOR_TOP_PX,
-                bottom: INSPECTOR_BOTTOM_PX,
+                // 下缘骑在时间线控制台上方,随其开合联动;通栏控制台的纵向占地即本面板的让位量
+                bottom:
+                    (layout.timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx,
                 width: CHROME.inspectorWidthPx,
                 overflow: "hidden",
             }}
@@ -105,11 +105,7 @@ export const InspectorSheet = observer(function InspectorSheet() {
                     </Typography>
                 </Box>
                 <Tooltip title={`清除选中 (${formatShortcutHint(SHORTCUT_ID.CLEAR_SELECTION)})`}>
-                    <IconButton
-                        size="small"
-                        aria-label="关闭检查器"
-                        onClick={() => selection.clear()}
-                    >
+                    <IconButton size="small" aria-label="关闭检查器" onClick={() => selection.clear()}>
                         <CloseIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
