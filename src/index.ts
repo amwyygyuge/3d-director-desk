@@ -126,7 +126,7 @@ export {
     SetMotionClipFocusCommand,
     SetMotionClipRangeCommand,
     SetMotionKeyCommand,
-    SetMotionKeyEasingCommand,
+    SetMotionClipEasingCommand,
     SetMotionKeyHandleCommand,
     SetProgramClipCommand,
     SetViewModeCommand,

@@ -20,7 +20,7 @@
 | 输出 | `CameraProgramTrack` | `cameraAt(t)` 同一时刻唯一机位，硬切，允许空隙；`motion.create-take` 默认同步落 Program |
 | 运行时 | `CameraMotionSampler` + `CameraMotionSink` | `bindSink/sampleCurrent/restore`，只写调用方标量，不写 MobX |
 | 定序 | `PlaybackCoordinator` | 单条 `reaction(transport.time)`：`binder → transform → motionSampler → pose → invalidate` |
-| 命令 | `motion.*` / `program.*` | `create-take / create-clip / set-clip-range / set-key / move-key / remove-key / set-key-handle / reset-key-handles / set-key-easing / set-focus / remove-clip / author / preview.enter / preview.exit`，全部持久写入命令可撤销 |
+| 命令 | `motion.*` / `program.*` | `create-take / create-clip / set-clip-range / set-key / move-key / remove-key / set-key-handle / reset-key-handles / set-clip-easing / set-focus / remove-clip / author / preview.enter / preview.exit`，全部持久写入命令可撤销 |
 | 引用完整性 | `RemoveObjectCommand.validateIssues` | 删除被跟拍对象返回 `focus-target-in-use` + `options: freeze-world-point / remove-dependent-focus` |
 
 **P0–P2 的领域、命令和交互面已形成闭环。**
@@ -140,6 +140,7 @@ classDiagram
         +durationSeconds: number
         +keys: CameraKey[]
         +focus: CameraFocusTrack
+        +easing: CameraMotionEasing
         +covers(time) bool
         +withKey(key) CameraMotionClip
         +withoutKey(keyId) CameraMotionClip
@@ -151,7 +152,6 @@ classDiagram
         +position: Vec3
         +target: Vec3
         +fov: number
-        +easingOut: CameraMotionEasing
         +handleMode: "auto" | "manual"
         +inHandle: Vec3
         +outHandle: Vec3
@@ -472,7 +472,7 @@ interface MotionPresetRequest {
 
 - `skills/director-desk/SKILL.md` 以 clip/key 制词汇、`motion.author` 与 `motion.get` 感知结构为准；
 - `listCapabilities()` 覆盖 `object.*`、`camera.set-shot`、`action.*`、`transport.*`、`view.frame`，每项均携带权限与 `appliesWhen`；
-- 片段时间编辑走 `motion.set-clip-range`；关键帧的缓动、位置与手柄分别走 `motion.set-key-easing`、`motion.set-key` 与 `motion.set-key-handle`。
+- 片段时间编辑走 `motion.set-clip-range`；整段时间曲线走 `motion.set-clip-easing`（缓动是整段起落，段间快慢由关键帧 `progress` 分布表达）；关键帧的位置与手柄分别走 `motion.set-key` 与 `motion.set-key-handle`。
 
 新增命令的能力契约（`appliesWhen: "director-desk.camera-motion-v3"`，权限沿用 `motion:edit` / `motion:read`）：
 
@@ -484,7 +484,7 @@ interface MotionPresetRequest {
 | `motion.move-key` | `{clipId, keyId, progress}` | ✅ | progress 唯一且有序 |
 | `motion.remove-key` | `{clipId, keyId}` | ✅ | 剩余 key ≥ 2 |
 | `motion.set-key-handle` / `motion.reset-key-handles` | `{clipId, keyId, ...}` | ✅ | 有限向量；拖手柄切到 manual，重置回 auto |
-| `motion.set-key-easing` | `{clipId, keyId, easing}` | ✅ | easing 为 `linear` 或 `smooth` |
+| `motion.set-clip-easing` | `{id, easing}` | ✅ | easing 为 `linear` 或 `smooth`（整段时间曲线，非逐关键帧） |
 | `motion.set-focus` / `motion.remove-clip` | `{id, target}` / `{id}` | ✅ | focus 可传 `null` 解除覆盖 |
 | `motion.author` | `MotionPresetRequest` | ✅ | 同 create-take + `move` 枚举 + subject 存在 |
 | `motion.preview.enter` / `motion.preview.exit` | `{clipId}` / `{}` | ❌ 瞬态 | clip 存在 |

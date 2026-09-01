@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import { TimelineViewport } from "@/authoring/TimelineViewport";
+import type { ShotSize } from "@/camera/CameraShot";
 import type { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 
 /**
@@ -32,6 +33,16 @@ export class MotionAuthoringStore {
     /** 轨迹辅助物开关:与壳层显隐解耦,掌镜/镜头视角下仍可见 */
     pathVisible: boolean;
     snapEnabled = true;
+    /**
+     * 被摄目标(场景对象 id):运镜预设的取景中心与新片段的跟拍绑定共用它。
+     * 它不能从「当前选中」推导——选中机位时右栏才显示运镜,此时选中的就不可能是模型。
+     */
+    subjectId: string | null = null;
+    /**
+     * 落幅景别(运镜收尾时的构图):null = 保持机位当前构图。
+     * 与 subjectId 同住编排态——面板开合是壳层行为,不该把作者的编排选择清零。
+     */
+    landingShotSize: ShotSize | null = null;
     /** null = 未缩放,窗口跟随工程时长;一旦作者缩放/平移即固化为显式窗口 */
     timelineViewport: TimelineViewport | null = null;
 
@@ -91,6 +102,14 @@ export class MotionAuthoringStore {
 
     setSnapEnabled(enabled: boolean): void {
         this.snapEnabled = enabled;
+    }
+
+    setSubject(objectId: string | null): void {
+        this.subjectId = objectId;
+    }
+
+    setLandingShotSize(shotSize: ShotSize | null): void {
+        this.landingShotSize = shotSize;
     }
 
     setTimelineViewport(viewport: TimelineViewport): void {

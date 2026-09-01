@@ -14,12 +14,15 @@ const AUTHORED_MOTION_START_SECONDS = 6;
 const TIMELINE_DURATION_SECONDS = 8;
 const FOCUS_OBJECT_ID = "motion-focus-object";
 const TAKE_DURATION_SECONDS = 3;
+/** 断言用的可辨识焦距:与任何预设产物的缺省值都不相同 */
+const EDITED_KEY_FOV = 33;
 const ZERO_VECTOR: [number, number, number] = [0, 0, 0];
 
 interface MotionGetValue {
     readonly clips: readonly {
         readonly id: string;
         readonly keys: readonly CameraKeyJSON[];
+        readonly easing: string;
     }[];
     readonly program: { readonly clips: readonly unknown[] };
 }
@@ -50,7 +53,6 @@ function cameraKey(
         position,
         target,
         fov: null,
-        easingOut: "smooth",
         handleMode: "auto",
         inHandle: ZERO_VECTOR,
         outHandle: ZERO_VECTOR,
@@ -173,14 +175,20 @@ function verifyAuthoringOutput(stores: DirectorDeskStores): void {
         "motion.author 未产出可编辑片段",
     );
     const key = required(authored.keys[0], "motion.author 产物缺少关键帧");
-    dispatch(stores, "motion.set-key", { clipId: authored.id, key: { ...key, easingOut: "linear" } });
+    dispatch(stores, "motion.set-key", { clipId: authored.id, key: { ...key, fov: EDITED_KEY_FOV } });
     const edited = required(
         required(motionState(stores).clips.find((clip) => clip.id === authored.id), "编辑后预设片段缺失").keys.find(
             (candidate) => candidate.id === key.id,
         ),
         "编辑后预设关键帧缺失",
     );
-    assertAcceptance(edited.easingOut === "linear", "motion.author 产物不可再编辑");
+    assertAcceptance(edited.fov === EDITED_KEY_FOV, "motion.author 产物不可再编辑");
+    dispatch(stores, "motion.set-clip-easing", { id: authored.id, easing: "linear" });
+    const retimed = required(
+        motionState(stores).clips.find((clip) => clip.id === authored.id),
+        "缓动编辑后片段缺失",
+    );
+    assertAcceptance(retimed.easing === "linear", "整段时间曲线不可编辑");
 }
 
 function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {

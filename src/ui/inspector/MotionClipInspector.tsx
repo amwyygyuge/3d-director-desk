@@ -1,6 +1,8 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
@@ -25,6 +27,7 @@ const FIELD_GRID_COLUMNS = "repeat(3, minmax(0, 1fr))";
 const KEY_ROW_GRID_COLUMNS = "1fr auto";
 const NUMBER_STEP = 0.1;
 const ORIGIN: Vec3 = [0, 0, 0];
+const NO_FOCUS = "none";
 const AXIS_X = 0;
 const AXIS_Y = 1;
 const AXIS_Z = 2;
@@ -74,6 +77,7 @@ const MotionClipProperties = observer(function MotionClipProperties({ clipId }: 
                 所属机位：{clip.cameraId}
             </Typography>
             <ClipRangeEditor clipId={clip.id} />
+            <ClipEasingControl clipId={clip.id} />
             <Divider />
             <ClipFocusControls clipId={clip.id} />
             <ClipActionControls clipId={clip.id} />
@@ -134,47 +138,48 @@ const ClipRangeEditor = observer(function ClipRangeEditor({ clipId }: { clipId: 
     );
 });
 
+/**
+ * 锁定被摄目标(跟拍覆盖层):选定后整段注视由该对象接管,关键帧的 target 被忽略但不丢失。
+ * 这里用下拉直接选对象,而不是「绑定当前选中」——看得到本面板时选中的必然是机位。
+ */
 const ClipFocusControls = observer(function ClipFocusControls({ clipId }: { clipId: string }) {
     const stores = useDirectorDeskStores();
-    const { dispatcher, motion, scene, selection } = stores;
+    const { dispatcher, motion, motionAuthoring, scene } = stores;
     const clip = motion.clip(clipId);
-    const selectedObject = selection.primaryId ? scene.manager.getEntity(selection.primaryId) : undefined;
+    const subjects = scene.manager.list().filter((entity) => entity.kind === "model");
 
     if (!clip) return null;
 
-    const bindFocus = () => {
-        if (!selectedObject) return;
-        const result = dispatcher.dispatch(
-            {
-                type: "motion.set-focus",
-                payload: {
-                    id: clip.id,
-                    target: { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId: selectedObject.id, worldOffset: ORIGIN },
-                },
-            },
-            stores,
-        );
-        reportCommandFailure(stores, result);
-    };
+    const lockedId = clip.focus?.target.kind === FOCUS_TARGET_KIND.SCENE_OBJECT ? clip.focus.target.objectId : NO_FOCUS;
 
-    const clearFocus = () => {
-        const result = dispatcher.dispatch({ type: "motion.set-focus", payload: { id: clip.id, target: null } }, stores);
+    const lockFocus = (objectId: string): void => {
+        const target =
+            objectId === NO_FOCUS
+                ? null
+                : { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId, worldOffset: ORIGIN };
+        const result = dispatcher.dispatch({ type: "motion.set-focus", payload: { id: clip.id, target } }, stores);
         reportCommandFailure(stores, result);
+        if (objectId !== NO_FOCUS) motionAuthoring.setSubject(objectId);
     };
 
     return (
         <>
             <Typography variant="caption" color="text.secondary">
-                跟拍目标：{focusDescription(clip)}
+                锁定目标：{focusDescription(clip)}
             </Typography>
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: FIELD_GAP }}>
-                <Button size="small" disabled={!selectedObject} onClick={bindFocus}>
-                    绑定选中对象
-                </Button>
-                <Button size="small" disabled={clip.focus === null} onClick={clearFocus}>
-                    解除跟拍
-                </Button>
-            </Box>
+            <Select
+                size="small"
+                value={lockedId}
+                onChange={(event) => lockFocus(event.target.value)}
+                aria-label="锁定跟拍目标"
+            >
+                <MenuItem value={NO_FOCUS}>不锁定(注视由关键帧插值)</MenuItem>
+                {subjects.map((entity) => (
+                    <MenuItem key={entity.id} value={entity.id}>
+                        锁定 {entity.name}
+                    </MenuItem>
+                ))}
+            </Select>
         </>
     );
 });
@@ -282,7 +287,6 @@ const SelectedMotionKeyInspector = observer(function SelectedMotionKeyInspector(
         <>
             <Divider />
             <KeyPoseFields clipId={clip.id} keyId={key.id} />
-            <KeyEasingControl clipId={clip.id} keyId={key.id} />
             {key.handleMode === MOTION_HANDLE_MODE.MANUAL && <ManualHandleFields clipId={clip.id} keyId={key.id} />}
         </>
     );
@@ -366,38 +370,38 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
     );
 });
 
-const KeyEasingControl = observer(function KeyEasingControl({ clipId, keyId }: { clipId: string; keyId: string }) {
+/** 整段时间曲线:平滑=起落加减速,线性=全程匀速。段间快慢改关键帧的时间分布,不在这里。 */
+const ClipEasingControl = observer(function ClipEasingControl({ clipId }: { clipId: string }) {
     const stores = useDirectorDeskStores();
     const { dispatcher, motion } = stores;
     const clip = motion.clip(clipId);
-    const key = clip?.key(keyId);
 
-    if (!clip || !key) return null;
+    if (!clip) return null;
 
     const setEasing = (easing: (typeof CAMERA_MOTION_EASING)[keyof typeof CAMERA_MOTION_EASING]) => {
-        const result = dispatcher.dispatch({ type: "motion.set-key-easing", payload: { clipId: clip.id, keyId: key.id, easing } }, stores);
+        const result = dispatcher.dispatch({ type: "motion.set-clip-easing", payload: { id: clip.id, easing } }, stores);
         reportCommandFailure(stores, result);
     };
 
     return (
         <Box sx={{ display: "grid", gap: FIELD_GAP }}>
             <Typography variant="caption" color="text.secondary">
-                出段缓动
+                整段时间曲线
             </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: FIELD_GAP }}>
                 <Button
                     size="small"
-                    variant={key.easingOut === CAMERA_MOTION_EASING.LINEAR ? "contained" : "outlined"}
+                    variant={clip.easing === CAMERA_MOTION_EASING.LINEAR ? "contained" : "outlined"}
                     onClick={() => setEasing(CAMERA_MOTION_EASING.LINEAR)}
                 >
-                    线性
+                    匀速
                 </Button>
                 <Button
                     size="small"
-                    variant={key.easingOut === CAMERA_MOTION_EASING.SMOOTH ? "contained" : "outlined"}
+                    variant={clip.easing === CAMERA_MOTION_EASING.SMOOTH ? "contained" : "outlined"}
                     onClick={() => setEasing(CAMERA_MOTION_EASING.SMOOTH)}
                 >
-                    平滑
+                    起落加减速
                 </Button>
             </Box>
         </Box>

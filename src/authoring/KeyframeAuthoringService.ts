@@ -60,8 +60,8 @@ function cameraKeyCommand(ctx: DirectorContext): KeyframeAuthoringResult {
         position: poseVector(VIEWPORT_POSE.positionX, VIEWPORT_POSE.positionY, VIEWPORT_POSE.positionZ),
         target: poseVector(VIEWPORT_POSE.targetX, VIEWPORT_POSE.targetY, VIEWPORT_POSE.targetZ),
         fov: VIEWPORT_POSE.fov,
-        // 覆盖既有关键帧时保留作者已接管的切线与出段缓动:打点只改画面,不撤销手工调校
-        ...(existing ? { inHandle: existing.inHandle, outHandle: existing.outHandle, easingOut: existing.easingOut } : {}),
+        // 覆盖既有关键帧时保留作者已接管的切线:打点只改画面,不撤销手工调校
+        ...(existing ? { inHandle: existing.inHandle, outHandle: existing.outHandle } : {}),
         handleMode: existing?.handleMode ?? MOTION_HANDLE_MODE.AUTO,
     });
     return { type: "motion.set-key", payload: { clipId: clip.id, key: key.toJSON() } };

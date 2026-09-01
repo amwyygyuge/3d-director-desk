@@ -3,7 +3,8 @@ import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFoc
 import { cameraKeyFrom } from "@/camera/CameraKey";
 import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyInit, CameraKeyJSON } from "@/camera/CameraKey";
-import { easedProgress } from "@/camera/CameraMotionEasing";
+import { CAMERA_MOTION_EASING, easedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
+import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraShot } from "@/camera/CameraShot";
 import { MotionTrajectory } from "@/motion/MotionTrajectory";
 import type { MotionPositionSample } from "@/motion/MotionTrajectory";
@@ -16,6 +17,8 @@ export interface CameraMotionClipInit {
     readonly keys: readonly (CameraKey | CameraKeyInit)[];
     /** 跟拍覆盖层:缺省 null = 注视来自关键帧插值 */
     readonly focus?: CameraFocusTrack | CameraFocusTrackJSON | null;
+    /** 整段时间曲线:smooth = 起落加减速,linear = 全程匀速;缺省 smooth */
+    readonly easing?: CameraMotionEasing;
 }
 
 export interface CameraMotionClipJSON {
@@ -25,6 +28,7 @@ export interface CameraMotionClipJSON {
     readonly durationSeconds: number;
     readonly keys: readonly CameraKeyJSON[];
     readonly focus: CameraFocusTrackJSON | null;
+    readonly easing: CameraMotionEasing;
 }
 
 /** Reusable scalar output; Three runtime ownership remains with the scene layer. */
@@ -57,6 +61,9 @@ function trajectoryFrom(init: CameraMotionClipInit): MotionTrajectory<CameraKey>
  *
  * 空间形状交给通用 MotionTrajectory(模型走位将复用同一实现),
  * 本类只负责时间边界、跟拍覆盖层与「时间 → 归一化进度」的换算。
+ *
+ * 缓动是**整段**的时间曲线,不是每段各自的:段内缓动会让每个关键帧处速度归零
+ * (环绕会「走一段停一下」)。段与段之间的快慢由关键帧的 progress 分布表达。
  */
 export class CameraMotionClip {
     readonly id: string;
@@ -66,11 +73,15 @@ export class CameraMotionClip {
     readonly trajectory: MotionTrajectory<CameraKey>;
     /** 跟拍目标覆盖层:非空时接管全部关键帧的注视点 */
     readonly focus: CameraFocusTrack | null;
+    /** 整段起落的时间曲线 */
+    readonly easing: CameraMotionEasing;
 
     constructor(init: CameraMotionClipInit) {
         const focus = focusFrom(init.focus);
         const trajectory = trajectoryFrom(init);
+        const easing = init.easing ?? CAMERA_MOTION_EASING.SMOOTH;
         if (
+            !isCameraMotionEasing(easing) ||
             init.id.length === 0 ||
             init.cameraId.length === 0 ||
             !Number.isFinite(init.startTimeSeconds) ||
@@ -86,6 +97,7 @@ export class CameraMotionClip {
         this.durationSeconds = init.durationSeconds;
         this.trajectory = trajectory;
         this.focus = focus;
+        this.easing = easing;
         Object.freeze(this);
     }
 
@@ -136,6 +148,10 @@ export class CameraMotionClip {
         return this.replicate({ focus });
     }
 
+    withEasing(easing: CameraMotionEasing): CameraMotionClip {
+        return this.replicate({ easing });
+    }
+
     toJSON(): CameraMotionClipJSON {
         return {
             id: this.id,
@@ -144,6 +160,7 @@ export class CameraMotionClip {
             durationSeconds: this.durationSeconds,
             keys: this.keys.map((key) => key.toJSON()),
             focus: this.focus?.toJSON() ?? null,
+            easing: this.easing,
         };
     }
 
@@ -155,13 +172,17 @@ export class CameraMotionClip {
             durationSeconds: this.durationSeconds,
             keys: this.keys,
             focus: this.focus,
+            easing: this.easing,
             ...overrides,
         });
     }
 }
 
 /**
- * 采样一刻画面到调用方标量:位置走轨迹,注视与 fov 在段内线性插值,跟拍目标存在时覆盖注视。
+ * 采样一刻画面到调用方标量。
+ *
+ * 时间曲线先作用于**整段进度**(起落加减速),再据此定位段并在段内线性插值——
+ * 这保证速度在关键帧处连续,不会每过一枚关键帧就顿一下。
  * 帧级调用,零分配、无临时对象。
  */
 export function sampleCameraMotionClip(
@@ -173,13 +194,13 @@ export function sampleCameraMotionClip(
     sample: CameraMotionSample,
 ): boolean {
     if (!clip.covers(timeSeconds)) return false;
-    const progress = clip.progressAt(timeSeconds);
+    const progress = easedProgress(clip.easing, clip.progressAt(timeSeconds));
     const trajectory = clip.trajectory;
     const segmentIndex = trajectory.segmentIndexAt(progress);
     const from = trajectory.keyAt(segmentIndex);
     const to = trajectory.keyAt(segmentIndex + 1);
     if (!from || !to) return false;
-    const local = easedProgress(from.easingOut, trajectory.segmentProgress(progress, segmentIndex));
+    const local = trajectory.segmentProgress(progress, segmentIndex);
     if (!trajectory.sampleSegment(segmentIndex, local, positionSample)) return false;
     sample.positionX = positionSample.x;
     sample.positionY = positionSample.y;

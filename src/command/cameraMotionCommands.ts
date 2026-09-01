@@ -67,6 +67,8 @@ interface CreateTakePayload {
     readonly keys: readonly CameraKeyJSON[];
     readonly focus?: FocusTargetJSON | null;
     readonly program?: ProgramFollow;
+    /** 整段时间曲线;缺省 smooth */
+    readonly easing?: CameraMotionEasing;
 }
 
 interface SetMotionClipRangePayload {
@@ -96,7 +98,8 @@ interface SetMotionKeyHandlePayload extends MotionKeyPayload {
     readonly value: Vec3;
 }
 
-interface SetMotionKeyEasingPayload extends MotionKeyPayload {
+interface SetMotionClipEasingPayload {
+    readonly id: string;
     readonly easing: CameraMotionEasing;
 }
 
@@ -289,6 +292,7 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
                 durationSeconds: this.payload.durationSeconds,
                 keys: this.payload.keys,
                 focus: this.payload.focus ? { mode: "single", target: this.payload.focus } : null,
+                ...(this.payload.easing ? { easing: this.payload.easing } : {}),
             });
         } catch {
             return null;
@@ -612,12 +616,12 @@ export class ResetMotionKeyHandlesCommand extends DirectorCommand<MotionKeyPaylo
     }
 }
 
-/** 出段缓动:本关键帧到下一枚之间的配速曲线。 */
-export class SetMotionKeyEasingCommand extends DirectorCommand<SetMotionKeyEasingPayload> {
-    static readonly TYPE = "motion.set-key-easing";
-    readonly type = SetMotionKeyEasingCommand.TYPE;
+/** 整段时间曲线:smooth = 起落加减速,linear = 全程匀速。段间快慢由关键帧 progress 分布表达。 */
+export class SetMotionClipEasingCommand extends DirectorCommand<SetMotionClipEasingPayload> {
+    static readonly TYPE = "motion.set-clip-easing";
+    readonly type = SetMotionClipEasingCommand.TYPE;
 
-    constructor(readonly payload: SetMotionKeyEasingPayload) {
+    constructor(readonly payload: SetMotionClipEasingPayload) {
         super();
     }
 
@@ -626,22 +630,23 @@ export class SetMotionKeyEasingCommand extends DirectorCommand<SetMotionKeyEasin
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
-        if (isIssue(located)) return [located];
+        const clip = existingClip(ctx, this.payload.id);
+        if (!clip) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
         return isCameraMotionEasing(this.payload.easing)
             ? []
             : [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
     }
 
     execute(ctx: DirectorContext): void {
-        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
-        if (isIssue(located)) return;
-        replaceKey(ctx, located.clip, located.key.withEasingOut(this.payload.easing));
+        const clip = existingClip(ctx, this.payload.id);
+        if (!clip) return;
+        ctx.motion.replaceClip(clip.withEasing(this.payload.easing));
+        ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
-        return isIssue(located) ? null : [restoreKeyCommand(located.clip.id, located.key)];
+        const clip = existingClip(ctx, this.payload.id);
+        return clip ? [{ type: SetMotionClipEasingCommand.TYPE, payload: { id: clip.id, easing: clip.easing } }] : null;
     }
 }
 
@@ -775,6 +780,7 @@ export class AuthorMotionCommand extends DirectorCommand<MotionPresetRequest> {
             startTimeSeconds: this.payload.startTimeSeconds,
             durationSeconds: this.payload.durationSeconds,
             keys,
+            ...(this.payload.easing ? { easing: this.payload.easing } : {}),
             focus: this.payload.subjectId
                 ? { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId: this.payload.subjectId, worldOffset: [0, 0, 0] }
                 : null,
@@ -956,7 +962,7 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         RemoveMotionKeyCommand,
         SetMotionKeyHandleCommand,
         ResetMotionKeyHandlesCommand,
-        SetMotionKeyEasingCommand,
+        SetMotionClipEasingCommand,
         SetMotionClipFocusCommand,
         RemoveMotionClipCommand,
         AuthorMotionCommand,

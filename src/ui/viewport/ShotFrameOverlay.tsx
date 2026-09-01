@@ -1,7 +1,6 @@
 import Button from "@mui/material/Button";
 import { observer } from "mobx-react-lite";
 
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
 import type { CameraKeyJSON } from "@/camera/CameraKey";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import type { DirectorPose } from "@/store/CameraStore";
@@ -56,7 +55,6 @@ function keyAtPose(id: string, progress: number, pose: DirectorPose): CameraKeyJ
         inHandle: [0, 0, 0],
         outHandle: [0, 0, 0],
         handleMode: MOTION_HANDLE_MODE.AUTO,
-        easingOut: CAMERA_MOTION_EASING.LINEAR,
     };
 }
 

@@ -1,5 +1,4 @@
 import type { CameraKeyJSON } from "@/camera/CameraKey";
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
 import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { ShotSizePresets } from "@/camera/ShotSizePresets";
@@ -160,7 +159,6 @@ export class MotionPresetCompiler {
         const poses = MOVE_RESOLVERS[request.move](context);
         const landing = this.landingPose(request, context);
         const resolved = landing ? [...poses.slice(0, -1), landing] : poses;
-        const easing = request.easing ?? CAMERA_MOTION_EASING.SMOOTH;
         const divisor = Math.max(resolved.length - 1, 1);
         return resolved.map((pose, index) => ({
             id: crypto.randomUUID(),
@@ -171,7 +169,6 @@ export class MotionPresetCompiler {
             handleMode: MOTION_HANDLE_MODE.AUTO,
             target: pose.target,
             fov: landing && index === divisor ? landing.fov : null,
-            easingOut: easing,
         }));
     }
 

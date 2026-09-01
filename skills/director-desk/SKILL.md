@@ -32,7 +32,7 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 | 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                                                          |
 | 机位表                      | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                                                                   |
 | 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                   |
-| 运镜编排                    | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, easingOut, handleMode, inHandle, outHandle }], focus }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
+| 运镜编排                    | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
 | 灯光                        | `query({ type: "lighting.list", payload: {} })`                                                                                                                                               |
 | 骨骼(姿态编辑前必查)        | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                                                               |
 | 眼睛(构图确认,仅美学用)     | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                                                                |
@@ -112,7 +112,7 @@ dispatch({
 // timeline.move-key / remove-key / set-key-easing 同族；姿势是模型当前状态，不进入时间轴。
 ```
 
-easing 只有两档:`"linear"` / `"smooth"`。**节奏靠关键帧密度 + easing 组合表达**(见「运镜语言」)。
+easing 只有两档:`"linear"` / `"smooth"`。运镜的 easing 是**整段时间曲线**(clip 级,`motion.set-clip-easing`):smooth = 起落加减速,linear = 全程匀速;**段与段之间的快慢由关键帧的 `progress` 分布表达**,不要给每个关键帧单独设缓动——那会让每过一枚关键帧就停顿一次。
 
 ### 机位与运镜
 
@@ -132,8 +132,8 @@ dispatch({
         startTimeSeconds: 0,
         durationSeconds: 2,
         keys: [
-            { id: "push-start", progress: 0, position: [0, 1.6, 4.2], target: [0, 0.9, 0], fov: null, easingOut: "smooth", handleMode: "auto", inHandle: [0, 0, 0], outHandle: [0, 0, 0] },
-            { id: "push-end", progress: 1, position: [0, 1.6, 2.2], target: [0, 0.9, 0], fov: null, easingOut: "smooth", handleMode: "auto", inHandle: [0, 0, 0], outHandle: [0, 0, 0] },
+            { id: "push-start", progress: 0, position: [0, 1.6, 4.2], target: [0, 0.9, 0], fov: null, handleMode: "auto", inHandle: [0, 0, 0], outHandle: [0, 0, 0] },
+            { id: "push-end", progress: 1, position: [0, 1.6, 2.2], target: [0, 0.9, 0], fov: null, handleMode: "auto", inHandle: [0, 0, 0], outHandle: [0, 0, 0] },
         ],
     },
 });
@@ -144,7 +144,7 @@ dispatch({ type: "motion.author", payload: { cameraId: "机位 01", startTimeSec
 
 `CameraKey` 是一帧完整画面：`position`、`target`、`fov`。`fov: null` 表示跟随机位的静态 fov；`progress ∈ [0,1]` 是片段内归一化时间，拉伸或重定时片段不改变运镜形状；`focus` 是可选的跟拍覆盖层，非空时接管 key 的 `target`，`null` 则回到 key 的 target 插值。
 
-编辑命令：`motion.set-key`（存在即覆盖）/ `motion.move-key` / `motion.remove-key` / `motion.set-key-handle` / `motion.reset-key-handles` / `motion.set-key-easing` / `motion.set-clip-range` / `motion.set-focus` / `motion.remove-clip`。`motion.preview.enter` / `motion.preview.exit` 控制指定片段预览；`view.set-mode { mode: "director" | "lens" }` 切换导演/镜头视角；`transport.set-loop { loop: boolean }` 控制整段循环。
+编辑命令：`motion.set-key`（存在即覆盖）/ `motion.move-key` / `motion.remove-key` / `motion.set-key-handle` / `motion.reset-key-handles` / `motion.set-clip-easing` / `motion.set-clip-range` / `motion.set-focus` / `motion.remove-clip`。`motion.preview.enter` / `motion.preview.exit` 控制指定片段预览；`view.set-mode { mode: "director" | "lens" }` 切换导演/镜头视角；`transport.set-loop { loop: boolean }` 控制整段循环。
 
 `motion.author` 的 `move` 词汇：`dolly-in`、`dolly-out`、`pan`、`tilt`、`truck`、`crane`、`orbit`、`hold`。同一机位片段不得重叠；`motion.create-take` 若其它机位占用 Program 时段会返回结构化 `program-overlapping-clip`，按 options 重试，不要手工补 Program。
 
@@ -189,7 +189,7 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 | 升降                 | `motion.author { move: "crane" }`                           |
 | 环绕                 | `motion.author { move: "orbit" }`                           |
 | 定镜                 | `motion.author { move: "hold" }`                            |
-| 自定义节奏/构图      | `motion.set-key` 后用 `motion.move-key` / `set-key-easing` 调整 |
+| 自定义节奏/构图      | `motion.move-key` 调关键帧时间分布定段间快慢;`motion.set-clip-easing` 只管整段起落 |
 | 尺度感(如 50 米机甲) | 用 scale 断言 + 低机位仰拍(target.y 高于 position.y)          |
 
 ## 纪律
