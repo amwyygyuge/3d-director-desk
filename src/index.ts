@@ -215,8 +215,8 @@ export { TimelineSampler, evaluateTimelineTransform, evaluateTransformTrack } fr
 export type { TransformSample } from "./timeline/TimelineSampler";
 export { PlaybackCoordinator } from "./timeline/PlaybackCoordinator";
 export type { TimelineInvalidator } from "./timeline/PlaybackCoordinator";
-export { createDirectorDeskStores, DirectorDeskProvider, useDirectorDeskStores } from "./ui/DirectorDeskContext";
-export type { DirectorDeskStores } from "./ui/DirectorDeskContext";
-export { DirectorDesk } from "./ui/DirectorDesk";
-export type { DirectorDeskProps } from "./ui/DirectorDesk";
-export { TimelinePanel } from "./ui/TimelinePanel";
+export { createDirectorDeskStores, DirectorDeskProvider, useDirectorDeskStores } from "./ui/shell/DirectorDeskContext";
+export type { DirectorDeskStores } from "./ui/shell/DirectorDeskContext";
+export { DirectorDesk } from "./ui/shell/DirectorDesk";
+export type { DirectorDeskProps } from "./ui/shell/DirectorDesk";
+export { TimelinePanel } from "./ui/timeline/TimelinePanel";

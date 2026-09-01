@@ -3,7 +3,7 @@ import { transformKeyCommandFor } from "../command/timelineCommands";
 import { RemoveShotCommand } from "../command/cameraCommands";
 import { EnterPresentationCommand, ExitPresentationCommand } from "../command/presentationCommands";
 import { requestFrameCapture } from "../command/captureCommands";
-import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
+import type { DirectorDeskStores } from "../ui/shell/DirectorDeskContext";
 import { ShortcutChord } from "./ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
 

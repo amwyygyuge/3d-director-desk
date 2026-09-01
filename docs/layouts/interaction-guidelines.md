@@ -98,16 +98,16 @@
 
 | 规范区域 | 组件 | 驱动状态 |
 |---|---|---|
-| 顶部药丸(左:项目 / 右:输出) | `src/ui/chrome/TopPillBar.tsx` | `UiStore.gizmoMode`、`CommandHistory`、`UiStore.videoRecording` |
-| 左侧抽屉 | `src/ui/chrome/AssetRail.tsx` | `WorkbenchLayoutStore.railSection` + 纯 CSS `:hover` 宽度切换 |
-| 右侧检查器 | `src/ui/chrome/InspectorSheet.tsx` | `SelectionStore.primaryId` |
-| 底部时间线 | `src/ui/chrome/TimelineConsole.tsx` | `WorkbenchLayoutStore.timelinePinned` + `useHoverIntent` 局部瞬时态 |
-| 表面材质 | `src/ui/theme.ts` | MUI `Paper` 的 `pill` / `panel` 变体(不用 Tailwind 写视觉) |
+| 顶部药丸(左:项目 / 右:输出) | `src/ui/workspace/TopPillBar.tsx` | `UiStore.gizmoMode`、`CommandHistory`、`UiStore.videoRecording` |
+| 左侧抽屉 | `src/ui/workspace/AssetRail.tsx` | `WorkbenchLayoutStore.railSection` + 纯 CSS `:hover` 宽度切换 |
+| 右侧检查器 | `src/ui/workspace/InspectorSheet.tsx` | `SelectionStore.primaryId` |
+| 底部时间线 | `src/ui/workspace/TimelineConsole.tsx` | `WorkbenchLayoutStore.timelinePinned` + `useHoverIntent` 局部瞬时态 |
+| 表面材质 | `src/ui/shell/theme.ts` | MUI `Paper` 的 `pill` / `panel` 变体(不用 Tailwind 写视觉) |
 
-大纲(`ui/OutlinerPanel`)是机位与场景实体的统一索引:两组各绑一个数据源
+大纲(`ui/outline/OutlinerPanel`)是机位与场景实体的统一索引:两组各绑一个数据源
 (`CameraDirector` / `SceneManager`),共享同一份 `SelectionStore`。
 机位的选中、进出机位视图、删除只有这一个入口,机位面板不再重复列一份(Rule of Two)。
-通用外壳 `outline/OutlineRow`、`outline/OutlineSection` 无领域身份,按叶子例外收值;
+通用外壳 `ui/outline/OutlineRow`、`ui/outline/OutlineSection` 无领域身份,按叶子例外收值;
 领域行 `ShotOutlineRow` / `EntityOutlineRow` 各自 `observer` 自取状态。
 
 壳层显隐的唯一开关是 `WorkbenchLayoutStore.authoringVisible`,悬浮四区与场景辅助物
@@ -145,7 +145,7 @@ R3F 相机"这一运行时行为。方案 D 的顶部中区留给视图模式后
 实现改为进入停留 200ms 才展开、离开 400ms 才收起,把手点击可钉住(钉住后不自动收起)。
 悬浮岛在左栏与检查器之间居中:检查器出现时整条左移,两块面板不互相压盖。
 
-提示条(命令失败与常驻操作提示)统一收敛为 `ui/chrome/ViewportToast`,停在顶部药丸条正下方
+提示条(命令失败与常驻操作提示)统一收敛为 `ui/workspace/ViewportToast`,停在顶部药丸条正下方
 (`top: 76px`)、水平居中、文案居中,外观走 `panel` 变体。MUI 默认的 bottom center 会压在
 时间线控制台上;默认的 `SnackbarContent` 在暗色主题下是反色浅底,与整套壳层割裂。
 注意 MUI 在 `sm` 断点里另给 `anchorOriginTopCenter` 一个 `top`,`sx` 必须用响应式对象覆盖,
