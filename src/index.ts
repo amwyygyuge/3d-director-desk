@@ -24,8 +24,8 @@ export type {
     HostOutboundRequest,
 } from "@/bridge/protocol";
 export { CameraDirector } from "@/camera/CameraDirector";
-export { CameraShot, SHOT_SIZE } from "@/camera/CameraShot";
-export type { ShotSize } from "@/camera/CameraShot";
+export { CameraShot, DEFAULT_CAMERA_FOV, FOV_MAX, FOV_MIN, SHOT_SIZE } from "@/camera/CameraShot";
+export type { CameraShotJSON, ShotSize } from "@/camera/CameraShot";
 export { ShotSizePresets } from "@/camera/ShotSizePresets";
 export { FramingService } from "@/camera/FramingService";
 export { CameraFocusTrack, FOCUS_TARGET_KIND, SceneObjectFocusTarget, WorldPointFocusTarget } from "@/camera/CameraFocusTrack";
@@ -40,16 +40,34 @@ export type {
     WorldPointFocusTargetJSON,
 } from "@/camera/CameraFocusTrack";
 export { FocusTargetResolver } from "@/camera/FocusTargetResolver";
-export { CameraMotionPath, MotionPathAnchor, sampleCameraMotionPath } from "@/camera/CameraMotionPath";
-export type {
-    CameraMotionPathInit,
-    CameraMotionPathJSON,
-    MotionPathAnchorInit,
-    MotionPathAnchorJSON,
-    PathPositionSample,
-} from "@/camera/CameraMotionPath";
-export { CAMERA_MOTION_EASING, CameraMotionClip, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
-export type { CameraMotionClipInit, CameraMotionClipJSON, CameraMotionEasing, CameraMotionSample } from "@/camera/CameraMotionClip";
+export { MotionKey, MOTION_HANDLE_MODE, MOTION_PROGRESS_MAX, MOTION_PROGRESS_MIN } from "@/motion/MotionKey";
+export type { MotionHandleMode, MotionKeyInit, MotionKeyJSON, MotionKeyLike } from "@/motion/MotionKey";
+export { AutoHandleSolver, createHandlePair } from "@/motion/AutoHandleSolver";
+export type { MotionHandlePair } from "@/motion/AutoHandleSolver";
+export { MotionTrajectory, createPositionSample } from "@/motion/MotionTrajectory";
+export type { MotionPositionSample } from "@/motion/MotionTrajectory";
+export { CameraKey, cameraKeyFrom } from "@/camera/CameraKey";
+export type { CameraKeyInit, CameraKeyJSON, CameraKeyPose } from "@/camera/CameraKey";
+export { CAMERA_MOTION_EASING, easedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
+export type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
+export { CameraMotionClip, createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
+export type { CameraMotionClipInit, CameraMotionClipJSON, CameraMotionSample } from "@/camera/CameraMotionClip";
+export { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
+export type { ProgramSlot, ProgramSlotKind } from "@/camera/ProgramLinkage";
+export { subjectBoundsFor } from "@/command/subjectBounds";
+export type { SubjectBounds } from "@/command/subjectBounds";
+export type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
+export { TimelineViewport } from "@/authoring/TimelineViewport";
+export type { TimelineViewportInit } from "@/authoring/TimelineViewport";
+export { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND, TIMELINE_ROW_KIND, TimelineLayout } from "@/authoring/TimelineLayout";
+export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/TimelineLayout";
+export { SNAP_THRESHOLD_PX, SnapResolver } from "@/authoring/SnapResolver";
+export type { SnapCandidates, SnapRequest } from "@/authoring/SnapResolver";
+export { KeyframeAuthoringService, isCommandIssue } from "@/authoring/KeyframeAuthoringService";
+export { MOTION_MOVE, MOTION_MOVE_LABEL, MotionPresetCompiler } from "@/authoring/MotionPresetCompiler";
+export type { MotionMove, MotionPresetContext, MotionPresetRequest } from "@/authoring/MotionPresetCompiler";
+export { MotionAuthoringStore, VIEW_MODE } from "@/store/MotionAuthoringStore";
+export type { ViewMode } from "@/store/MotionAuthoringStore";
 export { CameraProgramClip, CameraProgramTrack } from "@/camera/CameraProgramTrack";
 export type {
     CameraProgramClipInit,
@@ -92,17 +110,28 @@ export {
 } from "@/command/lightingCommands";
 export type { LightingObjectSnapshot } from "@/command/lightingCommands";
 export {
+    AuthorMotionCommand,
     CameraMotionGetQuery,
     CreateMotionClipCommand,
+    CreateMotionTakeCommand,
+    EnterMotionPreviewCommand,
+    ExitMotionPreviewCommand,
+    MoveMotionKeyCommand,
+    PROGRAM_FOLLOW,
     RemoveMotionClipCommand,
+    RemoveMotionKeyCommand,
     RemoveProgramClipCommand,
+    ResetMotionKeyHandlesCommand,
     registerCameraMotionCommands,
-    SetMotionClipEasingCommand,
-    SetMotionClipPathCommand,
-    SetMotionClipRangeCommand,
     SetMotionClipFocusCommand,
+    SetMotionClipRangeCommand,
+    SetMotionKeyCommand,
+    SetMotionKeyEasingCommand,
+    SetMotionKeyHandleCommand,
     SetProgramClipCommand,
+    SetViewModeCommand,
 } from "@/command/cameraMotionCommands";
+export type { ProgramFollow } from "@/command/cameraMotionCommands";
 export { CommandHistory } from "@/command/CommandHistory";
 export type { HistoryEntry } from "@/command/CommandHistory";
 export { CommandDispatcher } from "@/command/CommandDispatcher";

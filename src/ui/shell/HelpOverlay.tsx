@@ -19,6 +19,7 @@ const SHORTCUT_SCOPE_LABELS: Record<ShortcutScope, string> = {
     gizmo: "选中对象后",
     "shot-selected": "选中机位后",
     shot: "掌镜中",
+    lens: "镜头视角",
     presentation: "全屏预览中",
 };
 const SHORTCUT_SCOPE_ORDER = Object.keys(SHORTCUT_SCOPE_LABELS) as ShortcutScope[];

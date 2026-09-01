@@ -5,7 +5,8 @@ import type { SceneObjectInit } from "@/core/SceneObject";
 import type { TimelineDocInit } from "@/timeline/TimelineDoc";
 import type { DirectorContext } from "@/command/DirectorCommand";
 
-export const DESK_DOCUMENT_VERSION = 3;
+/** 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。 */
+export const DESK_DOCUMENT_VERSION = 4;
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
 export interface DeskDocumentAction {

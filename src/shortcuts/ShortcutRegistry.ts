@@ -3,9 +3,10 @@ import type { ShortcutChord } from "@/shortcuts/ShortcutChord";
 /**
  * 作用域:global 常驻;rail 在左栏二级面板展开时激活;gizmo 在有选中时激活;
  * shot-selected 只在选中未激活机位时激活;shot 在掌镜时激活;
+ * lens 在镜头视角(视口跟随时间轴输出、手势写镜头关键帧)时激活;
  * presentation 在全屏预览时独占(壳层已隐,编辑类键位一律让位)。
  */
-export type ShortcutScope = "global" | "rail" | "gizmo" | "shot-selected" | "shot" | "presentation";
+export type ShortcutScope = "global" | "rail" | "gizmo" | "shot-selected" | "shot" | "lens" | "presentation";
 
 /** 快捷键绑定:spec(数据)× action(行为)的合体,注册表持有 */
 export interface ShortcutBinding<TEnv> {

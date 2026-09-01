@@ -28,12 +28,15 @@ export class CameraMotionStore {
     clipsForCamera(cameraId: string): readonly CameraMotionClip[] {
         return this.clips.filter((clip) => clip.cameraId === cameraId);
     }
+
+    /** 跟拍覆盖层是可选的:只有显式绑定了对象的片段才构成引用关系。 */
     clipsForFocusObject(objectId: string): readonly CameraMotionClip[] {
-        return this.clips.filter(
-            (clip) =>
-                clip.focus.target.kind === FOCUS_TARGET_KIND.SCENE_OBJECT && clip.focus.target.objectId === objectId,
-        );
+        return this.clips.filter((clip) => {
+            const target = clip.focus?.target;
+            return target?.kind === FOCUS_TARGET_KIND.SCENE_OBJECT && target.objectId === objectId;
+        });
     }
+
     clipAt(cameraId: string, timeSeconds: number): CameraMotionClip | null {
         for (const clip of this.clipsById.values()) {
             if (clip.cameraId === cameraId && clip.covers(timeSeconds)) return clip;

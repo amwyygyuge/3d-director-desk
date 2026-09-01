@@ -4,13 +4,14 @@ import { useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
 import type { CameraMotionSink } from "@/camera/CameraMotionSampler";
+import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import type { OrbitLike } from "@/navigation/orbit";
 import { useOrbitControls } from "@/navigation/orbit";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** Runtime owner for temporary Program output poses. Editor camera values are restored on output exit. */
-class CameraMotionRuntimeSink implements CameraMotionSink {
+class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
     private camera: PerspectiveCamera | null = null;
     private controls: OrbitLike | null = null;
     private saved = false;
@@ -57,6 +58,21 @@ class CameraMotionRuntimeSink implements CameraMotionSink {
         controls.update();
     }
 
+    /** 当前 R3F 相机的标量姿态反向提供给关键帧编排服务,不创建 Three/JSON 对象。 */
+    readPose(sample: CameraMotionSample): boolean {
+        const camera = this.camera;
+        const controls = this.controls;
+        if (!camera || !controls) return false;
+        sample.positionX = camera.position.x;
+        sample.positionY = camera.position.y;
+        sample.positionZ = camera.position.z;
+        sample.targetX = controls.target.x;
+        sample.targetY = controls.target.y;
+        sample.targetZ = controls.target.z;
+        sample.fov = camera.fov;
+        return true;
+    }
+
     restoreFreeDirectorPose(): void {
         const camera = this.camera;
         const controls = this.controls;
@@ -73,13 +89,10 @@ class CameraMotionRuntimeSink implements CameraMotionSink {
     }
 }
 
-/**
- * Program 输出只在全屏预览期接管视口相机;编辑期(含运镜编排)始终保留自由编辑视角。
- * 预览退出时 restoreCameraMotion 把编辑相机的位姿放回去。
- */
+/** Program 输出在全屏预览与镜头视角中接管视口相机;退出时精确复原导演姿态。 */
 export const CameraMotionRig = observer(function CameraMotionRig() {
-    const { layout, playback } = useDirectorDeskStores();
-    const isProgramOutput = layout.presentationMode;
+    const { motionAuthoring, playback } = useDirectorDeskStores();
+    const isProgramOutput = motionAuthoring.programOutputActive;
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const sinkRef = useRef<CameraMotionRuntimeSink | null>(null);
@@ -93,8 +106,10 @@ export const CameraMotionRig = observer(function CameraMotionRig() {
         }
         sink.attach(camera, controls);
         playback.bindMotionSink(sink);
+        playback.bindPoseSource(sink);
         playback.sampleCurrent();
         return () => {
+            playback.unbindPoseSource(sink);
             playback.unbindMotionSink(sink);
             sink.detach();
         };

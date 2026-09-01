@@ -37,6 +37,14 @@ export const FOV_MAX = 179;
 
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
 const FOCUS_TARGET_IN_USE_CODE = "focus-target-in-use";
+const SCENE_EDIT_PERMISSION = "scene:edit";
+const CAMERA_EDIT_PERMISSION = "camera:edit";
+const SCENE_APPLIES_WHEN = "director-desk.scene-v1";
+const CAMERA_APPLIES_WHEN = "director-desk.camera-v1";
+
+function commandCapability(type: string, permission: string, appliesWhen: string): CommandCapability {
+    return { type, version: "1", kind: "command", permissions: [permission], appliesWhen };
+}
 
 interface PlaceObjectPayload {
     id: string;
@@ -345,10 +353,26 @@ export function registerBuiltinKeyframeCodecs(): void {
 
 /** 内置命令注册:Dispatcher 实例化后调一次,AI 工具 schema 由此派生 */
 export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(PlaceObjectCommand.TYPE, (payload) => new PlaceObjectCommand(payload));
-    dispatcher.register(MoveObjectCommand.TYPE, (payload) => new MoveObjectCommand(payload));
-    dispatcher.register(RemoveObjectCommand.TYPE, (payload) => new RemoveObjectCommand(payload));
-    dispatcher.register(SetCameraShotCommand.TYPE, (payload) => new SetCameraShotCommand(payload));
+    dispatcher.register(
+        PlaceObjectCommand.TYPE,
+        (payload) => new PlaceObjectCommand(payload),
+        commandCapability(PlaceObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN),
+    );
+    dispatcher.register(
+        MoveObjectCommand.TYPE,
+        (payload) => new MoveObjectCommand(payload),
+        commandCapability(MoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN),
+    );
+    dispatcher.register(
+        RemoveObjectCommand.TYPE,
+        (payload) => new RemoveObjectCommand(payload),
+        commandCapability(RemoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN),
+    );
+    dispatcher.register(
+        SetCameraShotCommand.TYPE,
+        (payload) => new SetCameraShotCommand(payload),
+        commandCapability(SetCameraShotCommand.TYPE, CAMERA_EDIT_PERMISSION, CAMERA_APPLIES_WHEN),
+    );
     dispatcher.registerQuery(
         SceneDescribeQuery.TYPE,
         (payload: Record<string, never>) => new SceneDescribeQuery(payload),

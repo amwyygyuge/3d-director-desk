@@ -3,7 +3,7 @@ import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
 import type { AnimationClip, Object3D } from "three";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
-import type { CommandDispatcher } from "@/command/CommandDispatcher";
+import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
 
 class BoneCompatibilityIndex {
     private readonly nodeNamesByRoot = new WeakMap<Object3D, ReadonlySet<string>>();
@@ -38,6 +38,14 @@ class BoneCompatibilityIndex {
 }
 
 const boneCompatibilityIndex = new BoneCompatibilityIndex();
+const ACTION_EDIT_PERMISSION = "action:edit";
+const TRANSPORT_CONTROL_PERMISSION = "transport:control";
+const ACTION_APPLIES_WHEN = "director-desk.action-v1";
+const TRANSPORT_APPLIES_WHEN = "director-desk.transport-v1";
+
+function capability(type: string, permission: string, appliesWhen: string): CommandCapability {
+    return { type, version: "1", kind: "command", permissions: [permission], appliesWhen };
+}
 
 interface MountActionPayload {
     objectId: string;
@@ -286,26 +294,77 @@ export class TransportSeekCommand extends DirectorCommand<TransportSeekPayload> 
     }
 }
 
+interface TransportLoopPayload {
+    readonly loop: boolean;
+}
+
+/** 循环开关(瞬态,不入撤销栈):反复看同一段是评估运镜节奏的唯一手段。 */
+export class TransportSetLoopCommand extends DirectorCommand<TransportLoopPayload> {
+    static readonly TYPE = "transport.set-loop";
+    readonly type = TransportSetLoopCommand.TYPE;
+
+    constructor(readonly payload: TransportLoopPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return typeof this.payload.loop === "boolean" ? [] : ["loop 必须是布尔值"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.clock.setLooping(this.payload.loop);
+    }
+}
+
 export function registerActionCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(MountActionCommand.TYPE, (payload: MountActionPayload) => new MountActionCommand(payload));
+    dispatcher.register(
+        MountActionCommand.TYPE,
+        (payload: MountActionPayload) => new MountActionCommand(payload),
+        capability(MountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+    );
     dispatcher.register(
         UnmountActionCommand.TYPE,
         (payload: UnmountActionPayload) => new UnmountActionCommand(payload),
+        capability(UnmountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
     );
     dispatcher.register(
         ActionPreviewPlayCommand.TYPE,
         (payload: PreviewActionPayload) => new ActionPreviewPlayCommand(payload),
+        capability(ActionPreviewPlayCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
     );
-    dispatcher.register(ActionPreviewPauseCommand.TYPE, () => new ActionPreviewPauseCommand());
+    dispatcher.register(
+        ActionPreviewPauseCommand.TYPE,
+        () => new ActionPreviewPauseCommand(),
+        capability(ActionPreviewPauseCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+    );
     dispatcher.register(
         ActionPreviewSeekCommand.TYPE,
         (payload: PreviewSeekPayload) => new ActionPreviewSeekCommand(payload),
+        capability(ActionPreviewSeekCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
     );
-    dispatcher.register(TransportPlayCommand.TYPE, () => new TransportPlayCommand());
-    dispatcher.register(TransportPauseCommand.TYPE, () => new TransportPauseCommand());
+    dispatcher.register(
+        TransportSetLoopCommand.TYPE,
+        (payload: TransportLoopPayload) => new TransportSetLoopCommand(payload),
+        capability(TransportSetLoopCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+    );
+    dispatcher.register(
+        TransportPlayCommand.TYPE,
+        () => new TransportPlayCommand(),
+        capability(TransportPlayCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+    );
+    dispatcher.register(
+        TransportPauseCommand.TYPE,
+        () => new TransportPauseCommand(),
+        capability(TransportPauseCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+    );
     dispatcher.register(
         TransportSeekCommand.TYPE,
         (payload: TransportSeekPayload) => new TransportSeekCommand(payload),
+        capability(TransportSeekCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
     );
-    dispatcher.register(TransportStopCommand.TYPE, () => new TransportStopCommand());
+    dispatcher.register(
+        TransportStopCommand.TYPE,
+        () => new TransportStopCommand(),
+        capability(TransportStopCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+    );
 }

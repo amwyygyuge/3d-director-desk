@@ -1,23 +1,21 @@
 import { CameraFocusTrack } from "@/camera/CameraFocusTrack";
 import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFocusTrack";
-import { CameraMotionPath, sampleCameraMotionPath } from "@/camera/CameraMotionPath";
-import type { CameraMotionPathJSON, PathPositionSample } from "@/camera/CameraMotionPath";
+import { cameraKeyFrom } from "@/camera/CameraKey";
+import type { CameraKey } from "@/camera/CameraKey";
+import type { CameraKeyInit, CameraKeyJSON } from "@/camera/CameraKey";
+import { easedProgress } from "@/camera/CameraMotionEasing";
 import type { CameraShot } from "@/camera/CameraShot";
-
-export const CAMERA_MOTION_EASING = {
-    LINEAR: "linear",
-    SMOOTH: "smooth",
-} as const;
-export type CameraMotionEasing = (typeof CAMERA_MOTION_EASING)[keyof typeof CAMERA_MOTION_EASING];
+import { MotionTrajectory } from "@/motion/MotionTrajectory";
+import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 
 export interface CameraMotionClipInit {
     readonly id: string;
     readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
-    readonly path: CameraMotionPath | CameraMotionPathJSON;
-    readonly focus: CameraFocusTrack | CameraFocusTrackJSON;
-    readonly easing: CameraMotionEasing;
+    readonly keys: readonly (CameraKey | CameraKeyInit)[];
+    /** 跟拍覆盖层:缺省 null = 注视来自关键帧插值 */
+    readonly focus?: CameraFocusTrack | CameraFocusTrackJSON | null;
 }
 
 export interface CameraMotionClipJSON {
@@ -25,9 +23,8 @@ export interface CameraMotionClipJSON {
     readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
-    readonly path: CameraMotionPathJSON;
-    readonly focus: CameraFocusTrackJSON;
-    readonly easing: CameraMotionEasing;
+    readonly keys: readonly CameraKeyJSON[];
+    readonly focus: CameraFocusTrackJSON | null;
 }
 
 /** Reusable scalar output; Three runtime ownership remains with the scene layer. */
@@ -41,69 +38,102 @@ export interface CameraMotionSample {
     fov: number;
 }
 
-function isEasing(value: CameraMotionEasing): boolean {
-    return value === CAMERA_MOTION_EASING.LINEAR || value === CAMERA_MOTION_EASING.SMOOTH;
+export function createCameraMotionSample(): CameraMotionSample {
+    return { positionX: 0, positionY: 0, positionZ: 0, targetX: 0, targetY: 0, targetZ: 0, fov: 45 };
+}
+
+function focusFrom(value: CameraMotionClipInit["focus"]): CameraFocusTrack | null {
+    const isMissing = value === undefined || value === null;
+    if (isMissing) return null;
+    return value instanceof CameraFocusTrack ? value : new CameraFocusTrack({ target: value.target });
+}
+
+function trajectoryFrom(init: CameraMotionClipInit): MotionTrajectory<CameraKey> {
+    return new MotionTrajectory<CameraKey>(init.keys.map(cameraKeyFrom));
 }
 
 /**
- * Time-bound camera movement aggregate. Camera configuration remains on CameraShot;
- * path and focus remain separate so future target keys do not alter spatial motion semantics.
+ * 时序聚合根:一台机位在一段时间内的运镜。
+ *
+ * 空间形状交给通用 MotionTrajectory(模型走位将复用同一实现),
+ * 本类只负责时间边界、跟拍覆盖层与「时间 → 归一化进度」的换算。
  */
 export class CameraMotionClip {
     readonly id: string;
     readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
-    readonly path: CameraMotionPath;
-    readonly focus: CameraFocusTrack;
-    readonly easing: CameraMotionEasing;
+    readonly trajectory: MotionTrajectory<CameraKey>;
+    /** 跟拍目标覆盖层:非空时接管全部关键帧的注视点 */
+    readonly focus: CameraFocusTrack | null;
 
     constructor(init: CameraMotionClipInit) {
-        const path = init.path instanceof CameraMotionPath ? init.path : new CameraMotionPath(init.path);
-        const focus = init.focus instanceof CameraFocusTrack ? init.focus : new CameraFocusTrack({ target: init.focus.target });
+        const focus = focusFrom(init.focus);
+        const trajectory = trajectoryFrom(init);
         if (
             init.id.length === 0 ||
             init.cameraId.length === 0 ||
             !Number.isFinite(init.startTimeSeconds) ||
             init.startTimeSeconds < 0 ||
             !Number.isFinite(init.durationSeconds) ||
-            init.durationSeconds <= 0 ||
-            !isEasing(init.easing)
+            init.durationSeconds <= 0
         ) {
-            throw new Error("CameraMotionClip requires stable identifiers, finite timing, a focus track, and easing");
+            throw new Error("CameraMotionClip requires stable identifiers and a finite positive time range");
         }
         this.id = init.id;
         this.cameraId = init.cameraId;
         this.startTimeSeconds = init.startTimeSeconds;
         this.durationSeconds = init.durationSeconds;
-        this.path = path;
+        this.trajectory = trajectory;
         this.focus = focus;
-        this.easing = init.easing;
         Object.freeze(this);
+    }
+
+    get keys(): readonly CameraKey[] {
+        return this.trajectory.keys;
     }
 
     get endTimeSeconds(): number {
         return this.startTimeSeconds + this.durationSeconds;
     }
 
+    get isFocusOverriding(): boolean {
+        return this.focus !== null;
+    }
+
     covers(timeSeconds: number): boolean {
         return timeSeconds >= this.startTimeSeconds && timeSeconds <= this.endTimeSeconds;
     }
 
+    /** 时间 → 归一化进度:重定时后同一 progress 仍指向同一画面。 */
+    progressAt(timeSeconds: number): number {
+        return (timeSeconds - this.startTimeSeconds) / this.durationSeconds;
+    }
+
+    timeAt(progress: number): number {
+        return this.startTimeSeconds + progress * this.durationSeconds;
+    }
+
+    key(keyId: string): CameraKey | undefined {
+        return this.trajectory.key(keyId);
+    }
+
     withTimeRange(startTimeSeconds: number, durationSeconds: number): CameraMotionClip {
-        return new CameraMotionClip({ ...this.toJSON(), startTimeSeconds, durationSeconds });
+        return this.replicate({ startTimeSeconds, durationSeconds });
     }
 
-    withPath(path: CameraMotionPath): CameraMotionClip {
-        return new CameraMotionClip({ ...this.toJSON(), path });
+    withKey(key: CameraKey): CameraMotionClip {
+        return this.replicate({ keys: this.trajectory.withKey(key).keys });
     }
 
-    withFocus(focus: CameraFocusTrack): CameraMotionClip {
-        return new CameraMotionClip({ ...this.toJSON(), focus });
+    /** 关键帧少于两个即无轨迹可言;返回 null 让调用方决定是否连片段一并删除。 */
+    withoutKey(keyId: string): CameraMotionClip | null {
+        const trajectory = this.trajectory.withoutKey(keyId);
+        return trajectory ? this.replicate({ keys: trajectory.keys }) : null;
     }
 
-    withEasing(easing: CameraMotionEasing): CameraMotionClip {
-        return new CameraMotionClip({ ...this.toJSON(), easing });
+    withFocus(focus: CameraFocusTrack | null): CameraMotionClip {
+        return this.replicate({ focus });
     }
 
     toJSON(): CameraMotionClipJSON {
@@ -112,35 +142,53 @@ export class CameraMotionClip {
             cameraId: this.cameraId,
             startTimeSeconds: this.startTimeSeconds,
             durationSeconds: this.durationSeconds,
-            path: this.path.toJSON(),
-            focus: this.focus.toJSON(),
-            easing: this.easing,
+            keys: this.keys.map((key) => key.toJSON()),
+            focus: this.focus?.toJSON() ?? null,
         };
+    }
+
+    private replicate(overrides: Partial<CameraMotionClipInit>): CameraMotionClip {
+        return new CameraMotionClip({
+            id: this.id,
+            cameraId: this.cameraId,
+            startTimeSeconds: this.startTimeSeconds,
+            durationSeconds: this.durationSeconds,
+            keys: this.keys,
+            focus: this.focus,
+            ...overrides,
+        });
     }
 }
 
-function easedProgress(easing: CameraMotionEasing, progress: number): number {
-    return easing === CAMERA_MOTION_EASING.SMOOTH ? progress * progress * (3 - 2 * progress) : progress;
-}
-
-/** Samples spatial motion and a resolved focus target into caller-owned scalars without allocations. */
+/**
+ * 采样一刻画面到调用方标量:位置走轨迹,注视与 fov 在段内线性插值,跟拍目标存在时覆盖注视。
+ * 帧级调用,零分配、无临时对象。
+ */
 export function sampleCameraMotionClip(
     clip: CameraMotionClip,
     timeSeconds: number,
     shot: CameraShot,
-    focusTarget: FocusTargetSample,
-    pathSample: PathPositionSample,
+    focusTarget: FocusTargetSample | null,
+    positionSample: MotionPositionSample,
     sample: CameraMotionSample,
 ): boolean {
     if (!clip.covers(timeSeconds)) return false;
-    const progress = (timeSeconds - clip.startTimeSeconds) / clip.durationSeconds;
-    if (!sampleCameraMotionPath(clip.path, easedProgress(clip.easing, progress), pathSample)) return false;
-    sample.positionX = pathSample.x;
-    sample.positionY = pathSample.y;
-    sample.positionZ = pathSample.z;
-    sample.targetX = focusTarget.x;
-    sample.targetY = focusTarget.y;
-    sample.targetZ = focusTarget.z;
-    sample.fov = shot.fov;
+    const progress = clip.progressAt(timeSeconds);
+    const trajectory = clip.trajectory;
+    const segmentIndex = trajectory.segmentIndexAt(progress);
+    const from = trajectory.keyAt(segmentIndex);
+    const to = trajectory.keyAt(segmentIndex + 1);
+    if (!from || !to) return false;
+    const local = easedProgress(from.easingOut, trajectory.segmentProgress(progress, segmentIndex));
+    if (!trajectory.sampleSegment(segmentIndex, local, positionSample)) return false;
+    sample.positionX = positionSample.x;
+    sample.positionY = positionSample.y;
+    sample.positionZ = positionSample.z;
+    sample.targetX = focusTarget ? focusTarget.x : from.target[0] + (to.target[0] - from.target[0]) * local;
+    sample.targetY = focusTarget ? focusTarget.y : from.target[1] + (to.target[1] - from.target[1]) * local;
+    sample.targetZ = focusTarget ? focusTarget.z : from.target[2] + (to.target[2] - from.target[2]) * local;
+    const fromFov = from.fov ?? shot.fov;
+    const toFov = to.fov ?? shot.fov;
+    sample.fov = fromFov + (toFov - fromFov) * local;
     return true;
 }

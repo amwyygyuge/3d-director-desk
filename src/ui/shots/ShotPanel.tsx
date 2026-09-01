@@ -1,81 +1,33 @@
 import AddAPhotoIcon from "@mui/icons-material/AddAPhoto";
-import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
-import Snackbar from "@mui/material/Snackbar";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import { Box3, Vector3 } from "three";
 
+import { MOTION_MOVE, MOTION_MOVE_LABEL } from "@/authoring/MotionPresetCompiler";
+import type { MotionMove } from "@/authoring/MotionPresetCompiler";
+import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionClip";
-import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import { ShotSizePresets } from "@/camera/ShotSizePresets";
-import type { CameraMotionClip } from "@/camera/CameraMotionClip";
-import type { CameraMotionPathJSON } from "@/camera/CameraMotionPath";
-import type { Vec3 } from "@/core/SceneObject";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 
 const shotSizePresets = new ShotSizePresets();
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
-const SNACKBAR_DURATION_MS = 4000;
+const MOTION_PRESET_STATUS_ID = "director-desk-motion-preset-status";
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
 const DEFAULT_MOTION_DURATION_SECONDS = 2;
-const BEZIER_CONTROL_DIVISOR = 3;
-const PATH_VECTOR_FIELDS = ["inHandle", "outHandle"] as const;
-const PATH_VECTOR_AXIS_LABELS = ["X", "Y", "Z"] as const;
-
-type PathVectorField = (typeof PATH_VECTOR_FIELDS)[number];
-
-function withVectorCoordinate(vector: Vec3, axis: number, value: number): Vec3 {
-    switch (axis) {
-        case 0:
-            return [value, vector[1], vector[2]];
-        case 1:
-            return [vector[0], value, vector[2]];
-        default:
-            return [vector[0], vector[1], value];
-    }
-}
-
-function appendCurveAnchor(path: CameraMotionPathJSON, position: Vec3, id: string): CameraMotionPathJSON {
-    const anchors = path.anchors;
-    const previous = anchors[anchors.length - 1];
-    if (!previous) return path;
-    const outgoingHandle: Vec3 = [
-        (position[0] - previous.position[0]) / BEZIER_CONTROL_DIVISOR,
-        (position[1] - previous.position[1]) / BEZIER_CONTROL_DIVISOR,
-        (position[2] - previous.position[2]) / BEZIER_CONTROL_DIVISOR,
-    ];
-    const incomingHandle: Vec3 = [-outgoingHandle[0], -outgoingHandle[1], -outgoingHandle[2]];
-    const updatedAnchors = anchors.map((anchor) =>
-        anchor.id === previous.id ? { ...anchor, outHandle: outgoingHandle } : anchor,
-    );
-    return { anchors: [...updatedAnchors, { id, position, inHandle: incomingHandle, outHandle: [0, 0, 0] }] };
-}
-
-function replaceAnchorVector(
-    clip: CameraMotionClip,
-    anchorId: string,
-    field: PathVectorField,
-    axis: number,
-    value: number,
-): CameraMotionPathJSON {
-    return {
-        anchors: clip.path.anchors.map((anchor) => {
-            const json = anchor.toJSON();
-            return anchor.id === anchorId ? { ...json, [field]: withVectorCoordinate(json[field], axis, value) } : json;
-        }),
-    };
-}
-
+const MOTION_PRESET_GRID_COLUMNS = "repeat(2, minmax(0, 1fr))";
+const BOX_SIZE_TO_RADIUS_DIVISOR = 2;
+const DEFAULT_SHOT_AZIMUTH_RADIANS = Math.PI / 4;
 const SHOT_SIZE_LABELS: Record<ShotSize, string> = {
     [SHOT_SIZE.EXTREME_LONG]: "大远景",
     [SHOT_SIZE.LONG]: "远景",
@@ -85,29 +37,44 @@ const SHOT_SIZE_LABELS: Record<ShotSize, string> = {
     [SHOT_SIZE.CLOSE_UP]: "特写",
     [SHOT_SIZE.EXTREME_CLOSE_UP]: "大特写",
 };
+const MOTION_MOVES = Object.values(MOTION_MOVE) as readonly MotionMove[];
 
-interface ShotSizeControlProps {
-    onNotice: (message: string) => void;
+
+
+function motionPresetStatus(cameraId: string | null, remainingSeconds: number): string | null {
+    if (cameraId === null) return "选择机位后可创建运镜预设";
+    if (remainingSeconds <= 0) return "播放头已到达时间线末尾，无法容纳运镜片段";
+    return null;
 }
 
-interface SaveCurrentViewControlProps {
-    available: boolean;
-    onSave: () => void;
-}
+const SaveCurrentViewControl = observer(function SaveCurrentViewControl() {
+    const stores = useDirectorDeskStores();
+    const { camera, dispatcher } = stores;
+    const available = camera.lastDirectorPose !== null;
 
+    const saveCurrentView = () => {
+        const pose = camera.lastDirectorPose;
+        if (pose === null) return;
+        const result = dispatcher.dispatch(
+            {
+                type: "camera.set-shot",
+                payload: {
+                    id: camera.nextShotName(),
+                    shot: { position: pose.position, target: pose.target, fov: pose.fov },
+                },
+            },
+            stores,
+        );
+        reportCommandFailure(stores, result);
+    };
 
-
-const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
-    available,
-    onSave,
-}: SaveCurrentViewControlProps) {
     return (
         <>
             <Button
                 size="small"
                 variant="outlined"
                 startIcon={<AddAPhotoIcon />}
-                onClick={onSave}
+                onClick={saveCurrentView}
                 disabled={!available}
                 aria-describedby={available ? undefined : SAVE_SHOT_STATUS_ID}
                 fullWidth
@@ -128,214 +95,23 @@ const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
         </>
     );
 });
-
-interface MotionSectionProps {
-    readonly onNotice: (message: string) => void;
+interface ShotSizeControlProps {
+    readonly onShotSizeChange: (size: ShotSize) => void;
 }
 
-/** 运镜从已选静态机位与稳定自由视角开始,避免将未稳定的编辑姿势写入路径。 */
-const MotionSection = observer(function MotionSection({ onNotice }: MotionSectionProps) {
+interface MotionPresetButtonsProps {
+    readonly shotSizeRef: MutableRefObject<ShotSize>;
+}
+
+const ShotSizeControl = observer(function ShotSizeControl({ onShotSizeChange }: ShotSizeControlProps) {
     const stores = useDirectorDeskStores();
-    const { camera, clock, dispatcher, layout, motion, scene, selection, timeline } = stores;
-    const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-    const selectedCameraId = selection.primaryId;
-    const selectedShot = selectedCameraId ? camera.director.getShot(selectedCameraId) : undefined;
-    const directorPose = camera.lastDirectorPose;
-    const selectedClip = selectedClipId ? motion.clip(selectedClipId) : undefined;
-    const selectedSceneObject = selection.primaryId ? scene.manager.getEntity(selection.primaryId) : undefined;
-    const focusTarget = selectedClip?.focus.target;
-    const canBindFocusObject = selectedClip !== undefined && selectedSceneObject !== undefined;
-    const canRestoreWorldFocus = selectedClip !== undefined && directorPose !== null;
-    const remainingSeconds = timeline.document.duration - clock.time;
-    const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, remainingSeconds);
-    const canCreateMotion =
-        !clock.isPlaying && selectedCameraId !== null && selectedShot !== undefined && directorPose !== null && durationSeconds > 0;
-    const canAppendAnchor = !clock.isPlaying && selectedClip !== undefined && directorPose !== null;
-
-    const dispatch = (type: string, payload: unknown) => {
-        const result = dispatcher.dispatch({ type, payload }, stores);
-        if (!result.ok) onNotice(result.issues?.join(";") ?? result.error);
-    };
-
-    const createMotionClip = () => {
-        if (!selectedCameraId || !selectedShot || !directorPose) return;
-        const clipId = crypto.randomUUID();
-        dispatch("motion.create-clip", {
-            clip: {
-                id: clipId,
-                cameraId: selectedCameraId,
-                startTimeSeconds: clock.time,
-                durationSeconds,
-                focus: { target: { kind: FOCUS_TARGET_KIND.WORLD_POINT, position: directorPose.target } },
-                easing: CAMERA_MOTION_EASING.SMOOTH,
-                path: {
-                    anchors: [
-                        { id: `${clipId}-start`, position: selectedShot.position },
-                        { id: `${clipId}-end`, position: directorPose.position },
-                    ],
-                },
-            },
-        });
-        setSelectedClipId(clipId);
-    };
-
-    const appendAnchor = () => {
-        if (!selectedClip || !directorPose) return;
-        dispatch("motion.set-clip-path", {
-            id: selectedClip.id,
-            path: appendCurveAnchor(selectedClip.path.toJSON(), directorPose.position, crypto.randomUUID()),
-        });
-    };
-
-    const updateAnchorVector = (anchorId: string, field: PathVectorField, axis: number, rawValue: string) => {
-        const value = rawValue.length === 0 ? Number.NaN : Number(rawValue);
-        if (!selectedClip || !Number.isFinite(value)) return;
-        dispatch("motion.set-clip-path", {
-            id: selectedClip.id,
-            path: replaceAnchorVector(selectedClip, anchorId, field, axis, value),
-        });
-    };
-
-    return (
-        <>
-            <Typography variant="subtitle2">运镜片段({motion.clips.length})</Typography>
-            <Button
-                size="small"
-                variant="outlined"
-                startIcon={<VideocamIcon />}
-                fullWidth
-                disabled={!canCreateMotion}
-                aria-describedby={canCreateMotion ? undefined : "director-desk-motion-create-status"}
-                onClick={createMotionClip}
-            >
-                从机位到当前视角创建运镜
-            </Button>
-            {!canCreateMotion && (
-                <Typography id="director-desk-motion-create-status" role="status" variant="caption" color="text.secondary">
-                    选择机位，暂停播放后在自由视角确定终点
-                </Typography>
-            )}
-            <Button
-                size="small"
-                fullWidth
-                sx={{ mt: 0.5 }}
-                aria-pressed={layout.motionPathPreviewVisible}
-                onClick={() => layout.setMotionPathPreviewVisible(!layout.motionPathPreviewVisible)}
-            >
-                {layout.motionPathPreviewVisible ? "隐藏运镜路径" : "显示运镜路径"}
-            </Button>
-            {motion.clips.map((clip) => (
-                <Box
-                    key={clip.id}
-                    sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 0.5, mt: 0.5, alignItems: "center" }}
-                >
-                    <Button
-                        size="small"
-                        variant={selectedClip?.id === clip.id ? "contained" : "text"}
-                        sx={{ justifyContent: "flex-start", overflow: "hidden", whiteSpace: "nowrap" }}
-                        onClick={() => setSelectedClipId(clip.id)}
-                    >
-                        {clip.cameraId} · {clip.startTimeSeconds.toFixed(2)}s — {clip.endTimeSeconds.toFixed(2)}s
-                    </Button>
-                    <Button
-                        size="small"
-                        color="error"
-                        aria-label={`删除 ${clip.cameraId} 运镜片段`}
-                        onClick={() => {
-                            dispatch("motion.remove-clip", { id: clip.id });
-                            if (selectedClip?.id === clip.id) setSelectedClipId(null);
-                        }}
-                    >
-                        删除
-                    </Button>
-                </Box>
-            ))}
-            {selectedClip && focusTarget && (
-                <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
-                    <Typography variant="caption" color="text.secondary">
-                        注视：
-                        {focusTarget.kind === FOCUS_TARGET_KIND.SCENE_OBJECT
-                            ? `绑定 ${focusTarget.objectId}`
-                            : `世界点 ${focusTarget.position.map((value) => value.toFixed(1)).join(", ")}`}
-                    </Typography>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mt: 0.5 }}>
-                        <Button
-                            size="small"
-                            disabled={!canBindFocusObject}
-                            onClick={() => {
-                                if (!selectedSceneObject) return;
-                                dispatch("motion.set-focus", {
-                                    id: selectedClip.id,
-                                    target: {
-                                        kind: FOCUS_TARGET_KIND.SCENE_OBJECT,
-                                        objectId: selectedSceneObject.id,
-                                        worldOffset: [0, 0, 0],
-                                    },
-                                });
-                            }}
-                        >
-                            绑定选中对象
-                        </Button>
-                        <Button
-                            size="small"
-                            disabled={!canRestoreWorldFocus}
-                            onClick={() => {
-                                if (!directorPose) return;
-                                dispatch("motion.set-focus", {
-                                    id: selectedClip.id,
-                                    target: { kind: FOCUS_TARGET_KIND.WORLD_POINT, position: directorPose.target },
-                                });
-                            }}
-                        >
-                            固定当前注视点
-                        </Button>
-                    </Box>
-                </Box>
-            )}
-            {selectedClip && (
-                <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
-                    <Typography variant="caption" color="text.secondary">
-                        路径锚点({selectedClip.path.anchors.length}) · 手柄为相对坐标
-                    </Typography>
-                    <Button size="small" fullWidth disabled={!canAppendAnchor} onClick={appendAnchor} sx={{ mt: 0.5 }}>
-                        当前视角追加曲线路径点
-                    </Button>
-                    {selectedClip.path.anchors.map((anchor, anchorIndex) => (
-                        <Box key={anchor.id} sx={{ mt: 0.75 }}>
-                            <Typography variant="caption">
-                                锚点 {anchorIndex + 1} · {anchor.position.map((value) => value.toFixed(1)).join(", ")}
-                            </Typography>
-                            {PATH_VECTOR_FIELDS.map((field) => (
-                                <Box key={field} sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.5, mt: 0.25 }}>
-                                    {anchor[field].map((value, axis) => (
-                                        <TextField
-                                            key={`${field}-${axis}`}
-                                            size="small"
-                                            type="number"
-                                            label={`${field === "inHandle" ? "入" : "出"}${PATH_VECTOR_AXIS_LABELS[axis] ?? ""}`}
-                                            defaultValue={value}
-                                            slotProps={{ htmlInput: { step: 0.1 } }}
-                                            onBlur={(event) => updateAnchorVector(anchor.id, field, axis, event.currentTarget.value)}
-                                        />
-                                    ))}
-                                </Box>
-                            ))}
-                        </Box>
-                    ))}
-                </Box>
-            )}
-        </>
-    );
-});
-
-const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSizeControlProps) {
-    const stores = useDirectorDeskStores();
-    const { camera, scene, selection, dispatcher } = stores;
+    const { camera, dispatcher, scene, selection } = stores;
     const [shotSize, setShotSize] = useState<ShotSize>(SHOT_SIZE.MEDIUM);
     const primaryRuntime = selection.primaryId ? scene.manager.getRuntime(selection.primaryId) : undefined;
 
     const applyShotSize = (size: ShotSize) => {
         setShotSize(size);
+        onShotSizeChange(size);
         const primaryId = selection.primaryId;
         const runtime = primaryId ? scene.manager.getRuntime(primaryId) : undefined;
         if (!runtime) return;
@@ -344,13 +120,17 @@ const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSize
         const sphere = new Vector3();
         box.getCenter(center);
         box.getSize(sphere);
-        const radius = sphere.length() / 2;
+        const radius = sphere.length() / BOX_SIZE_TO_RADIUS_DIVISOR;
         const eye = camera.lastDirectorPose;
-        const azimuth = eye ? Math.atan2(eye.position[2] - center.z, eye.position[0] - center.x) : Math.PI / 4;
+        const azimuth = eye
+            ? Math.atan2(eye.position[2] - center.z, eye.position[0] - center.x)
+            : DEFAULT_SHOT_AZIMUTH_RADIANS;
         const shot = shotSizePresets.resolve(size, [center.x, center.y, center.z], radius, azimuth);
-        const id = camera.nextShotName();
-        const result = dispatcher.dispatch({ type: "camera.set-shot", payload: { id, shot: shot.toJSON() } }, stores);
-        onNotice(result.ok ? `已生成 ${id}` : (result.issues?.join(";") ?? result.error));
+        const result = dispatcher.dispatch(
+            { type: "camera.set-shot", payload: { id: camera.nextShotName(), shot: shot.toJSON() } },
+            stores,
+        );
+        reportCommandFailure(stores, result);
     };
 
     return (
@@ -376,44 +156,96 @@ const ShotSizeControl = observer(function ShotSizeControl({ onNotice }: ShotSize
     );
 });
 
-export const ShotPanel = observer(function ShotPanel() {
+const MotionPresetButtons = observer(function MotionPresetButtons({ shotSizeRef }: MotionPresetButtonsProps) {
     const stores = useDirectorDeskStores();
-    const { camera, dispatcher } = stores;
-    const [notice, setNotice] = useState<string | null>(null);
-    const canSaveCurrentView = camera.lastDirectorPose !== null;
+    const { camera, dispatcher, motionAuthoring, playheadDisplay, scene, selection, timeline } = stores;
+    const cameraId = selection.selectedIds.find((id) => camera.director.getShot(id) !== undefined) ?? null;
+    const subjectId = selection.selectedIds.find((id) => scene.manager.getEntity(id) !== undefined) ?? null;
+    const playhead = Math.min(playheadDisplay.value, timeline.document.duration);
+    const remainingSeconds = timeline.document.duration - playhead;
+    const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, remainingSeconds);
+    const presetStatus = motionPresetStatus(cameraId, remainingSeconds);
 
-    const saveCurrentView = () => {
-        const pose = camera.lastDirectorPose;
-        if (!pose) {
-            return;
-        }
-        dispatcher.dispatch(
+    const authorMotion = (move: MotionMove) => {
+        if (cameraId === null || presetStatus !== null) return;
+        const result = dispatcher.dispatch(
             {
-                type: "camera.set-shot",
+                type: "motion.author",
                 payload: {
-                    id: camera.nextShotName(),
-                    shot: { position: pose.position, target: pose.target, fov: pose.fov },
+                    cameraId,
+                    startTimeSeconds: playhead,
+                    durationSeconds,
+                    move,
+                    ...(subjectId === null ? {} : { subjectId }),
+                    shotSize: shotSizeRef.current,
+                    easing: CAMERA_MOTION_EASING.SMOOTH,
                 },
             },
             stores,
         );
+        reportCommandFailure(stores, result);
     };
 
     return (
+        <>
+            <Typography variant="subtitle2">运镜预设</Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: MOTION_PRESET_GRID_COLUMNS, gap: STATUS_TEXT_MARGIN_TOP }}>
+                {MOTION_MOVES.map((move) => (
+                    <Button
+                        key={move}
+                        size="small"
+                        variant="outlined"
+                        disabled={presetStatus !== null}
+                        aria-describedby={presetStatus === null ? undefined : MOTION_PRESET_STATUS_ID}
+                        onClick={() => authorMotion(move)}
+                    >
+                        {MOTION_MOVE_LABEL[move]}
+                    </Button>
+                ))}
+            </Box>
+            {presetStatus !== null && (
+                <Typography
+                    id={MOTION_PRESET_STATUS_ID}
+                    role="status"
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block", mt: STATUS_TEXT_MARGIN_TOP }}
+                >
+                    {presetStatus}
+                </Typography>
+            )}
+            <Button
+                size="small"
+                fullWidth
+                sx={{ mt: PANEL_SECTION_GAP }}
+                aria-pressed={motionAuthoring.pathVisible}
+                onClick={() => motionAuthoring.setPathVisible(!motionAuthoring.pathVisible)}
+            >
+                {motionAuthoring.pathVisible ? "隐藏运镜路径" : "显示运镜路径"}
+            </Button>
+        </>
+    );
+});
+
+const ShotSizeAndMotionPresets = observer(function ShotSizeAndMotionPresets() {
+    const shotSizeRef = useRef<ShotSize>(SHOT_SIZE.MEDIUM);
+
+    return (
+        <>
+            <ShotSizeControl onShotSizeChange={(size) => (shotSizeRef.current = size)} />
+            <Divider sx={{ my: PANEL_SECTION_GAP }} />
+            <MotionPresetButtons shotSizeRef={shotSizeRef} />
+        </>
+    );
+});
+
+/** 左栏 CAMERA 只承担机位存盘、景别预设与语义运镜预设。 */
+export const ShotPanel = observer(function ShotPanel() {
+    return (
         <Box sx={{ p: 1.5 }}>
-            {/* 机位列表已收敛到大纲(唯一入口);本面板只留创建与编辑能力 */}
-            <SaveCurrentViewControl available={canSaveCurrentView} onSave={saveCurrentView} />
+            <SaveCurrentViewControl />
             <Divider sx={{ my: PANEL_SECTION_GAP }} />
-            <ShotSizeControl onNotice={setNotice} />
-            <Divider sx={{ my: PANEL_SECTION_GAP }} />
-            <MotionSection onNotice={setNotice} />
-            <Snackbar
-                open={notice !== null}
-                autoHideDuration={SNACKBAR_DURATION_MS}
-                onClose={() => setNotice(null)}
-                message={notice}
-                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-            />
+            <ShotSizeAndMotionPresets />
         </Box>
     );
 });

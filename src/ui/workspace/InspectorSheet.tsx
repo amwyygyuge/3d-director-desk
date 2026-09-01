@@ -7,10 +7,12 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
 import type { SceneObjectKind } from "@/core/SceneObject";
+import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { Inspector } from "@/ui/inspector/Inspector";
+import { MotionClipInspector } from "@/ui/inspector/MotionClipInspector";
 import { CHROME } from "@/ui/shell/theme";
 
 const INSPECTOR_TOP_PX = 80;
@@ -24,7 +26,7 @@ const TIMELINE_HINT_BORDER = "1px solid rgba(99,102,241,0.22)";
 const TIMELINE_HINT_BORDER_RADIUS = 1;
 const TIMELINE_HINT_PADDING = 1;
 
-type InspectorSelectionKind = SceneObjectKind | "camera-shot";
+type InspectorSelectionKind = SceneObjectKind | "camera-shot" | "motion-clip";
 
 interface InspectorSelection {
     readonly kind: InspectorSelectionKind;
@@ -42,6 +44,7 @@ const INSPECTOR_SELECTION_LABEL: Record<InspectorSelectionKind, string> = {
     light: "LIGHT SELECTED",
     camera: "CAMERA SELECTED",
     "camera-shot": "SHOT SELECTED",
+    "motion-clip": "MOTION SELECTED",
 };
 
 function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup): InspectorSelection | null {
@@ -50,13 +53,33 @@ function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup):
     const entity = stores.scene.manager.getEntity(primaryId);
     return entity ? { kind: entity.kind, name: entity.name, isSceneEntity: true } : null;
 }
+interface InspectorContextLookup {
+    readonly stores: Pick<DirectorDeskStores, "camera" | "scene">;
+    readonly primaryId: string | null;
+    readonly selectedClip: CameraMotionClip | undefined;
+}
+
+function inspectorContextFor({ stores, primaryId, selectedClip }: InspectorContextLookup): InspectorSelection | null {
+    if (selectedClip) {
+        return {
+            kind: "motion-clip",
+            name: `${selectedClip.cameraId} · ${selectedClip.startTimeSeconds.toFixed(2)}s`,
+            isSceneEntity: false,
+        };
+    }
+    if (primaryId === null) return null;
+    return inspectorSelectionFor({ stores, primaryId });
+}
+
 
 /** 仅在存在选中对象时出现的情境检查器，关闭操作复用全局清选中语义。 */
 export const InspectorSheet = observer(function InspectorSheet() {
     const stores = useDirectorDeskStores();
-    const { layout, selection } = stores;
+    const { layout, motion, motionAuthoring, selection } = stores;
+    const selectedClipId = motionAuthoring.selectedClipId;
+    const selectedClip = selectedClipId ? motion.clip(selectedClipId) : undefined;
     const primaryId = selection.primaryId;
-    const selected = primaryId === null ? null : inspectorSelectionFor({ stores, primaryId });
+    const selected = inspectorContextFor({ stores, primaryId, selectedClip });
 
     if (!layout.authoringVisible || selected === null) return null;
 
@@ -93,14 +116,22 @@ export const InspectorSheet = observer(function InspectorSheet() {
                     </Typography>
                 </Box>
                 <Tooltip title={`清除选中 (${formatShortcutHint(SHORTCUT_ID.CLEAR_SELECTION)})`}>
-                    <IconButton size="small" aria-label="关闭检查器" onClick={() => selection.clear()}>
+                    <IconButton
+                        size="small"
+                        aria-label="关闭检查器"
+                        onClick={() => (selectedClip ? motionAuthoring.selectClip(null) : selection.clear())}
+                    >
                         <CloseIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
             </Box>
-            <Box className="min-h-0 flex-1 overflow-auto">
-                <Inspector />
-            </Box>
+            {selectedClip ? (
+                <MotionClipInspector clipId={selectedClip.id} />
+            ) : (
+                <Box className="min-h-0 flex-1 overflow-auto">
+                    <Inspector />
+                </Box>
+            )}
             {selected.isSceneEntity && (
                 <Paper
                     elevation={0}

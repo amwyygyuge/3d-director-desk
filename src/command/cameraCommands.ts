@@ -1,7 +1,8 @@
 import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
-import { sampleCameraMotionClip } from "@/camera/CameraMotionClip";
+import { createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
-import type { PathPositionSample } from "@/camera/CameraMotionPath";
+import { createPositionSample } from "@/motion/MotionTrajectory";
+import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 import { CreateMotionClipCommand, SetProgramClipCommand } from "@/command/cameraMotionCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
@@ -9,16 +10,8 @@ import type { DirectorContext, SerializedCommand } from "@/command/DirectorComma
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
 
 /** 采样缓冲:查询低频但遵守零分配纪律(命令层模块级临时对象先例) */
-const TMP_MOTION_SAMPLE: CameraMotionSample = {
-    positionX: 0,
-    positionY: 0,
-    positionZ: 0,
-    targetX: 0,
-    targetY: 0,
-    targetZ: 0,
-    fov: 45,
-};
-const TMP_PATH_SAMPLE: PathPositionSample = { x: 0, y: 0, z: 0 };
+const TMP_MOTION_SAMPLE: CameraMotionSample = createCameraMotionSample();
+const TMP_POSITION_SAMPLE: MotionPositionSample = createPositionSample();
 const TMP_FOCUS_SAMPLE = { x: 0, y: 0, z: 0 };
 
 const CAMERA_POSE_CAPABILITY: CommandCapability = {
@@ -48,13 +41,13 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
         const shot = programCameraId ? ctx.camera.director.getShot(programCameraId) : undefined;
         const clip = programCameraId ? ctx.motion.clipAt(programCameraId, ctx.clock.time) : null;
         const focusResolver = new FocusTargetResolver(ctx.scene.manager);
-        const sampled =
-            clip &&
-            shot &&
-            focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) &&
-            sampleCameraMotionClip(clip, ctx.clock.time, shot, TMP_FOCUS_SAMPLE, TMP_PATH_SAMPLE, TMP_MOTION_SAMPLE)
-                ? TMP_MOTION_SAMPLE
-                : null;
+        const focusTarget = clip?.focus && focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) ? TMP_FOCUS_SAMPLE : null;
+        const isSampled =
+            clip !== null &&
+            shot !== undefined &&
+            (clip.focus === null || focusTarget !== null) &&
+            sampleCameraMotionClip(clip, ctx.clock.time, shot, focusTarget, TMP_POSITION_SAMPLE, TMP_MOTION_SAMPLE);
+        const sampled = isSampled ? TMP_MOTION_SAMPLE : null;
         return {
             activeShotId: ctx.camera.activeShotId,
             programCameraId,

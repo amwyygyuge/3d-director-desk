@@ -1,22 +1,21 @@
 import { observer } from "mobx-react-lite";
 
+import type { MotionKeyContextRequest } from "@/ui/viewport/scene/MotionClipPathPreview";
 import { MotionClipPathPreview } from "@/ui/viewport/scene/MotionClipPathPreview";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
-const PATH_COLORS = ["#00bcd4", "#9c7ae8", "#467fd0", "#d67db4"] as const;
+export interface MotionPathPreviewProps {
+    readonly onKeyContextMenu: (request: MotionKeyContextRequest) => void;
+}
 
-/** Immutable clip geometry is built only when authored path data changes; helpers are excluded from capture. */
-export const MotionPathPreview = observer(function MotionPathPreview({ visible }: { readonly visible: boolean }) {
-    const { motion } = useDirectorDeskStores();
-    if (!visible) return null;
+/** 运镜轨迹辅助物:全屏预览时直接卸载,其余编辑模式由编排态开关控制。 */
+export const MotionPathPreview = observer(function MotionPathPreview({ onKeyContextMenu }: MotionPathPreviewProps) {
+    const { motion, motionAuthoring } = useDirectorDeskStores();
+    if (!motionAuthoring.pathHelpersVisible) return null;
     return (
         <group userData={{ helper: true }}>
-            {motion.clips.map((clip, index) => (
-                <MotionClipPathPreview
-                    key={clip.id}
-                    clip={clip}
-                    color={PATH_COLORS[index % PATH_COLORS.length] ?? PATH_COLORS[0]}
-                />
+            {motion.clips.map((clip) => (
+                <MotionClipPathPreview key={clip.id} clipId={clip.id} onKeyContextMenu={onKeyContextMenu} />
             ))}
         </group>
     );

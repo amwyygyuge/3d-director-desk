@@ -1,32 +1,72 @@
 import { CameraFocusTrack, FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import type { FocusTargetJSON } from "@/camera/CameraFocusTrack";
-import { CAMERA_MOTION_EASING, CameraMotionClip } from "@/camera/CameraMotionClip";
-import type { CameraMotionClipJSON, CameraMotionEasing } from "@/camera/CameraMotionClip";
-import { CameraMotionPath } from "@/camera/CameraMotionPath";
-import type { CameraMotionPathJSON } from "@/camera/CameraMotionPath";
+import { CameraKey } from "@/camera/CameraKey";
+import type { CameraKeyJSON } from "@/camera/CameraKey";
+import { CameraMotionClip } from "@/camera/CameraMotionClip";
+import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
+import { isCameraMotionEasing } from "@/camera/CameraMotionEasing";
+import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import { CameraProgramClip } from "@/camera/CameraProgramTrack";
 import type { CameraProgramClipJSON } from "@/camera/CameraProgramTrack";
+import { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
+import { MotionPresetCompiler, MOTION_MOVE } from "@/authoring/MotionPresetCompiler";
+import type { MotionPresetRequest } from "@/authoring/MotionPresetCompiler";
+import { subjectBoundsFor } from "@/command/subjectBounds";
+import { VIEW_MODE } from "@/store/MotionAuthoringStore";
+import type { ViewMode } from "@/store/MotionAuthoringStore";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
+import { finiteVec3 } from "@/core/SceneObject";
+import type { Vec3 } from "@/core/SceneObject";
+import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 
 const MOTION_COMMAND_VERSION = "1" as const;
 const MOTION_PERMISSION = "motion:edit";
 const MOTION_READ_PERMISSION = "motion:read";
+const MOTION_APPLIES_WHEN = "director-desk.camera-motion-v3";
 const EMPTY_PAYLOAD: Record<string, never> = {};
+const MINIMUM_KEYS_PER_CLIP = 2;
+
 const ISSUE_CODE = {
     PAYLOAD: "motion-invalid-payload",
     CAMERA: "motion-camera-not-found",
     CLIP: "motion-clip-not-found",
+    KEY: "motion-key-not-found",
+    KEY_MINIMUM: "motion-key-minimum",
+    KEY_CONFLICT: "motion-key-progress-conflict",
     DURATION: "motion-time-outside-duration",
     OVERLAP: "motion-overlapping-clip",
     PROGRAM_OVERLAP: "program-overlapping-clip",
     PROGRAM_CLIP: "program-clip-not-found",
     FOCUS_OBJECT: "motion-focus-object-not-found",
+    SUBJECT: "motion-subject-not-found",
+    MOVE: "motion-unknown-move",
 } as const;
+
+/** Program 跟随策略:UI 与 AI 共用同一组语义,冲突时由调用方二选一。 */
+export const PROGRAM_FOLLOW = {
+    FOLLOW: "follow",
+    NONE: "none",
+    REPLACE: "replace",
+} as const;
+export type ProgramFollow = (typeof PROGRAM_FOLLOW)[keyof typeof PROGRAM_FOLLOW];
+
+const programLinkage = new ProgramLinkage();
+const presetCompiler = new MotionPresetCompiler();
 
 interface CreateMotionClipPayload {
     readonly clip: CameraMotionClipJSON;
+}
+
+interface CreateTakePayload {
+    readonly id?: string;
+    readonly cameraId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+    readonly keys: readonly CameraKeyJSON[];
+    readonly focus?: FocusTargetJSON | null;
+    readonly program?: ProgramFollow;
 }
 
 interface SetMotionClipRangePayload {
@@ -35,19 +75,34 @@ interface SetMotionClipRangePayload {
     readonly durationSeconds: number;
 }
 
-interface SetMotionClipPathPayload {
-    readonly id: string;
-    readonly path: CameraMotionPathJSON;
+interface SetMotionKeyPayload {
+    readonly clipId: string;
+    readonly key: CameraKeyJSON;
+}
+
+interface MoveMotionKeyPayload {
+    readonly clipId: string;
+    readonly keyId: string;
+    readonly progress: number;
+}
+
+interface MotionKeyPayload {
+    readonly clipId: string;
+    readonly keyId: string;
+}
+
+interface SetMotionKeyHandlePayload extends MotionKeyPayload {
+    readonly kind: "in" | "out";
+    readonly value: Vec3;
+}
+
+interface SetMotionKeyEasingPayload extends MotionKeyPayload {
+    readonly easing: CameraMotionEasing;
 }
 
 interface SetMotionClipFocusPayload {
     readonly id: string;
-    readonly target: FocusTargetJSON;
-}
-
-interface SetMotionClipEasingPayload {
-    readonly id: string;
-    readonly easing: CameraMotionEasing;
+    readonly target: FocusTargetJSON | null;
 }
 
 interface RemoveMotionClipPayload {
@@ -62,18 +117,25 @@ interface RemoveProgramClipPayload {
     readonly id: string;
 }
 
-function issue(code: string, path: string, message: string): CommandIssue {
-    return { code, path, message };
+interface PreviewClipPayload {
+    readonly clipId: string;
+}
+
+interface SetViewModePayload {
+    readonly mode: ViewMode;
+}
+
+function issue(code: string, path: string, message: string, options?: CommandIssue["options"]): CommandIssue {
+    return { code, path, message, ...(options ? { options } : {}) };
 }
 
 function issueMessages(issues: readonly CommandIssue[]): string[] {
     return issues.map((current) => current.message);
 }
 
-
-function motionClipFrom(payload: CreateMotionClipPayload): CameraMotionClip | null {
+function motionClipFrom(clip: CameraMotionClipJSON): CameraMotionClip | null {
     try {
-        return new CameraMotionClip(payload.clip);
+        return new CameraMotionClip(clip);
     } catch {
         return null;
     }
@@ -87,35 +149,62 @@ function programClipFrom(payload: SetProgramClipPayload): CameraProgramClip | nu
     }
 }
 
+function existingClip(ctx: DirectorContext, id: unknown): CameraMotionClip | null {
+    return typeof id === "string" && id.length > 0 ? (ctx.motion.clip(id) ?? null) : null;
+}
+
 function clipRangeIssue(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): CommandIssue | null {
     const isOutsideDuration = clip.endTimeSeconds > ctx.timeline.document.duration;
     if (isOutsideDuration) return issue(ISSUE_CODE.DURATION, "clip", "运镜片段不能超出时间轴时长");
     const overlaps = ctx.motion
         .clipsForCamera(clip.cameraId)
-        .some((current) => current.id !== excludedId && current.startTimeSeconds < clip.endTimeSeconds && clip.startTimeSeconds < current.endTimeSeconds);
+        .some(
+            (current) =>
+                current.id !== excludedId &&
+                current.startTimeSeconds < clip.endTimeSeconds &&
+                clip.startTimeSeconds < current.endTimeSeconds,
+        );
     return overlaps ? issue(ISSUE_CODE.OVERLAP, "clip", "同一机位的运镜片段不能重叠") : null;
-}
-
-function existingClip(ctx: DirectorContext, id: unknown): CameraMotionClip | null {
-    return typeof id === "string" && id.length > 0 ? (ctx.motion.clip(id) ?? null) : null;
 }
 
 function clipIssues(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): readonly CommandIssue[] {
     const camera = ctx.camera.director.getShot(clip.cameraId);
-    const range = clipRangeIssue(ctx, clip, excludedId);
-    const target = clip.focus.target;
+    const target = clip.focus?.target;
     const hasFocusObject =
-        target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId) !== undefined;
+        !target || target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId) !== undefined;
     if (!camera) return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "运镜引用的机位不存在")];
     if (!hasFocusObject) return [issue(ISSUE_CODE.FOCUS_OBJECT, "clip.focus.target.objectId", "注视绑定对象不存在")];
+    const range = clipRangeIssue(ctx, clip, excludedId);
     return range ? [range] : [];
 }
 
-function restoreMotionClipPayload(clip: CameraMotionClip): CreateMotionClipPayload {
-    return { clip: clip.toJSON() };
+/** 关键帧写操作共用的定位:片段 + 关键帧一次解析,失败即结构化 issue。 */
+function locateKey(
+    ctx: DirectorContext,
+    clipId: string,
+    keyId: string,
+): { readonly clip: CameraMotionClip; readonly key: CameraKey } | CommandIssue {
+    const clip = existingClip(ctx, clipId);
+    if (!clip) return issue(ISSUE_CODE.CLIP, "clipId", "运镜片段不存在");
+    const key = clip.key(keyId);
+    return key ? { clip, key } : issue(ISSUE_CODE.KEY, "keyId", "镜头关键帧不存在");
 }
 
-/** Creates a serialized, camera-owned time segment. Path geometry and temporal range remain independently editable. */
+function isIssue(value: object): value is CommandIssue {
+    return "code" in value;
+}
+
+/** 关键帧写命令的统一逆命令:回到该关键帧的前值。 */
+function restoreKeyCommand(clipId: string, key: CameraKey): SerializedCommand {
+    return { type: SetMotionKeyCommand.TYPE, payload: { clipId, key: key.toJSON() } };
+}
+
+function replaceKey(ctx: DirectorContext, clip: CameraMotionClip, key: CameraKey): void {
+    ctx.motion.replaceClip(clip.withKey(key));
+    ctx.playback.sampleCurrent();
+}
+
+/** Creates a serialized, camera-owned time segment. Trajectory and temporal range remain independently editable. */
 export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPayload> {
     static readonly TYPE = "motion.create-clip";
     readonly type = CreateMotionClipCommand.TYPE;
@@ -129,14 +218,14 @@ export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPay
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const clip = motionClipFrom(this.payload);
+        const clip = motionClipFrom(this.payload.clip);
         if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段格式无效")];
         if (ctx.motion.clip(clip.id)) return [issue(ISSUE_CODE.PAYLOAD, "clip.id", "运镜片段 id 已存在")];
         return clipIssues(ctx, clip, null);
     }
 
     execute(ctx: DirectorContext): void {
-        const clip = motionClipFrom(this.payload);
+        const clip = motionClipFrom(this.payload.clip);
         if (clip) ctx.motion.replaceClip(clip);
         ctx.playback.sampleCurrent();
     }
@@ -146,7 +235,116 @@ export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPay
     }
 }
 
-/** Retimes one clip without reauthoring its spatial path. */
+/**
+ * 一次成片:运镜片段与其 Program 输出片段同时落地。
+ *
+ * 「做完运镜忘了切 Program = 成片该段黑屏」是最贵的沉默失败,故输出跟随是默认行为;
+ * 其它机位已占用该时段时不静默覆盖,返回带 options 的结构化冲突让作者/AI 二选一。
+ */
+export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> {
+    static readonly TYPE = "motion.create-take";
+    readonly type = CreateMotionTakeCommand.TYPE;
+
+    constructor(readonly payload: CreateTakePayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const clip = this.clip();
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "keys", "镜头关键帧格式无效或少于两个")];
+        const clipProblems = clipIssues(ctx, clip, null);
+        if (clipProblems.length > 0) return clipProblems;
+        return programIssues(ctx, clip, this.programMode());
+    }
+
+    execute(ctx: DirectorContext): void {
+        const clip = this.clip();
+        if (!clip) return;
+        ctx.motion.replaceClip(clip);
+        applyProgramFollow(ctx, clip, this.programMode());
+        ctx.motionAuthoring.selectClip(clip.id);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const clip = this.clip();
+        if (!clip) return null;
+        return [{ type: RemoveMotionClipCommand.TYPE, payload: { id: clip.id } }, ...invertProgramFollow(ctx, clip, this.programMode())];
+    }
+
+    private programMode(): ProgramFollow {
+        return this.payload.program ?? PROGRAM_FOLLOW.FOLLOW;
+    }
+
+    private clip(): CameraMotionClip | null {
+        try {
+            return new CameraMotionClip({
+                id: this.payload.id ?? takeIdFor(this.payload),
+                cameraId: this.payload.cameraId,
+                startTimeSeconds: this.payload.startTimeSeconds,
+                durationSeconds: this.payload.durationSeconds,
+                keys: this.payload.keys,
+                focus: this.payload.focus ? { mode: "single", target: this.payload.focus } : null,
+            });
+        } catch {
+            return null;
+        }
+    }
+}
+
+/** take id 必须在 validate 与 execute 之间稳定,故由 payload 决定,缺省时按机位与起始时刻派生。 */
+function takeIdFor(payload: CreateTakePayload): string {
+    return `take-${payload.cameraId}-${payload.startTimeSeconds}-${payload.durationSeconds}`;
+}
+
+function programIssues(ctx: DirectorContext, clip: CameraMotionClip, mode: ProgramFollow): readonly CommandIssue[] {
+    if (mode !== PROGRAM_FOLLOW.FOLLOW) return [];
+    const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
+    if (slot.kind !== PROGRAM_SLOT_KIND.CONFLICT) return [];
+    return [
+        issue(ISSUE_CODE.PROGRAM_OVERLAP, "program", "该时段的 Program 输出已被其它机位占用", [
+            { type: "motion.create-take:replace-program", label: "替换为本机位输出" },
+            { type: "motion.create-take:keep-current", label: "保留现有输出" },
+        ]),
+    ];
+}
+
+function applyProgramFollow(ctx: DirectorContext, clip: CameraMotionClip, mode: ProgramFollow): void {
+    if (mode === PROGRAM_FOLLOW.NONE) return;
+    const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
+    const cleared = slot.clips.reduce((program, current) => program.withoutClip(current.id), ctx.motion.program);
+    const merged = programLinkage.mergedClip(
+        slot.kind === PROGRAM_SLOT_KIND.CONFLICT ? { kind: slot.kind, clips: [] } : slot,
+        clip.cameraId,
+        clip.startTimeSeconds,
+        clip.durationSeconds,
+        `program-${clip.id}`,
+    );
+    ctx.motion.replaceProgram(cleared.withClip(merged));
+}
+
+function invertProgramFollow(ctx: DirectorContext, clip: CameraMotionClip, mode: ProgramFollow): readonly SerializedCommand[] {
+    if (mode === PROGRAM_FOLLOW.NONE) return [];
+    const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
+    const restored = slot.clips.map((current) => ({
+        type: SetProgramClipCommand.TYPE,
+        payload: { clip: current.toJSON() },
+    }));
+    const merged = programLinkage.mergedClip(
+        slot.kind === PROGRAM_SLOT_KIND.CONFLICT ? { kind: slot.kind, clips: [] } : slot,
+        clip.cameraId,
+        clip.startTimeSeconds,
+        clip.durationSeconds,
+        `program-${clip.id}`,
+    );
+    return [{ type: RemoveProgramClipCommand.TYPE, payload: { id: merged.id } }, ...restored];
+}
+
+/** 重定时一段运镜而不重画轨迹;跟随态的 Program 片段一并移动。 */
 export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRangePayload> {
     static readonly TYPE = "motion.set-clip-range";
     readonly type = SetMotionClipRangeCommand.TYPE;
@@ -162,49 +360,64 @@ export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRang
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const current = existingClip(ctx, this.payload.id);
         if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
-        try {
-            const candidate = new CameraMotionClip({
-                ...current.toJSON(),
-                startTimeSeconds: this.payload.startTimeSeconds,
-                durationSeconds: this.payload.durationSeconds,
-            });
-            return clipIssues(ctx, candidate, current.id);
-        } catch {
-            return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围必须是有限正数")];
-        }
+        const candidate = this.retimed(current);
+        if (!candidate) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围必须是有限正数")];
+        return clipIssues(ctx, candidate, current.id);
     }
 
     execute(ctx: DirectorContext): void {
         const current = existingClip(ctx, this.payload.id);
-        if (current) {
-            ctx.motion.replaceClip(current.withTimeRange(this.payload.startTimeSeconds, this.payload.durationSeconds));
+        const candidate = current ? this.retimed(current) : null;
+        if (!current || !candidate) return;
+        const following = programLinkage.followingClip(ctx.motion.program, current);
+        ctx.motion.replaceClip(candidate);
+        if (following) {
+            ctx.motion.replaceProgram(
+                ctx.motion.program.withoutClip(following.id).withClip(
+                    new CameraProgramClip({
+                        id: following.id,
+                        cameraId: following.cameraId,
+                        startTimeSeconds: candidate.startTimeSeconds,
+                        durationSeconds: candidate.durationSeconds,
+                    }),
+                ),
+            );
         }
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const current = existingClip(ctx, this.payload.id);
-        return current
-            ? [
-                  {
-                      type: SetMotionClipRangeCommand.TYPE,
-                      payload: {
-                          id: current.id,
-                          startTimeSeconds: current.startTimeSeconds,
-                          durationSeconds: current.durationSeconds,
-                      },
-                  },
-              ]
-            : null;
+        if (!current) return null;
+        const following = programLinkage.followingClip(ctx.motion.program, current);
+        return [
+            {
+                type: SetMotionClipRangeCommand.TYPE,
+                payload: {
+                    id: current.id,
+                    startTimeSeconds: current.startTimeSeconds,
+                    durationSeconds: current.durationSeconds,
+                },
+            },
+            ...(following ? [{ type: SetProgramClipCommand.TYPE, payload: { clip: following.toJSON() } }] : []),
+        ];
+    }
+
+    private retimed(current: CameraMotionClip): CameraMotionClip | null {
+        try {
+            return current.withTimeRange(this.payload.startTimeSeconds, this.payload.durationSeconds);
+        } catch {
+            return null;
+        }
     }
 }
 
-/** Replaces a clip path atomically; control handles remain pure data and are safe for AI tooling. */
-export class SetMotionClipPathCommand extends DirectorCommand<SetMotionClipPathPayload> {
-    static readonly TYPE = "motion.set-clip-path";
-    readonly type = SetMotionClipPathCommand.TYPE;
+/** 落一枚镜头关键帧(存在即覆盖):视口摆位、时间轴打点与 AI 共用这一条写入口。 */
+export class SetMotionKeyCommand extends DirectorCommand<SetMotionKeyPayload> {
+    static readonly TYPE = "motion.set-key";
+    readonly type = SetMotionKeyCommand.TYPE;
 
-    constructor(readonly payload: SetMotionClipPathPayload) {
+    constructor(readonly payload: SetMotionKeyPayload) {
         super();
     }
 
@@ -213,31 +426,226 @@ export class SetMotionClipPathCommand extends DirectorCommand<SetMotionClipPathP
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const current = existingClip(ctx, this.payload.id);
-        if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
-        try {
-            new CameraMotionPath(this.payload.path);
-            return [];
-        } catch {
-            return [issue(ISSUE_CODE.PAYLOAD, "path", "路径必须含两个以上有限 Bézier 锚点")];
-        }
+        const clip = existingClip(ctx, this.payload.clipId);
+        if (!clip) return [issue(ISSUE_CODE.CLIP, "clipId", "运镜片段不存在")];
+        const key = cameraKeyOrNull(this.payload.key);
+        if (!key) return [issue(ISSUE_CODE.PAYLOAD, "key", "镜头关键帧参数无效(progress∈[0,1]、位姿有限、fov 在围栏内)")];
+        return withKeyIssues(clip, key);
     }
 
     execute(ctx: DirectorContext): void {
-        const current = existingClip(ctx, this.payload.id);
-        if (current) ctx.motion.replaceClip(current.withPath(new CameraMotionPath(this.payload.path)));
+        const clip = existingClip(ctx, this.payload.clipId);
+        const key = cameraKeyOrNull(this.payload.key);
+        if (clip && key) replaceKey(ctx, clip, key);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const clip = existingClip(ctx, this.payload.clipId);
+        if (!clip) return null;
+        const prior = clip.key(this.payload.key.id);
+        return prior
+            ? [restoreKeyCommand(clip.id, prior)]
+            : [{ type: RemoveMotionKeyCommand.TYPE, payload: { clipId: clip.id, keyId: this.payload.key.id } }];
+    }
+}
+
+function cameraKeyOrNull(json: CameraKeyJSON): CameraKey | null {
+    try {
+        return new CameraKey(json);
+    } catch {
+        return null;
+    }
+}
+
+/** 关键帧写入的公共围栏:progress 冲突由轨迹聚合裁决,命令层只负责翻译成结构化 issue。 */
+function withKeyIssues(clip: CameraMotionClip, key: CameraKey): readonly CommandIssue[] {
+    try {
+        clip.withKey(key);
+        return [];
+    } catch {
+        return [issue(ISSUE_CODE.KEY_CONFLICT, "key.progress", "同一片段内关键帧进度必须唯一")];
+    }
+}
+
+/** 重定时一枚关键帧:只改 progress,画面不动。 */
+export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> {
+    static readonly TYPE = "motion.move-key";
+    readonly type = MoveMotionKeyCommand.TYPE;
+
+    constructor(readonly payload: MoveMotionKeyPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return [located];
+        const moved = movedKeyOrNull(located.key, this.payload.progress);
+        if (!moved) return [issue(ISSUE_CODE.PAYLOAD, "progress", "关键帧进度必须落在 [0,1]")];
+        return withKeyIssues(located.clip, moved);
+    }
+
+    execute(ctx: DirectorContext): void {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return;
+        const moved = movedKeyOrNull(located.key, this.payload.progress);
+        if (moved) replaceKey(ctx, located.clip, moved);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        return isIssue(located) ? null : [restoreKeyCommand(located.clip.id, located.key)];
+    }
+}
+
+function movedKeyOrNull(key: CameraKey, progress: number): CameraKey | null {
+    try {
+        return key.withProgress(progress);
+    } catch {
+        return null;
+    }
+}
+
+export class RemoveMotionKeyCommand extends DirectorCommand<MotionKeyPayload> {
+    static readonly TYPE = "motion.remove-key";
+    readonly type = RemoveMotionKeyCommand.TYPE;
+
+    constructor(readonly payload: MotionKeyPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return [located];
+        return located.clip.keys.length > MINIMUM_KEYS_PER_CLIP
+            ? []
+            : [
+                  issue(ISSUE_CODE.KEY_MINIMUM, "keyId", "运镜至少需要两枚关键帧;要清空请删除整段", [
+                      { type: "motion.remove-clip", label: "删除该运镜片段" },
+                  ]),
+              ];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return;
+        const next = located.clip.withoutKey(this.payload.keyId);
+        if (!next) return;
+        ctx.motionAuthoring.selectKey(located.clip.id, null);
+        ctx.motion.replaceClip(next);
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const current = existingClip(ctx, this.payload.id);
-        return current
-            ? [{ type: SetMotionClipPathCommand.TYPE, payload: { id: current.id, path: current.path.toJSON() } }]
-            : null;
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        return isIssue(located) ? null : [restoreKeyCommand(located.clip.id, located.key)];
     }
 }
 
-/** Replaces one clip focus source. World points and scene-object bindings share this stable AI contract. */
+/** 拖手柄即接管切线:命令层落地「auto → manual」的语义切换,系统此后不再自动平滑该点。 */
+export class SetMotionKeyHandleCommand extends DirectorCommand<SetMotionKeyHandlePayload> {
+    static readonly TYPE = "motion.set-key-handle";
+    readonly type = SetMotionKeyHandleCommand.TYPE;
+
+    constructor(readonly payload: SetMotionKeyHandlePayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return [located];
+        const isValid =
+            (this.payload.kind === "in" || this.payload.kind === "out") && finiteVec3(this.payload.value);
+        return isValid ? [] : [issue(ISSUE_CODE.PAYLOAD, "value", "手柄必须是有限向量,kind 取 in 或 out")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return;
+        replaceKey(ctx, located.clip, located.key.withHandle(this.payload.kind, this.payload.value));
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        return isIssue(located) ? null : [restoreKeyCommand(located.clip.id, located.key)];
+    }
+}
+
+/** 交还切线控制权:关键帧回到 auto,曲线重新自动平滑。 */
+export class ResetMotionKeyHandlesCommand extends DirectorCommand<MotionKeyPayload> {
+    static readonly TYPE = "motion.reset-key-handles";
+    readonly type = ResetMotionKeyHandlesCommand.TYPE;
+
+    constructor(readonly payload: MotionKeyPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        return isIssue(located) ? [located] : [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return;
+        replaceKey(ctx, located.clip, located.key.withAutoHandles());
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        return isIssue(located) ? null : [restoreKeyCommand(located.clip.id, located.key)];
+    }
+}
+
+/** 出段缓动:本关键帧到下一枚之间的配速曲线。 */
+export class SetMotionKeyEasingCommand extends DirectorCommand<SetMotionKeyEasingPayload> {
+    static readonly TYPE = "motion.set-key-easing";
+    readonly type = SetMotionKeyEasingCommand.TYPE;
+
+    constructor(readonly payload: SetMotionKeyEasingPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return [located];
+        return isCameraMotionEasing(this.payload.easing)
+            ? []
+            : [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        if (isIssue(located)) return;
+        replaceKey(ctx, located.clip, located.key.withEasingOut(this.payload.easing));
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
+        return isIssue(located) ? null : [restoreKeyCommand(located.clip.id, located.key)];
+    }
+}
+
+/** 跟拍覆盖层:绑定对象即接管全部关键帧的注视点,target=null 解除覆盖回到关键帧插值。 */
 export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocusPayload> {
     static readonly TYPE = "motion.set-focus";
     readonly type = SetMotionClipFocusCommand.TYPE;
@@ -253,62 +661,42 @@ export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocu
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const current = existingClip(ctx, this.payload.id);
         if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        const focus = this.focus();
+        if (focus === undefined) return [issue(ISSUE_CODE.PAYLOAD, "target", "注视目标格式无效")];
+        const target = focus?.target;
+        const isResolvable =
+            !target || target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId) !== undefined;
+        return isResolvable ? [] : [issue(ISSUE_CODE.FOCUS_OBJECT, "target.objectId", "注视绑定对象不存在")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const current = existingClip(ctx, this.payload.id);
+        const focus = this.focus();
+        if (!current || focus === undefined) return;
+        ctx.motion.replaceClip(current.withFocus(focus));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const current = existingClip(ctx, this.payload.id);
+        return current
+            ? [
+                  {
+                      type: SetMotionClipFocusCommand.TYPE,
+                      payload: { id: current.id, target: current.focus?.target.toJSON() ?? null },
+                  },
+              ]
+            : null;
+    }
+
+    /** undefined = 载荷非法;null = 解除覆盖 */
+    private focus(): CameraFocusTrack | null | undefined {
+        if (this.payload.target === null || this.payload.target === undefined) return null;
         try {
-            const focus = new CameraFocusTrack({ target: this.payload.target });
-            const target = focus.target;
-            return target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId)
-                ? []
-                : [issue(ISSUE_CODE.FOCUS_OBJECT, "target.objectId", "注视绑定对象不存在")];
+            return new CameraFocusTrack({ target: this.payload.target });
         } catch {
-            return [issue(ISSUE_CODE.PAYLOAD, "target", "注视目标格式无效")];
+            return undefined;
         }
-    }
-
-    execute(ctx: DirectorContext): void {
-        const current = existingClip(ctx, this.payload.id);
-        if (current) ctx.motion.replaceClip(current.withFocus(new CameraFocusTrack({ target: this.payload.target })));
-        ctx.playback.sampleCurrent();
-    }
-
-    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const current = existingClip(ctx, this.payload.id);
-        return current
-            ? [{ type: SetMotionClipFocusCommand.TYPE, payload: { id: current.id, target: current.focus.target.toJSON() } }]
-            : null;
-    }
-}
-
-export class SetMotionClipEasingCommand extends DirectorCommand<SetMotionClipEasingPayload> {
-    static readonly TYPE = "motion.set-clip-easing";
-    readonly type = SetMotionClipEasingCommand.TYPE;
-
-    constructor(readonly payload: SetMotionClipEasingPayload) {
-        super();
-    }
-
-    validate(ctx: DirectorContext): string[] {
-        return issueMessages(this.validateIssues(ctx));
-    }
-
-    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const current = existingClip(ctx, this.payload.id);
-        if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
-        const isAllowed =
-            this.payload.easing === CAMERA_MOTION_EASING.LINEAR || this.payload.easing === CAMERA_MOTION_EASING.SMOOTH;
-        return isAllowed ? [] : [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
-    }
-
-    execute(ctx: DirectorContext): void {
-        const current = existingClip(ctx, this.payload.id);
-        if (current) ctx.motion.replaceClip(current.withEasing(this.payload.easing));
-        ctx.playback.sampleCurrent();
-    }
-
-    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const current = existingClip(ctx, this.payload.id);
-        return current
-            ? [{ type: SetMotionClipEasingCommand.TYPE, payload: { id: current.id, easing: current.easing } }]
-            : null;
     }
 }
 
@@ -329,13 +717,68 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
     }
 
     execute(ctx: DirectorContext): void {
+        ctx.motionAuthoring.forgetClip(this.payload.id);
         ctx.motion.removeClip(this.payload.id);
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const current = existingClip(ctx, this.payload.id);
-        return current ? [{ type: CreateMotionClipCommand.TYPE, payload: restoreMotionClipPayload(current) }] : null;
+        return current ? [{ type: CreateMotionClipCommand.TYPE, payload: { clip: current.toJSON() } }] : null;
+    }
+}
+
+/**
+ * 语义层入口:导演语汇 → 标准关键帧序列 → 与 create-take 同一条落地路径。
+ * UI 的预设按钮与 AI 工具调用共用它,产出可再编辑,不是黑盒。
+ */
+export class AuthorMotionCommand extends DirectorCommand<MotionPresetRequest> {
+    static readonly TYPE = "motion.author";
+    readonly type = AuthorMotionCommand.TYPE;
+
+    constructor(readonly payload: MotionPresetRequest) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const isKnownMove = Object.values(MOTION_MOVE).includes(this.payload.move);
+        if (!isKnownMove) return [issue(ISSUE_CODE.MOVE, "move", "未知的运镜语汇")];
+        const shot = ctx.camera.director.getShot(this.payload.cameraId);
+        if (!shot) return [issue(ISSUE_CODE.CAMERA, "cameraId", "运镜引用的机位不存在")];
+        const subjectId = this.payload.subjectId;
+        if (subjectId && !ctx.scene.manager.getEntity(subjectId)) {
+            return [issue(ISSUE_CODE.SUBJECT, "subjectId", "跟拍对象不存在")];
+        }
+        return this.takeCommand(ctx)?.validateIssues?.(ctx) ?? [issue(ISSUE_CODE.PAYLOAD, "keys", "预设编译失败")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        this.takeCommand(ctx)?.execute(ctx);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        return this.takeCommand(ctx)?.invert(ctx) ?? null;
+    }
+
+    private takeCommand(ctx: DirectorContext): CreateMotionTakeCommand | null {
+        const shot = ctx.camera.director.getShot(this.payload.cameraId);
+        if (!shot) return null;
+        const subject = this.payload.subjectId ? subjectBoundsFor(ctx, this.payload.subjectId) : null;
+        const keys = presetCompiler.compile(this.payload, { shot, subject });
+        return new CreateMotionTakeCommand({
+            id: `take-${this.payload.cameraId}-${this.payload.move}-${this.payload.startTimeSeconds}`,
+            cameraId: this.payload.cameraId,
+            startTimeSeconds: this.payload.startTimeSeconds,
+            durationSeconds: this.payload.durationSeconds,
+            keys,
+            focus: this.payload.subjectId
+                ? { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId: this.payload.subjectId, worldOffset: [0, 0, 0] }
+                : null,
+        });
     }
 }
 
@@ -412,6 +855,68 @@ export class RemoveProgramClipCommand extends DirectorCommand<RemoveProgramClipP
     }
 }
 
+/** 预览尚未切入 Program 的片段(瞬态视图态,不入撤销栈)。 */
+export class EnterMotionPreviewCommand extends DirectorCommand<PreviewClipPayload> {
+    static readonly TYPE = "motion.preview.enter";
+    readonly type = EnterMotionPreviewCommand.TYPE;
+
+    constructor(readonly payload: PreviewClipPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        return existingClip(ctx, this.payload.clipId) ? [] : [issue(ISSUE_CODE.CLIP, "clipId", "运镜片段不存在")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.motionAuthoring.setPreviewClip(this.payload.clipId);
+        ctx.motionAuthoring.setViewMode(VIEW_MODE.LENS);
+        ctx.playback.sampleCurrent();
+    }
+}
+
+export class ExitMotionPreviewCommand extends DirectorCommand<Record<string, never>> {
+    static readonly TYPE = "motion.preview.exit";
+    readonly type = ExitMotionPreviewCommand.TYPE;
+
+    constructor(readonly payload: Record<string, never> = EMPTY_PAYLOAD) {
+        super();
+    }
+
+    validate(): string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.motionAuthoring.setPreviewClip(null);
+        ctx.playback.sampleCurrent();
+    }
+}
+
+/** 视口模式切换(瞬态):导演视角 ↔ 镜头视角,写入目标随之从「无」变为镜头关键帧。 */
+export class SetViewModeCommand extends DirectorCommand<SetViewModePayload> {
+    static readonly TYPE = "view.set-mode";
+    readonly type = SetViewModeCommand.TYPE;
+
+    constructor(readonly payload: SetViewModePayload) {
+        super();
+    }
+
+    validate(): string[] {
+        const isKnown = this.payload.mode === VIEW_MODE.DIRECTOR || this.payload.mode === VIEW_MODE.LENS;
+        return isKnown ? [] : ["视口模式必须是 director 或 lens"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.motionAuthoring.setViewMode(this.payload.mode);
+        ctx.playback.sampleCurrent();
+    }
+}
+
 /** Read-only AI discovery and inspection endpoint. No Three references cross this boundary. */
 export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "motion.get";
@@ -429,28 +934,44 @@ export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>
             program: ctx.motion.program.toJSON(),
             activeProgramCameraId: ctx.motion.program.cameraAt(ctx.clock.time),
             timelineDurationSeconds: ctx.timeline.document.duration,
+            viewMode: ctx.motionAuthoring.viewMode,
+            previewClipId: ctx.motionAuthoring.previewClipId,
+            handleModes: Object.values(MOTION_HANDLE_MODE),
         };
     }
 }
 
 function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: MOTION_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.camera-motion-v2" };
+    return { type, version: MOTION_COMMAND_VERSION, kind, permissions, appliesWhen: MOTION_APPLIES_WHEN };
 }
 
 /** Motion and Program commands share one discovery namespace while retaining independent write permissions. */
 export function registerCameraMotionCommands(dispatcher: CommandDispatcher): void {
     const commands = [
         CreateMotionClipCommand,
+        CreateMotionTakeCommand,
         SetMotionClipRangeCommand,
-        SetMotionClipPathCommand,
+        SetMotionKeyCommand,
+        MoveMotionKeyCommand,
+        RemoveMotionKeyCommand,
+        SetMotionKeyHandleCommand,
+        ResetMotionKeyHandlesCommand,
+        SetMotionKeyEasingCommand,
         SetMotionClipFocusCommand,
-        SetMotionClipEasingCommand,
         RemoveMotionClipCommand,
+        AuthorMotionCommand,
         SetProgramClipCommand,
         RemoveProgramClipCommand,
+        EnterMotionPreviewCommand,
+        ExitMotionPreviewCommand,
+        SetViewModeCommand,
     ] as const;
     for (const Command of commands) {
-        dispatcher.register(Command.TYPE, (payload) => new Command(payload), capability(Command.TYPE, "command", [MOTION_PERMISSION]));
+        dispatcher.register(
+            Command.TYPE,
+            (payload) => new Command(payload as never),
+            capability(Command.TYPE, "command", [MOTION_PERMISSION]),
+        );
     }
     dispatcher.registerQuery(
         CameraMotionGetQuery.TYPE,

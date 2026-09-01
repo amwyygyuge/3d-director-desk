@@ -23,6 +23,10 @@ import { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { PoseGroundingService } from "@/pose/PoseGroundingService";
 import { CameraStore } from "@/store/CameraStore";
 import { CameraMotionStore } from "@/store/CameraMotionStore";
+import { KeyframeAuthoringService } from "@/authoring/KeyframeAuthoringService";
+import { SnapResolver } from "@/authoring/SnapResolver";
+import { TimelineLayout } from "@/authoring/TimelineLayout";
+import { MotionAuthoringStore } from "@/store/MotionAuthoringStore";
 import { SceneStore } from "@/store/SceneStore";
 import { SelectionStore } from "@/store/SelectionStore";
 import { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
@@ -80,6 +84,14 @@ export interface DirectorDeskStores {
     timeline: TimelineStore;
     /** 单条导演运镜路径的每实例可序列化状态容器 */
     motion: CameraMotionStore;
+    /** 运镜编排态(视口模式、预览片段、选中关键帧、轨迹显隐、时间轴窗口) */
+    motionAuthoring: MotionAuthoringStore;
+    /** 三数据源 → 统一行几何的时间轴视图模型(展开轨与迷你轨共用) */
+    timelineLayout: TimelineLayout;
+    /** 打点上下文分派(K:镜头关键帧 / 走位关键帧) */
+    keyframeAuthoring: KeyframeAuthoringService;
+    /** 时间轴拖拽吸附候选解析 */
+    snapResolver: SnapResolver;
     /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
@@ -124,8 +136,8 @@ export function createDirectorDeskStores(options?: {
     hostBridge?: HostBridgeConfiguration | undefined;
     /** 宿主注入的资源 provider(直嵌形态);内置资源始终加载 */
     assetProviders?: readonly AssetProvider[] | undefined;
-    /** 运镜轨迹预览的初始可见性(Storybook/宿主播种) */
-    motionPathPreviewVisible?: boolean | undefined;
+    /** 运镜轨迹辅助物的初始可见性(Storybook/宿主播种) */
+    motionPathVisible?: boolean | undefined;
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
@@ -135,17 +147,33 @@ export function createDirectorDeskStores(options?: {
     dispatcher.attachHistory(history);
     const host =
         options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
-    const clock = new TimeTransport();
+    const timeline = new TimelineStore();
+    // 时钟的时长权威来自时间轴文档:playhead 双端钳在 [0, duration],不再播过尾
+    const clock = new TimeTransport({
+        get durationSeconds() {
+            return timeline.document.duration;
+        },
+    });
     const binder = new AnimationBinder();
     const actionPreview = new ActionPreviewController(binder);
     const scene = new SceneStore();
     const poseGrounding = new PoseGroundingService(scene.manager);
-    const timeline = new TimelineStore();
     const skeletons = new SkeletonRuntimeRegistry();
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);
     const camera = new CameraStore();
-    const playback = new PlaybackCoordinator(timeline, scene.manager, clock, motion, camera, binder, skeletons);
+    const layout = new WorkbenchLayoutStore();
+    const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
+    const playback = new PlaybackCoordinator(
+        timeline,
+        scene.manager,
+        clock,
+        motion,
+        camera,
+        binder,
+        skeletons,
+        motionAuthoring,
+    );
     const catalog = new AssetCatalog();
     const lifecycle = new DeskLifecycleGuard();
     const documentImports = new DocumentImportService();
@@ -168,7 +196,11 @@ export function createDirectorDeskStores(options?: {
         assets: new AssetLibrary(),
         models: new ModelImporter(),
         ui: new UiStore(),
-        layout: new WorkbenchLayoutStore({ motionPathPreviewVisible: options?.motionPathPreviewVisible }),
+        layout,
+        motionAuthoring,
+        timelineLayout: new TimelineLayout(motion, timeline, camera),
+        keyframeAuthoring: new KeyframeAuthoringService(),
+        snapResolver: new SnapResolver(),
         playheadDisplay: new PlayheadDisplay(clock),
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,

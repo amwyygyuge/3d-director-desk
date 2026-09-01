@@ -1,6 +1,9 @@
 import type { Vec3 } from "@/core/SceneObject";
 
 export const DEFAULT_CAMERA_FOV = 45;
+/** 焦距围栏(领域常量):命令层与关键帧共用同一上下界,禁止两处各写一份 */
+export const FOV_MIN = 1;
+export const FOV_MAX = 179;
 
 function copyVec3([x, y, z]: Vec3): Vec3 {
     return Object.freeze([x, y, z] as const);

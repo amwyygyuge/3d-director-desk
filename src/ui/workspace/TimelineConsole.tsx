@@ -2,6 +2,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import RepeatIcon from "@mui/icons-material/Repeat";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
@@ -11,9 +12,11 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useRef } from "react";
 
-import type { CommandResult } from "@/command/DirectorCommand";
+import { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND } from "@/authoring/TimelineLayout";
+import { TimelineViewport } from "@/authoring/TimelineViewport";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { CHROME, MONO_FONT_STACK } from "@/ui/shell/theme";
 import { useScrubGesture } from "@/ui/timeline/useScrubGesture";
 import { TimelinePanel } from "@/ui/timeline/TimelinePanel";
@@ -29,7 +32,8 @@ const HOVER_OPEN_DELAY_MS = 200;
 const HOVER_CLOSE_DELAY_MS = 400;
 const MINI_TRACK_HEIGHT_PX = 24;
 const MINI_CLIP_HEIGHT_PX = 6;
-const MINI_CLIP_TOP_PX = 9;
+const MINI_MOTION_CLIP_TOP_PX = 4;
+const MINI_PROGRAM_CLIP_TOP_PX = 14;
 const MINI_KEYFRAME_SIZE_PX = 8;
 const MINI_KEYFRAME_TOP_PX = 8;
 const MINI_PLAYHEAD_GLOW = "0 0 8px #ef4444";
@@ -40,9 +44,17 @@ const MINI_TRACK_BACKGROUND = "rgba(0,0,0,0.4)";
 const RAIL_CLEARANCE_PX = CHROME.edgeGapPx * 2 + CHROME.railCollapsedPx;
 const INSPECTOR_CLEARANCE_PX = CHROME.edgeGapPx * 2 + CHROME.inspectorWidthPx;
 const MINI_CLIP_OPACITY = 0.5;
+const MINI_PERCENT_FULL = 100;
+const MINI_KEYFRAME_HALF_SIZE_PX = MINI_KEYFRAME_SIZE_PX / 2;
+const MINI_PILL_RADIUS_PX = 99;
 const MINI_DURATION_FALLBACK_SECONDS = 1;
 const EXPANDED_OPACITY_DELAY = "100ms";
 const COLLAPSED_OPACITY_DELAY = "0ms";
+
+const MINI_BAR_LAYER = {
+    [TIMELINE_BAR_KIND.PROGRAM]: { top: MINI_PROGRAM_CLIP_TOP_PX, color: "secondary.main" },
+    [TIMELINE_BAR_KIND.MOTION]: { top: MINI_MOTION_CLIP_TOP_PX, color: "primary.main" },
+} as const;
 
 type TransportCommandType = "transport.stop" | "transport.play" | "transport.pause";
 
@@ -66,9 +78,6 @@ function timePercent(time: number, duration: number): string {
     return `${(safeTime / safeDuration) * 100}%`;
 }
 
-function reportCommandFailure({ result, setNotice }: { readonly result: CommandResult; readonly setNotice: (message: string) => void }): void {
-    if (!result.ok) setNotice(result.issues?.join(";") ?? result.error);
-}
 
 /** 帧级 observable 的唯一渲染出口之一:只有这条 2px 游标随 playhead 重渲。 */
 const MiniPlayhead = observer(function MiniPlayhead() {
@@ -116,19 +125,22 @@ const TimecodeReadout = observer(function TimecodeReadout() {
  */
 const MiniTimeline = observer(function MiniTimeline() {
     const stores = useDirectorDeskStores();
-    const { motion, timeline, ui } = stores;
+    const { timeline } = stores;
     const duration = timeline.document.duration;
-    const programClips = motion.program.clips;
-    const tracks = timeline.document.tracks;
+    const viewport = TimelineViewport.full(duration);
+    const bars = stores.timelineLayout.bars(viewport);
+    const transformMarks = stores.timelineLayout
+        .project(viewport)
+        .flatMap((row) => row.marks.filter((mark) => mark.kind === TIMELINE_MARK_KIND.TRANSFORM_KEY));
     const trackRef = useRef<HTMLDivElement>(null);
     const scrub = useScrubGesture({
         trackRef,
         onScrub: (ratio) => {
             const result = stores.dispatcher.dispatch(
-                { type: "transport.seek", payload: { time: ratio * duration } },
+                { type: "transport.seek", payload: { time: viewport.timeAt(ratio) } },
                 stores,
             );
-            reportCommandFailure({ result, setNotice: (message) => ui.setApplicationNotice(message) });
+            reportCommandFailure(stores, result);
         },
     });
     return (
@@ -151,37 +163,38 @@ const MiniTimeline = observer(function MiniTimeline() {
                 "& > *": { pointerEvents: "none" },
             }}
         >
-            {programClips.map((clip) => (
+            {bars.map((bar) => {
+                const layer = MINI_BAR_LAYER[bar.kind];
+                return (
+                    <Box
+                        key={bar.id}
+                        sx={{
+                            position: "absolute",
+                            top: layer.top,
+                            left: `${bar.startRatio * MINI_PERCENT_FULL}%`,
+                            width: `${bar.widthRatio * MINI_PERCENT_FULL}%`,
+                            height: MINI_CLIP_HEIGHT_PX,
+                            borderRadius: MINI_PILL_RADIUS_PX,
+                            bgcolor: layer.color,
+                            opacity: MINI_CLIP_OPACITY,
+                        }}
+                    />
+                );
+            })}
+            {transformMarks.map((mark) => (
                 <Box
-                    key={clip.id}
+                    key={`${mark.ownerId}-${mark.id}`}
                     sx={{
                         position: "absolute",
-                        top: MINI_CLIP_TOP_PX,
-                        left: timePercent(clip.startTimeSeconds, duration),
-                        width: `${(clip.durationSeconds / Math.max(duration, MINI_DURATION_FALLBACK_SECONDS)) * 100}%`,
-                        height: MINI_CLIP_HEIGHT_PX,
-                        borderRadius: 99,
-                        bgcolor: "secondary.main",
-                        opacity: MINI_CLIP_OPACITY,
+                        top: MINI_KEYFRAME_TOP_PX,
+                        left: `calc(${mark.ratio * MINI_PERCENT_FULL}% - ${MINI_KEYFRAME_HALF_SIZE_PX}px)`,
+                        width: MINI_KEYFRAME_SIZE_PX,
+                        height: MINI_KEYFRAME_SIZE_PX,
+                        transform: "rotate(45deg)",
+                        bgcolor: "primary.main",
                     }}
                 />
             ))}
-            {tracks.flatMap((track) =>
-                track.keyframes.map((keyframe) => (
-                    <Box
-                        key={`${track.id}-${keyframe.id}`}
-                        sx={{
-                            position: "absolute",
-                            top: MINI_KEYFRAME_TOP_PX,
-                            left: `calc(${timePercent(keyframe.time, duration)} - ${MINI_KEYFRAME_SIZE_PX / 2}px)`,
-                            width: MINI_KEYFRAME_SIZE_PX,
-                            height: MINI_KEYFRAME_SIZE_PX,
-                            transform: "rotate(45deg)",
-                            bgcolor: "primary.main",
-                        }}
-                    />
-                )),
-            )}
             <MiniPlayhead />
         </Box>
     );
@@ -190,7 +203,7 @@ const MiniTimeline = observer(function MiniTimeline() {
 /** 方案 D 底部编排中枢:默认只保留低遮挡的迷你播放条。 */
 export const TimelineConsole = observer(function TimelineConsole() {
     const stores = useDirectorDeskStores();
-    const { clock, dispatcher, layout, selection, ui } = stores;
+    const { clock, dispatcher, layout, selection } = stores;
     const { active: hoverIntent, handlers } = useHoverIntent({
         openDelayMs: HOVER_OPEN_DELAY_MS,
         closeDelayMs: HOVER_CLOSE_DELAY_MS,
@@ -201,7 +214,7 @@ export const TimelineConsole = observer(function TimelineConsole() {
 
     const dispatchTransport = (type: TransportCommandType): void => {
         const result = dispatcher.dispatch({ type, payload: {} }, stores);
-        reportCommandFailure({ result, setNotice: (message) => ui.setApplicationNotice(message) });
+        reportCommandFailure(stores, result);
     };
 
     if (!layout.authoringVisible) return null;
@@ -243,6 +256,18 @@ export const TimelineConsole = observer(function TimelineConsole() {
                     </IconButton>
                 </Tooltip>
                 <TimecodeReadout />
+                <Tooltip title={`循环播放（${formatShortcutHint(SHORTCUT_ID.TRANSPORT_LOOP)}）`}>
+                    <IconButton
+                        aria-label="循环播放"
+                        aria-pressed={clock.isLooping}
+                        onClick={() => {
+                            const result = dispatcher.dispatch({ type: "transport.set-loop", payload: { loop: !clock.isLooping } }, stores);
+                            reportCommandFailure(stores, result);
+                        }}
+                    >
+                        <RepeatIcon />
+                    </IconButton>
+                </Tooltip>
                 <MiniTimeline />
                 <Tooltip title={layout.timelinePinned ? "取消钉住时间线" : "钉住展开时间线"}>
                     <IconButton

@@ -1,10 +1,12 @@
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import { Grid, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 import { observer } from "mobx-react-lite";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatFromUrl } from "@/assets/ModelAsset";
 import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
@@ -17,6 +19,7 @@ import { BonePicker } from "@/ui/viewport/scene/BonePicker";
 import { TransformGizmoController } from "@/ui/viewport/scene/TransformGizmoController";
 import { FlyDrive } from "@/ui/viewport/scene/FlyDrive";
 import { ShotNavigation } from "@/ui/viewport/scene/ShotNavigation";
+import { LensNavigation } from "@/ui/viewport/scene/LensNavigation";
 import type { AssetProvider } from "@/assets/catalog/AssetProvider";
 import { createDirectorDeskStores, DirectorDeskProvider } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -37,10 +40,16 @@ import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
 import { StudioRig } from "@/ui/viewport/scene/StudioRig";
 import { CameraMotionRig } from "@/ui/viewport/scene/CameraMotionRig";
 import { MotionPathPreview } from "@/ui/viewport/scene/MotionPathPreview";
+import type { MotionKeyContextRequest } from "@/ui/viewport/scene/MotionClipPathPreview";
 import { ShotCameraRig } from "@/ui/viewport/scene/ShotCameraRig";
 import { ShotMarkers } from "@/ui/viewport/scene/ShotMarkers";
 import { ShotFrameOverlay } from "@/ui/viewport/ShotFrameOverlay";
 import { ViewportInteractionHints } from "@/ui/viewport/ViewportInteractionHints";
+
+interface MotionKeyMenuPosition {
+    readonly left: number;
+    readonly top: number;
+}
 
 const STUDIO_CAMERA_FOV_DEGREES = 45;
 const STUDIO_CAMERA_POSITION: [number, number, number] = [6, 4, 8];
@@ -57,8 +66,8 @@ export interface DirectorDeskProps {
     assetProviders?: readonly AssetProvider[];
     /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
     hostBridge?: HostBridgeConfiguration;
-    /** 运镜轨迹预览的初始可见性(Storybook/宿主播种);运行时开关在左栏机位面板 */
-    initialMotionPreviewVisible?: boolean;
+    /** 运镜轨迹辅助物的初始可见性(Storybook/宿主播种);运行时开关在运镜编排态。 */
+    initialMotionPathVisible?: boolean;
     /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
     onReady?: (stores: DirectorDeskStores) => void;
 }
@@ -81,17 +90,30 @@ export const DirectorDesk = observer(function DirectorDesk({
     hostBridge,
     assetProviders,
     onReady,
-    initialMotionPreviewVisible = false,
+    initialMotionPathVisible = false,
 }: DirectorDeskProps) {
     const [stores] = useState<DirectorDeskStores>(() =>
         createDirectorDeskStores({
             host,
             hostBridge,
             assetProviders,
-            motionPathPreviewVisible: initialMotionPreviewVisible,
+            motionPathVisible: initialMotionPathVisible,
         }),
     );
     const deskRef = useRef<HTMLDivElement>(null);
+    const [motionKeyMenuPosition, setMotionKeyMenuPosition] = useState<MotionKeyMenuPosition | null>(null);
+    const openMotionKeyMenu = useCallback((request: MotionKeyContextRequest): void => {
+        setMotionKeyMenuPosition({ left: request.clientX, top: request.clientY });
+    }, []);
+    const closeMotionKeyMenu = useCallback((): void => {
+        setMotionKeyMenuPosition(null);
+    }, []);
+    const selectedClipId = stores.motionAuthoring.selectedClipId;
+    const selectedKeyId = stores.motionAuthoring.selectedKeyId;
+    const selectedClip = selectedClipId ? stores.motion.clip(selectedClipId) : undefined;
+    const selectedKey = selectedClip && selectedKeyId ? selectedClip.key(selectedKeyId) : undefined;
+
+
 
     // 每实例一次性就绪通知;onReady 变化不重复触发(播种语义)
     useEffect(() => {
@@ -217,9 +239,10 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <PlaybackDriver />
                                 <ShotCameraRig />
                                 <CameraMotionRig />
-                                <MotionPathPreview visible={stores.layout.motionPathPreviewActive} />
+                                <MotionPathPreview onKeyContextMenu={openMotionKeyMenu} />
                                 <FlyDrive />
                                 <ShotNavigation />
+                                <LensNavigation />
                             </Canvas>
                             <ShotFrameOverlay />
                             <CapturePreview />
@@ -238,6 +261,60 @@ export const DirectorDesk = observer(function DirectorDesk({
                         <ApplicationNotice />
                         <Hotkeys deskRef={deskRef} />
                         <HelpOverlay />
+                        <Menu
+                            open={motionKeyMenuPosition !== null}
+                            onClose={closeMotionKeyMenu}
+                            anchorReference="anchorPosition"
+                            anchorPosition={
+                                motionKeyMenuPosition
+                                    ? { top: motionKeyMenuPosition.top, left: motionKeyMenuPosition.left }
+                                    : undefined
+                            }
+                        >
+                            <MenuItem
+                                disabled={!selectedClipId || !selectedKeyId}
+                                onClick={() => {
+                                    if (!selectedClipId || !selectedKeyId) return;
+                                    const result = stores.dispatcher.dispatch(
+                                        { type: "motion.remove-key", payload: { clipId: selectedClipId, keyId: selectedKeyId } },
+                                        stores,
+                                    );
+                                    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+                                    else stores.motionAuthoring.selectKey(selectedClipId, null);
+                                    closeMotionKeyMenu();
+                                }}
+                            >
+                                删除关键帧
+                            </MenuItem>
+                            <MenuItem
+                                disabled={!selectedClipId || !selectedKeyId}
+                                onClick={() => {
+                                    if (!selectedClipId || !selectedKeyId) return;
+                                    const result = stores.dispatcher.dispatch(
+                                        { type: "motion.reset-key-handles", payload: { clipId: selectedClipId, keyId: selectedKeyId } },
+                                        stores,
+                                    );
+                                    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+                                    closeMotionKeyMenu();
+                                }}
+                            >
+                                恢复自动手柄
+                            </MenuItem>
+                            <MenuItem
+                                disabled={!selectedClip || !selectedKey}
+                                onClick={() => {
+                                    if (!selectedClip || !selectedKey) return;
+                                    const result = stores.dispatcher.dispatch(
+                                        { type: "transport.seek", payload: { timeSeconds: selectedClip.timeAt(selectedKey.progress) } },
+                                        stores,
+                                    );
+                                    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+                                    closeMotionKeyMenu();
+                                }}
+                            >
+                                定位到此
+                            </MenuItem>
+                        </Menu>
                     </div>
                 </DirectorDeskProvider>
             </ScopedCssBaseline>

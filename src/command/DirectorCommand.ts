@@ -5,6 +5,7 @@ import type { AssetCatalog } from "@/assets/catalog/AssetCatalog";
 import type { HostAdapter } from "@/host/HostAdapter";
 import type { ModelImporter } from "@/loaders/ModelImporter";
 import type { CameraStore } from "@/store/CameraStore";
+import type { MotionAuthoringStore } from "@/store/MotionAuthoringStore";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { CaptureService } from "@/capture/CaptureService";
 import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
@@ -27,6 +28,8 @@ export interface DirectorContext {
     readonly clock: TimeTransport;
     readonly timeline: TimelineStore;
     readonly motion: CameraMotionStore;
+    /** 运镜编排态:视口模式、预览片段、选中关键帧(纯 UI 态,不入文档与撤销栈) */
+    readonly motionAuthoring: MotionAuthoringStore;
     /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;

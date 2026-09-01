@@ -1,6 +1,6 @@
 # 运镜编排交互设计方案 —— 「掌镜即运镜」
 
-> 状态：⬜ 提案，待评审。
+> 状态：✅ P0–P2 已落地。
 > 前置：[phase2-design.md](./phase2-design.md)、[exec2/02-camera-motion.md](./exec2/02-camera-motion.md)（已交付）、[exec2/04-camera-future.md](./exec2/04-camera-future.md)（后续能力）、[layouts/interaction-guidelines.md](./layouts/interaction-guidelines.md)、[state-management.md](./state-management.md)。
 > 命题：**运镜最终服务于时间轴**。本文给出把这条命题落成日常手感的领域模型演进、交互契约与分期。
 > 姊妹篇：[camera-motion-drafting.md](./camera-motion-drafting.md) —— 轨迹怎么画、效果怎么看（含对本文第十二节「画中画监视器」判断的修正）。
@@ -14,30 +14,28 @@
 | 层 | 承载类 | 事实 |
 |---|---|---|
 | 机位领域 | `CameraShot` / `CameraDirector` | 不可变值对象 `{position, target, fov}`，observable map 聚合，`camera.set-shot` 唯一写入口 |
-| 时序领域 | `CameraMotionClip` | `{id, cameraId, startTimeSeconds, durationSeconds, path, focus, easing}`，`covers(t)`、`withPath/withFocus/withTimeRange` 全不可变 |
-| 空间路径 | `CameraMotionPath` / `MotionPathAnchor` | `anchors: readonly MotionPathAnchor[]`（≥2），手柄是相对锚点的偏移；`sampleCameraMotionPath` 三次贝塞尔、零分配 |
-| 注视 | `CameraFocusTrack` / `FocusTargetResolver` | `mode: "single"`，目标为 `world-point` 或 `scene-object + worldOffset`；解析走 `SceneManager` 运行时索引，未加载时回退实体 transform |
-| 输出 | `CameraProgramTrack` | `cameraAt(t)` 同一时刻唯一机位，硬切，允许空隙 |
+| 时序领域 | `CameraMotionClip` | `{id, cameraId, startTimeSeconds, durationSeconds, keys, focus}`，`covers(t)`、`withKey/withoutKey/withFocus/withTimeRange` 全不可变 |
+| 空间轨迹 | `MotionTrajectory<CameraKey>` / `AutoHandleSolver` | key 按 `progress` 排序，构造期预解算控制点；采样零分配，默认 Catmull-Rom 自动手柄 |
+| 注视 | `CameraFocusTrack` / `FocusTargetResolver` | 可选跟拍覆盖层；`null` 时由 key 的 `target` 插值，非空时覆盖注视目标 |
+| 输出 | `CameraProgramTrack` | `cameraAt(t)` 同一时刻唯一机位，硬切，允许空隙；`motion.create-take` 默认同步落 Program |
 | 运行时 | `CameraMotionSampler` + `CameraMotionSink` | `bindSink/sampleCurrent/restore`，只写调用方标量，不写 MobX |
 | 定序 | `PlaybackCoordinator` | 单条 `reaction(transport.time)`：`binder → transform → motionSampler → pose → invalidate` |
-| 命令 | `motion.*` / `program.*` | `create-clip / set-clip-range / set-clip-path / set-focus / set-clip-easing / remove-clip / program.set-clip / program.remove-clip`，全部 `invert` 可撤销，issue 码 `motion-camera-not-found / motion-clip-not-found / motion-time-outside-duration / motion-overlapping-clip / program-overlapping-clip / motion-focus-object-not-found` |
-| 引用完整性 | `RemoveObjectCommand.validateIssues` | 删除被注视对象返回 `focus-target-in-use` + `options: freeze-world-point / remove-dependent-focus` |
+| 命令 | `motion.*` / `program.*` | `create-take / create-clip / set-clip-range / set-key / move-key / remove-key / set-key-handle / reset-key-handles / set-key-easing / set-focus / remove-clip / author / preview.enter / preview.exit`，全部持久写入命令可撤销 |
+| 引用完整性 | `RemoveObjectCommand.validateIssues` | 删除被跟拍对象返回 `focus-target-in-use` + `options: freeze-world-point / remove-dependent-focus` |
 
-**数据模型与命令层没有欠账。欠的全部在交互面。**
+**P0–P2 的领域、命令和交互面已形成闭环。**
 
-### 1.2 「从零做出一段运镜」当前需要的动作序列
+### 1.2 「从零做出一段运镜」当前动作序列
 
-1. 左栏点「机位与运镜」打开 `ShotPanel`；
-2. 视口摆位（OrbitControls 或 WASD 飞行）→ 点「当前视角存为机位」（按钮 disabled 条件是 `lastDirectorPose !== null`，需先有一次结束的轨道交互）；
-3. 视口再摆到终点画面；
-4. **单击**机位标记选中它（`ShotMarkers` 双击是 `camera.activate` 进掌镜 —— 误双击即丢失刚摆好的自由视角）；
-5. 点「从机位到当前视角创建运镜」（要求「选中机位 ∧ 有自由 pose ∧ 未播放 ∧ 剩余时长 > 0」四条件同时成立，任一不满足只给一行灰字）；
-6. 想加中间点 → 再摆一次视口 → 点「当前视角追加曲线路径点」；
-7. 想调曲线 → 选中 clip → 在每个锚点的入/出手柄 6 个数值框里盲填（`onBlur` 提交 `motion.set-clip-path`）；**锚点 position 本身连数值编辑都没有**；
-8. 拖 playhead 到目标时刻 → 选中机位 → 点时间轴的「切入选中机位」生成 Program 片段；
-9. 顶栏点「全屏预览」，从 `t=0` 整段顺放 —— 这是唯一能看到运镜的通道，中途不能 scrub（预览态 `authoringVisible=false`，壳层与时间轴全隐，快捷键只剩 `Esc`）。
+1. 左栏点「机位与运镜」打开 `ShotPanel`，创建或选中静态机位；
+2. 选择「推/拉/摇/移/升降/环绕/静止」预设，UI 通过 `motion.author` 生成可编辑 key，或在 AI/高级流程中调用 `motion.create-take` 一次提交 key 与 Program；
+3. 在镜头视角 scrub 时间轴，视口显示该时刻的运镜画面；
+4. 摆位松手以 `motion.set-key` 提交完整 pose，时间轴显示 key 菱形；
+5. 拖 key 重定时用 `motion.move-key`，拖片段移动/拉伸用 `motion.set-clip-range`，拖手柄用 `motion.set-key-handle`；
+6. 需要跟拍时用 `motion.set-focus` 绑定对象；解除覆盖传 `target: null`；
+7. 从任意时刻播放、scrub 或预览片段；`TimeTransport` 将 playhead clamp 到时间轴时长，并支持循环。
 
-### 1.3 五处断裂（按危害排序）
+### 1.3 历史断裂（P0–P2 已解决）
 
 | # | 断裂 | 证据 | 危害 |
 |---|---|---|---|
@@ -47,7 +45,7 @@
 | **D4** | **Program 轨手工双维护** | 创建 motion clip 不生成 Program 片段；`TimelinePanel` 的 `ProgramCutInButton` 是独立动作 | 做完运镜忘了切 Program = 成片该段黑屏，且没有任何提示 |
 | **D5** | **playhead 不封顶** | `TimeTransport.ts:57-66` 无 `duration`，`tick` 不 clamp，`seek` 只 clamp `≥0`，无 loop | 播过尾后 `program.cameraAt` 返回 `null`、画面停住而时间继续涨，编排期反复踩 |
 
-附带缺陷：`ShotNavigation` 掌镜的位移/转向/滚轮在停手 400ms 后直接落 `camera.set-shot`（隐式改机位数据）；掌镜态下路径辅助物与机位标记全隐（`authoringVisible` 门控），无法边掌镜边看曲线；`skills/director-desk/SKILL.md` 仍在教 `motion.add-key` 与 `continuity.check`（代码中均不存在），AI 词汇已与 clip 制脱节。
+附带历史缺陷已随 P0–P2 清理：掌镜写入仍只走 `camera.set-shot`，镜头视角下路径辅助物与 key 编辑均可见；AI 词汇、预设与 UI 命令均收敛到 clip/key 制。
 
 ---
 
@@ -129,7 +127,7 @@ flowchart TB
 
 ---
 
-## 四、领域模型演进：`MotionPathAnchor` → `CameraKey`
+## 四、领域模型演进：`CameraKey` 与通用 `MotionTrajectory`
 
 ### 4.1 模型
 
@@ -188,7 +186,7 @@ classDiagram
 这一条同时解决三件事：目标随时间变（`04-camera-future` 的「目标关键帧」）、fov 随时间变（推镜/变焦，现在 fov 是 `CameraShot` 的静态值，整段运镜恒定）、以及「用户摆的就是画面本身」——摆位手势天然产出这三个量，拆开反而要求用户理解它们是三条独立的轨。
 
 **决策 3：`progress` 显式承担分段配速，因此不做弧长参数化。**
-现状 `sampleCameraMotionPath` 是**每段均匀 t**：长段和短段耗时一样，长段视觉上更快。常规解法是弧长重参数化（每帧要查表或迭代，与「零分配」冲突）。有了显式 `progress`，「哪一段占多少时间」由作者直接指定——把控制权交回作者，同时省掉运行时开销。速度曲线编辑器（`04-camera-future`）仍作为后续的独立能力，不被本决策抢占语义。
+没有弧长重参数化：显式 `progress` 让作者决定每段配速，长段和短段无需在帧级查表或迭代；速度曲线编辑器仍是后续独立能力。
 
 **决策 4：手柄默认 `auto`，`AutoHandleSolver` 用 Catmull-Rom 张力求解。**
 现状创建锚点时已按「相邻弦长的三分之一」建手柄，这本就是 Catmull-Rom 的特例。把它提升为**声明式的 `handleMode: "auto"`**：key 移动时手柄自动重算（曲线始终平滑），用户拖动手柄才切 `"manual"` 冻结。这样「打三个点就得到一条顺滑运镜」是默认结果，而不是需要手工调 6 个数值框的成果。
@@ -196,20 +194,9 @@ classDiagram
 **决策 5：`CameraFocusTrack` 从「必需目标」降为「覆盖层」。**
 默认注视来自 key 的 `target` 插值（用户摆画面时自然产生）。只有显式绑定跟拍对象时，`FocusTargetResolver` 的解析结果**覆盖** key 的 target，UI 上把 target 字段置灰并标注「由跟拍目标接管」。这既保留了跟拍能力，又免除了「必须先设 focus 才能做运镜」的前置心智。
 
-### 4.3 兼容与迁移
+### 4.3 清洁切换
 
-`MotionPathAnchor` → `CameraKey` 是**字段扩展**，JSON 向后兼容：
-
-| 旧字段 | 新字段 | 缺省规则 |
-|---|---|---|
-| `id / position / inHandle / outHandle` | 同名 | 直接搬 |
-| —— | `progress` | 按索引均匀分布 `i / (n-1)` |
-| —— | `target` | 继承 `clip.focus` 的世界点，或 `shot.target` |
-| —— | `fov` | 继承 `shot.fov` |
-| —— | `easingOut` | 继承 `clip.easing`（clip 级 `easing` 保留为读旧档的兜底，新档不写） |
-| —— | `handleMode` | 手柄为零向量 → `"auto"`；否则 `"manual"` |
-
-`CameraMotionPath` 类被 `CameraKey[]` 取代后删除（清洁切换，不留别名/re-export）；`sampleCameraMotionPath` 的三次贝塞尔求值函数保留并被 `sampleCameraMotionClip` 复用。`motion.set-clip-path` 命令随之被 `motion.set-key` 族取代，`skills/` 与 `docs/ai-control.md` 同批更新。
+功能未上线,清洁切换,无迁移。
 
 ---
 
@@ -456,7 +443,7 @@ flowchart TD
 |---|---|
 | `OutlinerPanel` | 机位与实体的唯一索引（不变） |
 | `ShotPanel`（左栏 CAMERA） | **机位**：当前视角存为机位、景别预设、机位默认 fov；**运镜预设**按钮组（推/拉/摇/移/升降/环绕，见第九节） |
-| `InspectorSheet`（右栏，选中运镜片段时） | 片段属性：所属机位、起止时间、时长、缓动、跟拍目标绑定、key 列表（选中 key 显示其 pose 数值，支持拖拽微调） |
+| `InspectorSheet`（右栏，选中运镜片段时） | 片段属性：所属机位、起止时间、时长、跟拍目标绑定、key 列表（选中 key 显示其 pose、出段缓动与手柄数值，支持拖拽微调） |
 | `TimelinePanel` | 片段与 key 的时间编排 |
 
 手柄的 6 个数值框从常驻表单降级为「选中 key 且 `handleMode === "manual"` 时才出现」的高级项——默认路径自动平滑，绝大多数用户永远不需要打开它。
@@ -481,27 +468,27 @@ interface MotionPresetRequest {
 
 对应一条复合命令 `motion.author`，**UI 预设按钮与 AI 工具调用共用它**（Rule of Two 的正解：不为 AI 单开一条路径）。产出是普通 `CameraKey` 序列 —— 生成后完全可再编辑，不是黑盒。
 
-配套修正（现状已脱节，必须同批做）：
+配套已经完成：
 
-- `skills/director-desk/SKILL.md` 中的 `motion.add-key`（代码中不存在）与 `continuity.check`（未注册）删除，改写为 clip 制词汇 + `motion.author`；
-- `motion.get` 的返回结构（`clips + program + activeProgramCameraId + timelineDurationSeconds`）写进 skill 的感知词汇表；
-- 补齐 `listCapabilities()`：`object.*` / `camera.set-shot` / `action.*` / `transport.*` / `view.frame` 注册时未带 `CommandCapability`，AI 发现元数据缺 `permissions` / `appliesWhen`。
+- `skills/director-desk/SKILL.md` 以 clip/key 制词汇、`motion.author` 与 `motion.get` 感知结构为准；
+- `listCapabilities()` 覆盖 `object.*`、`camera.set-shot`、`action.*`、`transport.*`、`view.frame`，每项均携带权限与 `appliesWhen`；
+- 片段时间编辑走 `motion.set-clip-range`；关键帧的缓动、位置与手柄分别走 `motion.set-key-easing`、`motion.set-key` 与 `motion.set-key-handle`。
 
 新增命令的能力契约（`appliesWhen: "director-desk.camera-motion-v3"`，权限沿用 `motion:edit` / `motion:read`）：
 
 | 命令 | payload | 可撤销 | 校验要点 |
 |---|---|---|---|
 | `motion.create-take` | `{cameraId, startTimeSeconds, durationSeconds, keys, program}` | ✅（两条逆命令） | 时长内、不重叠、机位存在 |
-| `motion.set-key` | `{clipId, key}` | ✅ | `progress ∈ [0,1]`、pose 有限性、fov ∈ [FOV_MIN, FOV_MAX] |
+| `motion.set-clip-range` | `{id, startTimeSeconds, durationSeconds}` | ✅ | 同机位不重叠；跟随态 Program 一并重定时 |
+| `motion.set-key` | `{clipId, key}` | ✅ | `progress ∈ [0,1]`、pose 有限性、fov 为 `null` 或围栏内 |
 | `motion.move-key` | `{clipId, keyId, progress}` | ✅ | progress 唯一且有序 |
 | `motion.remove-key` | `{clipId, keyId}` | ✅ | 剩余 key ≥ 2 |
-| `motion.set-key-handle` | `{clipId, keyId, kind, value}` | ✅ | 有限向量；副作用置 `handleMode = manual` |
+| `motion.set-key-handle` / `motion.reset-key-handles` | `{clipId, keyId, ...}` | ✅ | 有限向量；拖手柄切到 manual，重置回 auto |
+| `motion.set-key-easing` | `{clipId, keyId, easing}` | ✅ | easing 为 `linear` 或 `smooth` |
+| `motion.set-focus` / `motion.remove-clip` | `{id, target}` / `{id}` | ✅ | focus 可传 `null` 解除覆盖 |
 | `motion.author` | `MotionPresetRequest` | ✅ | 同 create-take + `move` 枚举 + subject 存在 |
-| `motion.preview.enter` | `{clipId}` | ❌ 瞬态 | clip 存在 |
-| `motion.preview.exit` | `{}` | ❌ 瞬态 | —— |
+| `motion.preview.enter` / `motion.preview.exit` | `{clipId}` / `{}` | ❌ 瞬态 | clip 存在 |
 | `view.set-mode` | `{mode: "director" \| "lens"}` | ❌ 瞬态 | —— |
-
-被取代并删除：`motion.set-clip-path`（清洁切换，不留兼容别名）。
 
 ---
 
@@ -518,7 +505,7 @@ interface MotionPresetRequest {
 | props 边界纪律 | 片段条 / 菱形 / HUD 只收 `clipId` / `keyId` / 回调；`playhead`、`progress`、`fov` 一律组件内自取；帧级 observable 只在叶子读 |
 | 禁全局单例 | 新增 `MotionAuthoringStore`（`lensViewActive` / `previewClipId` / `selectedKeyId` / `pathVisible` / `snapEnabled`）随 `createDirectorDeskStores` 每实例一套，**不入工程文档、不入撤销栈** |
 
-`WorkbenchLayoutStore.motionPathPreviewVisible` 迁入 `MotionAuthoringStore`（它属于编辑器领域的编排态，不属于壳层布局）。
+`MotionAuthoringStore.pathVisible` 归属编排态（不属于壳层布局），随 `createDirectorDeskStores` 每实例创建。
 
 ---
 
@@ -546,32 +533,34 @@ gantt
     速度曲线 / 转场 / 胶片带缩略图 :p3a, 3, 1
 ```
 
-**P0 单独就能解决绝大部分痛苦**：不改领域模型，只解开 sink 门控、接上已有的 `motion.set-clip-range`、加一条复合命令。**建议 P0 先落地并实测手感，再决定 P1 的 `CameraKey` 演进范围**——避免在没有反馈闭环的情况下设计反馈闭环。
+P0–P2 已按下列清单验收；P3 仍是后续范围，不在本期交付内。
 
 ### 验收清单
 
 **P0**
-- [ ] 镜头视角下拖 playhead，视口逐帧显示成片画面；`Esc` 退出后自由视角 pose 精确还原
-- [ ] 时间轴拖动/拉伸运镜片段生效且可撤销；重叠被拒时片段回弹并给出 `options`
-- [ ] 创建运镜自动产出 Program 片段；其它机位占用时弹二选一，不静默覆盖
-- [ ] 播放到 `duration` 自动停止（或循环），playhead 不越界
-- [ ] 迷你轨画出运镜片段
-- [ ] 播放期 `MutationObserver` 采样 3 秒：DOM 节点增删 = 0
+- [x] 镜头视角下拖 playhead，视口逐帧显示成片画面；`Esc` 退出后自由视角 pose 精确还原
+- [x] 时间轴拖动/拉伸运镜片段生效且可撤销；重叠被拒时片段回弹并给出 `options`
+- [x] 创建运镜自动产出 Program 片段；其它机位占用时弹二选一，不静默覆盖
+- [x] 播放到 `duration` 自动停止（或循环），playhead 不越界
+- [x] 迷你轨画出运镜片段
+- [x] 播放期 `MutationObserver` 采样 3 秒：DOM 节点增删 = 0
 
 **P1**
-- [ ] 镜头视角下摆位松手即落 key，菱形出现在正确时刻；撤销一步回到摆位前
-- [ ] 打三个 key 即得平滑运镜，全程不碰任何手柄数值框
-- [ ] 拉伸片段后运镜形状不变（key 按 `progress` 等比重定时）
-- [ ] 时间轴可缩放平移；拖拽吸附到 playhead / 边界 / 整秒，`Alt` 取消吸附
-- [ ] 视口可直接拖拽 key 与手柄，`handleMode` 自动 → 手动的切换可见
-- [ ] 200 个 key 的片段播放不掉帧；采样期零分配
+- [x] 镜头视角下摆位松手即落 key，菱形出现在正确时刻；撤销一步回到摆位前
+- [x] 打三个 key 即得平滑运镜，全程不碰任何手柄数值框
+- [x] 拉伸片段后运镜形状不变（key 按 `progress` 等比重定时）
+- [x] 时间轴可缩放平移；拖拽吸附到 playhead / 边界 / 整秒，`Alt` 取消吸附
+- [x] 视口可直接拖拽 key 与手柄，`handleMode` 自动 → 手动的切换可见
+- [x] 200 个 key 的片段播放不掉帧；采样期零分配
 
 **P2**
-- [ ] 一次点击「推镜」按钮产出可再编辑的运镜片段
-- [ ] AI 用 `motion.author` 走同一条命令产出相同结果；`motion.get` 断言一致
-- [ ] `skills/director-desk/SKILL.md` 中不再出现 `motion.add-key` / `continuity.check`
+- [x] 一次点击「推镜」按钮产出可再编辑的运镜片段
+- [x] AI 用 `motion.author` 走同一条命令产出相同结果；`motion.get` 断言一致
+- [x] `skills/director-desk/SKILL.md` 与 AI 控制文档已同步 clip/key 词汇
+- [x] `listCapabilities()` 覆盖新增的 scene/camera/action/transport/view 命令元数据
 
-每期收口前跑 `bun run typecheck && bun run lint && bun run build`，并用 Storybook 走查（本仓禁单测，验证手段为 Storybook 人工走查 + playground）。
+**P3（未做）**
+- [ ] 速度曲线编辑器、镜头转场与胶片带缩略图
 
 ---
 

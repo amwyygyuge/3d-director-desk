@@ -3,10 +3,9 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { type KeyboardEvent, useState } from "react";
-import type { CommandResult } from "@/command/DirectorCommand";
 import type { Transform, Vec3 } from "@/core/SceneObject";
-import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { MONO_FONT_STACK } from "@/ui/shell/theme";
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -76,10 +75,6 @@ function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     }
 }
 
-function reportCommandFailure({ stores, result }: { readonly stores: DirectorDeskStores; readonly result: CommandResult }): void {
-    if (result.ok) return;
-    stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
-}
 
 const TransformField = observer(function TransformField({ axisLabel, label, value, onCommit }: TransformFieldProps) {
     const [inputValue, setInputValue] = useState(() => formatValue(value));
@@ -140,7 +135,7 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
             scale: key === "scale" ? replaceAxis(currentTransform.scale, axis, storedValue) : currentTransform.scale,
         };
         const result = dispatcher.dispatch({ type: "object.move", payload: { id: objectId, transform } }, stores);
-        reportCommandFailure({ stores, result });
+        reportCommandFailure(stores, result);
     };
 
     return (

@@ -25,7 +25,6 @@ import { useRef, useState } from "react";
 import type { ChangeEvent, RefObject } from "react";
 
 import { requestFrameCapture } from "@/command/captureCommands";
-import type { CommandResult } from "@/command/DirectorCommand";
 import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "@/store/UiStore";
@@ -33,6 +32,7 @@ import type { GizmoMode } from "@/store/UiStore";
 import { RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { importModelFile } from "@/ui/assets/importFiles";
 import { CHROME } from "@/ui/shell/theme";
 
@@ -451,9 +451,6 @@ function exitPresentation(stores: DirectorDeskStores): void {
     reportCommandFailure(stores, stores.dispatcher.dispatch({ type: ExitPresentationCommand.TYPE, payload: {} }, stores));
 }
 
-function reportCommandFailure(stores: DirectorDeskStores, result: CommandResult): void {
-    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
-}
 
 function shortcutTitle({ label, shortcutId }: { readonly label: string; readonly shortcutId: (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID] }): string {
     return `${label} (${formatShortcutHint(shortcutId)})`;

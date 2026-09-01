@@ -31,29 +31,22 @@ export class WorkbenchLayoutStore {
     railSection: RailSection | null = null;
     /** 底部时间线由把手钉住展开;hover 意图展开属组件局部瞬时态,不入本聚合 */
     timelinePinned = false;
-    /** 运镜轨迹预览开关:本桌局部辅助物,不入文档 */
-    motionPathPreviewVisible: boolean;
     /** 全屏预览:悬浮壳层与场景辅助物一并隐去,Program 输出接管视口相机 */
     presentationMode = false;
-    /** 渲染画质档:高画质吃 GPU(retina 满分辨率 + MSAA),性能档换帧率 */
-    renderQuality: RenderQuality = RENDER_QUALITY.HIGH;
+    /** 渲染画质档:高性能 */
+    renderQuality: RenderQuality = RENDER_QUALITY.PERFORMANCE;
 
-    constructor(options?: { readonly motionPathPreviewVisible?: boolean | undefined }) {
-        this.motionPathPreviewVisible = options?.motionPathPreviewVisible ?? false;
+    constructor() {
         makeAutoObservable(this);
     }
 
     /**
-     * 编辑态可见性:悬浮壳层(顶部药丸/左栏/检查器/时间线)与场景辅助物
-     * (机位标记、灯光标记、运镜轨迹)共用同一开关——全屏预览时画面必须只剩成片内容。
+     * 编辑态可见性:悬浮壳层(顶部药丸/左栏/检查器/时间线)与机位/灯光标记共用同一开关——
+     * 全屏预览时画面必须只剩成片内容。运镜轨迹辅助物不在此列:它由 MotionAuthoringStore
+     * 单独门控,因为「一边看成片画面、一边看自己的轨迹」正是运镜手感的来源。
      */
     get authoringVisible(): boolean {
         return !this.presentationMode;
-    }
-
-    /** 运镜轨迹预览的最终可见性:局部开关 ∧ 编辑态 */
-    get motionPathPreviewActive(): boolean {
-        return this.motionPathPreviewVisible && this.authoringVisible;
     }
 
     /** 再次点击同一图标收起抽屉(DCC 惯例的开合语义) */
@@ -74,9 +67,6 @@ export class WorkbenchLayoutStore {
         this.timelinePinned = !this.timelinePinned;
     }
 
-    setMotionPathPreviewVisible(visible: boolean): void {
-        this.motionPathPreviewVisible = visible;
-    }
 
     /** 仅供 presentation 命令调用:UI 与 AI 都经命令层进出预览,不直写本字段 */
     setPresentationMode(active: boolean): void {

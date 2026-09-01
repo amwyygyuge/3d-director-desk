@@ -19,7 +19,7 @@ interface ShortcutInteractionHintSegment {
 type InteractionHintSegment = KeyInteractionHintSegment | ShortcutInteractionHintSegment;
 
 interface ViewportInteractionHint {
-    readonly id: "shot-selected" | "shot-navigation";
+    readonly id: "shot-selected" | "shot-navigation" | "lens-navigation";
     readonly segments: readonly InteractionHintSegment[];
 }
 
@@ -40,6 +40,16 @@ const VIEWPORT_INTERACTION_HINT = {
             { shortcutId: SHORTCUT_ID.SHOT_EXIT, label: "退出掌镜" },
         ],
     },
+    LENS_NAVIGATION: {
+        id: "lens-navigation",
+        segments: [
+            { keys: "WASD", label: "移动" },
+            { keys: "按住拖拽", label: "转向" },
+            { keys: "滚轮", label: "变焦" },
+            { shortcutId: SHORTCUT_ID.TIMELINE_ADD_KEY, label: "落关键帧" },
+            { shortcutId: SHORTCUT_ID.LENS_EXIT, label: "退出" },
+        ],
+    },
 } as const satisfies Record<string, ViewportInteractionHint>;
 
 function formatInteractionHintSegment(segment: InteractionHintSegment): string {
@@ -51,7 +61,17 @@ function formatInteractionHint(hint: ViewportInteractionHint): string {
     return hint.segments.map(formatInteractionHintSegment).join(" · ");
 }
 
+function hasLensClip(stores: DirectorDeskStores): boolean {
+    const timeSeconds = stores.playheadDisplay.value;
+    const previewId = stores.motionAuthoring.previewClipId;
+    const preview = previewId ? stores.motion.clip(previewId) : undefined;
+    if (preview?.covers(timeSeconds)) return true;
+    const cameraId = stores.motion.program.cameraAt(timeSeconds);
+    return cameraId !== null && stores.motion.clipAt(cameraId, timeSeconds) !== null;
+}
+
 function resolveViewportInteractionHint(stores: DirectorDeskStores): ViewportInteractionHint | null {
+    if (stores.motionAuthoring.lensViewActive) return hasLensClip(stores) ? VIEWPORT_INTERACTION_HINT.LENS_NAVIGATION : null;
     if (stores.camera.activeShotId !== null) return VIEWPORT_INTERACTION_HINT.SHOT_NAVIGATION;
     const primaryId = stores.selection.primaryId;
     const isShotSelected = primaryId !== null && stores.camera.director.getShot(primaryId) !== undefined;

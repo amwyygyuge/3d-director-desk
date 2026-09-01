@@ -3,9 +3,11 @@ import { Box3, Vector3 } from "three";
 import { FramingService } from "@/camera/FramingService";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext } from "@/command/DirectorCommand";
-import type { CommandDispatcher } from "@/command/CommandDispatcher";
+import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
 
 const framing = new FramingService();
+const VIEW_CONTROL_PERMISSION = "view:control";
+const VIEW_APPLIES_WHEN = "director-desk.view-v1";
 
 interface FrameViewPayload {
     /** 取景对象 id 集合;缺省 = 全部对象(F vs Home 的差别只在 payload) */
@@ -53,6 +55,18 @@ export class FrameViewCommand extends DirectorCommand<FrameViewPayload> {
     }
 }
 
+const FRAME_VIEW_CAPABILITY: CommandCapability = {
+    type: FrameViewCommand.TYPE,
+    version: "1",
+    kind: "command",
+    permissions: [VIEW_CONTROL_PERMISSION],
+    appliesWhen: VIEW_APPLIES_WHEN,
+};
+
 export function registerNavigationCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(FrameViewCommand.TYPE, (payload: FrameViewPayload) => new FrameViewCommand(payload));
+    dispatcher.register(
+        FrameViewCommand.TYPE,
+        (payload: FrameViewPayload) => new FrameViewCommand(payload),
+        FRAME_VIEW_CAPABILITY,
+    );
 }

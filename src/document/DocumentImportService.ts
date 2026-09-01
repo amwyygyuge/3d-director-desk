@@ -134,8 +134,8 @@ function motionIssues(plan: DocumentImportPlan): readonly string[] {
         clipIds.add(clip.id);
         const cameraClips = clipsByCamera.get(clip.cameraId) ?? [];
         clipsByCamera.set(clip.cameraId, [...cameraClips, clip]);
-        const focusObjectId =
-            clip.focus.target.kind === FOCUS_TARGET_KIND.SCENE_OBJECT ? clip.focus.target.objectId : null;
+        const focusTarget = clip.focus?.target;
+        const focusObjectId = focusTarget?.kind === FOCUS_TARGET_KIND.SCENE_OBJECT ? focusTarget.objectId : null;
         const issues = [
             ...(isDuplicate ? [`运镜片段 id 重复: ${clip.id}`] : []),
             ...(!cameraIds.has(clip.cameraId) ? [`运镜片段 "${clip.id}" 引用不存在的机位`] : []),

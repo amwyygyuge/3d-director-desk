@@ -1,8 +1,11 @@
 import { FrameViewCommand } from "@/command/navigationCommands";
-import { transformKeyCommandFor } from "@/command/timelineCommands";
+import { isCommandIssue } from "@/authoring/KeyframeAuthoringService";
 import { RemoveShotCommand } from "@/command/cameraCommands";
+import { RemoveMotionKeyCommand, SetViewModeCommand } from "@/command/cameraMotionCommands";
+import { TransportSetLoopCommand } from "@/command/actionCommands";
 import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
 import { requestFrameCapture } from "@/command/captureCommands";
+import { VIEW_MODE } from "@/store/MotionAuthoringStore";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { ShortcutChord } from "@/shortcuts/ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "@/shortcuts/ShortcutRegistry";
@@ -27,6 +30,10 @@ export const SHORTCUT_ID = {
     RAIL_CLOSE: "rail.close",
     PRESENTATION_ENTER: "presentation.enter",
     PRESENTATION_EXIT: "presentation.exit",
+    LENS_TOGGLE: "lens.toggle",
+    LENS_EXIT: "lens.exit",
+    MOTION_KEY_DELETE: "motion.key.delete",
+    TRANSPORT_LOOP: "transport.loop",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
@@ -46,12 +53,15 @@ export const SHORTCUT_SPECS: readonly {
     label: string;
 }[] = [
     { id: SHORTCUT_ID.PRESENTATION_EXIT, chords: ["escape"], scope: "presentation", label: "退出全屏预览" },
+    { id: SHORTCUT_ID.LENS_EXIT, chords: ["escape"], scope: "lens", label: "退出镜头视角" },
+    { id: SHORTCUT_ID.MOTION_KEY_DELETE, chords: ["delete", "backspace"], scope: "lens", label: "删除选中镜头关键帧" },
     { id: SHORTCUT_ID.RAIL_CLOSE, chords: ["escape"], scope: "rail", label: "收起左栏面板" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
     { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
     { id: SHORTCUT_ID.TIMELINE_ADD_KEY, chords: ["k"], scope: "gizmo", label: "在当前时间打关键帧" },
+    { id: SHORTCUT_ID.TIMELINE_ADD_KEY, chords: ["k"], scope: "lens", label: "在当前时刻落镜头关键帧" },
     { id: SHORTCUT_ID.SHOT_ENTER, chords: ["enter"], scope: "shot-selected", label: "进入掌镜" },
     { id: SHORTCUT_ID.SHOT_EXIT, chords: ["escape"], scope: "shot", label: "退出掌镜" },
     { id: SHORTCUT_ID.SHOT_PHOTO, chords: ["enter"], scope: "shot", label: "拍照" },
@@ -63,6 +73,8 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.EDIT_UNDO, chords: ["mod+z"], scope: "global", label: "撤销" },
     { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
     { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
+    { id: SHORTCUT_ID.LENS_TOGGLE, chords: ["`"], scope: "global", label: "导演视角 ↔ 镜头视角" },
+    { id: SHORTCUT_ID.TRANSPORT_LOOP, chords: ["l"], scope: "global", label: "循环播放开关" },
 ];
 
 function removeSelection(stores: DirectorDeskStores): void {
@@ -84,12 +96,29 @@ function activateSelectedShot(stores: DirectorDeskStores): void {
     stores.dispatcher.dispatch({ type: "camera.activate", payload: { id: shotId } }, stores);
 }
 
-function keyCurrentTransform(stores: DirectorDeskStores): void {
-    const objectId = stores.selection.primaryId;
-    if (!objectId) return;
-    const command = transformKeyCommandFor(stores, objectId);
-    if (!command) return;
-    const result = stores.dispatcher.dispatch(command, stores);
+/** K 的上下文分派收敛在 KeyframeAuthoringService:此处只负责把结构化 issue 落成提示。 */
+function keyCurrentContext(stores: DirectorDeskStores): void {
+    const resolved = stores.keyframeAuthoring.resolve(stores);
+    if (isCommandIssue(resolved)) {
+        stores.ui.setApplicationNotice(resolved.message);
+        return;
+    }
+    const result = stores.dispatcher.dispatch(resolved, stores);
+    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+}
+
+function toggleLensView(stores: DirectorDeskStores): void {
+    const mode = stores.motionAuthoring.lensViewActive ? VIEW_MODE.DIRECTOR : VIEW_MODE.LENS;
+    stores.dispatcher.dispatch({ type: SetViewModeCommand.TYPE, payload: { mode } }, stores);
+}
+
+function removeSelectedMotionKey(stores: DirectorDeskStores): void {
+    const { selectedClipId, selectedKeyId } = stores.motionAuthoring;
+    if (!selectedClipId || !selectedKeyId) return;
+    const result = stores.dispatcher.dispatch(
+        { type: RemoveMotionKeyCommand.TYPE, payload: { clipId: selectedClipId, keyId: selectedKeyId } },
+        stores,
+    );
     if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
 }
 
@@ -103,7 +132,7 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
-    [SHORTCUT_ID.TIMELINE_ADD_KEY]: keyCurrentTransform,
+    [SHORTCUT_ID.TIMELINE_ADD_KEY]: keyCurrentContext,
     [SHORTCUT_ID.SHOT_ENTER]: activateSelectedShot,
     [SHORTCUT_ID.SHOT_EXIT]: (s) => s.dispatcher.dispatch({ type: "camera.deactivate", payload: {} }, s),
     [SHORTCUT_ID.SHOT_PHOTO]: (s) => requestFrameCapture({ dispatcher: s.dispatcher, context: s }),
@@ -120,6 +149,12 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.EDIT_UNDO]: (s) => s.history.undo(s),
     [SHORTCUT_ID.EDIT_REDO]: (s) => s.history.redo(s),
     [SHORTCUT_ID.HELP_TOGGLE]: (s) => s.ui.toggleHelp(),
+    [SHORTCUT_ID.LENS_TOGGLE]: toggleLensView,
+    [SHORTCUT_ID.LENS_EXIT]: (s) =>
+        s.dispatcher.dispatch({ type: SetViewModeCommand.TYPE, payload: { mode: VIEW_MODE.DIRECTOR } }, s),
+    [SHORTCUT_ID.MOTION_KEY_DELETE]: removeSelectedMotionKey,
+    [SHORTCUT_ID.TRANSPORT_LOOP]: (s) =>
+        s.dispatcher.dispatch({ type: TransportSetLoopCommand.TYPE, payload: { loop: !s.clock.isLooping } }, s),
 };
 
 /** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */
@@ -155,6 +190,7 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
     return new Set<ShortcutScope>([
         "global",
         ...(stores.layout.railSection !== null ? ["rail" as const] : []),
+        ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
         ...(primaryId ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
         ...(stores.camera.activeShotId ? ["shot" as const] : []),

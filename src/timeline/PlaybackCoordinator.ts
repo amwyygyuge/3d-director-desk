@@ -2,7 +2,9 @@ import { reaction } from "mobx";
 
 import type { AnimationBinder } from "@/animation/AnimationBinder";
 import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
-import type { CameraMotionSink } from "@/camera/CameraMotionSampler";
+import type { CameraMotionSink, MotionPreviewSource } from "@/camera/CameraMotionSampler";
+import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
+import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import { PoseLayer } from "@/pose/PoseLayer";
 import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
@@ -24,6 +26,7 @@ export class PlaybackCoordinator {
     private readonly motionSampler: CameraMotionSampler;
     private readonly poseLayer: PoseLayer;
     private invalidator: TimelineInvalidator | null = null;
+    private poseSource: ViewportPoseSource | null = null;
     private readonly stopTransportReaction: () => void;
     private readonly stopStoppedReaction: () => void;
 
@@ -35,8 +38,9 @@ export class PlaybackCoordinator {
         camera: CameraStore,
         private readonly binder: AnimationBinder,
         private readonly skeletons: SkeletonRuntimeRegistry,
+        preview: MotionPreviewSource,
     ) {
-        this.motionSampler = new CameraMotionSampler(motion, camera, scene);
+        this.motionSampler = new CameraMotionSampler(motion, camera, scene, preview);
         this.poseLayer = new PoseLayer(skeletons);
         // A single reaction owns deterministic binder → transform → camera → pose sampling order.
         this.stopTransportReaction = reaction(
@@ -64,6 +68,22 @@ export class PlaybackCoordinator {
 
     unbindMotionSink(sink: CameraMotionSink): void {
         this.motionSampler.unbindSink(sink);
+    }
+
+    /**
+     * 视口姿态探针:镜头视角下「此刻画面」的唯一读出口。
+     * 编排层据此把摆位手势落成关键帧,全程不接触 Three。
+     */
+    bindPoseSource(source: ViewportPoseSource): void {
+        this.poseSource = source;
+    }
+
+    unbindPoseSource(source: ViewportPoseSource): void {
+        if (this.poseSource === source) this.poseSource = null;
+    }
+
+    readViewportPose(sample: CameraMotionSample): boolean {
+        return this.poseSource?.readPose(sample) ?? false;
     }
 
     sampleCurrent(): void {

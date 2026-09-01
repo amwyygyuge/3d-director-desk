@@ -1,6 +1,6 @@
 # AI 语言控制导演台 — 方案设计(未来铺垫)
 
-> 状态:方案已定,命令层骨架已落地(`src/command/`);SemanticCompiler 与 Monet agent 工具接入属阶段一尾声/阶段二。
+> 状态:方案已定,命令层骨架已落地(`src/command/`);运镜语义编译已落地为 `MotionPresetCompiler` + `motion.author`,Monet agent 工具接入属阶段一尾声/阶段二。
 
 ## 场景分级
 
@@ -19,7 +19,7 @@
 ```mermaid
 flowchart LR
     U[用户自然语言] --> A[Monet Agent<br/>FastAPI]
-    A -->|tool call 语义级参数| SC[SemanticCompiler<br/>语义→数值]
+    A -->|tool call 语义级参数| SC[MotionPresetCompiler<br/>语义→CameraKey]
     SC --> CMD[DirectorCommand 命令层]
     UI[导演台 UI 操作] --> CMD
     HB[HostBridge 宿主消息] --> CMD
@@ -28,7 +28,7 @@ flowchart LR
     FB --> A
 ```
 
-**核心决策**:UI、HostBridge、AI 是命令层的三个平级调用方。AI 接入不做新 API,只做 tool schema 生成(从 `CommandDispatcher.listCommands()` 派生)+ SemanticCompiler。
+**核心决策**:UI、HostBridge、AI 是命令层的三个平级调用方。AI 接入不做新 API,只做 tool schema 生成(从 `CommandDispatcher.listCommands()` 派生)+ 语义编译；`listCapabilities()` 已覆盖 scene/camera/motion/timeline/action/transport/view/lighting/pose/capture/document/assets，用于发现权限与适用条件。
 
 ## 命令层(已落地 `src/command/`)
 
@@ -64,12 +64,13 @@ classDiagram
 - payload 纯数据可序列化 → 兑现可序列化纪律,天然支持操作日志回放/撤销。
 - 幻觉围栏在 validate:坐标有限性、fov 范围、id 存在性(`finiteVec3` 等)。
 
-## SemanticCompiler(待建,AI 方案心脏)
+## 语义编译（运镜已落地）
 
-LLM 不擅长数值、擅长语义。禁止 LLM 直接输出世界坐标:
+LLM 不擅长数值、擅长语义。禁止 LLM 直接输出世界坐标。运镜已由 `MotionPresetCompiler` 编译为标准 `CameraKey` 序列，再通过 `motion.author` 落地；UI 预设按钮与 AI 共用同一命令，产物可继续按 key 编辑。
 
 | 语义                         | 编译产物                                                         |
 | ---------------------------- | ---------------------------------------------------------------- |
+| 「推近」「环绕」「横移」     | `MotionPresetCompiler` → `motion.author` → 可编辑 `CameraKey` 序列 |
 | 「过肩镜头」「特写」「俯拍」 | 机位模板 → CameraShot(参考 xiaozangao 18 套运镜预设的参数化思路) |
 | 「A 的左边两米」「面对面」   | 相对关系 + 锚点 → Transform,经碰撞/边界 clamp                    |
 | 「跑起来」                   | 动作名 → 动作资产解析 + 骨骼兼容性预检                           |
@@ -78,12 +79,12 @@ LLM 不擅长数值、擅长语义。禁止 LLM 直接输出世界坐标:
 
 ## AI 的「眼睛」与「手」
 
-| 能力     | 机制                                         | 现状                               |
-| -------- | -------------------------------------------- | ---------------------------------- |
-| 眼睛     | 场景文档快照(纯数据,JSON)+ 截图喂多模态      | 序列化纪律 + CaptureService 已就位 |
-| 手       | tool call → SemanticCompiler → 命令层        | 命令层已就位,Compiler 待建         |
-| 资产目录 | AssetCatalog 查询工具(接 Monet 资产接口)     | 待建                               |
-| 撤销     | 一批 AI 命令 = Monet undoManager 一个 record | Monet 侧集成时处理                 |
+| 能力     | 机制                                         | 现状                                                       |
+| -------- | -------------------------------------------- | ---------------------------------------------------------- |
+| 眼睛     | 场景文档快照(纯数据,JSON)+ 截图喂多模态      | 序列化纪律 + CaptureService 已就位                         |
+| 手       | tool call → 语义编译 → 命令层                | 运镜 `MotionPresetCompiler` + `motion.author` 已就位       |
+| 资产目录 | AssetCatalog 查询工具(接 Monet 资产接口)     | 待建                                                       |
+| 撤销     | 一批 AI 命令 = Monet undoManager 一个 record | Monet 侧集成时处理                                         |
 
 ## 接入路线
 
