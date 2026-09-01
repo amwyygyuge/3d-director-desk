@@ -1,14 +1,23 @@
 import { createTheme } from "@mui/material/styles";
 
 /**
- * 液态玻璃材质规格(方案 D 视觉语言的单一真相源)。
- * 药丸与面板只差半径/模糊量级,颜色与描边共用一套,避免两处玻璃各自漂移。
+ * 悬浮壳层材质规格(方案 D 视觉语言的单一真相源)。
+ * 药丸与面板只差圆角,颜色与描边共用一套,避免两处表面各自漂移。
+ *
+ * **不用 backdrop-filter(性能决策,不是审美取舍)。**
+ * 壳层压在活动的 WebGL 画布上,毛玻璃要求合成器在画布每一帧重绘后
+ * 重新读回并模糊背景;播放/飞行期画布是 60fps 重绘,四块壳层就是每秒
+ * 240 次全尺寸模糊。改用不透明底色后这项开销归零,画布重绘不再牵动壳层合成。
+ * 阴影也压到贴边的小半径——大半径 box-shadow 同样按层重绘计价。
  */
-const GLASS = {
-    pill: { background: "rgba(30, 31, 34, 0.55)", blur: "blur(20px)", radius: 9999, shadow: "0 8px 30px rgba(0,0,0,.45)" },
-    panel: { background: "rgba(22, 23, 26, 0.72)", blur: "blur(28px)", radius: 16, shadow: "0 10px 50px rgba(0,0,0,.5)" },
+const SURFACE = {
+    pill: { background: "#1e1f22", radius: 9999 },
+    panel: { background: "#161719", radius: 14 },
+    shadow: "0 2px 8px rgba(0,0,0,.55)",
 } as const;
-const GLASS_BORDER = "1px solid rgba(255,255,255,0.09)";
+const SURFACE_BORDER = "1px solid rgba(255,255,255,0.10)";
+/** 壳层与画布互不影响布局/绘制,声明出来把脏区限制在面板自身 */
+const SURFACE_CONTAIN = "layout paint";
 
 /** 视口底色:Canvas 清屏色与 MUI 背景同源,避免壳层与画布之间出现色差缝 */
 export const VIEWPORT_BACKGROUND = "#1a1a1c";
@@ -16,7 +25,12 @@ export const VIEWPORT_BACKGROUND = "#1a1a1c";
 /** 随时间/拖拽变化的数字一律等宽,防止位数跳动导致布局抖 */
 export const MONO_FONT_STACK = '"SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
 
-/** 悬浮壳层的安全区边距与关键尺寸(壳层组件共用,禁各自硬编码) */
+/**
+ * 悬浮壳层的安全区边距与关键尺寸(壳层组件共用,禁各自硬编码)。
+ * 不提供过渡时长 token:壳层的展开/收起改的是 width/height/padding,
+ * 这些属性无法交给合成器,过渡期每帧都要重排——画布同时在渲染时代价直接叠加。
+ * 需要动画时只允许 opacity(见 TimelineConsole 展开区的淡入)。
+ */
 export const CHROME = {
     edgeGapPx: 16,
     railCollapsedPx: 56,
@@ -25,7 +39,6 @@ export const CHROME = {
     inspectorWidthPx: 288,
     timelineMiniPx: 56,
     timelineExpandedPx: 264,
-    transition: "300ms cubic-bezier(0.4, 0, 0.2, 1)",
 } as const;
 
 declare module "@mui/material/Paper" {
@@ -47,7 +60,7 @@ export const directorDeskTheme = createTheme({
         primary: { main: "#6366f1" },
         secondary: { main: "#3b82f6" },
         error: { main: "#ef4444" },
-        background: { default: VIEWPORT_BACKGROUND, paper: "rgba(22, 23, 26, 0.72)" },
+        background: { default: VIEWPORT_BACKGROUND, paper: SURFACE.panel.background },
         divider: "rgba(255,255,255,0.09)",
     },
     shape: { borderRadius: 10 },
@@ -65,25 +78,23 @@ export const directorDeskTheme = createTheme({
                 {
                     props: { variant: "pill" },
                     style: {
-                        background: GLASS.pill.background,
-                        backdropFilter: GLASS.pill.blur,
-                        WebkitBackdropFilter: GLASS.pill.blur,
-                        border: GLASS_BORDER,
-                        borderRadius: GLASS.pill.radius,
-                        boxShadow: GLASS.pill.shadow,
+                        background: SURFACE.pill.background,
+                        border: SURFACE_BORDER,
+                        borderRadius: SURFACE.pill.radius,
+                        boxShadow: SURFACE.shadow,
                         backgroundImage: "none",
+                        contain: SURFACE_CONTAIN,
                     },
                 },
                 {
                     props: { variant: "panel" },
                     style: {
-                        background: GLASS.panel.background,
-                        backdropFilter: GLASS.panel.blur,
-                        WebkitBackdropFilter: GLASS.panel.blur,
-                        border: GLASS_BORDER,
-                        borderRadius: GLASS.panel.radius,
-                        boxShadow: GLASS.panel.shadow,
+                        background: SURFACE.panel.background,
+                        border: SURFACE_BORDER,
+                        borderRadius: SURFACE.panel.radius,
+                        boxShadow: SURFACE.shadow,
                         backgroundImage: "none",
+                        contain: SURFACE_CONTAIN,
                     },
                 },
             ],

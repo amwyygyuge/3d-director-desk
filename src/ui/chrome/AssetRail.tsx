@@ -206,7 +206,6 @@ export const AssetRail = observer(function AssetRail() {
                 sx={{
                     width: RAIL_COLLAPSED_WIDTH,
                     overflow: "hidden",
-                    transition: `width ${CHROME.transition}`,
                     whiteSpace: "nowrap",
                     maxHeight: RAIL_MAX_HEIGHT,
                     p: `${RAIL_PADDING_PX}px`,

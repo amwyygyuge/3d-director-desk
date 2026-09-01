@@ -183,7 +183,6 @@ export const TimelineConsole = observer(function TimelineConsole() {
             sx={{
                 pl: `${RAIL_CLEARANCE_PX}px`,
                 pr: `${selection.primaryId === null ? CHROME.edgeGapPx : INSPECTOR_CLEARANCE_PX}px`,
-                transition: `padding ${CHROME.transition}`,
             }}
         >
             <Paper
@@ -196,7 +195,6 @@ export const TimelineConsole = observer(function TimelineConsole() {
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
-                    transition: `height ${CHROME.transition}`,
                 }}
             >
             <Box className="shrink-0 flex items-center" sx={{ height: CHROME.timelineMiniPx, gap: 1, px: 1.5, bgcolor: "rgba(0,0,0,0.2)" }}>

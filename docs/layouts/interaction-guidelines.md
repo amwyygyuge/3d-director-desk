@@ -92,17 +92,17 @@
 
 ## 六、 落地映射与偏差记录 (Implementation)
 
-本规范已按方案 D 落地。以下是规范条目到代码的对应关系,以及与规范字面不同的四处决策与理由。
+本规范已按方案 D 落地。以下是规范条目到代码的对应关系,以及与规范字面不同的六处决策与理由。
 
 ### 1. 组件与状态映射
 
 | 规范区域 | 组件 | 驱动状态 |
 |---|---|---|
-| 顶部三药丸 | `src/ui/chrome/TopPillBar.tsx` | `CameraStore.activeShotId`(视图模式)、`UiStore.gizmoMode`、`CommandHistory` |
-| 左侧抽屉 | `src/ui/chrome/AssetRail.tsx` | `WorkbenchLayoutStore.railSection` + 纯 CSS `:hover` 宽度过渡 |
+| 顶部三药丸 | `src/ui/chrome/TopPillBar.tsx` | `UiStore.gizmoMode`、`CommandHistory`、`UiStore.videoRecording` |
+| 左侧抽屉 | `src/ui/chrome/AssetRail.tsx` | `WorkbenchLayoutStore.railSection` + 纯 CSS `:hover` 宽度切换 |
 | 右侧检查器 | `src/ui/chrome/InspectorSheet.tsx` | `SelectionStore.primaryId` |
 | 底部时间线 | `src/ui/chrome/TimelineConsole.tsx` | `WorkbenchLayoutStore.timelinePinned` + `useHoverIntent` 局部瞬时态 |
-| 玻璃材质 | `src/ui/theme.ts` | MUI `Paper` 的 `pill` / `panel` 变体(不用 Tailwind 写视觉) |
+| 表面材质 | `src/ui/theme.ts` | MUI `Paper` 的 `pill` / `panel` 变体(不用 Tailwind 写视觉) |
 
 壳层显隐的唯一开关是 `WorkbenchLayoutStore.authoringVisible`,悬浮四区与场景辅助物
 (机位标记、灯光标记、运镜轨迹、地面网格)共用它——全屏预览时画面只剩成片内容。
@@ -120,14 +120,47 @@ R3F 相机"这一运行时行为。方案 D 的顶部中区留给视图模式后
 工具常驻,辅助物按 `authoringVisible` 显隐,而 Program 回放绑定归位到真正表达它的概念——
 全屏预览(`desk.enter-presentation` / `desk.exit-presentation`)。
 
-### 4. 偏差:视图模式沿用代码语义,标签为「机位视图 / 自由视角」
+### 4. 偏差:取消「机位视图 / 自由视角」二态开关
 
-规范草图写的是「导演视图 (Render Cam) / 漫游 (Free Cam)」,但代码里"导演视角"历来指
-自由轨道编辑视角,与草图正好相反。为免全仓重命名 `CameraStore.backToDirectorView` /
-`DirectorPose` 等稳定 API,UI 文案改用无歧义的「机位视图 / 自由视角」。
+规范草图的中部药丸是「导演视图 (Render Cam) / 漫游 (Free Cam)」二态。两个问题:
+一是词汇与代码相反——代码里"导演视角"历来指自由轨道编辑视角;
+二是这组按钮是重复入口——选中机位后 `Enter`(或双击机位标记)即进入,`Esc` 即退出,
+两条路径都在 `ViewportInteractionHints` 常驻提示里。中部药丸因此只保留 gizmo 三态。
 
 ### 5. 偏差:时间线 hover 展开带延迟,并让位左右两区
 
 规范 §二.4 的原型用纯 CSS `:hover` 展开,鼠标划过屏幕底部就会弹起遮画面。
 实现改为进入停留 200ms 才展开、离开 400ms 才收起,把手点击可钉住(钉住后不自动收起)。
-悬浮岛在左栏与检查器之间居中:检查器出现时整条左移,两块玻璃不互相压盖。
+悬浮岛在左栏与检查器之间居中:检查器出现时整条左移,两块面板不互相压盖。
+
+### 6. 偏差:不做毛玻璃,不做布局过渡(性能优先级高于视觉)
+
+规范 §三.1 要求 `backdrop-blur` 亚克力材质、§五 建议用 CSS Transition 做展开动画。
+两者都在活动的 WebGL 画布上代价高昂,已按「性能第一」的决策取消:
+
+| 规范要求 | 实际做法 | 原因 |
+|---|---|---|
+| `backdrop-filter: blur(28px)` | 不透明底色 `#1e1f22` / `#161719` | 画布每帧重绘都要求合成器重新读回并模糊背景;播放期 60fps × 四块壳层 |
+| `shadow-[0_10px_50px]` | `0 2px 8px` | 大半径阴影同样按层重绘计价 |
+| width / height / padding 过渡 | 直接切换,无过渡 | 这三个属性无法交给合成器,过渡期每帧重排,与画布渲染叠加 |
+| — | 保留 `opacity` 过渡 | 只有 opacity 是纯合成属性,零重排 |
+
+壳层另加 `contain: layout paint`,把脏区限制在面板自身。
+
+### 7. 播放期重渲染纪律(踩过的坑)
+
+`playhead` 是帧级 observable(经 `PlayheadDisplay` 节流到 12Hz)。最初 `TimelineConsole`
+与 `TimelinePanel` 在组件顶层直读它、再把值当 props 传给子组件,结果整张轨道网格
+每秒重建 12 次。修法是把读 playhead 的位置收敛到叶子:
+`MiniPlayhead` / `TimecodeReadout` / `RulerPlayhead` / `ProgramCutInButton` 各自 `useDirectorDeskStores()` 自取,
+父组件一行都不读。收起态更进一步——不挂载 `TimelinePanel`。
+
+实测(Storybook,双机位 Program 播放中,3 秒采样):
+
+| 状态 | DOM 节点增删 | 属性/文本变更 | 帧间隔中位数 |
+|---|---|---|---|
+| 时间线收起 | 0 | 72(= 12Hz × 2 处) | 16.6ms |
+| 时间线展开 | 0 | 108(= 12Hz × 3 处) | 16.6ms |
+
+节点增删为 0 是这条纪律的验收线:播放期不允许有任何 DOM 结构重建。
+详细规则见 [state-management.md 的「props 边界纪律」](../state-management.md)。
