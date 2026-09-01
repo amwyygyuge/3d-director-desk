@@ -2,9 +2,9 @@ import { useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { PerspectiveCamera } from "three";
 
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
-import { useOrbitControls } from "../../../navigation/orbit";
-import { useFlyNavigation } from "./useFlyNavigation";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitControls } from "@/navigation/orbit";
+import { useFlyNavigation } from "@/ui/viewport/scene/useFlyNavigation";
 
 /**
  * 飞行导航(仅导演视角):WASD+Space/Shift 持续位移相机与轨道中心。

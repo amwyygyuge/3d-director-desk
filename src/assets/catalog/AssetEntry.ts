@@ -1,5 +1,5 @@
-import { MODEL_FORMAT } from "../ModelAsset";
-import type { ModelFormat } from "../ModelAsset";
+import { MODEL_FORMAT } from "@/assets/ModelAsset";
+import type { ModelFormat } from "@/assets/ModelAsset";
 
 /** 资源大类:模型 / 动作 */
 export const ASSET_KIND = {

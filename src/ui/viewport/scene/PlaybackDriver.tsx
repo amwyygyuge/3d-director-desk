@@ -1,7 +1,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect } from "react";
 
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const MILLISECONDS_PER_SECOND = 1000;
 

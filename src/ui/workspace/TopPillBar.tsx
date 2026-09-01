@@ -24,17 +24,17 @@ import { observer } from "mobx-react-lite";
 import { useRef, useState } from "react";
 import type { ChangeEvent, RefObject } from "react";
 
-import { requestFrameCapture } from "../../command/captureCommands";
-import type { CommandResult } from "../../command/DirectorCommand";
-import { EnterPresentationCommand, ExitPresentationCommand } from "../../command/presentationCommands";
-import { formatShortcutHint, SHORTCUT_ID } from "../../shortcuts/builtinShortcuts";
-import { GIZMO_MODE } from "../../store/UiStore";
-import type { GizmoMode } from "../../store/UiStore";
-import { RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "../../store/WorkbenchLayoutStore";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import type { DirectorDeskStores } from "../shell/DirectorDeskContext";
-import { importModelFile } from "../assets/importFiles";
-import { CHROME } from "../shell/theme";
+import { requestFrameCapture } from "@/command/captureCommands";
+import type { CommandResult } from "@/command/DirectorCommand";
+import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
+import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
+import { GIZMO_MODE } from "@/store/UiStore";
+import type { GizmoMode } from "@/store/UiStore";
+import { RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { importModelFile } from "@/ui/assets/importFiles";
+import { CHROME } from "@/ui/shell/theme";
 
 const COMMAND_TYPE = {
     CAPTURE_VIDEO: "capture.video",

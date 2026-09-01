@@ -1,5 +1,5 @@
-import type { PoseSnapshot } from "./PoseSnapshot";
-import type { SkeletonRuntimeRegistry } from "./SkeletonRuntimeRegistry";
+import type { PoseSnapshot } from "@/pose/PoseSnapshot";
+import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 
 /** Applies an absolute serialized pose snapshot after animation sampling. */
 export class PoseLayer {

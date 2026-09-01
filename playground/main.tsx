@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
 
-import { DirectorDesk } from "../src";
-import type { DirectorDeskStores } from "../src";
-import "../src/styles/index.css";
+import { DirectorDesk } from "@/index";
+import type { DirectorDeskStores } from "@/index";
+import "@/styles/index.css";
 import "./index.css";
 
 declare global {

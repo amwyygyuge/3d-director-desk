@@ -1,8 +1,8 @@
 import { makeAutoObservable, observable, values } from "mobx";
 
-import type { CameraMotionClip } from "../camera/CameraMotionClip";
-import { FOCUS_TARGET_KIND } from "../camera/CameraFocusTrack";
-import { CameraProgramTrack } from "../camera/CameraProgramTrack";
+import type { CameraMotionClip } from "@/camera/CameraMotionClip";
+import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
+import { CameraProgramTrack } from "@/camera/CameraProgramTrack";
 
 /** Per-desk motion timeline state. Cameras remain static entities; clips and Program output live here. */
 export class CameraMotionStore {

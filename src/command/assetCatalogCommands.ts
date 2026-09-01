@@ -1,10 +1,10 @@
-import { ASSET_KIND, isAssetKind } from "../assets/catalog/AssetEntry";
-import { finiteTransform } from "../core/SceneObject";
-import type { Transform } from "../core/SceneObject";
-import { DirectorCommand } from "./DirectorCommand";
-import { mountWhenReady, provisionAction } from "./actionProvisioning";
-import type { DirectorContext } from "./DirectorCommand";
-import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
+import { ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
+import { finiteTransform } from "@/core/SceneObject";
+import type { Transform } from "@/core/SceneObject";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
+import type { DirectorContext } from "@/command/DirectorCommand";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 
 const ASSETS_COMMAND_VERSION = "1" as const;
 const ASSETS_READ_PERMISSION = "assets:read";

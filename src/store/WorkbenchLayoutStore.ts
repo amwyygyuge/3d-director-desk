@@ -1,6 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
-import type { RailSection } from "../workspace/railSections";
+import type { RailSection } from "@/workspace/railSections";
 
 /**
  * 渲染画质档:唯一影响 3D 输出质量的开关(截图与录制成片同样受它影响)。

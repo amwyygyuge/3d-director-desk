@@ -1,6 +1,6 @@
-import { formatFromFileName } from "../../assets/ModelAsset";
-import type { ModelFormat } from "../../assets/ModelAsset";
-import type { DirectorDeskStores } from "../shell/DirectorDeskContext";
+import { formatFromFileName } from "@/assets/ModelAsset";
+import type { ModelFormat } from "@/assets/ModelAsset";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** 文件 → 受支持的模型/动作来源:格式守卫 + objectURL(禁 base64) */
 function fileToSource(file: File, notify: (message: string) => void): { url: string; format: ModelFormat } | null {

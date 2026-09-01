@@ -5,7 +5,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const EMPTY_LOADING_COUNT = 0;
 const LOADING_ITEM_SPACING = 1;

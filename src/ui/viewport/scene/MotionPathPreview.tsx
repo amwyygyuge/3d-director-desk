@@ -1,7 +1,7 @@
 import { observer } from "mobx-react-lite";
 
-import { MotionClipPathPreview } from "./MotionClipPathPreview";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import { MotionClipPathPreview } from "@/ui/viewport/scene/MotionClipPathPreview";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const PATH_COLORS = ["#00bcd4", "#9c7ae8", "#467fd0", "#d67db4"] as const;
 

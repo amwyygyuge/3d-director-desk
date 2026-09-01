@@ -1,8 +1,8 @@
 import type { AnimationClip } from "three";
 
-import { PoseSnapshot } from "./PoseSnapshot";
-import type { BoneKey, QuaternionTuple } from "./PoseSnapshot";
-import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "./SkeletonRuntimeRegistry";
+import { PoseSnapshot } from "@/pose/PoseSnapshot";
+import type { BoneKey, QuaternionTuple } from "@/pose/PoseSnapshot";
+import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "@/pose/SkeletonRuntimeRegistry";
 
 const QUATERNION_COMPONENT_COUNT = 4;
 const QUATERNION_TRACK_SUFFIX = ".quaternion";

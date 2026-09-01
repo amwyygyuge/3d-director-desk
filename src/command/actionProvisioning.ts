@@ -1,7 +1,7 @@
-import { formatFromUrl } from "../assets/ModelAsset";
-import type { ActionAsset } from "../assets/ActionAsset";
-import { waitMs } from "../core/waitMs";
-import type { DirectorContext } from "./DirectorCommand";
+import { formatFromUrl } from "@/assets/ModelAsset";
+import type { ActionAsset } from "@/assets/ActionAsset";
+import { waitMs } from "@/core/waitMs";
+import type { DirectorContext } from "@/command/DirectorCommand";
 
 /** 挂载恢复的运行时等待上限:40 × 250ms = 10s(模型重新加载) */
 const MOUNT_RETRY_LIMIT = 40;

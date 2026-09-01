@@ -1,9 +1,9 @@
 import { makeAutoObservable } from "mobx";
 import type { Object3D } from "three";
 
-import { CameraDirector } from "../camera/CameraDirector";
-import { type CameraShot } from "../camera/CameraShot";
-import type { Vec3 } from "../core/SceneObject";
+import { CameraDirector } from "@/camera/CameraDirector";
+import { type CameraShot } from "@/camera/CameraShot";
+import type { Vec3 } from "@/core/SceneObject";
 
 /** 导演视角 pose:纯数据,激活机位前暂存,回导演视角时精确还原 */
 export interface DirectorPose {

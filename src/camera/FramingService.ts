@@ -1,5 +1,5 @@
-import type { Vec3 } from "../core/SceneObject";
-import type { DirectorPose } from "../store/CameraStore";
+import type { Vec3 } from "@/core/SceneObject";
+import type { DirectorPose } from "@/store/CameraStore";
 
 /** 取景留边:包围球半径的倍率,主体不贴画幅边 */
 const FRAME_PADDING = 1.4;

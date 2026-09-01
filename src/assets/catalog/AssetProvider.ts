@@ -1,5 +1,5 @@
-import { parseAssetEntry } from "./AssetEntry";
-import type { AssetEntry } from "./AssetEntry";
+import { parseAssetEntry } from "@/assets/catalog/AssetEntry";
+import type { AssetEntry } from "@/assets/catalog/AssetEntry";
 
 /**
  * 资源来源策略:每个 provider 负责把自己的条目加载进目录。

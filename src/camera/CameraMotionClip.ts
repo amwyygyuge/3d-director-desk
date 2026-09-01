@@ -1,8 +1,8 @@
-import { CameraFocusTrack } from "./CameraFocusTrack";
-import type { CameraFocusTrackJSON, FocusTargetSample } from "./CameraFocusTrack";
-import { CameraMotionPath, sampleCameraMotionPath } from "./CameraMotionPath";
-import type { CameraMotionPathJSON, PathPositionSample } from "./CameraMotionPath";
-import type { CameraShot } from "./CameraShot";
+import { CameraFocusTrack } from "@/camera/CameraFocusTrack";
+import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFocusTrack";
+import { CameraMotionPath, sampleCameraMotionPath } from "@/camera/CameraMotionPath";
+import type { CameraMotionPathJSON, PathPositionSample } from "@/camera/CameraMotionPath";
+import type { CameraShot } from "@/camera/CameraShot";
 
 export const CAMERA_MOTION_EASING = {
     LINEAR: "linear",

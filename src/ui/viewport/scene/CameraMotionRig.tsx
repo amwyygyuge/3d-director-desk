@@ -3,11 +3,11 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
-import type { CameraMotionSink } from "../../../camera/CameraMotionSampler";
-import type { CameraMotionSample } from "../../../camera/CameraMotionClip";
-import type { OrbitLike } from "../../../navigation/orbit";
-import { useOrbitControls } from "../../../navigation/orbit";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import type { CameraMotionSink } from "@/camera/CameraMotionSampler";
+import type { CameraMotionSample } from "@/camera/CameraMotionClip";
+import type { OrbitLike } from "@/navigation/orbit";
+import { useOrbitControls } from "@/navigation/orbit";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** Runtime owner for temporary Program output poses. Editor camera values are restored on output exit. */
 class CameraMotionRuntimeSink implements CameraMotionSink {

@@ -1,8 +1,8 @@
 import { Box3 } from "three";
 
-import { measureModelBox } from "../core/measureModelBox";
-import type { SceneManager } from "../core/SceneManager";
-import type { Transform } from "../core/SceneObject";
+import { measureModelBox } from "@/core/measureModelBox";
+import type { SceneManager } from "@/core/SceneManager";
+import type { Transform } from "@/core/SceneObject";
 
 const GROUND_Y = 0;
 const GROUND_ALIGNMENT_EPSILON_METERS = 0.0001;

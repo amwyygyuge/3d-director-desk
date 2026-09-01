@@ -1,6 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
-import type { AnimationBinder } from "./AnimationBinder";
+import type { AnimationBinder } from "@/animation/AnimationBinder";
 
 const INITIAL_PREVIEW_TIME_SECONDS = 0;
 const MINIMUM_DURATION_SECONDS = Number.EPSILON;

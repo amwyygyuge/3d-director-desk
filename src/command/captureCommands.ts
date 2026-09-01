@@ -1,7 +1,7 @@
-import { VIDEO_MAX_DURATION_SECONDS } from "../capture/CaptureService";
-import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext } from "./DirectorCommand";
-import type { CommandCapability, CommandDispatcher } from "./CommandDispatcher";
+import { VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { DirectorContext } from "@/command/DirectorCommand";
+import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
 
 interface CaptureFramePayload {
     /** 默认 true:网格/gizmo/高亮框不入镜 */

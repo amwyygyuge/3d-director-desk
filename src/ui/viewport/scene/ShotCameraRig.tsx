@@ -3,10 +3,10 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
-import type { DirectorPose } from "../../../store/CameraStore";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
-import { useOrbitControls } from "../../../navigation/orbit";
-import type { OrbitLike } from "../../../navigation/orbit";
+import type { DirectorPose } from "@/store/CameraStore";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitControls } from "@/navigation/orbit";
+import type { OrbitLike } from "@/navigation/orbit";
 
 function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPose {
     return {

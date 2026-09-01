@@ -12,15 +12,15 @@ import { observer } from "mobx-react-lite";
 import { useState } from "react";
 import { Box3, Vector3 } from "three";
 
-import { SHOT_SIZE } from "../../camera/CameraShot";
-import type { ShotSize } from "../../camera/CameraShot";
-import { CAMERA_MOTION_EASING } from "../../camera/CameraMotionClip";
-import { FOCUS_TARGET_KIND } from "../../camera/CameraFocusTrack";
-import { ShotSizePresets } from "../../camera/ShotSizePresets";
-import type { CameraMotionClip } from "../../camera/CameraMotionClip";
-import type { CameraMotionPathJSON } from "../../camera/CameraMotionPath";
-import type { Vec3 } from "../../core/SceneObject";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
+import { SHOT_SIZE } from "@/camera/CameraShot";
+import type { ShotSize } from "@/camera/CameraShot";
+import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionClip";
+import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
+import { ShotSizePresets } from "@/camera/ShotSizePresets";
+import type { CameraMotionClip } from "@/camera/CameraMotionClip";
+import type { CameraMotionPathJSON } from "@/camera/CameraMotionPath";
+import type { Vec3 } from "@/core/SceneObject";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";

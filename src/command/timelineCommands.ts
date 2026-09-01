@@ -1,12 +1,12 @@
-import { finiteTransform } from "../core/SceneObject";
-import { TimelineTrack, TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
-import type { TimelineTrackInit } from "../timeline/TimelineTrack";
-import { TransformKeyframe, TIMELINE_EASING } from "../timeline/TransformKeyframe";
-import type { TimelineEasing, TransformKeyframeInit } from "../timeline/TransformKeyframe";
-import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
-import type { CommandDispatcher } from "./CommandDispatcher";
-import { DirectorCommand } from "./DirectorCommand";
-import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
+import { finiteTransform } from "@/core/SceneObject";
+import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import type { TimelineTrackInit } from "@/timeline/TimelineTrack";
+import { TransformKeyframe, TIMELINE_EASING } from "@/timeline/TransformKeyframe";
+import type { TimelineEasing, TransformKeyframeInit } from "@/timeline/TransformKeyframe";
+import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
+import type { CommandDispatcher } from "@/command/CommandDispatcher";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 
 const TIMELINE_COMMAND_VERSION = "1" as const;
 const TIMELINE_PERMISSION = "timeline:edit";

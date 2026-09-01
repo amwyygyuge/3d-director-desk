@@ -1,4 +1,4 @@
-import type { Transform } from "../core/SceneObject";
+import type { Transform } from "@/core/SceneObject";
 
 export const TIMELINE_EASING = {
     LINEAR: "linear",

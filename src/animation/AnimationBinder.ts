@@ -1,7 +1,7 @@
 import type { AnimationClip, Object3D } from "three";
 import { AnimationMixer } from "three";
 
-import type { TimeTransport } from "../time/TimeTransport";
+import type { TimeTransport } from "@/time/TimeTransport";
 
 /**
  * 动作挂载协调器(领域服务):把动作 clip 绑定到场景对象的骨骼上。

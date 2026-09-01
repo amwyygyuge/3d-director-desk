@@ -2,9 +2,9 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Vector3 } from "three";
 
-import { isEditingText } from "../../../shortcuts/ShortcutRegistry";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
-import { useOrbitControls } from "../../../navigation/orbit";
+import { isEditingText } from "@/shortcuts/ShortcutRegistry";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitControls } from "@/navigation/orbit";
 
 /** 飞行速度(单位/秒) */
 const FLY_SPEED = 5;

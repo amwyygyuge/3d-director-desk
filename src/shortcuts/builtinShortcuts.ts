@@ -1,11 +1,11 @@
-import { FrameViewCommand } from "../command/navigationCommands";
-import { transformKeyCommandFor } from "../command/timelineCommands";
-import { RemoveShotCommand } from "../command/cameraCommands";
-import { EnterPresentationCommand, ExitPresentationCommand } from "../command/presentationCommands";
-import { requestFrameCapture } from "../command/captureCommands";
-import type { DirectorDeskStores } from "../ui/shell/DirectorDeskContext";
-import { ShortcutChord } from "./ShortcutChord";
-import type { ShortcutRegistry, ShortcutScope } from "./ShortcutRegistry";
+import { FrameViewCommand } from "@/command/navigationCommands";
+import { transformKeyCommandFor } from "@/command/timelineCommands";
+import { RemoveShotCommand } from "@/command/cameraCommands";
+import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
+import { requestFrameCapture } from "@/command/captureCommands";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { ShortcutChord } from "@/shortcuts/ShortcutChord";
+import type { ShortcutRegistry, ShortcutScope } from "@/shortcuts/ShortcutRegistry";
 
 /** 快捷键动作 id:AI 工具描述/文档/冲突检测的引用键 */
 export const SHORTCUT_ID = {

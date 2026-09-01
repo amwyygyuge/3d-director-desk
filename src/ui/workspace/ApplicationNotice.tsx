@@ -1,7 +1,7 @@
 import { observer } from "mobx-react-lite";
 
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import { ViewportToast } from "./ViewportToast";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { ViewportToast } from "@/ui/workspace/ViewportToast";
 
 const NOTICE_DURATION_MS = 3000;
 

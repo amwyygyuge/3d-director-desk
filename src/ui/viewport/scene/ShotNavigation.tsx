@@ -3,10 +3,10 @@ import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useRef } from "react";
 import { PerspectiveCamera, Spherical, Vector3 } from "three";
 
-import { FOV_MAX, FOV_MIN } from "../../../command/commands";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
-import { useOrbitControls } from "../../../navigation/orbit";
-import { useFlyNavigation } from "./useFlyNavigation";
+import { FOV_MAX, FOV_MIN } from "@/command/commands";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitControls } from "@/navigation/orbit";
+import { useFlyNavigation } from "@/ui/viewport/scene/useFlyNavigation";
 
 /** 与正常导演视角 OrbitControls 一致:一次完整转向对应画布高度 */
 const ORBIT_TURN_RADIANS_PER_CANVAS_HEIGHT = Math.PI * 2;

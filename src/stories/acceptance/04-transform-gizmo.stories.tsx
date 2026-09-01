@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { DirectorDesk } from "../../ui/shell/DirectorDesk";
-import { AcceptancePanel } from "./AcceptancePanel";
-import { placeModels } from "./seeds";
+import { DirectorDesk } from "@/ui/shell/DirectorDesk";
+import { AcceptancePanel } from "@/stories/acceptance/AcceptancePanel";
+import { placeModels } from "@/stories/acceptance/seeds";
 
 const meta: Meta = { title: "验收/04 摆位操作" };
 export default meta;

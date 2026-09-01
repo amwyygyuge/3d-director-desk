@@ -5,9 +5,9 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { observer } from "mobx-react-lite";
 import type { MouseEvent } from "react";
 
-import { LIGHTING_MODE } from "../../store/SceneStore";
-import type { LightingMode } from "../../store/SceneStore";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
+import { LIGHTING_MODE } from "@/store/SceneStore";
+import type { LightingMode } from "@/store/SceneStore";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const STUDIO_LABEL = "演播室";
 const CUSTOM_LABEL = "自定义";

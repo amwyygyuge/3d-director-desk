@@ -1,10 +1,10 @@
 import { PerspectiveCamera, Vector3 } from "three";
 
-import { waitMs } from "../core/waitMs";
+import { waitMs } from "@/core/waitMs";
 import type { Camera, Scene, WebGLRenderer } from "three";
 import type { Object3D } from "three";
 
-import type { Vec3 } from "../core/SceneObject";
+import type { Vec3 } from "@/core/SceneObject";
 
 const PNG_MIME_TYPE = "image/png";
 const TMP_DIRECTION = new Vector3();

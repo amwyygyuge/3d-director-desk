@@ -1,9 +1,9 @@
 import { useEffect, useMemo } from "react";
 import { BufferAttribute, BufferGeometry } from "three";
 
-import type { CameraMotionClip } from "../../../camera/CameraMotionClip";
-import { sampleCameraMotionPath } from "../../../camera/CameraMotionPath";
-import type { PathPositionSample } from "../../../camera/CameraMotionPath";
+import type { CameraMotionClip } from "@/camera/CameraMotionClip";
+import { sampleCameraMotionPath } from "@/camera/CameraMotionPath";
+import type { PathPositionSample } from "@/camera/CameraMotionPath";
 
 const PATH_SAMPLES_PER_SEGMENT = 24;
 

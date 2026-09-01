@@ -1,12 +1,12 @@
-import { FocusTargetResolver } from "../camera/FocusTargetResolver";
-import { sampleCameraMotionClip } from "../camera/CameraMotionClip";
-import type { CameraMotionSample } from "../camera/CameraMotionClip";
-import type { PathPositionSample } from "../camera/CameraMotionPath";
-import { CreateMotionClipCommand, SetProgramClipCommand } from "./cameraMotionCommands";
-import { DirectorCommand } from "./DirectorCommand";
-import type { CommandCapability, DirectorQuery } from "./CommandDispatcher";
-import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
-import type { CommandDispatcher } from "./CommandDispatcher";
+import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
+import { sampleCameraMotionClip } from "@/camera/CameraMotionClip";
+import type { CameraMotionSample } from "@/camera/CameraMotionClip";
+import type { PathPositionSample } from "@/camera/CameraMotionPath";
+import { CreateMotionClipCommand, SetProgramClipCommand } from "@/command/cameraMotionCommands";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
+import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import type { CommandDispatcher } from "@/command/CommandDispatcher";
 
 /** 采样缓冲:查询低频但遵守零分配纪律(命令层模块级临时对象先例) */
 const TMP_MOTION_SAMPLE: CameraMotionSample = {

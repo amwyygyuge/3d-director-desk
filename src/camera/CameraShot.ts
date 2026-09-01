@@ -1,4 +1,4 @@
-import type { Vec3 } from "../core/SceneObject";
+import type { Vec3 } from "@/core/SceneObject";
 
 export const DEFAULT_CAMERA_FOV = 45;
 

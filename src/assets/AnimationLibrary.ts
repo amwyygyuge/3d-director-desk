@@ -1,7 +1,7 @@
 import { makeAutoObservable } from "mobx";
 import type { AnimationClip } from "three";
 
-import { ActionAsset } from "./ActionAsset";
+import { ActionAsset } from "@/assets/ActionAsset";
 
 /**
  * 动作库(仓储):已导入动作的注册表。

@@ -1,7 +1,7 @@
-import { assembleDeskDocument } from "../document/DeskDocument";
-import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext } from "./DirectorCommand";
-import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
+import { assembleDeskDocument } from "@/document/DeskDocument";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { DirectorContext } from "@/command/DirectorCommand";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 
 const DOCUMENT_COMMAND_VERSION = "1" as const;
 const DOCUMENT_READ_PERMISSION = "document:read";

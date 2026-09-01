@@ -16,9 +16,9 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
 
-import { ASSET_CATEGORY, ASSET_KIND } from "../../assets/catalog/AssetEntry";
-import type { AssetEntry } from "../../assets/catalog/AssetEntry";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
+import { ASSET_CATEGORY, ASSET_KIND } from "@/assets/catalog/AssetEntry";
+import type { AssetEntry } from "@/assets/catalog/AssetEntry";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** 分类 → 图标/文案查表；资源库只展示可直接放置的模型。 */
 const CATEGORY_PRESENTATION: Record<string, { icon: ReactNode; label: string }> = {

@@ -1,16 +1,16 @@
 import { runInAction } from "mobx";
 
-import { provisionAction, mountWhenReady } from "../command/actionProvisioning";
-import type { DirectorContext } from "../command/DirectorCommand";
-import { CameraMotionClip } from "../camera/CameraMotionClip";
-import { FOCUS_TARGET_KIND } from "../camera/CameraFocusTrack";
-import { CameraProgramTrack } from "../camera/CameraProgramTrack";
-import { CameraShot } from "../camera/CameraShot";
-import { finiteTransform, finiteVec3, SceneObject, SCENE_OBJECT_KINDS } from "../core/SceneObject";
-import { TimelineDoc } from "../timeline/TimelineDoc";
-import type { TimelineTrack } from "../timeline/TimelineTrack";
-import { DESK_DOCUMENT_VERSION } from "./DeskDocument";
-import type { DeskDocument, DeskDocumentAction } from "./DeskDocument";
+import { provisionAction, mountWhenReady } from "@/command/actionProvisioning";
+import type { DirectorContext } from "@/command/DirectorCommand";
+import { CameraMotionClip } from "@/camera/CameraMotionClip";
+import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
+import { CameraProgramTrack } from "@/camera/CameraProgramTrack";
+import { CameraShot } from "@/camera/CameraShot";
+import { finiteTransform, finiteVec3, SceneObject, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
+import { TimelineDoc } from "@/timeline/TimelineDoc";
+import type { TimelineTrack } from "@/timeline/TimelineTrack";
+import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
+import type { DeskDocument, DeskDocumentAction } from "@/document/DeskDocument";
 const SCENE_OBJECT_KIND_VALUES: readonly string[] = SCENE_OBJECT_KINDS;
 
 interface DocumentImportPlan {

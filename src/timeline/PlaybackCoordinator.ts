@@ -1,17 +1,17 @@
 import { reaction } from "mobx";
 
-import type { AnimationBinder } from "../animation/AnimationBinder";
-import { CameraMotionSampler } from "../camera/CameraMotionSampler";
-import type { CameraMotionSink } from "../camera/CameraMotionSampler";
-import { PoseLayer } from "../pose/PoseLayer";
-import type { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
-import { TIMELINE_TRACK_KIND } from "./TimelineTrack";
-import type { SceneManager } from "../core/SceneManager";
-import type { CameraStore } from "../store/CameraStore";
-import type { CameraMotionStore } from "../store/CameraMotionStore";
-import type { TimelineStore } from "../store/TimelineStore";
-import type { TimeTransport } from "../time/TimeTransport";
-import { TimelineSampler } from "./TimelineSampler";
+import type { AnimationBinder } from "@/animation/AnimationBinder";
+import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
+import type { CameraMotionSink } from "@/camera/CameraMotionSampler";
+import { PoseLayer } from "@/pose/PoseLayer";
+import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import type { SceneManager } from "@/core/SceneManager";
+import type { CameraStore } from "@/store/CameraStore";
+import type { CameraMotionStore } from "@/store/CameraMotionStore";
+import type { TimelineStore } from "@/store/TimelineStore";
+import type { TimeTransport } from "@/time/TimeTransport";
+import { TimelineSampler } from "@/timeline/TimelineSampler";
 
 export type TimelineInvalidator = () => void;
 

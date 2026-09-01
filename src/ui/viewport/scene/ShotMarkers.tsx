@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Group } from "three";
 import { BufferGeometry, Float32BufferAttribute, Quaternion, Vector3 } from "three";
 
-import type { CameraShot } from "../../../camera/CameraShot";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import type { CameraShot } from "@/camera/CameraShot";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const BODY_WIDTH = 0.3;
 const BODY_HEIGHT = 0.2;

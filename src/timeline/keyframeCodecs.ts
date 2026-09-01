@@ -1,4 +1,4 @@
-import type { TimelineKeyframe, TimelineTrackKind } from "./TimelineTrack";
+import type { TimelineKeyframe, TimelineTrackKind } from "@/timeline/TimelineTrack";
 
 /**
  * 关键帧种类编解码器(策略接口):轨道容器只面向本接口,不认识具体关键帧类。

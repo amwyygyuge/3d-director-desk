@@ -1,8 +1,8 @@
 import { makeAutoObservable, observable, values } from "mobx";
 import type { Object3D } from "three";
 
-import { DisposeBag } from "./DisposeBag";
-import { type SceneObject } from "./SceneObject";
+import { DisposeBag } from "@/core/DisposeBag";
+import { type SceneObject } from "@/core/SceneObject";
 
 /**
  * 场景管理器:场景对象的身份注册、查询与生命周期编排。

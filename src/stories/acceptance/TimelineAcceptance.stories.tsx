@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import type { DirectorDeskStores } from "../../ui/shell/DirectorDeskContext";
-import { DirectorDesk } from "../../ui/shell/DirectorDesk";
-import { TEST_ASSETS } from "./seeds";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { DirectorDesk } from "@/ui/shell/DirectorDesk";
+import { TEST_ASSETS } from "@/stories/acceptance/seeds";
 
 const ACTOR_ID = "timeline-actor";
 const REMOVED_ACTOR_ID = "timeline-deleted";

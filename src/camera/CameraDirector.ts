@@ -1,6 +1,6 @@
 import { entries, makeAutoObservable, observable } from "mobx";
 
-import type { CameraShot } from "./CameraShot";
+import type { CameraShot } from "@/camera/CameraShot";
 
 /**
  * 机位管理器:多机位注册、激活机位切换、导演视角回退。

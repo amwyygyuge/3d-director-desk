@@ -4,7 +4,7 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
 
-import { CHROME } from "../shell/theme";
+import { CHROME } from "@/ui/shell/theme";
 
 const TOAST_MAX_WIDTH_PX = 560;
 const TOAST_PADDING_X = 3;

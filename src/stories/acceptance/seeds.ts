@@ -1,5 +1,5 @@
-import type { DirectorDeskStores } from "../../ui/shell/DirectorDeskContext";
-import { placementFor } from "../../ui/assets/importFiles";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { placementFor } from "@/ui/assets/importFiles";
 
 /** 测试资产(public/test-assets,已入库,来源见该目录 README)的统一入口 */
 export const TEST_ASSETS = {

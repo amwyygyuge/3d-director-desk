@@ -3,11 +3,11 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { type KeyboardEvent, useState } from "react";
-import type { CommandResult } from "../../command/DirectorCommand";
-import type { Transform, Vec3 } from "../../core/SceneObject";
-import type { DirectorDeskStores } from "../shell/DirectorDeskContext";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import { MONO_FONT_STACK } from "../shell/theme";
+import type { CommandResult } from "@/command/DirectorCommand";
+import type { Transform, Vec3 } from "@/core/SceneObject";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { MONO_FONT_STACK } from "@/ui/shell/theme";
 
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;

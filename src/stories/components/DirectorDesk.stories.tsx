@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { DirectorDesk } from "../../ui/shell/DirectorDesk";
+import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 
 const meta: Meta<typeof DirectorDesk> = {
     title: "DirectorDesk/DirectorDesk",

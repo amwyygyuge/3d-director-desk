@@ -1,6 +1,6 @@
-import { DirectorCommand } from "./DirectorCommand";
-import type { CommandIssue, DirectorContext } from "./DirectorCommand";
-import type { CommandCapability, CommandDispatcher } from "./CommandDispatcher";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
+import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
 
 const PRESENTATION_COMMAND_VERSION = "1" as const;
 const PRESENTATION_PERMISSION = "desk:present";

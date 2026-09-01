@@ -11,13 +11,13 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useRef } from "react";
 
-import type { CommandResult } from "../../command/DirectorCommand";
-import { formatShortcutHint, SHORTCUT_ID } from "../../shortcuts/builtinShortcuts";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import { CHROME, MONO_FONT_STACK } from "../shell/theme";
-import { useScrubGesture } from "../timeline/useScrubGesture";
-import { TimelinePanel } from "../timeline/TimelinePanel";
-import { useHoverIntent } from "./useHoverIntent";
+import type { CommandResult } from "@/command/DirectorCommand";
+import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { CHROME, MONO_FONT_STACK } from "@/ui/shell/theme";
+import { useScrubGesture } from "@/ui/timeline/useScrubGesture";
+import { TimelinePanel } from "@/ui/timeline/TimelinePanel";
+import { useHoverIntent } from "@/ui/workspace/useHoverIntent";
 
 const PREVIEW_FRAME_RATE = 30;
 const SECONDS_PER_MINUTE = 60;

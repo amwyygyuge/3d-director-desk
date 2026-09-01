@@ -7,11 +7,11 @@ import { alpha } from "@mui/material/styles";
 import { observer } from "mobx-react-lite";
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
 
-import type { TimelineEasing } from "../../timeline/TransformKeyframe";
-import { TIMELINE_EASING } from "../../timeline/TransformKeyframe";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import { MONO_FONT_STACK } from "../shell/theme";
-import { useScrubGesture } from "./useScrubGesture";
+import type { TimelineEasing } from "@/timeline/TransformKeyframe";
+import { TIMELINE_EASING } from "@/timeline/TransformKeyframe";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { MONO_FONT_STACK } from "@/ui/shell/theme";
+import { useScrubGesture } from "@/ui/timeline/useScrubGesture";
 
 const RULER_HEIGHT_PX = 34;
 const TRACK_LABEL_WIDTH_PX = 168;

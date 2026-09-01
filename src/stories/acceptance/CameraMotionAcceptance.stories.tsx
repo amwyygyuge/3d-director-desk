@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import type { DirectorDeskStores } from "../../ui/shell/DirectorDeskContext";
-import { TEST_ASSETS } from "./seeds";
-import { DirectorDesk } from "../../ui/shell/DirectorDesk";
-import { EnterPresentationCommand } from "../../command/presentationCommands";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { DirectorDesk } from "@/ui/shell/DirectorDesk";
+import { EnterPresentationCommand } from "@/command/presentationCommands";
 
 const PRIMARY_CAMERA_ID = "主机位";
 const SIDE_CAMERA_ID = "侧机位";

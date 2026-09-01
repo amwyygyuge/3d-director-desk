@@ -1,10 +1,10 @@
 import { observer } from "mobx-react-lite";
 
-import { ViewportToast } from "../workspace/ViewportToast";
-import { SHORTCUT_ID, formatShortcutHint } from "../../shortcuts/builtinShortcuts";
-import type { ShortcutId } from "../../shortcuts/builtinShortcuts";
-import type { DirectorDeskStores } from "../shell/DirectorDeskContext";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
+import { ViewportToast } from "@/ui/workspace/ViewportToast";
+import { SHORTCUT_ID, formatShortcutHint } from "@/shortcuts/builtinShortcuts";
+import type { ShortcutId } from "@/shortcuts/builtinShortcuts";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 interface KeyInteractionHintSegment {
     readonly keys: string;

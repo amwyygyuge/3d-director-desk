@@ -1,11 +1,11 @@
 import type { Object3D } from "three";
 
-import type { Transform } from "../core/SceneObject";
-import type { TimelineDoc } from "./TimelineDoc";
-import type { TimelineTrack } from "./TimelineTrack";
-import type { TransformKeyframe } from "./TransformKeyframe";
-import { TIMELINE_TRACK_KIND } from "./TimelineTrack";
-import { TIMELINE_EASING } from "./TransformKeyframe";
+import type { Transform } from "@/core/SceneObject";
+import type { TimelineDoc } from "@/timeline/TimelineDoc";
+import type { TimelineTrack } from "@/timeline/TimelineTrack";
+import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import { TIMELINE_EASING } from "@/timeline/TransformKeyframe";
 
 /** Mutable output buffer for pure timeline transform sampling; callers own its lifetime. */
 export interface TransformSample {

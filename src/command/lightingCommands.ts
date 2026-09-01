@@ -1,12 +1,12 @@
-import { isLightingMode } from "../store/SceneStore";
-import type { LightingMode } from "../store/SceneStore";
+import { isLightingMode } from "@/store/SceneStore";
+import type { LightingMode } from "@/store/SceneStore";
 
-import type { LightParams } from "../core/LightParams";
-import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "../core/LightParams";
-import type { SceneObject } from "../core/SceneObject";
-import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
-import { DirectorCommand } from "./DirectorCommand";
-import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
+import type { LightParams } from "@/core/LightParams";
+import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "@/core/LightParams";
+import type { SceneObject } from "@/core/SceneObject";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 
 const LIGHTING_COMMAND_VERSION = "1" as const;
 const LIGHTING_PERMISSION = "lighting:edit";

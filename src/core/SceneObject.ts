@@ -1,10 +1,10 @@
 import { makeAutoObservable, observableRef } from "mobx";
 
-import type { ModelFormat } from "../assets/ModelAsset";
-import { normalizeLightParams } from "./LightParams";
-import type { LightParams } from "./LightParams";
-import { PoseSnapshot } from "../pose/PoseSnapshot";
-import type { PoseSnapshotInit } from "../pose/PoseSnapshot";
+import type { ModelFormat } from "@/assets/ModelAsset";
+import { normalizeLightParams } from "@/core/LightParams";
+import type { LightParams } from "@/core/LightParams";
+import { PoseSnapshot } from "@/pose/PoseSnapshot";
+import type { PoseSnapshotInit } from "@/pose/PoseSnapshot";
 
 export type Vec3 = readonly [number, number, number];
 

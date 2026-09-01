@@ -2,8 +2,8 @@ import { useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 
-import { LIGHTING_MODE } from "../../../store/SceneStore";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import { LIGHTING_MODE } from "@/store/SceneStore";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const AMBIENT_INTENSITY = 0.5;
 const KEY_LIGHT_INTENSITY = 1.4;

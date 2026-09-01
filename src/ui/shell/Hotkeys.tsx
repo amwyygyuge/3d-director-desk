@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import type { RefObject } from "react";
 
-import { activeShortcutScopes, registerBuiltinShortcuts } from "../../shortcuts/builtinShortcuts";
-import { useDirectorDeskStores } from "./DirectorDeskContext";
+import { activeShortcutScopes, registerBuiltinShortcuts } from "@/shortcuts/builtinShortcuts";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 interface HotkeysProps {
     readonly deskRef: RefObject<HTMLDivElement | null>;

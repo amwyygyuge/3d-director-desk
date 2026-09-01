@@ -1,8 +1,8 @@
 import { makeAutoObservable } from "mobx";
 
-import { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "../timeline/TimelineDoc";
-import { TimelineTrack, TIMELINE_TRACK_KIND } from "../timeline/TimelineTrack";
-import type { TransformKeyframe } from "../timeline/TransformKeyframe";
+import { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "@/timeline/TimelineDoc";
+import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
 
 /**
  * 每个 DirectorDesk 实例各自拥有的时间轴状态。仅保存 TimelineDoc 纯数据；

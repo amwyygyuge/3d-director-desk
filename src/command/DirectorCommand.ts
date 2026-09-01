@@ -1,22 +1,22 @@
-import type { AnimationBinder } from "../animation/AnimationBinder";
-import type { ActionPreviewController } from "../animation/ActionPreviewController";
-import type { AnimationLibrary } from "../assets/AnimationLibrary";
-import type { AssetCatalog } from "../assets/catalog/AssetCatalog";
-import type { HostAdapter } from "../host/HostAdapter";
-import type { ModelImporter } from "../loaders/ModelImporter";
-import type { CameraStore } from "../store/CameraStore";
-import type { CameraMotionStore } from "../store/CameraMotionStore";
-import type { CaptureService } from "../capture/CaptureService";
-import type { SkeletonRuntimeRegistry } from "../pose/SkeletonRuntimeRegistry";
-import type { PoseGroundingService } from "../pose/PoseGroundingService";
-import type { SceneStore } from "../store/SceneStore";
-import type { TimeTransport } from "../time/TimeTransport";
-import type { SelectionStore } from "../store/SelectionStore";
-import type { UiStore } from "../store/UiStore";
-import type { WorkbenchLayoutStore } from "../store/WorkbenchLayoutStore";
-import type { PlaybackCoordinator } from "../timeline/PlaybackCoordinator";
-import type { TimelineStore } from "../store/TimelineStore";
-import type { DocumentImportService } from "../document/DocumentImportService";
+import type { AnimationBinder } from "@/animation/AnimationBinder";
+import type { ActionPreviewController } from "@/animation/ActionPreviewController";
+import type { AnimationLibrary } from "@/assets/AnimationLibrary";
+import type { AssetCatalog } from "@/assets/catalog/AssetCatalog";
+import type { HostAdapter } from "@/host/HostAdapter";
+import type { ModelImporter } from "@/loaders/ModelImporter";
+import type { CameraStore } from "@/store/CameraStore";
+import type { CameraMotionStore } from "@/store/CameraMotionStore";
+import type { CaptureService } from "@/capture/CaptureService";
+import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
+import type { PoseGroundingService } from "@/pose/PoseGroundingService";
+import type { SceneStore } from "@/store/SceneStore";
+import type { TimeTransport } from "@/time/TimeTransport";
+import type { SelectionStore } from "@/store/SelectionStore";
+import type { UiStore } from "@/store/UiStore";
+import type { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
+import type { PlaybackCoordinator } from "@/timeline/PlaybackCoordinator";
+import type { TimelineStore } from "@/store/TimelineStore";
+import type { DocumentImportService } from "@/document/DocumentImportService";
 
 /**
  * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。

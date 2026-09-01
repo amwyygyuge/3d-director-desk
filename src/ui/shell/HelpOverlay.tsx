@@ -7,9 +7,9 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { Fragment } from "react";
 
-import { formatShortcutHint, SHORTCUT_SPECS } from "../../shortcuts/builtinShortcuts";
-import type { ShortcutScope } from "../../shortcuts/ShortcutRegistry";
-import { useDirectorDeskStores } from "./DirectorDeskContext";
+import { formatShortcutHint, SHORTCUT_SPECS } from "@/shortcuts/builtinShortcuts";
+import type { ShortcutScope } from "@/shortcuts/ShortcutRegistry";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const DIALOG_TITLE = "快捷键";
 const FIRST_GROUP_INDEX = 0;

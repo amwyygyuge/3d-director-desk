@@ -1,4 +1,4 @@
-import type { Vec3 } from "../core/SceneObject";
+import type { Vec3 } from "@/core/SceneObject";
 
 export interface MotionPathAnchorInit {
     readonly id: string;

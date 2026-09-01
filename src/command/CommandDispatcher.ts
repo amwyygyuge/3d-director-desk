@@ -1,6 +1,6 @@
-import type { CommandIssue, DirectorCommand, DirectorContext, SerializedCommand } from "./DirectorCommand";
-import type { CommandResult } from "./DirectorCommand";
-import type { CommandHistory } from "./CommandHistory";
+import type { CommandIssue, DirectorCommand, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import type { CommandResult } from "@/command/DirectorCommand";
+import type { CommandHistory } from "@/command/CommandHistory";
 
 type CommandFactory = (payload: never) => DirectorCommand;
 type QueryFactory = (payload: never) => DirectorQuery;

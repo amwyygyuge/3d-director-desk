@@ -1,6 +1,6 @@
 import { makeAutoObservable, onBecomeObserved, onBecomeUnobserved, reaction } from "mobx";
 
-import type { TimeTransport } from "../../time/TimeTransport";
+import type { TimeTransport } from "@/time/TimeTransport";
 
 const PLAYHEAD_DISPLAY_RATE_HZ = 12;
 const PLAYHEAD_DISPLAY_INTERVAL_MS = 1000 / PLAYHEAD_DISPLAY_RATE_HZ;

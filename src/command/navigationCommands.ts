@@ -1,9 +1,9 @@
 import { Box3, Vector3 } from "three";
 
-import { FramingService } from "../camera/FramingService";
-import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext } from "./DirectorCommand";
-import type { CommandDispatcher } from "./CommandDispatcher";
+import { FramingService } from "@/camera/FramingService";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { DirectorContext } from "@/command/DirectorCommand";
+import type { CommandDispatcher } from "@/command/CommandDispatcher";
 
 const framing = new FramingService();
 

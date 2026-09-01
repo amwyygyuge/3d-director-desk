@@ -1,7 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
-import { ModelAsset } from "./ModelAsset";
-import type { ModelFormat } from "./ModelAsset";
+import { ModelAsset } from "@/assets/ModelAsset";
+import type { ModelFormat } from "@/assets/ModelAsset";
 
 /**
  * 资产库(仓储):已导入模型的纯数据注册表。

@@ -1,6 +1,6 @@
 import { observer } from "mobx-react-lite";
 
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /**
  * 机位视角的取景框叠加:画幅框 + 三分构图网格 + 机位名。

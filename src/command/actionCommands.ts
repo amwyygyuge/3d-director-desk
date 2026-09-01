@@ -1,9 +1,9 @@
-import { BONE_MATCH_THRESHOLD } from "../animation/BoneCompatibilityChecker";
-import type { BoneCheckResult } from "../animation/BoneCompatibilityChecker";
+import { BONE_MATCH_THRESHOLD } from "@/animation/BoneCompatibilityChecker";
+import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
 import type { AnimationClip, Object3D } from "three";
-import { DirectorCommand } from "./DirectorCommand";
-import type { DirectorContext, SerializedCommand } from "./DirectorCommand";
-import type { CommandDispatcher } from "./CommandDispatcher";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import type { CommandDispatcher } from "@/command/CommandDispatcher";
 
 class BoneCompatibilityIndex {
     private readonly nodeNamesByRoot = new WeakMap<Object3D, ReadonlySet<string>>();

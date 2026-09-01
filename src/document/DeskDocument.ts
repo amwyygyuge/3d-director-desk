@@ -1,9 +1,9 @@
-import type { CameraMotionClipJSON } from "../camera/CameraMotionClip";
-import type { CameraProgramTrackJSON } from "../camera/CameraProgramTrack";
-import type { CameraShotJSON } from "../camera/CameraShot";
-import type { SceneObjectInit } from "../core/SceneObject";
-import type { TimelineDocInit } from "../timeline/TimelineDoc";
-import type { DirectorContext } from "../command/DirectorCommand";
+import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
+import type { CameraProgramTrackJSON } from "@/camera/CameraProgramTrack";
+import type { CameraShotJSON } from "@/camera/CameraShot";
+import type { SceneObjectInit } from "@/core/SceneObject";
+import type { TimelineDocInit } from "@/timeline/TimelineDoc";
+import type { DirectorContext } from "@/command/DirectorCommand";
 
 export const DESK_DOCUMENT_VERSION = 3;
 

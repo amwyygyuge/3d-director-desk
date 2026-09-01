@@ -1,6 +1,6 @@
-import type { TransformKeyframe } from "./TransformKeyframe";
-import type { TransformKeyframeInit } from "./TransformKeyframe";
-import { keyframeCodecFor } from "./keyframeCodecs";
+import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
+import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
+import { keyframeCodecFor } from "@/timeline/keyframeCodecs";
 
 export const TIMELINE_TRACK_KIND = {
     TRANSFORM: "transform",

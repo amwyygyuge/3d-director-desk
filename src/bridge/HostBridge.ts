@@ -1,5 +1,5 @@
-import { HOST_BRIDGE_FAILURE_CODE, HOST_OUTBOUND_MESSAGE_TYPE, isDirectorDeskMessage } from "./protocol";
-import type { HostInboundMessage, HostOutboundMessage, HostOutboundRequest } from "./protocol";
+import { HOST_BRIDGE_FAILURE_CODE, HOST_OUTBOUND_MESSAGE_TYPE, isDirectorDeskMessage } from "@/bridge/protocol";
+import type { HostInboundMessage, HostOutboundMessage, HostOutboundRequest } from "@/bridge/protocol";
 
 /** 每个导演台实例的不可变宿主会话标识。 */
 export class HostBridgeSession {

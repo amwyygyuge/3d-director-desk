@@ -1,6 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
-import type { LiveCameraPose } from "../capture/CaptureService";
+import type { LiveCameraPose } from "@/capture/CaptureService";
 /** gizmo 模式:三态查表,工具条与控制器共享 */
 export const GIZMO_MODE = {
     TRANSLATE: "translate",

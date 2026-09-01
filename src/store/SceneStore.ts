@@ -1,10 +1,10 @@
 import { makeAutoObservable } from "mobx";
 
-import { SceneManager } from "../core/SceneManager";
-import { SceneObject } from "../core/SceneObject";
-import type { LightParams } from "../core/LightParams";
-import type { PoseSnapshot } from "../pose/PoseSnapshot";
-import type { SceneObjectInit, Transform } from "../core/SceneObject";
+import { SceneManager } from "@/core/SceneManager";
+import { SceneObject } from "@/core/SceneObject";
+import type { LightParams } from "@/core/LightParams";
+import type { PoseSnapshot } from "@/pose/PoseSnapshot";
+import type { SceneObjectInit, Transform } from "@/core/SceneObject";
 
 export const LIGHTING_MODE = {
     STUDIO: "studio",

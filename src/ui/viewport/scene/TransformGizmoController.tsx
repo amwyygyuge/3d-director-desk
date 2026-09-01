@@ -4,7 +4,7 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
 
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** gizmo 控制器:只挂主选场景对象的运行时。
  *

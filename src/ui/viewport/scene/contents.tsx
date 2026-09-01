@@ -5,11 +5,11 @@ import type { MutableRefObject } from "react";
 import type { DirectionalLight, Mesh, Object3D, PointLight, Scene, SpotLight } from "three";
 import { ArrowHelper, Box3, DirectionalLightHelper, Group, PointLightHelper, SpotLightHelper, Vector3 } from "three";
 
-import type { LightParams, LightType } from "../../../core/LightParams";
-import type { SceneObject } from "../../../core/SceneObject";
-import type { ModelHandle } from "../../../loaders/ModelImporter";
-import { measureModelBox } from "../../../core/measureModelBox";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
+import type { LightParams, LightType } from "@/core/LightParams";
+import type { SceneObject } from "@/core/SceneObject";
+import type { ModelHandle } from "@/loaders/ModelImporter";
+import { measureModelBox } from "@/core/measureModelBox";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 
 /** 导入模型归一化目标:最大边缩放到 2 个场景单位,底面贴地——游戏模型单位各异(cm/m),裸放会糊满屏 */

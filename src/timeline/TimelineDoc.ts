@@ -1,5 +1,5 @@
-import { TimelineTrack } from "./TimelineTrack";
-import type { TimelineTrackInit, TimelineTrackKind } from "./TimelineTrack";
+import { TimelineTrack } from "@/timeline/TimelineTrack";
+import type { TimelineTrackInit, TimelineTrackKind } from "@/timeline/TimelineTrack";
 
 export const DEFAULT_TIMELINE_DURATION_SECONDS = 10;
 

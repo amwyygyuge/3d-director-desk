@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { HostBridgeConfiguration, HostBridgeSession } from "../../bridge/HostBridge";
-import { DirectorDesk } from "../../ui/shell/DirectorDesk";
-import { AcceptancePanel } from "./AcceptancePanel";
-import { placeModel, TEST_ASSETS } from "./seeds";
+import { HostBridgeConfiguration, HostBridgeSession } from "@/bridge/HostBridge";
+import { DirectorDesk } from "@/ui/shell/DirectorDesk";
+import { AcceptancePanel } from "@/stories/acceptance/AcceptancePanel";
+import { placeModel, TEST_ASSETS } from "@/stories/acceptance/seeds";
 
 const meta: Meta = { title: "验收/03 模型导入" };
 export default meta;

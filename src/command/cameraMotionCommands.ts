@@ -1,14 +1,14 @@
-import { CameraFocusTrack, FOCUS_TARGET_KIND } from "../camera/CameraFocusTrack";
-import type { FocusTargetJSON } from "../camera/CameraFocusTrack";
-import { CAMERA_MOTION_EASING, CameraMotionClip } from "../camera/CameraMotionClip";
-import type { CameraMotionClipJSON, CameraMotionEasing } from "../camera/CameraMotionClip";
-import { CameraMotionPath } from "../camera/CameraMotionPath";
-import type { CameraMotionPathJSON } from "../camera/CameraMotionPath";
-import { CameraProgramClip } from "../camera/CameraProgramTrack";
-import type { CameraProgramClipJSON } from "../camera/CameraProgramTrack";
-import { DirectorCommand } from "./DirectorCommand";
-import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
-import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
+import { CameraFocusTrack, FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
+import type { FocusTargetJSON } from "@/camera/CameraFocusTrack";
+import { CAMERA_MOTION_EASING, CameraMotionClip } from "@/camera/CameraMotionClip";
+import type { CameraMotionClipJSON, CameraMotionEasing } from "@/camera/CameraMotionClip";
+import { CameraMotionPath } from "@/camera/CameraMotionPath";
+import type { CameraMotionPathJSON } from "@/camera/CameraMotionPath";
+import { CameraProgramClip } from "@/camera/CameraProgramTrack";
+import type { CameraProgramClipJSON } from "@/camera/CameraProgramTrack";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 
 const MOTION_COMMAND_VERSION = "1" as const;
 const MOTION_PERMISSION = "motion:edit";

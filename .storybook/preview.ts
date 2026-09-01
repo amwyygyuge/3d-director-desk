@@ -1,4 +1,4 @@
-import "../src/styles/index.css";
+import "@/styles/index.css";
 
 import type { Preview } from "@storybook/react-vite";
 

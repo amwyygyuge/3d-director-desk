@@ -1,7 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
-import type { CommandDispatcher } from "./CommandDispatcher";
-import type { CommandResult, DirectorContext, SerializedCommand } from "./DirectorCommand";
+import type { CommandDispatcher } from "@/command/CommandDispatcher";
+import type { CommandResult, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 
 /** 一条可逆历史记录:undo/redo 互为逆序列 */
 export interface HistoryEntry {

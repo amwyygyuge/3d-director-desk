@@ -1,6 +1,6 @@
-import { HostBridge } from "../bridge/HostBridge";
-import type { HostBridgeConfiguration } from "../bridge/HostBridge";
-import { HOST_INBOUND_MESSAGE_TYPE, HOST_OUTBOUND_MESSAGE_TYPE } from "../bridge/protocol";
+import { HostBridge } from "@/bridge/HostBridge";
+import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
+import { HOST_INBOUND_MESSAGE_TYPE, HOST_OUTBOUND_MESSAGE_TYPE } from "@/bridge/protocol";
 
 /** 宿主适配器接口:导演台与宿主的唯一契约面(两形态一契约)。 */
 export interface HostAdapter {

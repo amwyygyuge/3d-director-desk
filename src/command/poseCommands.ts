@@ -1,8 +1,8 @@
-import { PoseSnapshot, isQuaternionTuple } from "../pose/PoseSnapshot";
-import type { PoseSnapshotInit, QuaternionTuple } from "../pose/PoseSnapshot";
-import { DirectorCommand } from "./DirectorCommand";
-import type { CommandIssue, DirectorContext, SerializedCommand } from "./DirectorCommand";
-import type { CommandCapability, CommandDispatcher, DirectorQuery } from "./CommandDispatcher";
+import { PoseSnapshot, isQuaternionTuple } from "@/pose/PoseSnapshot";
+import type { PoseSnapshotInit, QuaternionTuple } from "@/pose/PoseSnapshot";
+import { DirectorCommand } from "@/command/DirectorCommand";
+import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 
 const POSE_VERSION = "1" as const;
 const EDIT_PERMISSION = "pose:edit";

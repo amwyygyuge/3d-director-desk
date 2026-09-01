@@ -1,6 +1,6 @@
-import { FOCUS_TARGET_KIND } from "./CameraFocusTrack";
-import type { CameraFocusTrack, FocusTargetSample } from "./CameraFocusTrack";
-import type { SceneManager } from "../core/SceneManager";
+import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
+import type { CameraFocusTrack, FocusTargetSample } from "@/camera/CameraFocusTrack";
+import type { SceneManager } from "@/core/SceneManager";
 
 export class FocusTargetResolver {
     constructor(private readonly scene: SceneManager) {}

@@ -2,8 +2,8 @@ import { useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
-import { SceneObjectView } from "./SceneObjectView";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { SceneObjectView } from "@/ui/viewport/scene/SceneObjectView";
 
 /**
  * 场景渲染根:实体列表 → SceneObjectView(纯映射组件)。

@@ -5,9 +5,9 @@ import type { ComponentType } from "react";
 import type { Group, Object3D } from "three";
 import { Box3, Box3Helper, BufferGeometry, Matrix4 } from "three";
 
-import type { SceneObject, SceneObjectKind } from "../../../core/SceneObject";
-import { useDirectorDeskStores } from "../../shell/DirectorDeskContext";
-import { LightContent, ModelContent } from "./contents";
+import type { SceneObject, SceneObjectKind } from "@/core/SceneObject";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { LightContent, ModelContent } from "@/ui/viewport/scene/contents";
 
 const HIGHLIGHT_COLOR = "#ffd54f";
 

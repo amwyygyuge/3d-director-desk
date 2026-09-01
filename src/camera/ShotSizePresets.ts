@@ -1,6 +1,6 @@
-import type { Vec3 } from "../core/SceneObject";
-import { CameraShot, SHOT_SIZE } from "./CameraShot";
-import type { ShotSize } from "./CameraShot";
+import type { Vec3 } from "@/core/SceneObject";
+import { CameraShot, SHOT_SIZE } from "@/camera/CameraShot";
+import type { ShotSize } from "@/camera/CameraShot";
 
 /**
  * 景别 → 构图参数查表(Record,禁 if 链):

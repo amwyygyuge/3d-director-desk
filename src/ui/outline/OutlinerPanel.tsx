@@ -9,13 +9,13 @@ import Tooltip from "@mui/material/Tooltip";
 import { observer } from "mobx-react-lite";
 import type { MouseEvent, ReactNode } from "react";
 
-import { RemoveShotCommand } from "../../command/cameraCommands";
-import { RemoveObjectCommand } from "../../command/commands";
-import { FrameViewCommand } from "../../command/navigationCommands";
-import type { SceneObjectKind } from "../../core/SceneObject";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import { OutlineRow } from "./OutlineRow";
-import { OutlineSection } from "./OutlineSection";
+import { RemoveShotCommand } from "@/command/cameraCommands";
+import { RemoveObjectCommand } from "@/command/commands";
+import { FrameViewCommand } from "@/command/navigationCommands";
+import type { SceneObjectKind } from "@/core/SceneObject";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { OutlineRow } from "@/ui/outline/OutlineRow";
+import { OutlineSection } from "@/ui/outline/OutlineSection";
 
 const KIND_ICONS: Record<SceneObjectKind, ReactNode> = {
     model: <ViewInArIcon fontSize="small" />,

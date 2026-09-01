@@ -1,7 +1,7 @@
 import type { Bone, Object3D } from "three";
 import { SkeletonHelper } from "three";
 
-import type { BoneKey, QuaternionTuple } from "./PoseSnapshot";
+import type { BoneKey, QuaternionTuple } from "@/pose/PoseSnapshot";
 
 export interface BoneTreeNodeDto {
     readonly key: BoneKey;

@@ -1,11 +1,11 @@
-import type { FocusTargetSample } from "./CameraFocusTrack";
-import { FocusTargetResolver } from "./FocusTargetResolver";
-import type { SceneManager } from "../core/SceneManager";
-import type { CameraMotionStore } from "../store/CameraMotionStore";
-import type { CameraStore } from "../store/CameraStore";
-import { sampleCameraMotionClip } from "./CameraMotionClip";
-import type { CameraMotionSample } from "./CameraMotionClip";
-import type { PathPositionSample } from "./CameraMotionPath";
+import type { FocusTargetSample } from "@/camera/CameraFocusTrack";
+import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
+import type { SceneManager } from "@/core/SceneManager";
+import type { CameraMotionStore } from "@/store/CameraMotionStore";
+import type { CameraStore } from "@/store/CameraStore";
+import { sampleCameraMotionClip } from "@/camera/CameraMotionClip";
+import type { CameraMotionSample } from "@/camera/CameraMotionClip";
+import type { PathPositionSample } from "@/camera/CameraMotionPath";
 
 /** R3F-owned runtime bridge; no Three references ever enter MobX state. */
 export interface CameraMotionSink {

@@ -5,8 +5,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
-import { MODEL_FORMAT } from "../assets/ModelAsset";
-import type { ModelFormat } from "../assets/ModelAsset";
+import { MODEL_FORMAT } from "@/assets/ModelAsset";
+import type { ModelFormat } from "@/assets/ModelAsset";
 
 /** 加载解析结果:原始场景图源 + 动作 clip(动作挂载在 05 任务消费) */
 interface ParsedModel {

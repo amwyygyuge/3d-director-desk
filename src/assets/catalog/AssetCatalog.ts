@@ -1,8 +1,8 @@
 import { makeAutoObservable } from "mobx";
 
-import { parseAssetEntry } from "./AssetEntry";
-import type { AssetEntry, AssetSource } from "./AssetEntry";
-import type { AssetProvider } from "./AssetProvider";
+import { parseAssetEntry } from "@/assets/catalog/AssetEntry";
+import type { AssetEntry, AssetSource } from "@/assets/catalog/AssetEntry";
+import type { AssetProvider } from "@/assets/catalog/AssetProvider";
 
 export interface AssetListFilter {
     readonly kind?: AssetEntry["kind"] | undefined;

@@ -1,5 +1,5 @@
-import type { Vec3 } from "../core/SceneObject";
-import { finiteVec3 } from "../core/SceneObject";
+import type { Vec3 } from "@/core/SceneObject";
+import { finiteVec3 } from "@/core/SceneObject";
 
 export const FOCUS_TARGET_KIND = {
     WORLD_POINT: "world-point",

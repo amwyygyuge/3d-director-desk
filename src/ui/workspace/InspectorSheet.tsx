@@ -6,12 +6,12 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
-import type { SceneObjectKind } from "../../core/SceneObject";
-import { formatShortcutHint, SHORTCUT_ID } from "../../shortcuts/builtinShortcuts";
-import type { DirectorDeskStores } from "../shell/DirectorDeskContext";
-import { useDirectorDeskStores } from "../shell/DirectorDeskContext";
-import { Inspector } from "../inspector/Inspector";
-import { CHROME } from "../shell/theme";
+import type { SceneObjectKind } from "@/core/SceneObject";
+import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { Inspector } from "@/ui/inspector/Inspector";
+import { CHROME } from "@/ui/shell/theme";
 
 const INSPECTOR_TOP_PX = 80;
 const INSPECTOR_BOTTOM_PX = 88;
