@@ -11,6 +11,7 @@ import type { TimelineEasing } from "../timeline/TransformKeyframe";
 import { TIMELINE_EASING } from "../timeline/TransformKeyframe";
 import { useDirectorDeskStores } from "./DirectorDeskContext";
 import { MONO_FONT_STACK } from "./theme";
+import { useScrubGesture } from "./useScrubGesture";
 
 const RULER_HEIGHT_PX = 34;
 const TRACK_LABEL_WIDTH_PX = 168;
@@ -154,6 +155,11 @@ export const TimelinePanel = observer(function TimelinePanel() {
         return clampTime(((event.clientX - bounds.left) / bounds.width) * duration, duration);
     };
 
+    const scrub = useScrubGesture({
+        trackRef: rulerRef,
+        onScrub: (ratio) => dispatchCommand({ type: "transport.seek", payload: { time: ratio * duration } }),
+    });
+
     const setEasing = (easing: TimelineEasing): void => {
         if (!selectedKey) return;
         dispatchCommand({ type: "timeline.set-key-easing", payload: { ...selectedKey, easing } });
@@ -208,16 +214,35 @@ export const TimelinePanel = observer(function TimelinePanel() {
                         <Box sx={{ height: RULER_HEIGHT_PX, bgcolor: TRACK_HEADER_BACKGROUND, borderRight: 1, borderColor: TRACK_BORDER_COLOR }} />
                         <Box
                             ref={rulerRef}
-                            role="presentation"
-                            onPointerMove={(event) => dragState && setDragState({ ...dragState, time: timeAtPointer(event) })}
-                            onPointerUp={completeDrag}
-                            onPointerCancel={() => setDragState(null)}
+                            role="slider"
+                            aria-label="时间轴定位"
+                            aria-valuemin={0}
+                            aria-valuemax={duration}
+                            {...scrub}
+                            onPointerMove={(event) => {
+                                // 标尺同时是关键帧拖拽的指针捕获目标:拖帧优先,否则才是定位
+                                if (dragState) {
+                                    setDragState({ ...dragState, time: timeAtPointer(event) });
+                                    return;
+                                }
+                                scrub.onPointerMove(event);
+                            }}
+                            onPointerUp={(event) => {
+                                scrub.onPointerUp(event);
+                                completeDrag(event);
+                            }}
+                            onPointerCancel={(event) => {
+                                scrub.onPointerCancel(event);
+                                setDragState(null);
+                            }}
                             sx={{
                                 position: "relative",
                                 minHeight: RULER_HEIGHT_PX,
                                 borderBottom: 1,
                                 borderColor: TRACK_BORDER_COLOR,
                                 backgroundImage: TRACK_GRID_BACKGROUND,
+                                cursor: "ew-resize",
+                                touchAction: "none",
                             }}
                         >
                             {Array.from({ length: RULER_DIVISIONS + 1 }, (_, index) => {

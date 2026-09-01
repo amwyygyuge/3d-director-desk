@@ -26,14 +26,19 @@ import { LightModeToggle } from "../LightModeToggle";
 import { OutlinerPanel } from "../OutlinerPanel";
 import { ShotPanel } from "../ShotPanel";
 import { placementFor } from "../importFiles";
-import { CHROME } from "../theme";
-
+import { CHROME, SURFACE_BORDER_PX } from "../theme";
 const RAIL_COLLAPSED_WIDTH = `${CHROME.railCollapsedPx}px`;
 const RAIL_EXPANDED_WIDTH = `${CHROME.railExpandedPx}px`;
 const RAIL_MAX_HEIGHT = "70vh";
-const RAIL_PADDING_PX = 4;
-/** 图标列宽 = 收起态细条减去玻璃内边距;两者绑死,细条改宽图标不会跑偏 */
-const RAIL_ICON_COLUMN_PX = CHROME.railCollapsedPx - RAIL_PADDING_PX * 2;
+/** 竖向内边距;横向必须为 0——overflow 裁的是 padding box,留横向内边距会把文字挤出裁剪线 */
+const RAIL_PADDING_Y_PX = 4;
+/**
+ * 图标列宽 = 收起态细条 − 左右描边。
+ * 少算描边或留了横向内边距,收起态就会在细条右缘露出半个字。
+ */
+const RAIL_ICON_COLUMN_PX = CHROME.railCollapsedPx - SURFACE_BORDER_PX * 2;
+/** hover 判定要覆盖「图标条 + 二级面板」,故由外层容器按类名选中图标条 */
+const RAIL_STRIP_CLASS = "director-desk-rail-strip";
 const RAIL_LABEL_PADDING_RIGHT = 1.5;
 const RAIL_FLYOUT_MARGIN_LEFT = 1;
 const PANEL_CONTENT_PADDING = 1.5;
@@ -198,18 +203,24 @@ export const AssetRail = observer(function AssetRail() {
     return (
         <Box
             className="absolute top-1/2 -translate-y-1/2 z-20 pointer-events-auto flex"
-            sx={{ left: CHROME.edgeGapPx }}
+            sx={{
+                left: CHROME.edgeGapPx,
+                // hover 判定挂在「图标条 + 二级面板」的整体上:鼠标从图标滑向面板的途中
+                // 不会掉出 hover 区,图标条也就不会在半路突然缩回去
+                [`&:hover .${RAIL_STRIP_CLASS}`]: { width: RAIL_EXPANDED_WIDTH },
+            }}
         >
             <Paper
                 variant="panel"
-                className="pointer-events-auto"
+                className={`pointer-events-auto ${RAIL_STRIP_CLASS}`}
                 sx={{
-                    width: RAIL_COLLAPSED_WIDTH,
+                    // 二级面板开着时图标条常驻展开:此时它是抽屉的一部分,不该随鼠标忽宽忽窄
+                    width: layout.railSection === null ? RAIL_COLLAPSED_WIDTH : RAIL_EXPANDED_WIDTH,
                     overflow: "hidden",
                     whiteSpace: "nowrap",
                     maxHeight: RAIL_MAX_HEIGHT,
-                    p: `${RAIL_PADDING_PX}px`,
-                    "&:hover": { width: RAIL_EXPANDED_WIDTH },
+                    px: 0,
+                    py: `${RAIL_PADDING_Y_PX}px`,
                 }}
             >
                 <List disablePadding>

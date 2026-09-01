@@ -9,11 +9,13 @@ import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
+import { useRef } from "react";
 
 import type { CommandResult } from "../../command/DirectorCommand";
 import { formatShortcutHint, SHORTCUT_ID } from "../../shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 import { CHROME, MONO_FONT_STACK } from "../theme";
+import { useScrubGesture } from "../useScrubGesture";
 import { TimelinePanel } from "../TimelinePanel";
 import { useHoverIntent } from "./useHoverIntent";
 
@@ -110,16 +112,44 @@ const TimecodeReadout = observer(function TimecodeReadout() {
  * 迷你指示轨:只画片段与关键帧,**不读 playhead**。
  * playhead 是帧级 observable,若在这里直读,整条轨的片段与关键帧节点会跟着重建;
  * 红色游标因此拆成独立 observer,重渲染面收敛到一个 2px 的盒子。
+ * 收起态也要能定位,故本轨接管拖拽 seek;内部标记全部 pointer-events:none 不挡手势。
  */
 const MiniTimeline = observer(function MiniTimeline() {
-    const { motion, timeline } = useDirectorDeskStores();
+    const stores = useDirectorDeskStores();
+    const { motion, timeline, ui } = stores;
     const duration = timeline.document.duration;
     const programClips = motion.program.clips;
     const tracks = timeline.document.tracks;
+    const trackRef = useRef<HTMLDivElement>(null);
+    const scrub = useScrubGesture({
+        trackRef,
+        onScrub: (ratio) => {
+            const result = stores.dispatcher.dispatch(
+                { type: "transport.seek", payload: { time: ratio * duration } },
+                stores,
+            );
+            reportCommandFailure({ result, setNotice: (message) => ui.setApplicationNotice(message) });
+        },
+    });
     return (
         <Box
+            ref={trackRef}
             className="relative flex-1"
-            sx={{ height: MINI_TRACK_HEIGHT_PX, overflow: "hidden", border: `1px solid ${MINI_TRACK_BORDER}`, borderRadius: 1, bgcolor: MINI_TRACK_BACKGROUND, pointerEvents: "none" }}
+            role="slider"
+            aria-label="时间轴定位"
+            aria-valuemin={0}
+            aria-valuemax={duration}
+            {...scrub}
+            sx={{
+                height: MINI_TRACK_HEIGHT_PX,
+                overflow: "hidden",
+                border: `1px solid ${MINI_TRACK_BORDER}`,
+                borderRadius: 1,
+                bgcolor: MINI_TRACK_BACKGROUND,
+                cursor: "ew-resize",
+                touchAction: "none",
+                "& > *": { pointerEvents: "none" },
+            }}
         >
             {programClips.map((clip) => (
                 <Box

@@ -3,6 +3,22 @@ import { makeAutoObservable } from "mobx";
 import type { RailSection } from "../workspace/railSections";
 
 /**
+ * 渲染画质档:唯一影响 3D 输出质量的开关(截图与录制成片同样受它影响)。
+ * high = 满设备像素比 + MSAA;performance = 限像素比 + 关 MSAA,换帧率。
+ */
+export const RENDER_QUALITY = { HIGH: "high", PERFORMANCE: "performance" } as const;
+export type RenderQuality = (typeof RENDER_QUALITY)[keyof typeof RENDER_QUALITY];
+
+/** 各档的画布参数(Canvas 直接消费,禁在组件里再拼一份) */
+export const RENDER_QUALITY_PROFILES: Record<
+    RenderQuality,
+    { readonly label: string; readonly dpr: readonly [number, number]; readonly antialias: boolean }
+> = {
+    [RENDER_QUALITY.HIGH]: { label: "高画质", dpr: [1, 2], antialias: true },
+    [RENDER_QUALITY.PERFORMANCE]: { label: "高性能", dpr: [1, 1.5], antialias: false },
+};
+
+/**
  * 工作台壳层聚合(方案 D「液态悬浮界面」的状态边界)。
  *
  * 职责只有一件事:悬浮壳层的空间编排与显隐。它刻意不碰 gizmo、加载反馈、截图产物
@@ -19,6 +35,8 @@ export class WorkbenchLayoutStore {
     motionPathPreviewVisible: boolean;
     /** 全屏预览:悬浮壳层与场景辅助物一并隐去,Program 输出接管视口相机 */
     presentationMode = false;
+    /** 渲染画质档:高画质吃 GPU(retina 满分辨率 + MSAA),性能档换帧率 */
+    renderQuality: RenderQuality = RENDER_QUALITY.HIGH;
 
     constructor(options?: { readonly motionPathPreviewVisible?: boolean | undefined }) {
         this.motionPathPreviewVisible = options?.motionPathPreviewVisible ?? false;
@@ -41,6 +59,15 @@ export class WorkbenchLayoutStore {
     /** 再次点击同一图标收起抽屉(DCC 惯例的开合语义) */
     toggleRailSection(section: RailSection): void {
         this.railSection = this.railSection === section ? null : section;
+    }
+
+    /** Esc 收起二级面板;图标条本身常驻 */
+    closeRail(): void {
+        this.railSection = null;
+    }
+
+    setRenderQuality(quality: RenderQuality): void {
+        this.renderQuality = quality;
     }
 
     toggleTimelinePin(): void {

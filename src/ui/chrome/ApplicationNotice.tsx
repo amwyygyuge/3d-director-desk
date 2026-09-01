@@ -1,7 +1,7 @@
-import Snackbar from "@mui/material/Snackbar";
 import { observer } from "mobx-react-lite";
 
 import { useDirectorDeskStores } from "../DirectorDeskContext";
+import { ViewportToast } from "./ViewportToast";
 
 const NOTICE_DURATION_MS = 3000;
 
@@ -14,14 +14,13 @@ export const ApplicationNotice = observer(function ApplicationNotice() {
     const { ui } = useDirectorDeskStores();
 
     return (
-        <Snackbar
+        <ViewportToast
+            assertive
             open={ui.applicationNotice !== null}
-            autoHideDuration={NOTICE_DURATION_MS}
+            autoHideMs={NOTICE_DURATION_MS}
             onClose={() => ui.clearApplicationNotice()}
-            message={ui.applicationNotice}
-            slotProps={{ content: { role: "alert", "aria-live": "assertive" } }}
-            anchorOrigin={{ vertical: "top", horizontal: "center" }}
-            sx={{ zIndex: 40 }}
-        />
+        >
+            {ui.applicationNotice}
+        </ViewportToast>
     );
 });

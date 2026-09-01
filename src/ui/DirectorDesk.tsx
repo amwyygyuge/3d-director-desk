@@ -12,6 +12,7 @@ import { PROTOCOL_VERSION } from "../bridge/protocol";
 import { PostMessageAdapter } from "../host/HostAdapter";
 import type { HostAdapter } from "../host/HostAdapter";
 import { GIZMO_CLICK_GUARD_MS } from "../store/UiStore";
+import { RENDER_QUALITY_PROFILES } from "../store/WorkbenchLayoutStore";
 import { BonePicker } from "./scene/BonePicker";
 import { TransformGizmoController } from "./scene/TransformGizmoController";
 import { FlyDrive } from "./scene/FlyDrive";
@@ -162,14 +163,20 @@ export const DirectorDesk = observer(function DirectorDesk({
                     >
                         {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
                         <div className="absolute inset-0">
+                            {/* key 绑画质档:antialias 是 WebGL 上下文属性,只能靠重建上下文切换 */}
                             <Canvas
+                                key={stores.layout.renderQuality}
                                 frameloop={
                                     stores.clock.isPlaying || stores.actionPreview.isPlaying || stores.ui.flying
                                         ? "always"
                                         : "demand"
                                 }
                                 camera={{ position: STUDIO_CAMERA_POSITION, fov: STUDIO_CAMERA_FOV_DEGREES }}
-                                gl={{ antialias: true, preserveDrawingBuffer: false }}
+                                dpr={[...RENDER_QUALITY_PROFILES[stores.layout.renderQuality].dpr]}
+                                gl={{
+                                    antialias: RENDER_QUALITY_PROFILES[stores.layout.renderQuality].antialias,
+                                    preserveDrawingBuffer: false,
+                                }}
                                 onCreated={(state) =>
                                     stores.capture.attach({
                                         gl: state.gl,

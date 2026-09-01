@@ -1,7 +1,6 @@
-import Snackbar from "@mui/material/Snackbar";
-import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
+import { ViewportToast } from "./chrome/ViewportToast";
 import { SHORTCUT_ID, formatShortcutHint } from "../shortcuts/builtinShortcuts";
 import type { ShortcutId } from "../shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "./DirectorDeskContext";
@@ -59,27 +58,9 @@ function resolveViewportInteractionHint(stores: DirectorDeskStores): ViewportInt
     return isShotSelected ? VIEWPORT_INTERACTION_HINT.SHOT_SELECTED : null;
 }
 
-/** 常驻的非阻塞操作提示:内容由领域状态解析器提供,渲染器不持有模式逻辑。 */
-function renderInteractionHintToast(hint: ViewportInteractionHint | null) {
-    return (
-        <Snackbar
-            open={hint !== null}
-            anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            sx={{ pointerEvents: "none" }}
-            message={
-                hint ? (
-                    <Typography variant="body2" component="span">
-                        {formatInteractionHint(hint)}
-                    </Typography>
-                ) : null
-            }
-        />
-    );
-}
-
 /** 视口交互提示协调器:同一时刻只解析并显示最高优先级的一条提示。 */
 export const ViewportInteractionHints = observer(function ViewportInteractionHints() {
     const stores = useDirectorDeskStores();
     const hint = resolveViewportInteractionHint(stores);
-    return renderInteractionHintToast(hint);
+    return <ViewportToast open={hint !== null}>{hint ? formatInteractionHint(hint) : null}</ViewportToast>;
 });

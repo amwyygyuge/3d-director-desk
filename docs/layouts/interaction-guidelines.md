@@ -98,11 +98,17 @@
 
 | 规范区域 | 组件 | 驱动状态 |
 |---|---|---|
-| 顶部三药丸 | `src/ui/chrome/TopPillBar.tsx` | `UiStore.gizmoMode`、`CommandHistory`、`UiStore.videoRecording` |
+| 顶部药丸(左:项目 / 右:输出) | `src/ui/chrome/TopPillBar.tsx` | `UiStore.gizmoMode`、`CommandHistory`、`UiStore.videoRecording` |
 | 左侧抽屉 | `src/ui/chrome/AssetRail.tsx` | `WorkbenchLayoutStore.railSection` + 纯 CSS `:hover` 宽度切换 |
 | 右侧检查器 | `src/ui/chrome/InspectorSheet.tsx` | `SelectionStore.primaryId` |
 | 底部时间线 | `src/ui/chrome/TimelineConsole.tsx` | `WorkbenchLayoutStore.timelinePinned` + `useHoverIntent` 局部瞬时态 |
 | 表面材质 | `src/ui/theme.ts` | MUI `Paper` 的 `pill` / `panel` 变体(不用 Tailwind 写视觉) |
+
+大纲(`ui/OutlinerPanel`)是机位与场景实体的统一索引:两组各绑一个数据源
+(`CameraDirector` / `SceneManager`),共享同一份 `SelectionStore`。
+机位的选中、进出机位视图、删除只有这一个入口,机位面板不再重复列一份(Rule of Two)。
+通用外壳 `outline/OutlineRow`、`outline/OutlineSection` 无领域身份,按叶子例外收值;
+领域行 `ShotOutlineRow` / `EntityOutlineRow` 各自 `observer` 自取状态。
 
 壳层显隐的唯一开关是 `WorkbenchLayoutStore.authoringVisible`,悬浮四区与场景辅助物
 (机位标记、灯光标记、运镜轨迹、地面网格)共用它——全屏预览时画面只剩成片内容。
@@ -120,18 +126,43 @@ R3F 相机"这一运行时行为。方案 D 的顶部中区留给视图模式后
 工具常驻,辅助物按 `authoringVisible` 显隐,而 Program 回放绑定归位到真正表达它的概念——
 全屏预览(`desk.enter-presentation` / `desk.exit-presentation`)。
 
-### 4. 偏差:取消「机位视图 / 自由视角」二态开关
+### 4. 偏差:顶部只剩两块药丸,中部药丸整体取消
 
 规范草图的中部药丸是「导演视图 (Render Cam) / 漫游 (Free Cam)」二态。两个问题:
 一是词汇与代码相反——代码里"导演视角"历来指自由轨道编辑视角;
 二是这组按钮是重复入口——选中机位后 `Enter`(或双击机位标记)即进入,`Esc` 即退出,
-两条路径都在 `ViewportInteractionHints` 常驻提示里。中部药丸因此只保留 gizmo 三态。
+两条路径都在 `ViewportInteractionHints` 常驻提示里。
+
+去掉视图二态后中部只剩 gizmo 三态,不值得单占一块药丸,已并入右侧输出药丸的正中:
+`撤销/重做 │ 移动/旋转/缩放 │ 截图/录制 │ 全屏预览`。
+三态用与同排一致的 `IconButton` 渲染(激活态只以主色区分),不套 `ToggleButtonGroup`——
+后者自带描边圆角,嵌在药丸里会形成"胶囊套胶囊"的双重样式。
+顶部中间空出来的位置留给提示条(见下条)。
 
 ### 5. 偏差:时间线 hover 展开带延迟,并让位左右两区
 
 规范 §二.4 的原型用纯 CSS `:hover` 展开,鼠标划过屏幕底部就会弹起遮画面。
 实现改为进入停留 200ms 才展开、离开 400ms 才收起,把手点击可钉住(钉住后不自动收起)。
 悬浮岛在左栏与检查器之间居中:检查器出现时整条左移,两块面板不互相压盖。
+
+提示条(命令失败与常驻操作提示)统一收敛为 `ui/chrome/ViewportToast`,停在顶部药丸条正下方
+(`top: 76px`)、水平居中、文案居中,外观走 `panel` 变体。MUI 默认的 bottom center 会压在
+时间线控制台上;默认的 `SnackbarContent` 在暗色主题下是反色浅底,与整套壳层割裂。
+注意 MUI 在 `sm` 断点里另给 `anchorOriginTopCenter` 一个 `top`,`sx` 必须用响应式对象覆盖,
+单值写法会被它盖掉。
+
+### 补充:渲染画质开关(唯一影响成片质量的性能杠杆)
+
+`WorkbenchLayoutStore.renderQuality` 二档,入口在项目菜单:
+
+| 档位 | `dpr` | `antialias` | 说明 |
+|---|---|---|---|
+| 高画质(默认) | `[1, 2]` | `true` | retina 满分辨率 + MSAA |
+| 高性能 | `[1, 1.5]` | `false` | 限像素比、关 MSAA,换帧率 |
+
+`antialias` 是 WebGL 上下文属性,只能靠重建上下文切换,故 `<Canvas key={renderQuality}>`。
+切档会重挂画布:场景实体、机位、时间轴均由 store 持有,重挂后自动重建运行时,已实测无丢失。
+**这两项影响截图与录制成片的画质**,故不做成隐式优化,由用户显式选择。
 
 ### 6. 偏差:不做毛玻璃,不做布局过渡(性能优先级高于视觉)
 

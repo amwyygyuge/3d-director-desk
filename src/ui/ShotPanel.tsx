@@ -1,14 +1,8 @@
 import AddAPhotoIcon from "@mui/icons-material/AddAPhoto";
-import DeleteIcon from "@mui/icons-material/Delete";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
@@ -30,8 +24,6 @@ import { useDirectorDeskStores } from "./DirectorDeskContext";
 
 const shotSizePresets = new ShotSizePresets();
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
-const ROW_ACTIONS_PADDING = 10;
-const ROW_ACTIONS_GAP = 0.25;
 const SNACKBAR_DURATION_MS = 4000;
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
@@ -103,72 +95,6 @@ interface SaveCurrentViewControlProps {
     onSave: () => void;
 }
 
-
-/** 机位与运镜飞出面板:机位 CRUD、当前视角存机位与景别预设。 */
-const ShotList = observer(function ShotList() {
-    const stores = useDirectorDeskStores();
-    const { camera, dispatcher, selection } = stores;
-    const shots = camera.director.listShots();
-
-    const removeShot = (id: string) => {
-        const result = dispatcher.dispatch({ type: "camera.remove-shot", payload: { id } }, stores);
-        if (result.ok) selection.remove(id);
-    };
-
-    return (
-        <>
-            <Typography variant="subtitle2">机位({shots.length})</Typography>
-            <List dense disablePadding aria-label="机位列表">
-                {shots.map(([id]) => {
-                    const active = camera.activeShotId === id;
-                    return (
-                        <ListItem
-                            key={id}
-                            disablePadding
-                            secondaryAction={
-                                <Box sx={{ display: "flex", gap: ROW_ACTIONS_GAP }}>
-                                    <IconButton
-                                        size="small"
-                                        edge="end"
-                                        color={active ? "primary" : "default"}
-                                        aria-label={active ? `切换至自由视角 ${id}` : `切换至机位视图 ${id}`}
-                                        onClick={() =>
-                                            dispatcher.dispatch(
-                                                {
-                                                    type: active ? "camera.deactivate" : "camera.activate",
-                                                    payload: active ? {} : { id },
-                                                },
-                                                stores,
-                                            )
-                                        }
-                                    >
-                                        <VideocamIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton
-                                        size="small"
-                                        edge="end"
-                                        aria-label={`删除 ${id}`}
-                                        onClick={() => removeShot(id)}
-                                    >
-                                        <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                </Box>
-                            }
-                        >
-                            <ListItemButton
-                                selected={selection.isSelected(id)}
-                                onClick={() => selection.select(id)}
-                                sx={{ pr: ROW_ACTIONS_PADDING }}
-                            >
-                                <ListItemText primary={id} secondary={active ? "机位视图中" : undefined} />
-                            </ListItemButton>
-                        </ListItem>
-                    );
-                })}
-            </List>
-        </>
-    );
-});
 
 
 const SaveCurrentViewControl = observer(function SaveCurrentViewControl({
@@ -475,7 +401,7 @@ export const ShotPanel = observer(function ShotPanel() {
 
     return (
         <Box sx={{ p: 1.5 }}>
-            <ShotList />
+            {/* 机位列表已收敛到大纲(唯一入口);本面板只留创建与编辑能力 */}
             <SaveCurrentViewControl available={canSaveCurrentView} onSave={saveCurrentView} />
             <Divider sx={{ my: PANEL_SECTION_GAP }} />
             <ShotSizeControl onNotice={setNotice} />

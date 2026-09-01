@@ -18,8 +18,6 @@ import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
@@ -32,6 +30,7 @@ import { EnterPresentationCommand, ExitPresentationCommand } from "../../command
 import { formatShortcutHint, SHORTCUT_ID } from "../../shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "../../store/UiStore";
 import type { GizmoMode } from "../../store/UiStore";
+import { RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "../../store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "../DirectorDeskContext";
 import type { DirectorDeskStores } from "../DirectorDeskContext";
 import { importModelFile } from "../importFiles";
@@ -53,6 +52,7 @@ const TEXT = {
     FULLSCREEN_PREVIEW: "全屏预览",
     GIZMO_TOOL: "变换工具",
     HELP: "快捷键速查",
+    RENDER_QUALITY: "渲染画质",
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
@@ -77,7 +77,7 @@ const COMPACT_SIZE = "small" as const;
 const FIRST_ITEM_INDEX = 0;
 const EMPTY_OBJECT_COUNT = 0;
 const JSON_INDENT_SPACES = 2;
-const PILL_HEIGHT_PX = 48;
+const PILL_HEIGHT_PX = CHROME.pillHeightPx;
 const PILL_PADDING_X = 0.75;
 const PILL_GAP = 0.5;
 const DIVIDER_MARGIN_X = 0.25;
@@ -89,6 +89,12 @@ const PREVIEW_BUTTON_COLOR = "#000";
 const PREVIEW_BUTTON_HOVER_BACKGROUND = "#e5e5e5";
 const PREVIEW_BUTTON_SHADOW = "0 0 15px rgba(255,255,255,0.2)";
 const PILL_SX = { alignItems: "center", display: "flex", gap: PILL_GAP, height: PILL_HEIGHT_PX, px: PILL_PADDING_X } as const;
+/** 激活态工具:只靠主色与浅底区分,不引入第二种按钮形状 */
+const ACTIVE_TOOL_SX = {
+    color: "primary.main",
+    bgcolor: "rgba(99,102,241,0.16)",
+    "&:hover": { bgcolor: "rgba(99,102,241,0.24)", color: "primary.light" },
+} as const;
 const PREVIEW_BUTTON_SX = {
     bgcolor: PREVIEW_BUTTON_BACKGROUND,
     borderRadius: PILL_HEIGHT_PX,
@@ -108,7 +114,6 @@ export const TopPillBar = observer(function TopPillBar() {
             sx={{ left: CHROME.edgeGapPx, right: CHROME.edgeGapPx, top: CHROME.edgeGapPx }}
         >
             <ProjectPill />
-            <ViewportPill />
             <OutputPill />
         </Box>
     );
@@ -173,6 +178,26 @@ const ProjectMenu = observer(function ProjectMenu({
                 <DeleteSweepIcon fontSize={COMPACT_SIZE} sx={{ mr: PILL_GAP }} />
                 {clearLabel}
             </MenuItem>
+            <Divider />
+            <MenuItem
+                onClick={() =>
+                    closeMenuThen({
+                        action: () =>
+                            stores.layout.setRenderQuality(
+                                stores.layout.renderQuality === RENDER_QUALITY.HIGH
+                                    ? RENDER_QUALITY.PERFORMANCE
+                                    : RENDER_QUALITY.HIGH,
+                            ),
+                        onClose,
+                    })
+                }
+            >
+                {TEXT.RENDER_QUALITY}
+                <Typography sx={{ ml: MENU_SHORTCUT_MARGIN }} variant="caption">
+                    {RENDER_QUALITY_PROFILES[stores.layout.renderQuality].label}
+                </Typography>
+            </MenuItem>
+            <Divider />
             <MenuItem onClick={() => closeMenuThen({ action: () => stores.ui.toggleHelp(), onClose })}>
                 {TEXT.HELP}
                 <Typography sx={{ ml: MENU_SHORTCUT_MARGIN }} variant="caption">
@@ -254,19 +279,6 @@ function clearScene(stores: DirectorDeskStores): void {
     }
 }
 
-/**
- * 视口高频控制区。
- * 不设「机位视图/自由视角」二态开关:进机位由选中机位后 Enter(或双击机位标记)完成,
- * 退出由 Esc 完成,两者都在 ViewportInteractionHints 里常驻提示——再放一组按钮只是重复入口。
- */
-const ViewportPill = observer(function ViewportPill() {
-    return (
-        <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
-            <GizmoToggle />
-        </Paper>
-    );
-});
-
 const GIZMO_MODE_META: Record<GizmoMode, { readonly icon: typeof OpenWithIcon; readonly label: string }> = {
     [GIZMO_MODE.TRANSLATE]: { icon: OpenWithIcon, label: "移动" },
     [GIZMO_MODE.ROTATE]: { icon: RotateRightIcon, label: "旋转" },
@@ -274,33 +286,44 @@ const GIZMO_MODE_META: Record<GizmoMode, { readonly icon: typeof OpenWithIcon; r
 };
 const GIZMO_MODE_ORDER = [GIZMO_MODE.TRANSLATE, GIZMO_MODE.ROTATE, GIZMO_MODE.SCALE] as const;
 
+/**
+ * 变换工具三态。
+ * 不用 ToggleButtonGroup:它自带描边圆角,套在药丸里就成了"胶囊套胶囊",
+ * 与同排的 IconButton 两种样式并存。改用同款 IconButton,激活态只靠主色区分。
+ */
 const GizmoToggle = observer(function GizmoToggle() {
     const { ui } = useDirectorDeskStores();
     return (
-        <ToggleButtonGroup exclusive aria-label={TEXT.GIZMO_TOOL} onChange={(_, mode: GizmoMode | null) => setGizmoMode({ mode, stores: ui })} size={COMPACT_SIZE} value={ui.gizmoMode}>
+        <Box aria-label={TEXT.GIZMO_TOOL} className="flex items-center" role="group" sx={{ gap: PILL_GAP }}>
             {GIZMO_MODE_ORDER.map((mode) => {
                 const meta = GIZMO_MODE_META[mode];
                 const GizmoIcon = meta.icon;
+                const active = ui.gizmoMode === mode;
                 return (
-                    <ToggleButton aria-label={meta.label} key={mode} value={mode}>
-                        <Tooltip title={meta.label}>
+                    <Tooltip key={mode} title={meta.label}>
+                        <IconButton
+                            aria-label={meta.label}
+                            aria-pressed={active}
+                            onClick={() => ui.setGizmoMode(mode)}
+                            size={COMPACT_SIZE}
+                            sx={active ? ACTIVE_TOOL_SX : undefined}
+                        >
                             <GizmoIcon fontSize={COMPACT_SIZE} />
-                        </Tooltip>
-                    </ToggleButton>
+                        </IconButton>
+                    </Tooltip>
                 );
             })}
-        </ToggleButtonGroup>
+        </Box>
     );
 });
 
-function setGizmoMode({ mode, stores }: { readonly mode: GizmoMode | null; readonly stores: DirectorDeskStores["ui"] }): void {
-    if (mode) stores.setGizmoMode(mode);
-}
-
+/** 输出药丸:历史 → 变换工具 → 采集 → 主行动,变换工具居中,顶部不再需要独立的视口药丸。 */
 const OutputPill = observer(function OutputPill() {
     return (
         <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
             <HistoryControls />
+            <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
+            <GizmoToggle />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <CaptureControls />
             <PresentationControl />

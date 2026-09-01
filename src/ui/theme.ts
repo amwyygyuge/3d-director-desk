@@ -15,7 +15,9 @@ const SURFACE = {
     panel: { background: "#161719", radius: 14 },
     shadow: "0 2px 8px rgba(0,0,0,.55)",
 } as const;
-const SURFACE_BORDER = "1px solid rgba(255,255,255,0.10)";
+/** 描边宽度对外可见:壳层做像素级对齐(如左栏图标列宽)时必须把它算进去 */
+export const SURFACE_BORDER_PX = 1;
+const SURFACE_BORDER = `${SURFACE_BORDER_PX}px solid rgba(255,255,255,0.10)`;
 /** 壳层与画布互不影响布局/绘制,声明出来把脏区限制在面板自身 */
 const SURFACE_CONTAIN = "layout paint";
 
@@ -32,6 +34,7 @@ export const MONO_FONT_STACK = '"SF Mono", "JetBrains Mono", ui-monospace, Menlo
  * 需要动画时只允许 opacity(见 TimelineConsole 展开区的淡入)。
  */
 export const CHROME = {
+    pillHeightPx: 48,
     edgeGapPx: 16,
     railCollapsedPx: 56,
     railExpandedPx: 240,
@@ -39,6 +42,8 @@ export const CHROME = {
     inspectorWidthPx: 288,
     timelineMiniPx: 56,
     timelineExpandedPx: 264,
+    /** 提示条压在一切壳层之上:它可能在时间线展开或检查器打开时出现 */
+    toastZIndex: 40,
 } as const;
 
 declare module "@mui/material/Paper" {

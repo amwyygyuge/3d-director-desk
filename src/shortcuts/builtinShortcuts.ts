@@ -1,5 +1,6 @@
 import { FrameViewCommand } from "../command/navigationCommands";
 import { transformKeyCommandFor } from "../command/timelineCommands";
+import { RemoveShotCommand } from "../command/cameraCommands";
 import { EnterPresentationCommand, ExitPresentationCommand } from "../command/presentationCommands";
 import { requestFrameCapture } from "../command/captureCommands";
 import type { DirectorDeskStores } from "../ui/DirectorDeskContext";
@@ -23,6 +24,7 @@ export const SHORTCUT_ID = {
     HELP_TOGGLE: "help.toggle",
     TRANSPORT_TOGGLE: "transport.toggle",
     TIMELINE_ADD_KEY: "timeline.add-key",
+    RAIL_CLOSE: "rail.close",
     PRESENTATION_ENTER: "presentation.enter",
     PRESENTATION_EXIT: "presentation.exit",
 } as const;
@@ -44,6 +46,7 @@ export const SHORTCUT_SPECS: readonly {
     label: string;
 }[] = [
     { id: SHORTCUT_ID.PRESENTATION_EXIT, chords: ["escape"], scope: "presentation", label: "退出全屏预览" },
+    { id: SHORTCUT_ID.RAIL_CLOSE, chords: ["escape"], scope: "rail", label: "收起左栏面板" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
@@ -63,8 +66,14 @@ export const SHORTCUT_SPECS: readonly {
 ];
 
 function removeSelection(stores: DirectorDeskStores): void {
+    // 机位不是场景实体,住在 CameraDirector 里;按 id 归属分派,否则 Delete 对机位是空操作
     for (const id of stores.selection.selectedIds) {
-        stores.dispatcher.dispatch({ type: "object.remove", payload: { id } }, stores);
+        const isShot = stores.camera.director.getShot(id) !== undefined;
+        const result = stores.dispatcher.dispatch(
+            { type: isShot ? RemoveShotCommand.TYPE : "object.remove", payload: { id } },
+            stores,
+        );
+        if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
     }
     stores.selection.clear();
 }
@@ -105,6 +114,7 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.TRANSPORT_TOGGLE]: (s) =>
         s.dispatcher.dispatch({ type: s.clock.isPlaying ? "transport.pause" : "transport.play", payload: {} }, s),
     [SHORTCUT_ID.PRESENTATION_ENTER]: enterPresentation,
+    [SHORTCUT_ID.RAIL_CLOSE]: (s) => s.layout.closeRail(),
     [SHORTCUT_ID.PRESENTATION_EXIT]: (s) =>
         s.dispatcher.dispatch({ type: ExitPresentationCommand.TYPE, payload: {} }, s),
     [SHORTCUT_ID.EDIT_UNDO]: (s) => s.history.undo(s),
@@ -132,7 +142,8 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
 /**
  * 当前激活作用域。
  * 全屏预览独占:壳层已隐、成片正在放,此时一切编辑键位都不该生效——只留退出键。
- * 其余情形 global 常驻,机位选择与掌镜各有精确 scope,避免 Enter 作用于普通对象。
+ * 其余情形 global 常驻;rail/gizmo/shot-selected/shot 各自按精确条件激活,
+ * Esc 的归属由 SHORTCUT_SPECS 的顺序决定(注册表先命中先执行)。
  */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
     if (stores.layout.presentationMode) return new Set<ShortcutScope>(["presentation"]);
@@ -143,6 +154,7 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         stores.camera.director.getShot(primaryId) !== undefined;
     return new Set<ShortcutScope>([
         "global",
+        ...(stores.layout.railSection !== null ? ["rail" as const] : []),
         ...(primaryId ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
         ...(stores.camera.activeShotId ? ["shot" as const] : []),
