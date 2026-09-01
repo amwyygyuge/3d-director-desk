@@ -3,7 +3,7 @@ import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFoc
 import { cameraKeyFrom } from "@/camera/CameraKey";
 import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyInit, CameraKeyJSON } from "@/camera/CameraKey";
-import { CAMERA_MOTION_EASING, easedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
+import { CAMERA_MOTION_EASING, easedProgress, inverseEasedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraShot } from "@/camera/CameraShot";
 import { MotionTrajectory } from "@/motion/MotionTrajectory";
@@ -117,13 +117,24 @@ export class CameraMotionClip {
         return timeSeconds >= this.startTimeSeconds && timeSeconds <= this.endTimeSeconds;
     }
 
-    /** 时间 → 归一化进度:重定时后同一 progress 仍指向同一画面。 */
+    /** 时间 → 归一化时间:重定时后同一比例仍指向同一时刻。 */
     progressAt(timeSeconds: number): number {
         return (timeSeconds - this.startTimeSeconds) / this.durationSeconds;
     }
 
-    timeAt(progress: number): number {
-        return this.startTimeSeconds + progress * this.durationSeconds;
+    /**
+     * 时间 → 轨迹参数(关键帧 progress 所在的域)。
+     *
+     * 整段时间曲线在此生效:采样与打点必须共用这一个换算,否则「我看到的画面」与
+     * 「我落的关键帧」落在轨迹的不同位置,提交后画面会自己跳一下。
+     */
+    trajectoryProgressAt(timeSeconds: number): number {
+        return easedProgress(this.easing, this.progressAt(timeSeconds));
+    }
+
+    /** 轨迹参数 → 时刻:时间轴菱形、跳转与吸附的唯一换算口(时间曲线的反解)。 */
+    timeAtProgress(progress: number): number {
+        return this.startTimeSeconds + inverseEasedProgress(this.easing, progress) * this.durationSeconds;
     }
 
     key(keyId: string): CameraKey | undefined {
@@ -194,7 +205,7 @@ export function sampleCameraMotionClip(
     sample: CameraMotionSample,
 ): boolean {
     if (!clip.covers(timeSeconds)) return false;
-    const progress = easedProgress(clip.easing, clip.progressAt(timeSeconds));
+    const progress = clip.trajectoryProgressAt(timeSeconds);
     const trajectory = clip.trajectory;
     const segmentIndex = trajectory.segmentIndexAt(progress);
     const from = trajectory.keyAt(segmentIndex);

@@ -14,16 +14,19 @@ const PITCH_LIMIT_RAD = (85 * Math.PI) / 180;
 const FOV_WHEEL_STEP = 0.05;
 /** 松手/停滚后提交一次持久化命令。 */
 const COMMIT_DEBOUNCE_MS = 400;
+/** 只有主键拖拽转向:右键留给关键帧上下文菜单,中键留给宿主。 */
+const PRIMARY_MOUSE_BUTTON = 0;
 
 const TMP_OFFSET = new Vector3();
 const TMP_SPHERICAL = new Spherical();
 
 export interface ViewportPoseGestureOptions {
     readonly active: boolean;
-    readonly onCommit: () => void;
+    /** 稳定点的收敛策略;省略 = 纯试镜手势,画面只在 three 上变,不落任何命令 */
+    readonly onCommit?: (() => void) | undefined;
 }
 
-function useDebouncedPoseCommit(onCommit: () => void, active: boolean): () => void {
+function useDebouncedPoseCommit(onCommit: (() => void) | undefined, active: boolean): () => void {
     const commitTimer = useRef<number | undefined>(undefined);
     const commitRef = useRef(onCommit);
     const activeRef = useRef(active);
@@ -33,9 +36,10 @@ function useDebouncedPoseCommit(onCommit: () => void, active: boolean): () => vo
     });
     useEffect(() => () => clearTimeout(commitTimer.current), []);
     return useCallback(() => {
+        if (!commitRef.current) return;
         clearTimeout(commitTimer.current);
         commitTimer.current = window.setTimeout(() => {
-            if (activeRef.current) commitRef.current();
+            if (activeRef.current) commitRef.current?.();
         }, COMMIT_DEBOUNCE_MS);
     }, []);
 }
@@ -77,7 +81,8 @@ function useViewportPointerPoseGesture(active: boolean, scheduleCommit: () => vo
             if (dragging.current) turn(event.movementX, event.movementY);
         };
         const onMouseDown = (event: MouseEvent): void => {
-            if (event.target === canvas) dragging.current = true;
+            if (event.button !== PRIMARY_MOUSE_BUTTON || event.target !== canvas) return;
+            dragging.current = true;
         };
         const onMouseUp = (): void => {
             dragging.current = false;
@@ -104,7 +109,8 @@ function useViewportPointerPoseGesture(active: boolean, scheduleCommit: () => vo
 
 /**
  * 视口摆位手势内核:掌镜与镜头视角共用同一份 transient Three 操作。
- * 调用方在稳定点将当前画面收敛到自己的领域命令;拖拽与飞行期均不写 MobX。
+ * 拖拽与飞行期均不写 MobX;是否在稳定点落命令由调用方的 onCommit 决定
+ * (掌镜落 camera.set-shot;镜头视角不落——那里只有 K 才写关键帧)。
  */
 export function useViewportPoseGesture({ active, onCommit }: ViewportPoseGestureOptions): void {
     const scheduleCommit = useDebouncedPoseCommit(onCommit, active);

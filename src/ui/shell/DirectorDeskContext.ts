@@ -22,6 +22,7 @@ import { ShortcutRegistry } from "@/shortcuts/ShortcutRegistry";
 import { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { PoseGroundingService } from "@/pose/PoseGroundingService";
 import { CameraStore } from "@/store/CameraStore";
+import { ViewportCameraAuthority } from "@/camera/ViewportCameraAuthority";
 import { CameraMotionStore } from "@/store/CameraMotionStore";
 import { KeyframeAuthoringService } from "@/authoring/KeyframeAuthoringService";
 import { SnapResolver } from "@/authoring/SnapResolver";
@@ -86,6 +87,8 @@ export interface DirectorDeskStores {
     motion: CameraMotionStore;
     /** 运镜编排态(视口模式、预览片段、选中关键帧、轨迹显隐、时间轴窗口) */
     motionAuthoring: MotionAuthoringStore;
+    /** 视口相机所有权裁决:导航路径与轨道控制器的启停唯一判据 */
+    viewportCamera: ViewportCameraAuthority;
     /** 三数据源 → 统一行几何的时间轴视图模型(展开轨与迷你轨共用) */
     timelineLayout: TimelineLayout;
     /** 打点上下文分派(K:镜头关键帧 / 走位关键帧) */
@@ -164,6 +167,7 @@ export function createDirectorDeskStores(options?: {
     const camera = new CameraStore();
     const layout = new WorkbenchLayoutStore();
     const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
+    const viewportCamera = new ViewportCameraAuthority(camera, motionAuthoring);
     const playback = new PlaybackCoordinator(
         timeline,
         scene.manager,
@@ -198,6 +202,7 @@ export function createDirectorDeskStores(options?: {
         ui: new UiStore(),
         layout,
         motionAuthoring,
+        viewportCamera,
         timelineLayout: new TimelineLayout(motion, timeline, camera),
         keyframeAuthoring: new KeyframeAuthoringService(),
         snapResolver: new SnapResolver(),

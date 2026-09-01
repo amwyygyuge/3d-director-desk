@@ -25,17 +25,17 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ## 感知(怎么看懂场景)
 
-| 你要知道的                  | 怎么拿                                                                                                                                                                                        |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 资源目录(发现可用模型/动作) | `query({ type: "assets.list", payload: { kind?: "model"\|"action", category?: "character.human"\|"character.animal"\|"plant"\|"furniture" } })` → 条目含 license/skeletonFamily/embeddedClips |
-| 生效相机位姿                | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                              |
-| 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                                                          |
-| 机位表                      | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                                                                   |
-| 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                   |
+| 你要知道的                  | 怎么拿                                                                                                                                                                                                                                                                                               |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 资源目录(发现可用模型/动作) | `query({ type: "assets.list", payload: { kind?: "model"\|"action", category?: "character.human"\|"character.animal"\|"plant"\|"furniture" } })` → 条目含 license/skeletonFamily/embeddedClips                                                                                                        |
+| 生效相机位姿                | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                                                                                                                                     |
+| 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                                                                                                                                                                 |
+| 机位表                      | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                                                                                                                                                                          |
+| 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                                                                                                                          |
 | 运镜编排                    | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
-| 灯光                        | `query({ type: "lighting.list", payload: {} })`                                                                                                                                               |
-| 骨骼(姿态编辑前必查)        | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                                                               |
-| 眼睛(构图确认,仅美学用)     | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                                                                |
+| 灯光                        | `query({ type: "lighting.list", payload: {} })`                                                                                                                                                                                                                                                      |
+| 骨骼(姿态编辑前必查)        | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                                                                                                                                                                      |
+| 眼睛(构图确认,仅美学用)     | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                                                                                                                                                                       |
 
 **分工:度量问数据,美学问截图。默认断言驱动:每步操作后用 query 断言结果,断言过了不截图;只有断言失败(排查)或验收构图(美学)才截图。**
 
@@ -132,19 +132,40 @@ dispatch({
         startTimeSeconds: 0,
         durationSeconds: 2,
         keys: [
-            { id: "push-start", progress: 0, position: [0, 1.6, 4.2], target: [0, 0.9, 0], fov: null, handleMode: "auto", inHandle: [0, 0, 0], outHandle: [0, 0, 0] },
-            { id: "push-end", progress: 1, position: [0, 1.6, 2.2], target: [0, 0.9, 0], fov: null, handleMode: "auto", inHandle: [0, 0, 0], outHandle: [0, 0, 0] },
+            {
+                id: "push-start",
+                progress: 0,
+                position: [0, 1.6, 4.2],
+                target: [0, 0.9, 0],
+                fov: null,
+                handleMode: "auto",
+                inHandle: [0, 0, 0],
+                outHandle: [0, 0, 0],
+            },
+            {
+                id: "push-end",
+                progress: 1,
+                position: [0, 1.6, 2.2],
+                target: [0, 0.9, 0],
+                fov: null,
+                handleMode: "auto",
+                inHandle: [0, 0, 0],
+                outHandle: [0, 0, 0],
+            },
         ],
     },
 });
 
 // 语义预设同样产出普通可编辑的 key；UI 预设按钮与 AI 共用此入口。
-dispatch({ type: "motion.author", payload: { cameraId: "机位 01", startTimeSeconds: 2, durationSeconds: 2, move: "dolly-in" } });
+dispatch({
+    type: "motion.author",
+    payload: { cameraId: "机位 01", startTimeSeconds: 2, durationSeconds: 2, move: "dolly-in" },
+});
 ```
 
-`CameraKey` 是一帧完整画面：`position`、`target`、`fov`。`fov: null` 表示跟随机位的静态 fov；`progress ∈ [0,1]` 是片段内归一化时间，拉伸或重定时片段不改变运镜形状；`focus` 是可选的跟拍覆盖层，非空时接管 key 的 `target`，`null` 则回到 key 的 target 插值。
+`CameraKey` 是一帧完整画面：`position`、`target`、`fov`。`fov: null` 表示跟随机位的静态 fov；`focus` 是可选的跟拍覆盖层，非空时接管 key 的 `target`，`null` 则回到 key 的 target 插值。`progress ∈ [0,1]` 是**片段内轨迹参数**（不是时间比例）：整段时间曲线 `easing` 把归一化时间映射成它，`smooth` 下 `progress = 3p² - 2p³`（`p` = 归一化时间），`linear` 下两者相等；反解 `p = 0.5 - sin(asin(1 - 2·progress) / 3)`。拉伸或重定时片段不改变运镜形状。要在「某个时刻」落画面，用 `motion.set-key` 前先按上式换算，或直接在镜头视角摆好画面让 UI 落键。
 
-编辑命令：`motion.set-key`（存在即覆盖）/ `motion.move-key` / `motion.remove-key` / `motion.set-key-handle` / `motion.reset-key-handles` / `motion.set-clip-easing` / `motion.set-clip-range` / `motion.set-focus` / `motion.remove-clip`。`motion.preview.enter` / `motion.preview.exit` 控制指定片段预览；`view.set-mode { mode: "director" | "lens" }` 切换导演/镜头视角；`transport.set-loop { loop: boolean }` 控制整段循环。
+编辑命令：`motion.set-key`（存在即覆盖）/ `motion.move-key` / `motion.remove-key` / `motion.set-key-handle` / `motion.reset-key-handles` / `motion.set-clip-easing` / `motion.set-clip-range` / `motion.set-focus` / `motion.remove-clip`。`motion.preview.enter` / `motion.preview.exit` 控制指定片段预览：进入预览时若 playhead 不在片段内会自动 seek 到片段起点，且预览片段的取景优先于 Program 排期；`view.set-mode { mode: "director" | "lens" }` 切换导演/镜头视角；`transport.set-loop { loop: boolean }` 控制整段循环。
 
 `motion.author` 的 `move` 词汇：`dolly-in`、`dolly-out`、`pan`、`tilt`、`truck`、`crane`、`orbit`、`hold`。同一机位片段不得重叠；`motion.create-take` 若其它机位占用 Program 时段会返回结构化 `program-overlapping-clip`，按 options 重试，不要手工补 Program。
 
@@ -179,18 +200,18 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 
 ## 运镜语言速查(语义 → 命令)
 
-| 说法                 | 落地                                                          |
-| -------------------- | ------------------------------------------------------------- |
-| 推近                 | `motion.author { move: "dolly-in" }`                        |
-| 拉远                 | `motion.author { move: "dolly-out" }`                       |
-| 水平摇镜             | `motion.author { move: "pan" }`                             |
-| 俯仰                 | `motion.author { move: "tilt" }`                            |
-| 横移                 | `motion.author { move: "truck" }`                           |
-| 升降                 | `motion.author { move: "crane" }`                           |
-| 环绕                 | `motion.author { move: "orbit" }`                           |
-| 定镜                 | `motion.author { move: "hold" }`                            |
+| 说法                 | 落地                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| 推近                 | `motion.author { move: "dolly-in" }`                                               |
+| 拉远                 | `motion.author { move: "dolly-out" }`                                              |
+| 水平摇镜             | `motion.author { move: "pan" }`                                                    |
+| 俯仰                 | `motion.author { move: "tilt" }`                                                   |
+| 横移                 | `motion.author { move: "truck" }`                                                  |
+| 升降                 | `motion.author { move: "crane" }`                                                  |
+| 环绕                 | `motion.author { move: "orbit" }`                                                  |
+| 定镜                 | `motion.author { move: "hold" }`                                                   |
 | 自定义节奏/构图      | `motion.move-key` 调关键帧时间分布定段间快慢;`motion.set-clip-easing` 只管整段起落 |
-| 尺度感(如 50 米机甲) | 用 scale 断言 + 低机位仰拍(target.y 高于 position.y)          |
+| 尺度感(如 50 米机甲) | 用 scale 断言 + 低机位仰拍(target.y 高于 position.y)                               |
 
 ## 纪律
 

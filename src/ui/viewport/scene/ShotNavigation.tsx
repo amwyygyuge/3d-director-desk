@@ -36,6 +36,6 @@ export const ShotNavigation = observer(function ShotNavigation() {
         if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
     }, [activeShotId, camera, controls, stores]);
 
-    useViewportPoseGesture({ active: activeShotId !== null, onCommit: commitShot });
+    useViewportPoseGesture({ active: stores.viewportCamera.isShotOperating, onCommit: commitShot });
     return null;
 });

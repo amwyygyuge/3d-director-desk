@@ -63,7 +63,6 @@ function focusDescription(clip: CameraMotionClip): string {
     return "固定世界点";
 }
 
-
 const MotionClipProperties = observer(function MotionClipProperties({ clipId }: { clipId: string }) {
     const { motion } = useDirectorDeskStores();
     const clip = motion.clip(clipId);
@@ -154,9 +153,7 @@ const ClipFocusControls = observer(function ClipFocusControls({ clipId }: { clip
 
     const lockFocus = (objectId: string): void => {
         const target =
-            objectId === NO_FOCUS
-                ? null
-                : { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId, worldOffset: ORIGIN };
+            objectId === NO_FOCUS ? null : { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId, worldOffset: ORIGIN };
         const result = dispatcher.dispatch({ type: "motion.set-focus", payload: { id: clip.id, target } }, stores);
         reportCommandFailure(stores, result);
         if (objectId !== NO_FOCUS) motionAuthoring.setSubject(objectId);
@@ -194,7 +191,9 @@ const ClipActionControls = observer(function ClipActionControls({ clipId }: { cl
     const togglePreview = () => {
         const previewing = motionAuthoring.previewClipId === clip.id;
         const result = dispatcher.dispatch(
-            previewing ? { type: "motion.preview.exit", payload: {} } : { type: "motion.preview.enter", payload: { clipId: clip.id } },
+            previewing
+                ? { type: "motion.preview.exit", payload: {} }
+                : { type: "motion.preview.enter", payload: { clipId: clip.id } },
             stores,
         );
         reportCommandFailure(stores, result);
@@ -207,7 +206,12 @@ const ClipActionControls = observer(function ClipActionControls({ clipId }: { cl
 
     return (
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: FIELD_GAP }}>
-            <Button size="small" variant="outlined" aria-pressed={motionAuthoring.previewClipId === clip.id} onClick={togglePreview}>
+            <Button
+                size="small"
+                variant="outlined"
+                aria-pressed={motionAuthoring.previewClipId === clip.id}
+                onClick={togglePreview}
+            >
                 {motionAuthoring.previewClipId === clip.id ? "退出镜头预览" : "镜头视角预览"}
             </Button>
             <Button size="small" color="error" onClick={removeClip}>
@@ -229,9 +233,12 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
             <Typography variant="subtitle2">关键帧 ({clip.keys.length})</Typography>
             {clip.keys.map((key) => {
                 const selected = motionAuthoring.selectedKeyId === key.id;
-                const timeSeconds = clip.timeAt(key.progress);
+                const timeSeconds = clip.timeAtProgress(key.progress);
                 return (
-                    <Box key={key.id} sx={{ display: "grid", gridTemplateColumns: KEY_ROW_GRID_COLUMNS, gap: FIELD_GAP }}>
+                    <Box
+                        key={key.id}
+                        sx={{ display: "grid", gridTemplateColumns: KEY_ROW_GRID_COLUMNS, gap: FIELD_GAP }}
+                    >
                         <Button
                             size="small"
                             variant={selected ? "contained" : "text"}
@@ -244,7 +251,10 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
                             <Button
                                 size="small"
                                 onClick={() => {
-                                    const result = dispatcher.dispatch({ type: "transport.seek", payload: { time: timeSeconds } }, stores);
+                                    const result = dispatcher.dispatch(
+                                        { type: "transport.seek", payload: { time: timeSeconds } },
+                                        stores,
+                                    );
                                     reportCommandFailure(stores, result);
                                 }}
                             >
@@ -256,7 +266,10 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
                                     aria-label={`删除 ${timeSeconds.toFixed(2)} 秒的关键帧`}
                                     onClick={() => {
                                         const result = dispatcher.dispatch(
-                                            { type: RemoveMotionKeyCommand.TYPE, payload: { clipId: clip.id, keyId: key.id } },
+                                            {
+                                                type: RemoveMotionKeyCommand.TYPE,
+                                                payload: { clipId: clip.id, keyId: key.id },
+                                            },
                                             stores,
                                         );
                                         reportCommandFailure(stores, result);
@@ -301,7 +314,10 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
     if (!clip || !key) return null;
 
     const commitPose = (next: CameraKey) => {
-        const result = dispatcher.dispatch({ type: "motion.set-key", payload: { clipId: clip.id, key: next.toJSON() } }, stores);
+        const result = dispatcher.dispatch(
+            { type: "motion.set-key", payload: { clipId: clip.id, key: next.toJSON() } },
+            stores,
+        );
         reportCommandFailure(stores, result);
     };
 
@@ -338,8 +354,13 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
                                             return;
                                         }
                                         const position =
-                                            group.property === "position" ? replaceAxis(key.position, axis.index, value) : key.position;
-                                        const target = group.property === "target" ? replaceAxis(key.target, axis.index, value) : key.target;
+                                            group.property === "position"
+                                                ? replaceAxis(key.position, axis.index, value)
+                                                : key.position;
+                                        const target =
+                                            group.property === "target"
+                                                ? replaceAxis(key.target, axis.index, value)
+                                                : key.target;
                                         commitPose(key.withPose({ position, target, fov: key.fov }));
                                     }}
                                 />
@@ -379,7 +400,10 @@ const ClipEasingControl = observer(function ClipEasingControl({ clipId }: { clip
     if (!clip) return null;
 
     const setEasing = (easing: (typeof CAMERA_MOTION_EASING)[keyof typeof CAMERA_MOTION_EASING]) => {
-        const result = dispatcher.dispatch({ type: "motion.set-clip-easing", payload: { id: clip.id, easing } }, stores);
+        const result = dispatcher.dispatch(
+            { type: "motion.set-clip-easing", payload: { id: clip.id, easing } },
+            stores,
+        );
         reportCommandFailure(stores, result);
     };
 
@@ -417,7 +441,10 @@ const ManualHandleFields = observer(function ManualHandleFields({ clipId, keyId 
     if (!clip || !key) return null;
 
     const resetHandles = () => {
-        const result = dispatcher.dispatch({ type: "motion.reset-key-handles", payload: { clipId: clip.id, keyId: key.id } }, stores);
+        const result = dispatcher.dispatch(
+            { type: "motion.reset-key-handles", payload: { clipId: clip.id, keyId: key.id } },
+            stores,
+        );
         reportCommandFailure(stores, result);
     };
 

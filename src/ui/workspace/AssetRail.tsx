@@ -57,7 +57,6 @@ const LIGHT_TYPE_LABELS: Record<LightType, string> = {
     spot: "聚光",
 };
 
-
 /** 灯光入口只组装可序列化命令,场景实体始终由命令层创建。 */
 const LightSection = observer(function LightSection() {
     const stores = useDirectorDeskStores();

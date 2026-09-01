@@ -33,16 +33,12 @@ function resolveFrameMode(presentationMode: boolean, lensViewActive: boolean, ac
     return activeShotId === null ? "none" : "shot";
 }
 
+/** 生效片段的裁决与采样器/打点服务同源:取景框角标不得自成一套判据。 */
 function clipAtLensTime(
     stores: DirectorDeskStores,
     timeSeconds: number,
 ): { readonly id: string; readonly cameraId: string } | null {
-    const previewId = stores.motionAuthoring.previewClipId;
-    const preview = previewId ? stores.motion.clip(previewId) : undefined;
-    if (preview?.covers(timeSeconds)) return preview;
-    const programCameraId = stores.motion.program.cameraAt(timeSeconds);
-    const clip = programCameraId ? stores.motion.clipAt(programCameraId, timeSeconds) : null;
-    return clip ? { id: clip.id, cameraId: clip.cameraId } : null;
+    return stores.motion.resolveOutputClipAt(timeSeconds, stores.motionAuthoring.previewClipId);
 }
 
 function keyAtPose(id: string, progress: number, pose: DirectorPose): CameraKeyJSON {
@@ -64,7 +60,11 @@ const LensFrameLabel = observer(function LensFrameLabel() {
     const timeSeconds = stores.playheadDisplay.value;
     const clip = clipAtLensTime(stores, timeSeconds);
     const cameraLabel = clip?.cameraId ?? "—";
-    return <span className="absolute left-5 top-20 text-xs text-indigo-200">镜头 · {cameraLabel} · t={timeSeconds.toFixed(2)}s</span>;
+    return (
+        <span className="absolute left-5 top-20 text-xs text-indigo-200">
+            镜头 · {cameraLabel} · t={timeSeconds.toFixed(2)}s
+        </span>
+    );
 });
 
 /** 镜头视角在片段空档给出可执行的下一步,但不在帧级父层读取 playhead。 */
@@ -72,7 +72,9 @@ const LensNoClipToast = observer(function LensNoClipToast() {
     const stores = useDirectorDeskStores();
     const timeSeconds = stores.playheadDisplay.value;
     const clip = clipAtLensTime(stores, timeSeconds);
-    const preview = stores.motionAuthoring.previewClipId ? stores.motion.clip(stores.motionAuthoring.previewClipId) : undefined;
+    const preview = stores.motionAuthoring.previewClipId
+        ? stores.motion.clip(stores.motionAuthoring.previewClipId)
+        : undefined;
     const selectedId = stores.selection.primaryId;
     const selectedCameraId = selectedId && stores.camera.director.getShot(selectedId) ? selectedId : null;
     const cameraId = preview?.cameraId ?? selectedCameraId;
@@ -124,14 +126,29 @@ export const ShotFrameOverlay = observer(function ShotFrameOverlay() {
         <>
             <div data-helper="shot-frame" className="pointer-events-none absolute inset-0 z-[1]">
                 <div className={`${FRAME_INSET_CLASS} border ${style.borderClassName}`} />
-                <div className={`absolute top-3 bottom-3 border-l ${GRID_LINE_CLASS}`} style={{ left: "calc(0.75rem + (100% - 1.5rem) / 3)" }} />
-                <div className={`absolute top-3 bottom-3 border-l ${GRID_LINE_CLASS}`} style={{ left: "calc(0.75rem + (100% - 1.5rem) * 2 / 3)" }} />
-                <div className={`absolute left-3 right-3 border-t ${GRID_LINE_CLASS}`} style={{ top: "calc(0.75rem + (100% - 1.5rem) / 3)" }} />
-                <div className={`absolute left-3 right-3 border-t ${GRID_LINE_CLASS}`} style={{ top: "calc(0.75rem + (100% - 1.5rem) * 2 / 3)" }} />
+                <div
+                    className={`absolute top-3 bottom-3 border-l ${GRID_LINE_CLASS}`}
+                    style={{ left: "calc(0.75rem + (100% - 1.5rem) / 3)" }}
+                />
+                <div
+                    className={`absolute top-3 bottom-3 border-l ${GRID_LINE_CLASS}`}
+                    style={{ left: "calc(0.75rem + (100% - 1.5rem) * 2 / 3)" }}
+                />
+                <div
+                    className={`absolute left-3 right-3 border-t ${GRID_LINE_CLASS}`}
+                    style={{ top: "calc(0.75rem + (100% - 1.5rem) / 3)" }}
+                />
+                <div
+                    className={`absolute left-3 right-3 border-t ${GRID_LINE_CLASS}`}
+                    style={{ top: "calc(0.75rem + (100% - 1.5rem) * 2 / 3)" }}
+                />
                 {isLens ? (
                     <LensFrameLabel />
                 ) : (
-                    <span className={`absolute left-5 top-20 text-xs ${style.labelClassName}`} style={{ fontFamily: MONO_FONT_STACK }}>
+                    <span
+                        className={`absolute left-5 top-20 text-xs ${style.labelClassName}`}
+                        style={{ fontFamily: MONO_FONT_STACK }}
+                    >
                         {camera.activeShotId} · 静态
                     </span>
                 )}

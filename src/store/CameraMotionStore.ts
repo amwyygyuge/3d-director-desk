@@ -44,6 +44,19 @@ export class CameraMotionStore {
         return null;
     }
 
+    /**
+     * 成片输出在某时刻的生效片段:显式预览优先于 Program 排期。
+     *
+     * 采样器、打点服务与提示条必须共用这一个判据——判据分叉过一次:采样按 Program 取景、
+     * 打点按预览片段落键,结果是「看到的是 A 机位,键落进了 A 的片段,而你按的是预览 B」。
+     */
+    resolveOutputClipAt(timeSeconds: number, previewClipId: string | null): CameraMotionClip | null {
+        const preview = previewClipId ? this.clip(previewClipId) : undefined;
+        if (preview?.covers(timeSeconds)) return preview;
+        const cameraId = this.program.cameraAt(timeSeconds);
+        return cameraId ? this.clipAt(cameraId, timeSeconds) : null;
+    }
+
     replaceClip(clip: CameraMotionClip): void {
         this.clipsById.set(clip.id, clip);
     }

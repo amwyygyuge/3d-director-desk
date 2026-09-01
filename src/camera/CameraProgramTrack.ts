@@ -71,14 +71,16 @@ export class CameraProgramTrack {
     readonly clips: readonly CameraProgramClip[];
 
     constructor(init: CameraProgramTrackInit = {}) {
-        const clips = init.clips?.map((clip) => (clip instanceof CameraProgramClip ? clip : new CameraProgramClip(clip))) ?? [];
+        const clips =
+            init.clips?.map((clip) => (clip instanceof CameraProgramClip ? clip : new CameraProgramClip(clip))) ?? [];
         const ordered = [...clips].sort((left, right) => left.startTimeSeconds - right.startTimeSeconds);
         const ids = new Set(ordered.map((clip) => clip.id));
         const hasOverlap = ordered.some((clip, index) => {
             const next = ordered[index + 1];
             return next ? clip.endTimeSeconds > next.startTimeSeconds : false;
         });
-        if (ids.size !== ordered.length || hasOverlap) throw new Error("CameraProgramTrack clips must have unique ids and not overlap");
+        if (ids.size !== ordered.length || hasOverlap)
+            throw new Error("CameraProgramTrack clips must have unique ids and not overlap");
         this.clips = Object.freeze(ordered);
         Object.freeze(this);
     }

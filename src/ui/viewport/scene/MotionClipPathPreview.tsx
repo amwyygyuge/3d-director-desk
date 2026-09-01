@@ -10,10 +10,10 @@ import type { CameraKey } from "@/camera/CameraKey";
 import { AutoHandleSolver, createHandlePair } from "@/motion/AutoHandleSolver";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import type { Vec3 } from "@/core/SceneObject";
-import { useOrbitControls } from "@/navigation/orbit";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitSuspension } from "@/ui/viewport/scene/useOrbitSuspension";
 
 const PATH_SAMPLES_PER_SEGMENT = 24;
 const KEY_RADIUS_METERS = 0.11;
@@ -38,7 +38,6 @@ function selectMotionKey(stores: DirectorDeskStores, clipId: string, keyId: stri
     stores.motionAuthoring.selectKey(clipId, keyId);
     if (cameraId) stores.selection.select(cameraId);
 }
-
 
 interface PreviewGeometry {
     readonly path: BufferGeometry;
@@ -147,7 +146,7 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
     const inHandleRef = useRef<Group | null>(null);
     const outHandleRef = useRef<Group | null>(null);
     const dragRef = useRef<DragState | null>(null);
-    const controls = useOrbitControls();
+    const orbitSuspension = useOrbitSuspension();
     const [dragging, setDragging] = useState(false);
     const handleOffsets = useMemo(() => {
         const offsets = createHandlePair();
@@ -172,7 +171,7 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
     );
 
     // 拖拽期把指针跟踪挂到 window:射线一旦脱离小球,R3F 的对象级 pointermove 就不再触发,
-    // 手感会「跟不上手」;同时必须停掉 OrbitControls,否则同一串指针事件既转轨道又拖点。
+    // 手感会「跟不上手」;同时向所有权裁决申请轨道让位,否则同一串指针事件既转轨道又拖点。
     const runDrag = useCallback(
         (clientX: number, clientY: number): void => {
             const drag = dragRef.current;
@@ -200,7 +199,6 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
     const finishDrag = useCallback((): void => {
         const drag = dragRef.current;
         dragRef.current = null;
-        if (controls) controls.enabled = true;
         if (!drag || !key) return;
         const result =
             drag.kind === "key"
@@ -216,11 +214,12 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
                       stores,
                   );
         reportCommandFailure(stores, result);
-    }, [clipId, controls, key, keyId, stores]);
+    }, [clipId, key, keyId, stores]);
 
-    // 监听器只在拖拽进行中存在:非拖拽期视口没有任何额外的全局指针开销
+    // 监听器与轨道让位只在拖拽进行中存在:成对挂载/卸载,组件中途卸载也不会把轨道锁死
     useEffect(() => {
         if (!dragging) return undefined;
+        orbitSuspension.suspend();
         const onMove = (event: PointerEvent) => runDrag(event.clientX, event.clientY);
         const onUp = () => {
             finishDrag();
@@ -233,11 +232,17 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
             window.removeEventListener("pointercancel", onUp);
+            orbitSuspension.release();
         };
-    }, [dragging, finishDrag, runDrag]);
+    }, [dragging, finishDrag, orbitSuspension, runDrag]);
 
     const startDrag = useCallback(
-        (kind: DragState["kind"], target: Group | null, geometry: BufferGeometry | null, event: ThreeEvent<PointerEvent>): void => {
+        (
+            kind: DragState["kind"],
+            target: Group | null,
+            geometry: BufferGeometry | null,
+            event: ThreeEvent<PointerEvent>,
+        ): void => {
             if (!target || !rootRef.current) return;
             event.stopPropagation();
             event.nativeEvent.stopPropagation();
@@ -245,10 +250,9 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
             camera.getWorldDirection(TMP_CAMERA_FORWARD);
             TMP_DRAG_PLANE.setFromNormalAndCoplanarPoint(TMP_CAMERA_FORWARD, rootRef.current.position);
             dragRef.current = { kind, target, geometry };
-            if (controls) controls.enabled = false;
             setDragging(true);
         },
-        [camera, clipId, controls, keyId, stores],
+        [camera, clipId, keyId, stores],
     );
 
     if (!key) return null;
@@ -271,7 +275,10 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
                 userData={{ helper: true }}
             >
                 <sphereGeometry args={[KEY_RADIUS_METERS, 16, 12]} />
-                <meshStandardMaterial color={selected ? SELECTED_KEY_COLOR : KEY_COLOR} emissive={selected ? KEY_COLOR : "#000000"} />
+                <meshStandardMaterial
+                    color={selected ? SELECTED_KEY_COLOR : KEY_COLOR}
+                    emissive={selected ? KEY_COLOR : "#000000"}
+                />
             </mesh>
             {selected && inGeometry && outGeometry ? (
                 <>
@@ -283,14 +290,28 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
                         <primitive object={outGeometry} attach="geometry" />
                         <lineBasicMaterial color={handleColor} toneMapped={false} />
                     </line>
-                    <group ref={inHandleRef} position={[handleOffsets.inX, handleOffsets.inY, handleOffsets.inZ]} userData={{ helper: true }}>
-                        <mesh userData={{ helper: true }} onPointerDown={(event) => startDrag("in", inHandleRef.current, inGeometry, event)}>
+                    <group
+                        ref={inHandleRef}
+                        position={[handleOffsets.inX, handleOffsets.inY, handleOffsets.inZ]}
+                        userData={{ helper: true }}
+                    >
+                        <mesh
+                            userData={{ helper: true }}
+                            onPointerDown={(event) => startDrag("in", inHandleRef.current, inGeometry, event)}
+                        >
                             <sphereGeometry args={[HANDLE_RADIUS_METERS, 12, 10]} />
                             <meshStandardMaterial color={handleColor} wireframe={handleWireframe} />
                         </mesh>
                     </group>
-                    <group ref={outHandleRef} position={[handleOffsets.outX, handleOffsets.outY, handleOffsets.outZ]} userData={{ helper: true }}>
-                        <mesh userData={{ helper: true }} onPointerDown={(event) => startDrag("out", outHandleRef.current, outGeometry, event)}>
+                    <group
+                        ref={outHandleRef}
+                        position={[handleOffsets.outX, handleOffsets.outY, handleOffsets.outZ]}
+                        userData={{ helper: true }}
+                    >
+                        <mesh
+                            userData={{ helper: true }}
+                            onPointerDown={(event) => startDrag("out", outHandleRef.current, outGeometry, event)}
+                        >
                             <sphereGeometry args={[HANDLE_RADIUS_METERS, 12, 10]} />
                             <meshStandardMaterial color={handleColor} wireframe={handleWireframe} />
                         </mesh>

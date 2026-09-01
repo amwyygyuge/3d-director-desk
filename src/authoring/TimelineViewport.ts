@@ -48,7 +48,10 @@ export class TimelineViewport {
     /** 以锚点比例为中心缩放:滚轮位置下的时刻在缩放前后保持不动。 */
     zoomedAt(factor: number, anchorRatio: number, durationSeconds: number): TimelineViewport {
         const anchorTime = this.timeAt(Math.min(Math.max(anchorRatio, RATIO_MIN), RATIO_MAX));
-        const visibleSeconds = Math.min(Math.max(this.visibleSeconds * factor, MINIMUM_VISIBLE_SECONDS), durationSeconds);
+        const visibleSeconds = Math.min(
+            Math.max(this.visibleSeconds * factor, MINIMUM_VISIBLE_SECONDS),
+            durationSeconds,
+        );
         const startSeconds = anchorTime - (anchorTime - this.startSeconds) * (visibleSeconds / this.visibleSeconds);
         return new TimelineViewport({ startSeconds, visibleSeconds }).clampedTo(durationSeconds);
     }
@@ -62,7 +65,10 @@ export class TimelineViewport {
 
     /** 窗口不得越出工程时长:时长变短时窗口自动收敛。 */
     clampedTo(durationSeconds: number): TimelineViewport {
-        const visibleSeconds = Math.min(Math.max(this.visibleSeconds, MINIMUM_VISIBLE_SECONDS), Math.max(durationSeconds, MINIMUM_VISIBLE_SECONDS));
+        const visibleSeconds = Math.min(
+            Math.max(this.visibleSeconds, MINIMUM_VISIBLE_SECONDS),
+            Math.max(durationSeconds, MINIMUM_VISIBLE_SECONDS),
+        );
         const startSeconds = Math.min(Math.max(this.startSeconds, 0), Math.max(durationSeconds - visibleSeconds, 0));
         return new TimelineViewport({ startSeconds, visibleSeconds });
     }

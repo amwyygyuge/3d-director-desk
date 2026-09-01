@@ -167,7 +167,9 @@ export class MotionTrajectory<K extends MotionKeyLike = MotionKey> {
     /** 覆盖同 id 关键点,否则追加;返回的新轨迹已重新解算切线。 */
     withKey(key: K): MotionTrajectory<K> {
         const replaced = this.key(key.id) !== undefined;
-        const keys = replaced ? this.keys.map((current) => (current.id === key.id ? key : current)) : [...this.keys, key];
+        const keys = replaced
+            ? this.keys.map((current) => (current.id === key.id ? key : current))
+            : [...this.keys, key];
         return new MotionTrajectory<K>(keys);
     }
 

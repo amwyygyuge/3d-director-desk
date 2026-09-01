@@ -126,11 +126,11 @@ this.transportDisposer = reaction(() => transport.time, (t) => this.setTime(t));
 
 props 只允许承载三类东西:
 
-| 允许 | 例子 | 理由 |
-|---|---|---|
-| 身份 id | `shotId` / `objectId` / `section` | 子组件据此自己 `get(id)`,是「传引用晚解引用」的落地形态 |
-| 回调 | `onCommit` / `onClose` / `report` | 行为注入,不是状态 |
-| DOM ref / children | `modelInputRef` / `children` | React 结构,与 MobX 无关 |
+| 允许               | 例子                              | 理由                                                    |
+| ------------------ | --------------------------------- | ------------------------------------------------------- |
+| 身份 id            | `shotId` / `objectId` / `section` | 子组件据此自己 `get(id)`,是「传引用晚解引用」的落地形态 |
+| 回调               | `onCommit` / `onClose` / `report` | 行为注入,不是状态                                       |
+| DOM ref / children | `modelInputRef` / `children`      | React 结构,与 MobX 无关                                 |
 
 禁止下传的是**值型状态**:数字、布尔、数组、快照对象——`duration`、`playhead`、`objectCount`、
 `programClips`、`actionId`、`fov`、`shot` 全部由子组件自取。

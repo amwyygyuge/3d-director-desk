@@ -28,7 +28,12 @@ export { CameraShot, DEFAULT_CAMERA_FOV, FOV_MAX, FOV_MIN, SHOT_SIZE } from "@/c
 export type { CameraShotJSON, ShotSize } from "@/camera/CameraShot";
 export { ShotSizePresets } from "@/camera/ShotSizePresets";
 export { FramingService } from "@/camera/FramingService";
-export { CameraFocusTrack, FOCUS_TARGET_KIND, SceneObjectFocusTarget, WorldPointFocusTarget } from "@/camera/CameraFocusTrack";
+export {
+    CameraFocusTrack,
+    FOCUS_TARGET_KIND,
+    SceneObjectFocusTarget,
+    WorldPointFocusTarget,
+} from "@/camera/CameraFocusTrack";
 export type {
     CameraFocusTrackInit,
     CameraFocusTrackJSON,

@@ -113,7 +113,9 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
             <Select
                 size="small"
                 value={hasSubject ? subjectId : NO_SUBJECT}
-                onChange={(event) => motionAuthoring.setSubject(event.target.value === NO_SUBJECT ? null : event.target.value)}
+                onChange={(event) =>
+                    motionAuthoring.setSubject(event.target.value === NO_SUBJECT ? null : event.target.value)
+                }
                 aria-label="被摄目标"
             >
                 <MenuItem value={NO_SUBJECT}>被摄目标：无(镜头自由运动)</MenuItem>

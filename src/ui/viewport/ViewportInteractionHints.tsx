@@ -44,9 +44,9 @@ const VIEWPORT_INTERACTION_HINT = {
         id: "lens-navigation",
         segments: [
             { keys: "WASD", label: "移动" },
-            { keys: "按住拖拽", label: "转向" },
+            { keys: "按住拖拽", label: "试镜" },
             { keys: "滚轮", label: "变焦" },
-            { shortcutId: SHORTCUT_ID.TIMELINE_ADD_KEY, label: "落关键帧" },
+            { shortcutId: SHORTCUT_ID.TIMELINE_ADD_KEY, label: "写入关键帧" },
             { shortcutId: SHORTCUT_ID.LENS_EXIT, label: "退出" },
         ],
     },
@@ -61,16 +61,15 @@ function formatInteractionHint(hint: ViewportInteractionHint): string {
     return hint.segments.map(formatInteractionHintSegment).join(" · ");
 }
 
+/** 生效片段的裁决与采样器/打点服务同源:提示条不得自成一套判据。 */
 function hasLensClip(stores: DirectorDeskStores): boolean {
-    const timeSeconds = stores.playheadDisplay.value;
-    const previewId = stores.motionAuthoring.previewClipId;
-    const preview = previewId ? stores.motion.clip(previewId) : undefined;
-    if (preview?.covers(timeSeconds)) return true;
-    const cameraId = stores.motion.program.cameraAt(timeSeconds);
-    return cameraId !== null && stores.motion.clipAt(cameraId, timeSeconds) !== null;
+    return (
+        stores.motion.resolveOutputClipAt(stores.playheadDisplay.value, stores.motionAuthoring.previewClipId) !== null
+    );
 }
 
 function resolveViewportInteractionHint(stores: DirectorDeskStores): ViewportInteractionHint | null {
+    // 无片段时的提示条与「在此创建 1 秒片段」由 ShotFrameOverlay 承担,此处不重复一套
     if (stores.motionAuthoring.lensViewActive) return hasLensClip(stores) ? VIEWPORT_INTERACTION_HINT.LENS_NAVIGATION : null;
     if (stores.camera.activeShotId !== null) return VIEWPORT_INTERACTION_HINT.SHOT_NAVIGATION;
     const primaryId = stores.selection.primaryId;

@@ -48,6 +48,8 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
             this.fov = camera.fov;
             this.saved = true;
         }
+        // 先排空轨道的阻尼残量再写入采样姿态:顺序反过来会把上一次拖拽的余速叠加到成片画面上
+        controls.update();
         camera.position.set(sample.positionX, sample.positionY, sample.positionZ);
         if (camera.fov !== sample.fov) {
             camera.fov = sample.fov;
@@ -55,7 +57,6 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
         }
         controls.target.set(sample.targetX, sample.targetY, sample.targetZ);
         camera.lookAt(sample.targetX, sample.targetY, sample.targetZ);
-        controls.update();
     }
 
     /** 当前 R3F 相机的标量姿态反向提供给关键帧编排服务,不创建 Three/JSON 对象。 */

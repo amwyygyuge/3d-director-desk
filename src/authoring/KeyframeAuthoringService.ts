@@ -32,13 +32,9 @@ function poseVector(x: number, y: number, z: number): Vec3 {
     return [x, y, z];
 }
 
-/** 镜头视角下 playhead 命中的可编辑片段:先看预览片段,再看 Program 输出所在机位的片段。 */
+/** 镜头视角下 playhead 命中的可编辑片段:与采样器共用同一裁决,禁止两处推断。 */
 function lensClipAt(ctx: DirectorContext, timeSeconds: number): CameraMotionClip | null {
-    const previewClipId = ctx.motionAuthoring.previewClipId;
-    const preview = previewClipId ? ctx.motion.clip(previewClipId) : undefined;
-    if (preview && preview.covers(timeSeconds)) return preview;
-    const programCameraId = ctx.motion.program.cameraAt(timeSeconds);
-    return programCameraId ? ctx.motion.clipAt(programCameraId, timeSeconds) : null;
+    return ctx.motion.resolveOutputClipAt(timeSeconds, ctx.motionAuthoring.previewClipId);
 }
 
 function cameraKeyCommand(ctx: DirectorContext): KeyframeAuthoringResult {
@@ -52,7 +48,7 @@ function cameraKeyCommand(ctx: DirectorContext): KeyframeAuthoringResult {
     if (!ctx.playback.readViewportPose(VIEWPORT_POSE)) {
         return issue(ISSUE_CODE.NO_POSE, "viewport", "视口相机尚未接管,无法读取当前画面");
     }
-    const progress = clip.progressAt(timeSeconds);
+    const progress = clip.trajectoryProgressAt(timeSeconds);
     const existing = clip.keys.find((key) => Math.abs(key.progress - progress) < KEY_MERGE_PROGRESS);
     const key = new CameraKey({
         id: existing?.id ?? crypto.randomUUID(),
@@ -82,10 +78,5 @@ function transformKeyCommand(ctx: DirectorContext): KeyframeAuthoringResult {
 export class KeyframeAuthoringService {
     resolve(ctx: DirectorContext): KeyframeAuthoringResult {
         return ctx.motionAuthoring.lensViewActive ? cameraKeyCommand(ctx) : transformKeyCommand(ctx);
-    }
-
-    /** 视口摆位手势终点复用同一条路径:镜头视角外不产出命令。 */
-    resolveCameraKey(ctx: DirectorContext): KeyframeAuthoringResult {
-        return cameraKeyCommand(ctx);
     }
 }

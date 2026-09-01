@@ -35,7 +35,12 @@ export class SnapResolver {
         const clamped = Math.min(Math.max(request.timeSeconds, 0), request.durationSeconds);
         if (!request.enabled) return clamped;
         const wholeSecond = Math.round(clamped / WHOLE_SECOND) * WHOLE_SECOND;
-        const candidates = [request.candidates.playheadSeconds, wholeSecond, ...request.candidates.edges, ...request.candidates.keys];
+        const candidates = [
+            request.candidates.playheadSeconds,
+            wholeSecond,
+            ...request.candidates.edges,
+            ...request.candidates.keys,
+        ];
         const nearest = nearestCandidate(clamped, candidates);
         const threshold = SNAP_THRESHOLD_PX * request.secondsPerPixel;
         const isWithinThreshold = nearest !== null && Math.abs(nearest - clamped) <= threshold;

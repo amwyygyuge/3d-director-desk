@@ -75,7 +75,6 @@ function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     }
 }
 
-
 const TransformField = observer(function TransformField({ axisLabel, label, value, onCommit }: TransformFieldProps) {
     const [inputValue, setInputValue] = useState(() => formatValue(value));
 

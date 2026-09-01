@@ -44,12 +44,12 @@ flowchart LR
 
 ### 1.1 选层判据（写进帮助浮层，不靠用户悟）
 
-| 作者意图 | 该用哪层 | 为什么不用别层 |
-|---|---|---|
+| 作者意图                                    | 该用哪层        | 为什么不用别层                                                       |
+| ------------------------------------------- | --------------- | -------------------------------------------------------------------- |
 | 规则运动：推近 / 拉远 / 绕角色转 90° / 升降 | **L1 预设参数** | 圆弧手绘画不准；「绕谁、转多少度、半径多少」是三个数字，不是一条曲线 |
-| 自由走位：穿过门洞、绕开柱子、沿走廊推进 | **L2 平面速绘** | 参数表达不了不规则路径；逐点打太慢 |
-| 画面精确：这一刻构图必须是这样 | **L3 视口打点** | 只有摆画面才能同时定死 position + target + fov |
-| 形状微调：曲线太胖 / 转弯太急 / 这个点高了 | **L4 控制点** | 前三层都是「重来一遍」，微调只要动一个点 |
+| 自由走位：穿过门洞、绕开柱子、沿走廊推进    | **L2 平面速绘** | 参数表达不了不规则路径；逐点打太慢                                   |
+| 画面精确：这一刻构图必须是这样              | **L3 视口打点** | 只有摆画面才能同时定死 position + target + fov                       |
+| 形状微调：曲线太胖 / 转弯太急 / 这个点高了  | **L4 控制点**   | 前三层都是「重来一遍」，微调只要动一个点                             |
 
 **弧线与环绕不该手绘**——这是本节最重要的判据。手绘擅长自由曲线，参数擅长规则运动，混淆两者是绝大多数三维软件运镜难用的根因。
 
@@ -70,20 +70,21 @@ flowchart LR
 
 绘制模式**不能独占左键**——用户画一半常要转个角度看清遮挡。
 
-| 输入 | 行为 |
-|---|---|
-| 按住 `D` + 左键拖 | 绘制（弹簧态，松开 `D` 即退出） |
-| 点击左栏「绘制轨迹」按钮 | 钉住绘制模式（与 rail / 时间线的「hover 展开 + 点击钉住」惯例一致） |
-| 绘制模式下 右键拖 / 中键拖 / 滚轮 | 保留平移 / 轨道 / 推拉，随时调整观察角度 |
-| `Esc` | 退出绘制模式 |
+| 输入                              | 行为                                                                |
+| --------------------------------- | ------------------------------------------------------------------- |
+| 按住 `D` + 左键拖                 | 绘制（弹簧态，松开 `D` 即退出）                                     |
+| 点击左栏「绘制轨迹」按钮          | 钉住绘制模式（与 rail / 时间线的「hover 展开 + 点击钉住」惯例一致） |
+| 绘制模式下 右键拖 / 中键拖 / 滚轮 | 保留平移 / 轨道 / 推拉，随时调整观察角度                            |
+| `Esc`                             | 退出绘制模式                                                        |
 
 #### 松手即抽稀：RDP，不是原始采样点
 
 拖动产生几百个原始点，直接入库就是不可编辑的死数据。松手时跑 **Ramer–Douglas–Peucker** 抽稀成 3~6 个 `CameraKey`：
 
 ```ts
-class PathSimplifier {                       // 领域服务，无状态
-    simplify(points: readonly Vec2[], epsilon: number): readonly Vec2[]
+class PathSimplifier {
+    // 领域服务，无状态
+    simplify(points: readonly Vec2[], epsilon: number): readonly Vec2[];
 }
 ```
 
@@ -104,17 +105,17 @@ class PathSimplifier {                       // 领域服务，无状态
 
 导演平面图上其实有两条线：机位移动线 + 视线箭头。对应设计：
 
-| 情形 | 注视来源 |
-|---|---|
-| 绘制前**选中了场景对象** | 自动绑定为跟拍目标（`CameraFocusTrack` 覆盖层），整段看向它 —— 覆盖绝大多数意图 |
-| 未选中，且未画第二条线 | 所有 key 的 `target` = 轨迹前进方向前方 `LOOK_AHEAD_METERS`，即「向前开」 |
-| 按住 `D` + `Shift` 再拖一条 | 画**注视线**：与位置线按 `progress` 一一对应，逐 key 写 `target` |
+| 情形                        | 注视来源                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| 绘制前**选中了场景对象**    | 自动绑定为跟拍目标（`CameraFocusTrack` 覆盖层），整段看向它 —— 覆盖绝大多数意图 |
+| 未选中，且未画第二条线      | 所有 key 的 `target` = 轨迹前进方向前方 `LOOK_AHEAD_METERS`，即「向前开」       |
+| 按住 `D` + `Shift` 再拖一条 | 画**注视线**：与位置线按 `progress` 一一对应，逐 key 写 `target`                |
 
 注视线是可选的高级动作，默认路径上用户永远不需要知道它存在。
 
 #### 时间与空间分离（沿用现有设计意图）
 
-`CameraMotionPath` 的现有注释已经写明：*"Time belongs to CameraMotionClip, so one path can be retimed without redrawing it."* 绘制严格遵守这条：
+`CameraMotionPath` 的现有注释已经写明：_"Time belongs to CameraMotionClip, so one path can be retimed without redrawing it."_ 绘制严格遵守这条：
 
 - 绘制**不计时**（不是"边画边录"）；
 - 起点 = 当前 playhead，时长 = `DEFAULT_TAKE_SECONDS = 2`；
@@ -124,11 +125,11 @@ class PathSimplifier {                       // 领域服务，无状态
 
 现状 `TransformGizmoController.tsx:28-33` 显式排除机位领域（这个排除是对的，不该把 `TransformControls` 直接绑到机位数据上），结果是空间编辑完全失能。方案是**专用把手**，不复用 gizmo：
 
-| 把手 | 外观 | 拖动效果 | 命令 |
-|---|---|---|---|
-| key 小球 | Indigo 实心球 | 改 `position`（`target` / `fov` 不动） | `motion.set-key` |
-| 站杆 | 球下竖直细杆 | 只改 Y | `motion.set-key` |
-| 手柄杆 | 选中 key 后长出两根；`auto` 时空心、`manual` 时实心 | 改切线，**并把 `handleMode` 置 `manual`** | `motion.set-key-handle` |
+| 把手     | 外观                                                | 拖动效果                                  | 命令                    |
+| -------- | --------------------------------------------------- | ----------------------------------------- | ----------------------- |
+| key 小球 | Indigo 实心球                                       | 改 `position`（`target` / `fov` 不动）    | `motion.set-key`        |
+| 站杆     | 球下竖直细杆                                        | 只改 Y                                    | `motion.set-key`        |
+| 手柄杆   | 选中 key 后长出两根；`auto` 时空心、`manual` 时实心 | 改切线，**并把 `handleMode` 置 `manual`** | `motion.set-key-handle` |
 
 右键 key → `删除` / `恢复自动手柄` / `把 playhead 定位到此`。全部 `userData.helper = true`（截图排除），资源登记 `DisposeBag`。
 
@@ -140,12 +141,12 @@ class PathSimplifier {                       // 领域服务，无状态
 
 四层各解决一个**不同的**问题，不是同一件事的四种做法：
 
-| 层 | 回答什么问题 | 渲染成本 |
-|---|---|---|
-| L1 镜头视角接管 | 「这一刻画面长什么样」 | 零（复用主 pass） |
-| L2 画中画监视器 | 「我一边改轨迹，一边看成片」 | 一次额外场景遍历，像素量 ≈ 主画布 0.7% |
+| 层                | 回答什么问题                       | 渲染成本                                |
+| ----------------- | ---------------------------------- | --------------------------------------- |
+| L1 镜头视角接管   | 「这一刻画面长什么样」             | 零（复用主 pass）                       |
+| L2 画中画监视器   | 「我一边改轨迹，一边看成片」       | 一次额外场景遍历，像素量 ≈ 主画布 0.7%  |
 | L3 轨迹时间可视化 | 「整段运镜的形状、朝向、**快慢**」 | 零（helper 几何，只在 clip 变更时重建） |
-| L4 片段独奏循环 | 「这 2 秒的**节奏**对不对」 | 零（只是 transport 的循环区间） |
+| L4 片段独奏循环   | 「这 2 秒的**节奏**对不对」        | 零（只是 transport 的循环区间）         |
 
 ### 2.1 L3 轨迹时间可视化 —— 被低估的零成本反馈
 
@@ -174,11 +175,11 @@ class PathSimplifier {                       // 领域服务，无状态
 
 #### 成本量级
 
-| 项 | 数值 |
-|---|---|
-| 监视器分辨率 | `320 × 180`（16:9）= 57,600 px |
-| 主画布 | `1920 × 1080` @ dpr 2 = 8,294,400 px |
-| **像素占比** | **≈ 0.7%** |
+| 项           | 数值                                 |
+| ------------ | ------------------------------------ |
+| 监视器分辨率 | `320 × 180`（16:9）= 57,600 px       |
+| 主画布       | `1920 × 1080` @ dpr 2 = 8,294,400 px |
+| **像素占比** | **≈ 0.7%**                           |
 
 填充率不是瓶颈。真正的成本是**第二次场景遍历与重复 draw call（CPU 侧）**。导演台的场景规模（个位数模型 + 三点布光）下 draw call 数量小，这是可控的。三条纪律把它钉住：
 
@@ -207,11 +208,11 @@ class PathSimplifier {                       // 领域服务，无状态
 readonly loopRange: { readonly startSeconds: number; readonly endSeconds: number } | null
 ```
 
-| 输入 | 行为 |
-|---|---|
+| 输入               | 行为                                                                             |
+| ------------------ | -------------------------------------------------------------------------------- |
 | 选中运镜片段 + `L` | `loopRange = [clip.start, clip.start + clip.duration]`，立即播放，反复循环该片段 |
-| 无选中 + `L` | `loopRange = [0, duration]`，整片循环 |
-| 再按 `L` | 关闭循环 |
+| 无选中 + `L`       | `loopRange = [0, duration]`，整片循环                                            |
+| 再按 `L`           | 关闭循环                                                                         |
 
 片段条在循环中时显示循环角标。实现成本近乎为零（`tick` 到 `endSeconds` → `seek(startSeconds)`），收益是**让"改一点 → 立刻看效果"的循环周期从十几秒压到两秒**。
 
@@ -303,62 +304,64 @@ sequenceDiagram
 
 ### 4.1 新增件
 
-| 件 | 职责 | 类型 |
-|---|---|---|
-| `MotionDraftPlane` | 绘制平面 helper（网格 + 高度把手） | R3F 组件 |
-| `MotionDraftController` / `useMotionDraft` | 绘制手势状态机（弹簧键、射线求交、原始点缓冲） | 控制器 + hook |
-| `PathSimplifier` | RDP 二维抽稀 | 领域服务（无状态纯函数集合） |
-| `MotionKeyHandles` | key 小球 / 站杆 / 手柄杆的拖拽把手 | R3F 组件 |
-| `MotionTrailVisualizer` | 时间着色 + 等时刻度 + 视锥 ghost + 当前位置球 | R3F 组件（取代现 `MotionClipPathPreview`） |
-| `ProgramMonitor` | 画中画 `WebGLRenderTarget` 渲染 | R3F 组件 |
-| `MotionAuthoringStore` | `draftMode` / `draftPlaneHeight` / `previewTimeOverride` / `monitorVisible` / `pathVisible` / `selectedKeyId` | 每实例 MobX store，不入文档 |
+| 件                                         | 职责                                                                                                          | 类型                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `MotionDraftPlane`                         | 绘制平面 helper（网格 + 高度把手）                                                                            | R3F 组件                                   |
+| `MotionDraftController` / `useMotionDraft` | 绘制手势状态机（弹簧键、射线求交、原始点缓冲）                                                                | 控制器 + hook                              |
+| `PathSimplifier`                           | RDP 二维抽稀                                                                                                  | 领域服务（无状态纯函数集合）               |
+| `MotionKeyHandles`                         | key 小球 / 站杆 / 手柄杆的拖拽把手                                                                            | R3F 组件                                   |
+| `MotionTrailVisualizer`                    | 时间着色 + 等时刻度 + 视锥 ghost + 当前位置球                                                                 | R3F 组件（取代现 `MotionClipPathPreview`） |
+| `ProgramMonitor`                           | 画中画 `WebGLRenderTarget` 渲染                                                                               | R3F 组件                                   |
+| `MotionAuthoringStore`                     | `draftMode` / `draftPlaneHeight` / `previewTimeOverride` / `monitorVisible` / `pathVisible` / `selectedKeyId` | 每实例 MobX store，不入文档                |
 
 `TimeTransport` 扩展 `loopRange`；`WorkbenchLayoutStore.motionPathPreviewVisible` 迁入 `MotionAuthoringStore`（它属编辑器领域的编排态，不属壳层布局）。
 
 ### 4.2 命令增量
 
-| 命令 | payload | 可撤销 |
-|---|---|---|
-| `motion.draft-take` | `{cameraId, startTimeSeconds, durationSeconds, planePoints, planeHeight, simplifyRatio, subjectId?}` | ✅ |
-| `motion.set-key-height` | `{clipId, keyId, height}` | ✅ |
-| `motion.set-elevation-ramp` | `{clipId, startHeight, endHeight}` | ✅ 整段线性升降 |
-| `transport.set-loop-range` | `{startSeconds, endSeconds} \| null` | ❌ 瞬态 |
-| `motion.preview.override-time` | `{timeSeconds \| null}` | ❌ 瞬态 |
+| 命令                           | payload                                                                                              | 可撤销          |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- | --------------- |
+| `motion.draft-take`            | `{cameraId, startTimeSeconds, durationSeconds, planePoints, planeHeight, simplifyRatio, subjectId?}` | ✅              |
+| `motion.set-key-height`        | `{clipId, keyId, height}`                                                                            | ✅              |
+| `motion.set-elevation-ramp`    | `{clipId, startHeight, endHeight}`                                                                   | ✅ 整段线性升降 |
+| `transport.set-loop-range`     | `{startSeconds, endSeconds} \| null`                                                                 | ❌ 瞬态         |
+| `motion.preview.override-time` | `{timeSeconds \| null}`                                                                              | ❌ 瞬态         |
 
 `motion.draft-take` 让 **AI 也能"画"轨迹**（传平面点序列），与 UI 共用同一条命令 —— Rule of Two 的正解，不为 AI 单开路径。
 
 ### 4.3 性能纪律复核
 
-| 红线 | 落法 |
-|---|---|
-| 渲染循环零分配 | 绘制期原始点写入预分配 `Float32Array` 环形缓冲；当前位置球复用模块级 `Vector3`；RDP 只在松手时跑一次 |
-| 轨迹几何仅在不可变路径引用变化时重建 | `MotionTrailVisualizer` 以 `clip.keys` 引用为 memo 键；刻度点用 `InstancedMesh`，旧 `BufferGeometry` 必须 `dispose()` |
-| `frameloop="demand"` | 绘制拖动 / key 拖动 / `previewTimeOverride` 变化 → `invalidate()`，不切 `always` |
-| 播放期 DOM 增删 = 0 | 监视器是 canvas 内 `RenderTarget`，不是 DOM 面板；角标时间码由叶子 observer 自取（12Hz 节流） |
-| 收起的重面板必须卸载 | 监视器关闭销毁 `RenderTarget`；绘制平面退出模式即卸载 |
-| 禁毛玻璃 / 禁尺寸过渡 / 阴影 ≤ `0 2px 8px` | 监视器外框走 `theme.ts` 的 `panel` 变体，只允许 `opacity` 过渡 |
-| props 边界纪律 | 把手组件只收 `clipId` / `keyId` / 回调；`progress`、`fov`、`playhead` 一律自取 |
+| 红线                                       | 落法                                                                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 渲染循环零分配                             | 绘制期原始点写入预分配 `Float32Array` 环形缓冲；当前位置球复用模块级 `Vector3`；RDP 只在松手时跑一次                  |
+| 轨迹几何仅在不可变路径引用变化时重建       | `MotionTrailVisualizer` 以 `clip.keys` 引用为 memo 键；刻度点用 `InstancedMesh`，旧 `BufferGeometry` 必须 `dispose()` |
+| `frameloop="demand"`                       | 绘制拖动 / key 拖动 / `previewTimeOverride` 变化 → `invalidate()`，不切 `always`                                      |
+| 播放期 DOM 增删 = 0                        | 监视器是 canvas 内 `RenderTarget`，不是 DOM 面板；角标时间码由叶子 observer 自取（12Hz 节流）                         |
+| 收起的重面板必须卸载                       | 监视器关闭销毁 `RenderTarget`；绘制平面退出模式即卸载                                                                 |
+| 禁毛玻璃 / 禁尺寸过渡 / 阴影 ≤ `0 2px 8px` | 监视器外框走 `theme.ts` 的 `panel` 变体，只允许 `opacity` 过渡                                                        |
+| props 边界纪律                             | 把手组件只收 `clipId` / `keyId` / 回调；`progress`、`fov`、`playhead` 一律自取                                        |
 
 ### 4.4 分期
 
-| 期 | 内容 | 判据 |
-|---|---|---|
+| 期     | 内容                                                                                     | 判据                                             |
+| ------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | **P0** | L3 轨迹时间可视化（刻度点 / 时间着色 / 视锥 ghost / 位置球）+ 门控拆分 + L4 片段独奏循环 | 零渲染成本、无模型改动，**先让用户看懂现有轨迹** |
-| **P1** | L2 平面速绘 + `PathSimplifier` + L4 控制点把手 + L2 画中画监视器（带性能门槛） | 依赖主方案 P1 的 `CameraKey` 模型 |
-| **P2** | 注视线双线绘制 + `motion.draft-take` 的 AI 通道 + 整段升降 ramp | —— |
-| **P3** | 胶片带缩略图（片段条上烘 N 张离屏渲染，异步一次、不入帧循环） | 依赖监视器的离屏渲染基建 |
+| **P1** | L2 平面速绘 + `PathSimplifier` + L4 控制点把手 + L2 画中画监视器（带性能门槛）           | 依赖主方案 P1 的 `CameraKey` 模型                |
+| **P2** | 注视线双线绘制 + `motion.draft-take` 的 AI 通道 + 整段升降 ramp                          | ——                                               |
+| **P3** | 胶片带缩略图（片段条上烘 N 张离屏渲染，异步一次、不入帧循环）                            | 依赖监视器的离屏渲染基建                         |
 
 **P0 单独就有意义**：不改任何领域模型、不加任何渲染通道，只是把已有的轨迹画得能读懂、再加一个循环区间。建议先落 P0 实测，再决定 P1 的绘制层投入。
 
 ### 4.5 验收清单
 
 **P0**
+
 - [ ] 轨迹刻度点疏密与实际速度一致（加速段点变疏）；起落幅方向由明度渐变可辨
 - [ ] 每个 key 的视锥张角随其 `fov` 变化，推长焦时肉眼可见收拢
 - [ ] 镜头视角 / 掌镜下轨迹仍可见（门控拆分生效），全屏预览下不可见
 - [ ] 选中片段按 `L` 循环该片段区间；再按关闭；播放期 DOM 节点增删 = 0
 
 **P1**
+
 - [ ] 按住 `D` 拖一条抖手曲线，松手得到 ≤ 6 个 key 的平滑运镜，且全程未碰任何数值框
 - [ ] 绘制期间监视器跟随笔尖推进；拖 key 时监视器锁到该 key 时刻，松手回 playhead
 - [ ] 大场景与小场景下抽稀密度一致（epsilon 随包围球缩放）

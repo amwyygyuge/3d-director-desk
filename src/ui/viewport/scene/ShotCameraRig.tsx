@@ -18,13 +18,14 @@ function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPo
 
 /**
  * 机位视角装备:
- * - 激活机位 → 暂存导演 pose(首次进入时),相机钉死机位参数,禁轨道;
- * - 回导演视角 → 精确还原暂存 pose,恢复轨道;
+ * - 激活机位 → 暂存导演 pose(首次进入时),相机钉死机位参数;
+ * - 回导演视角 → 精确还原暂存 pose;
+ * - 轨道启停不在本组件:归 OrbitAuthorityRig 按 ViewportCameraAuthority 的所有权统一执行;
  * - 轨道交互结束(controls "end")记录导演 pose,供「当前视角存为机位」消费。
  * 激活后机位参数被改(FOV 滑杆等)会重跑 effect 重新钉参——activeShot computed 锚定 shots 表该 key,替换即触发。
  */
 export const ShotCameraRig = observer(function ShotCameraRig() {
-    const { camera: cameraStore } = useDirectorDeskStores();
+    const { camera: cameraStore, viewportCamera } = useDirectorDeskStores();
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const invalidate = useThree((state) => state.invalidate);
@@ -40,27 +41,27 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
     useEffect(() => {
         if (!controls || !(camera instanceof PerspectiveCamera)) return;
         const remember = () => {
-            if (!controls.enabled) return; // 机位视角下轨道禁用,残事件不污染暂存
+            // 机位/成片接管期轨道已停手,残事件不得污染导演姿态暂存
+            if (!viewportCamera.isDirectorFree) return;
             cameraStore.rememberDirectorPose(currentPose(camera, controls));
         };
         controls.addEventListener("end", remember);
         remember();
         return () => controls.removeEventListener("end", remember);
-    }, [camera, controls, cameraStore]);
+    }, [camera, controls, cameraStore, viewportCamera]);
 
     // 机位钉参 / 导演视角还原
     useEffect(() => {
         if (!controls || !(camera instanceof PerspectiveCamera)) return;
         if (shot) {
             savedDirectorPose.current ??= currentPose(camera, controls);
-            // 进入机位时 DirectorDesk 已关阻尼(enableDamping=false),这次 update 把轨道残量一次清零
+            // 轨道启停归 OrbitAuthorityRig;这次 update 只为把进入机位前的阻尼残量一次清零
             controls.update();
             camera.position.set(shot.position[0], shot.position[1], shot.position[2]);
             camera.fov = shot.fov;
             camera.updateProjectionMatrix();
             camera.lookAt(shot.target[0], shot.target[1], shot.target[2]);
             controls.target.set(shot.target[0], shot.target[1], shot.target[2]);
-            controls.enabled = false;
             invalidate();
             return;
         }
@@ -71,7 +72,6 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
         camera.updateProjectionMatrix();
         camera.lookAt(saved.target[0], saved.target[1], saved.target[2]);
         controls.target.set(saved.target[0], saved.target[1], saved.target[2]);
-        controls.enabled = true;
         controls.update();
         savedDirectorPose.current = null;
         invalidate();

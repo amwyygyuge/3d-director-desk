@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
 
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitSuspension } from "@/ui/viewport/scene/useOrbitSuspension";
 
 /** gizmo 控制器:只挂主选场景对象的运行时。
  *
@@ -14,13 +15,15 @@ import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
  * 性能铁律落实(transient 拖拽):
  * - 拖拽逐帧只改 Object3D(TransformControls 内部),onObjectChange 仅 invalidate——零 store 写入;
  * - 松手(onMouseUp)才把最终 pose 收敛为一条 object.move 命令——撤销/回放/AI 的唯一挂点;
- * - drei 侦测 makeDefault 的 OrbitControls,拖拽期自动禁用,免相机互抢;
+ * - gizmo 拖拽期经 ViewportCameraAuthority 申请轨道让位:drei 在 dragging-changed 时会把默认
+ *   控制器无条件置回 enabled=true,掌镜/镜头视角下必须由 OrbitAuthorityRig 重新拨正;
  * - size 不传走默认 1:three 的 TransformControls 内部已按相机距离做恒屏占补偿,
  *   再乘距离系数是双重补偿(远景 gizmo 暴涨的回退教训)。
  */
 export const TransformGizmoController = observer(function TransformGizmoController() {
     const stores = useDirectorDeskStores();
     const { scene, camera, selection, ui, dispatcher } = stores;
+    const orbitSuspension = useOrbitSuspension();
     const invalidate = useThree((state) => state.invalidate);
     const controlsRef = useRef<ComponentRef<typeof TransformControls> | null>(null);
 
@@ -45,6 +48,7 @@ export const TransformGizmoController = observer(function TransformGizmoControll
 
     const commitDrag = () => {
         ui.noteGizmoInteraction();
+        orbitSuspension.release();
         dispatcher.dispatch(
             {
                 type: "object.move",
@@ -69,7 +73,10 @@ export const TransformGizmoController = observer(function TransformGizmoControll
             showX={ui.gizmoAxes.x}
             showY={ui.gizmoAxes.y}
             showZ={ui.gizmoAxes.z}
-            onMouseDown={() => ui.noteGizmoInteraction()}
+            onMouseDown={() => {
+                ui.noteGizmoInteraction();
+                orbitSuspension.suspend();
+            }}
             onObjectChange={() => invalidate()}
             onMouseUp={commitDrag}
         />

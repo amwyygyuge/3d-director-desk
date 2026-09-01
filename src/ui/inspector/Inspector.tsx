@@ -699,12 +699,7 @@ const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, re
             <Divider sx={{ my: CONTROL_GAP }} />
             <Box sx={INSPECTOR_FIELD_SX}>
                 <Typography variant="overline">关键帧 / KEYFRAME</Typography>
-                <Button
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    onClick={addKey}
-                >
+                <Button size="small" variant="outlined" fullWidth onClick={addKey}>
                     在当前时间打关键帧 ({formatShortcutHint(SHORTCUT_ID.TIMELINE_ADD_KEY)})
                 </Button>
             </Box>
@@ -751,9 +746,7 @@ export const Inspector = observer(function Inspector() {
 
     return (
         <>
-            <Box sx={{ display: "grid", gap: CONTROL_GAP, p: PANEL_PADDING }}>
-                {content}
-            </Box>
+            <Box sx={{ display: "grid", gap: CONTROL_GAP, p: PANEL_PADDING }}>{content}</Box>
             <Snackbar
                 open={notice !== null}
                 autoHideDuration={SNACKBAR_DURATION_MS}

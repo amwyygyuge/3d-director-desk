@@ -36,7 +36,9 @@ interface ActionRestoreRequest {
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function isTimelineDocument(value: unknown): value is { readonly duration: number; readonly tracks: readonly unknown[] } {
+function isTimelineDocument(
+    value: unknown,
+): value is { readonly duration: number; readonly tracks: readonly unknown[] } {
     return (
         isRecord(value) &&
         Array.isArray(value.tracks) &&
@@ -77,7 +79,12 @@ function shotIssues(value: unknown): readonly string[] {
 }
 
 function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly string[] {
-    if (!isRecord(value) || typeof value.name !== "string" || value.name.length === 0 || typeof value.url !== "string") {
+    if (
+        !isRecord(value) ||
+        typeof value.name !== "string" ||
+        value.name.length === 0 ||
+        typeof value.url !== "string"
+    ) {
         return ["动作资产参数无效"];
     }
     if (typeof value.clipName !== "string") return [`动作 "${value.name}" 的 clipName 无效`];
@@ -116,13 +123,13 @@ function trackIssues(
             finiteTransform(keyframe.value) &&
             (keyframe.easing === "linear" || keyframe.easing === "smooth");
         if (!isValid) return [`轨道 "${track.id}" 的关键帧参数无效`];
-        if (keyIds.has(keyframe.id) || keyTimes.has(keyframe.time)) return [`轨道 "${track.id}" 的关键帧 id 或时间重复`];
+        if (keyIds.has(keyframe.id) || keyTimes.has(keyframe.time))
+            return [`轨道 "${track.id}" 的关键帧 id 或时间重复`];
         keyIds.add(keyframe.id);
         keyTimes.add(keyframe.time);
         return [];
     });
 }
-
 
 function motionIssues(plan: DocumentImportPlan): readonly string[] {
     const cameraIds = new Set(plan.shots.map(({ id }) => id));
@@ -254,8 +261,10 @@ export class DocumentImportService {
                 const registered = await provisionAction(ctx, action, { signal });
                 if (signal.aborted) return;
                 const isMounted =
-                    action.mountedOn === null || (await mountWhenReady(ctx, action.mountedOn, registered.id, { signal }));
-                if (!isMounted && !signal.aborted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${action.mountedOn}`);
+                    action.mountedOn === null ||
+                    (await mountWhenReady(ctx, action.mountedOn, registered.id, { signal }));
+                if (!isMounted && !signal.aborted)
+                    ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${action.mountedOn}`);
             } catch {
                 if (!signal.aborted) ctx.ui.setApplicationNotice(`动作 "${action.name}" 恢复失败:${action.url}`);
             }

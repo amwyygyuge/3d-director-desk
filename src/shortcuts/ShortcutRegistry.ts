@@ -8,14 +8,7 @@ import type { ShortcutChord } from "@/shortcuts/ShortcutChord";
  * presentation 在全屏预览时独占(壳层已隐,编辑类键位一律让位)。
  */
 export type ShortcutScope =
-    | "global"
-    | "rail"
-    | "gizmo"
-    | "shot-selected"
-    | "shot"
-    | "lens"
-    | "motion-key"
-    | "presentation";
+    "global" | "rail" | "gizmo" | "shot-selected" | "shot" | "lens" | "motion-key" | "presentation";
 
 /** 快捷键绑定:spec(数据)× action(行为)的合体,注册表持有 */
 export interface ShortcutBinding<TEnv> {

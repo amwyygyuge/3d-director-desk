@@ -174,7 +174,9 @@ function clipIssues(ctx: DirectorContext, clip: CameraMotionClip, excludedId: st
     const camera = ctx.camera.director.getShot(clip.cameraId);
     const target = clip.focus?.target;
     const hasFocusObject =
-        !target || target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId) !== undefined;
+        !target ||
+        target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT ||
+        ctx.scene.manager.getEntity(target.objectId) !== undefined;
     if (!camera) return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "运镜引用的机位不存在")];
     if (!hasFocusObject) return [issue(ISSUE_CODE.FOCUS_OBJECT, "clip.focus.target.objectId", "注视绑定对象不存在")];
     const range = clipRangeIssue(ctx, clip, excludedId);
@@ -276,7 +278,10 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const clip = this.clip();
         if (!clip) return null;
-        return [{ type: RemoveMotionClipCommand.TYPE, payload: { id: clip.id } }, ...invertProgramFollow(ctx, clip, this.programMode())];
+        return [
+            { type: RemoveMotionClipCommand.TYPE, payload: { id: clip.id } },
+            ...invertProgramFollow(ctx, clip, this.programMode()),
+        ];
     }
 
     private programMode(): ProgramFollow {
@@ -331,7 +336,11 @@ function applyProgramFollow(ctx: DirectorContext, clip: CameraMotionClip, mode: 
     ctx.motion.replaceProgram(cleared.withClip(merged));
 }
 
-function invertProgramFollow(ctx: DirectorContext, clip: CameraMotionClip, mode: ProgramFollow): readonly SerializedCommand[] {
+function invertProgramFollow(
+    ctx: DirectorContext,
+    clip: CameraMotionClip,
+    mode: ProgramFollow,
+): readonly SerializedCommand[] {
     if (mode === PROGRAM_FOLLOW.NONE) return [];
     const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
     const restored = slot.clips.map((current) => ({
@@ -433,7 +442,8 @@ export class SetMotionKeyCommand extends DirectorCommand<SetMotionKeyPayload> {
         const clip = existingClip(ctx, this.payload.clipId);
         if (!clip) return [issue(ISSUE_CODE.CLIP, "clipId", "运镜片段不存在")];
         const key = cameraKeyOrNull(this.payload.key);
-        if (!key) return [issue(ISSUE_CODE.PAYLOAD, "key", "镜头关键帧参数无效(progress∈[0,1]、位姿有限、fov 在围栏内)")];
+        if (!key)
+            return [issue(ISSUE_CODE.PAYLOAD, "key", "镜头关键帧参数无效(progress∈[0,1]、位姿有限、fov 在围栏内)")];
         return withKeyIssues(clip, key);
     }
 
@@ -569,8 +579,7 @@ export class SetMotionKeyHandleCommand extends DirectorCommand<SetMotionKeyHandl
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
         if (isIssue(located)) return [located];
-        const isValid =
-            (this.payload.kind === "in" || this.payload.kind === "out") && finiteVec3(this.payload.value);
+        const isValid = (this.payload.kind === "in" || this.payload.kind === "out") && finiteVec3(this.payload.value);
         return isValid ? [] : [issue(ISSUE_CODE.PAYLOAD, "value", "手柄必须是有限向量,kind 取 in 或 out")];
     }
 
@@ -670,7 +679,9 @@ export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocu
         if (focus === undefined) return [issue(ISSUE_CODE.PAYLOAD, "target", "注视目标格式无效")];
         const target = focus?.target;
         const isResolvable =
-            !target || target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT || ctx.scene.manager.getEntity(target.objectId) !== undefined;
+            !target ||
+            target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT ||
+            ctx.scene.manager.getEntity(target.objectId) !== undefined;
         return isResolvable ? [] : [issue(ISSUE_CODE.FOCUS_OBJECT, "target.objectId", "注视绑定对象不存在")];
     }
 
@@ -879,8 +890,11 @@ export class EnterMotionPreviewCommand extends DirectorCommand<PreviewClipPayloa
     }
 
     execute(ctx: DirectorContext): void {
+        const clip = ctx.motion.clip(this.payload.clipId);
         ctx.motionAuthoring.setPreviewClip(this.payload.clipId);
         ctx.motionAuthoring.setViewMode(VIEW_MODE.LENS);
+        // 预览一段就该看到这一段:playhead 不在片段内时移到片段起点,否则画面停在别的机位上
+        if (clip && !clip.covers(ctx.clock.time)) ctx.clock.seek(clip.startTimeSeconds);
         ctx.playback.sampleCurrent();
     }
 }

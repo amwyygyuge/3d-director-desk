@@ -11,7 +11,6 @@ import type { ModelHandle } from "@/loaders/ModelImporter";
 import { measureModelBox } from "@/core/measureModelBox";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
-
 /** 导入模型归一化目标:最大边缩放到 2 个场景单位,底面贴地——游戏模型单位各异(cm/m),裸放会糊满屏 */
 const MODEL_TARGET_MAX_DIM = 2;
 const LOADING_START_PROGRESS = 0;
@@ -33,7 +32,6 @@ function fitShell(shell: Group): void {
     shell.scale.setScalar(factor);
     shell.position.set(-TMP_CENTER.x * factor, -TMP_BOX.min.y * factor, -TMP_CENTER.z * factor);
 }
-
 
 const LIGHT_MARKER_RADIUS = 0.14;
 const LIGHT_MARKER_SEGMENTS = 16;

@@ -39,6 +39,7 @@ import { SceneRoot } from "@/ui/viewport/scene/SceneRoot";
 import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
 import { StudioRig } from "@/ui/viewport/scene/StudioRig";
 import { CameraMotionRig } from "@/ui/viewport/scene/CameraMotionRig";
+import { OrbitAuthorityRig } from "@/ui/viewport/scene/OrbitAuthorityRig";
 import { MotionPathPreview } from "@/ui/viewport/scene/MotionPathPreview";
 import type { MotionKeyContextRequest } from "@/ui/viewport/scene/MotionClipPathPreview";
 import { ShotCameraRig } from "@/ui/viewport/scene/ShotCameraRig";
@@ -220,8 +221,8 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     })
                                 }
                                 onPointerMissed={() => {
-                                    // 掌镜中拖拽转向的 mouseup 也算"点空",不该清选中
-                                    if (stores.camera.activeShotId !== null) return;
+                                    // 掌镜/镜头视角的转向 mouseup 也算"点空",不该清选中
+                                    if (!stores.viewportCamera.isDirectorFree) return;
                                     // 点 gizmo 对 R3F 射线是空点;守卫窗内的 pointerMissed 是拖拽余波,不取消选中
                                     if (performance.now() - stores.ui.lastGizmoInteractionAt > GIZMO_CLICK_GUARD_MS) {
                                         stores.selection.clear();
@@ -237,9 +238,9 @@ export const DirectorDesk = observer(function DirectorDesk({
                                         userData={{ helper: true }}
                                     />
                                 )}
+                                {/* 轨道启停统一由 OrbitAuthorityRig 执行:此处不再声明 enabled/阻尼开关 */}
                                 <OrbitControls
                                     makeDefault
-                                    enableDamping={stores.camera.activeShotId === null}
                                     minDistance={STUDIO_CAMERA_MIN_DISTANCE_METERS}
                                     maxDistance={STUDIO_CAMERA_MAX_DISTANCE_METERS}
                                 />
@@ -250,6 +251,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <ShotMarkers />
                                 <PlaybackDriver />
                                 <ShotCameraRig />
+                                <OrbitAuthorityRig />
                                 <CameraMotionRig />
                                 <MotionPathPreview onKeyContextMenu={openMotionKeyMenu} />
                                 <FlyDrive />
@@ -327,7 +329,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     const result = stores.dispatcher.dispatch(
                                         {
                                             type: "transport.seek",
-                                            payload: { timeSeconds: selectedClip.timeAt(selectedKey.progress) },
+                                            payload: { time: selectedClip.timeAtProgress(selectedKey.progress) },
                                         },
                                         stores,
                                     );

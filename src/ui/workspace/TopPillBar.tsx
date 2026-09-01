@@ -88,7 +88,13 @@ const PREVIEW_BUTTON_BACKGROUND = "#fff";
 const PREVIEW_BUTTON_COLOR = "#000";
 const PREVIEW_BUTTON_HOVER_BACKGROUND = "#e5e5e5";
 const PREVIEW_BUTTON_SHADOW = "0 0 15px rgba(255,255,255,0.2)";
-const PILL_SX = { alignItems: "center", display: "flex", gap: PILL_GAP, height: PILL_HEIGHT_PX, px: PILL_PADDING_X } as const;
+const PILL_SX = {
+    alignItems: "center",
+    display: "flex",
+    gap: PILL_GAP,
+    height: PILL_HEIGHT_PX,
+    px: PILL_PADDING_X,
+} as const;
 /** 激活态工具:只靠主色与浅底区分,不引入第二种按钮形状 */
 const ACTIVE_TOOL_SX = {
     color: "primary.main",
@@ -171,10 +177,19 @@ const ProjectMenu = observer(function ProjectMenu({
     const clearLabel = `${TEXT.CLEAR_SCENE}（${objectCount}）`;
     return (
         <Menu anchorEl={menuAnchor} id={MENU_ID} onClose={onClose} open={menuAnchor !== null}>
-            <MenuItem onClick={() => closeMenuThen({ action: () => modelInputRef.current?.click(), onClose })}>{TEXT.IMPORT_MODEL}</MenuItem>
-            <MenuItem onClick={() => closeMenuThen({ action: () => documentInputRef.current?.click(), onClose })}>{TEXT.IMPORT_DOCUMENT}</MenuItem>
-            <MenuItem onClick={() => closeMenuThen({ action: () => exportDocument(stores), onClose })}>{TEXT.EXPORT_DOCUMENT}</MenuItem>
-            <MenuItem disabled={objectCount === EMPTY_OBJECT_COUNT} onClick={() => closeMenuThen({ action: () => clearScene(stores), onClose })}>
+            <MenuItem onClick={() => closeMenuThen({ action: () => modelInputRef.current?.click(), onClose })}>
+                {TEXT.IMPORT_MODEL}
+            </MenuItem>
+            <MenuItem onClick={() => closeMenuThen({ action: () => documentInputRef.current?.click(), onClose })}>
+                {TEXT.IMPORT_DOCUMENT}
+            </MenuItem>
+            <MenuItem onClick={() => closeMenuThen({ action: () => exportDocument(stores), onClose })}>
+                {TEXT.EXPORT_DOCUMENT}
+            </MenuItem>
+            <MenuItem
+                disabled={objectCount === EMPTY_OBJECT_COUNT}
+                onClick={() => closeMenuThen({ action: () => clearScene(stores), onClose })}
+            >
                 <DeleteSweepIcon fontSize={COMPACT_SIZE} sx={{ mr: PILL_GAP }} />
                 {clearLabel}
             </MenuItem>
@@ -212,13 +227,15 @@ function closeMenuThen({ action, onClose }: { readonly action: () => void; reado
     onClose();
 }
 
-
 interface HiddenImportInputsProps {
     readonly documentInputRef: RefObject<HTMLInputElement>;
     readonly modelInputRef: RefObject<HTMLInputElement>;
 }
 
-const HiddenImportInputs = observer(function HiddenImportInputs({ documentInputRef, modelInputRef }: HiddenImportInputsProps) {
+const HiddenImportInputs = observer(function HiddenImportInputs({
+    documentInputRef,
+    modelInputRef,
+}: HiddenImportInputsProps) {
     const stores = useDirectorDeskStores();
     return (
         <>
@@ -240,19 +257,34 @@ const HiddenImportInputs = observer(function HiddenImportInputs({ documentInputR
     );
 });
 
-function importModelFromInput({ event, stores }: { readonly event: ChangeEvent<HTMLInputElement>; readonly stores: DirectorDeskStores }): void {
+function importModelFromInput({
+    event,
+    stores,
+}: {
+    readonly event: ChangeEvent<HTMLInputElement>;
+    readonly stores: DirectorDeskStores;
+}): void {
     const file = event.target.files?.[FIRST_ITEM_INDEX];
     event.target.value = "";
     if (file) importModelFile(stores, file, (message) => stores.ui.setApplicationNotice(message));
 }
 
-async function importDocumentFromInput({ event, stores }: { readonly event: ChangeEvent<HTMLInputElement>; readonly stores: DirectorDeskStores }): Promise<void> {
+async function importDocumentFromInput({
+    event,
+    stores,
+}: {
+    readonly event: ChangeEvent<HTMLInputElement>;
+    readonly stores: DirectorDeskStores;
+}): Promise<void> {
     const file = event.target.files?.[FIRST_ITEM_INDEX];
     event.target.value = "";
     if (!file) return;
     try {
         const document = JSON.parse(await file.text()) as unknown;
-        reportCommandFailure(stores, stores.dispatcher.dispatch({ type: COMMAND_TYPE.IMPORT_DOCUMENT, payload: { document } }, stores));
+        reportCommandFailure(
+            stores,
+            stores.dispatcher.dispatch({ type: COMMAND_TYPE.IMPORT_DOCUMENT, payload: { document } }, stores),
+        );
     } catch {
         stores.ui.setApplicationNotice(TEXT.DOCUMENT_FILE_INVALID);
     }
@@ -275,7 +307,10 @@ function exportDocument(stores: DirectorDeskStores): void {
 
 function clearScene(stores: DirectorDeskStores): void {
     for (const entity of stores.scene.manager.list()) {
-        reportCommandFailure(stores, stores.dispatcher.dispatch({ type: COMMAND_TYPE.REMOVE_OBJECT, payload: { id: entity.id } }, stores));
+        reportCommandFailure(
+            stores,
+            stores.dispatcher.dispatch({ type: COMMAND_TYPE.REMOVE_OBJECT, payload: { id: entity.id } }, stores),
+        );
     }
 }
 
@@ -337,14 +372,24 @@ const HistoryControls = observer(function HistoryControls() {
         <>
             <Tooltip title={shortcutTitle({ label: TEXT.UNDO, shortcutId: SHORTCUT_ID.EDIT_UNDO })}>
                 <span>
-                    <IconButton aria-label={TEXT.UNDO} disabled={!stores.history.canUndo} onClick={() => stores.history.undo(stores)} size={COMPACT_SIZE}>
+                    <IconButton
+                        aria-label={TEXT.UNDO}
+                        disabled={!stores.history.canUndo}
+                        onClick={() => stores.history.undo(stores)}
+                        size={COMPACT_SIZE}
+                    >
                         <UndoIcon fontSize={COMPACT_SIZE} />
                     </IconButton>
                 </span>
             </Tooltip>
             <Tooltip title={shortcutTitle({ label: TEXT.REDO, shortcutId: SHORTCUT_ID.EDIT_REDO })}>
                 <span>
-                    <IconButton aria-label={TEXT.REDO} disabled={!stores.history.canRedo} onClick={() => stores.history.redo(stores)} size={COMPACT_SIZE}>
+                    <IconButton
+                        aria-label={TEXT.REDO}
+                        disabled={!stores.history.canRedo}
+                        onClick={() => stores.history.redo(stores)}
+                        size={COMPACT_SIZE}
+                    >
                         <RedoIcon fontSize={COMPACT_SIZE} />
                     </IconButton>
                 </span>
@@ -363,7 +408,11 @@ const CaptureControls = observer(function CaptureControls() {
     return (
         <>
             <Tooltip title={TEXT.SCREENSHOT}>
-                <IconButton aria-label={TEXT.SCREENSHOT} onClick={() => requestFrameCapture({ context: stores, dispatcher: stores.dispatcher })} size={COMPACT_SIZE}>
+                <IconButton
+                    aria-label={TEXT.SCREENSHOT}
+                    onClick={() => requestFrameCapture({ context: stores, dispatcher: stores.dispatcher })}
+                    size={COMPACT_SIZE}
+                >
                     <PhotoCameraIcon fontSize={COMPACT_SIZE} />
                 </IconButton>
             </Tooltip>
@@ -402,8 +451,15 @@ const PresentationControl = observer(function PresentationControl() {
     return (
         <Box className="flex items-center" sx={{ gap: PILL_GAP }}>
             {stores.clock.isPlaying ? <PlayingIndicator /> : null}
-            <Tooltip title={shortcutTitle({ label: TEXT.FULLSCREEN_PREVIEW, shortcutId: SHORTCUT_ID.PRESENTATION_ENTER })}>
-                <Button onClick={() => enterPresentation(stores)} startIcon={<PlayArrowIcon />} sx={PREVIEW_BUTTON_SX} variant={BUTTON_VARIANT.CONTAINED}>
+            <Tooltip
+                title={shortcutTitle({ label: TEXT.FULLSCREEN_PREVIEW, shortcutId: SHORTCUT_ID.PRESENTATION_ENTER })}
+            >
+                <Button
+                    onClick={() => enterPresentation(stores)}
+                    startIcon={<PlayArrowIcon />}
+                    sx={PREVIEW_BUTTON_SX}
+                    variant={BUTTON_VARIANT.CONTAINED}
+                >
                     {TEXT.FULLSCREEN_PREVIEW}
                 </Button>
             </Tooltip>
@@ -414,7 +470,14 @@ const PresentationControl = observer(function PresentationControl() {
 const PlayingIndicator = observer(function PlayingIndicator() {
     return (
         <Box className="flex items-center" sx={{ gap: PILL_GAP }}>
-            <Box sx={{ bgcolor: PLAY_INDICATOR_COLOR, borderRadius: PILL_HEIGHT_PX, height: PLAY_INDICATOR_SIZE_PX, width: PLAY_INDICATOR_SIZE_PX }} />
+            <Box
+                sx={{
+                    bgcolor: PLAY_INDICATOR_COLOR,
+                    borderRadius: PILL_HEIGHT_PX,
+                    height: PLAY_INDICATOR_SIZE_PX,
+                    width: PLAY_INDICATOR_SIZE_PX,
+                }}
+            />
             <Typography color={PLAY_INDICATOR_COLOR} variant="caption">
                 {TEXT.PLAYING}
             </Typography>
@@ -423,7 +486,10 @@ const PlayingIndicator = observer(function PlayingIndicator() {
 });
 
 function enterPresentation(stores: DirectorDeskStores): void {
-    reportCommandFailure(stores, stores.dispatcher.dispatch({ type: EnterPresentationCommand.TYPE, payload: {} }, stores));
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch({ type: EnterPresentationCommand.TYPE, payload: {} }, stores),
+    );
 }
 
 /** 预览态仅保留退出入口,避免编辑壳层遮挡 Program 输出。 */
@@ -448,11 +514,18 @@ export const PresentationExitHint = observer(function PresentationExitHint() {
 });
 
 function exitPresentation(stores: DirectorDeskStores): void {
-    reportCommandFailure(stores, stores.dispatcher.dispatch({ type: ExitPresentationCommand.TYPE, payload: {} }, stores));
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch({ type: ExitPresentationCommand.TYPE, payload: {} }, stores),
+    );
 }
 
-
-function shortcutTitle({ label, shortcutId }: { readonly label: string; readonly shortcutId: (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID] }): string {
+function shortcutTitle({
+    label,
+    shortcutId,
+}: {
+    readonly label: string;
+    readonly shortcutId: (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
+}): string {
     return `${label} (${formatShortcutHint(shortcutId)})`;
 }
-

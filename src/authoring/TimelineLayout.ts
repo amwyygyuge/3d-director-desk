@@ -122,7 +122,7 @@ export class TimelineLayout {
                 })),
                 marks: clips.flatMap((clip) =>
                     clip.keys.map((key) => {
-                        const timeSeconds = clip.timeAt(key.progress);
+                        const timeSeconds = clip.timeAtProgress(key.progress);
                         return {
                             id: key.id,
                             kind: TIMELINE_MARK_KIND.CAMERA_KEY,

@@ -24,7 +24,9 @@ export interface CameraKeyPose {
 }
 
 export function isCameraKeyFov(value: unknown): value is number | null {
-    return value === null || (typeof value === "number" && Number.isFinite(value) && value >= FOV_MIN && value <= FOV_MAX);
+    return (
+        value === null || (typeof value === "number" && Number.isFinite(value) && value >= FOV_MIN && value <= FOV_MAX)
+    );
 }
 
 /**
@@ -74,7 +76,6 @@ export class CameraKey extends MotionKey {
     withPose(pose: CameraKeyPose): CameraKey {
         return this.replicate({ position: pose.position, target: pose.target, fov: pose.fov ?? null });
     }
-
 
     override toJSON(): CameraKeyJSON {
         return {

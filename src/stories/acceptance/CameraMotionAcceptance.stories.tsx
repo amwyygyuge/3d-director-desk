@@ -59,7 +59,12 @@ function cameraKey(
     };
 }
 
-function createTakePayload(id: string, cameraId: string, startTimeSeconds: number, focus: FocusTargetJSON | null = null) {
+function createTakePayload(
+    id: string,
+    cameraId: string,
+    startTimeSeconds: number,
+    focus: FocusTargetJSON | null = null,
+) {
     const isPrimary = cameraId === PRIMARY_CAMERA_ID;
     const start: [number, number, number] = isPrimary ? [-6, 3, 6] : [6, 3, 6];
     const midpoint: [number, number, number] = isPrimary ? [-2, 2.5, 3] : [3, 2, 1];
@@ -121,26 +126,29 @@ function verifyOverlapRejected(stores: DirectorDeskStores): void {
 
 function verifyKeyUndoRedo(stores: DirectorDeskStores): void {
     const before = required(
-        required(motionState(stores).clips.find((clip) => clip.id === PRIMARY_MOTION_ID), "主机位片段缺失").keys.find(
-            (key) => key.id === `${PRIMARY_MOTION_ID}-middle`,
-        ),
+        required(
+            motionState(stores).clips.find((clip) => clip.id === PRIMARY_MOTION_ID),
+            "主机位片段缺失",
+        ).keys.find((key) => key.id === `${PRIMARY_MOTION_ID}-middle`),
         "主机位中间关键帧缺失",
     );
     const updated: CameraKeyJSON = { ...before, position: [-1, 2.25, 2.5] };
     dispatch(stores, "motion.set-key", { clipId: PRIMARY_MOTION_ID, key: updated });
     assertAcceptance(stores.history.undo(stores).ok, "motion.set-key 撤销失败");
     const undone = required(
-        required(motionState(stores).clips.find((clip) => clip.id === PRIMARY_MOTION_ID), "撤销后主机位片段缺失").keys.find(
-            (key) => key.id === before.id,
-        ),
+        required(
+            motionState(stores).clips.find((clip) => clip.id === PRIMARY_MOTION_ID),
+            "撤销后主机位片段缺失",
+        ).keys.find((key) => key.id === before.id),
         "撤销后关键帧缺失",
     );
     assertAcceptance(undone.position.join(",") === before.position.join(","), "撤销未恢复关键帧前值");
     assertAcceptance(stores.history.redo(stores).ok, "motion.set-key 重做失败");
     const redone = required(
-        required(motionState(stores).clips.find((clip) => clip.id === PRIMARY_MOTION_ID), "重做后主机位片段缺失").keys.find(
-            (key) => key.id === before.id,
-        ),
+        required(
+            motionState(stores).clips.find((clip) => clip.id === PRIMARY_MOTION_ID),
+            "重做后主机位片段缺失",
+        ).keys.find((key) => key.id === before.id),
         "重做后关键帧缺失",
     );
     assertAcceptance(redone.position.join(",") === updated.position.join(","), "重做未恢复更新后的关键帧");
@@ -169,17 +177,16 @@ function verifyAuthoringOutput(stores: DirectorDeskStores): void {
         move: "dolly-in",
     });
     const authored = required(
-        motionState(stores).clips.find(
-            (clip) => clip.id !== PRIMARY_MOTION_ID && clip.id !== SIDE_MOTION_ID,
-        ),
+        motionState(stores).clips.find((clip) => clip.id !== PRIMARY_MOTION_ID && clip.id !== SIDE_MOTION_ID),
         "motion.author 未产出可编辑片段",
     );
     const key = required(authored.keys[0], "motion.author 产物缺少关键帧");
     dispatch(stores, "motion.set-key", { clipId: authored.id, key: { ...key, fov: EDITED_KEY_FOV } });
     const edited = required(
-        required(motionState(stores).clips.find((clip) => clip.id === authored.id), "编辑后预设片段缺失").keys.find(
-            (candidate) => candidate.id === key.id,
-        ),
+        required(
+            motionState(stores).clips.find((clip) => clip.id === authored.id),
+            "编辑后预设片段缺失",
+        ).keys.find((candidate) => candidate.id === key.id),
         "编辑后预设关键帧缺失",
     );
     assertAcceptance(edited.fov === EDITED_KEY_FOV, "motion.author 产物不可再编辑");

@@ -50,7 +50,12 @@ export function copyVec3(vector: Vec3): Vec3 {
 }
 
 export function isMotionProgress(value: unknown): value is number {
-    return typeof value === "number" && Number.isFinite(value) && value >= MOTION_PROGRESS_MIN && value <= MOTION_PROGRESS_MAX;
+    return (
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        value >= MOTION_PROGRESS_MIN &&
+        value <= MOTION_PROGRESS_MAX
+    );
 }
 
 function isHandleMode(value: MotionHandleMode): boolean {

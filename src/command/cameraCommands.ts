@@ -41,7 +41,8 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
         const shot = programCameraId ? ctx.camera.director.getShot(programCameraId) : undefined;
         const clip = programCameraId ? ctx.motion.clipAt(programCameraId, ctx.clock.time) : null;
         const focusResolver = new FocusTargetResolver(ctx.scene.manager);
-        const focusTarget = clip?.focus && focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) ? TMP_FOCUS_SAMPLE : null;
+        const focusTarget =
+            clip?.focus && focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) ? TMP_FOCUS_SAMPLE : null;
         const isSampled =
             clip !== null &&
             shot !== undefined &&

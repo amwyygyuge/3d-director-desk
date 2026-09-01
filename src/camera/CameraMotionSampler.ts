@@ -59,17 +59,18 @@ export class CameraMotionSampler {
     }
 
     /**
-     * 该时刻的成片画面:Program 输出优先;Program 留空时回退到编排中的预览片段,
-     * 这正是「镜头视角能看到尚未切入 Program 的运镜」的唯一来源。
+     * 该时刻的成片画面:生效片段由 CameraMotionStore.resolveOutputClipAt 裁决(预览优先于 Program),
+     * 片段缺位时退回 Program 机位的静态取景;两者皆无则保持上一帧画面。
+     *
+     * 无输出时不复位相机:镜头视角下 scrub 出片段区间会把画面弹回导演姿态,是编排期最刺眼的跳变。
+     * 复位只发生在离开成片接管(sink 解绑)时。
      */
     sampleCurrent(timeSeconds: number): boolean {
         const take = this.resolveTake(timeSeconds);
-        if (!take) {
-            this.sink?.restoreFreeDirectorPose();
-            return false;
-        }
+        if (!take) return false;
         const { shot, clip } = take;
-        const focusTarget = clip?.focus && this.focusResolver.resolve(clip.focus, this.focusSample) ? this.focusSample : null;
+        const focusTarget =
+            clip?.focus && this.focusResolver.resolve(clip.focus, this.focusSample) ? this.focusSample : null;
         const hasClipSample =
             clip !== null &&
             (clip.focus === null || focusTarget !== null) &&
@@ -84,20 +85,12 @@ export class CameraMotionSampler {
     }
 
     private resolveTake(timeSeconds: number): ResolvedTake | null {
+        const clip = this.motion.resolveOutputClipAt(timeSeconds, this.preview.previewClipId);
+        const clipShot = clip ? this.camera.director.getShot(clip.cameraId) : undefined;
+        if (clip && clipShot) return { shot: clipShot, clip };
         const programCameraId = this.motion.program.cameraAt(timeSeconds);
         const programShot = programCameraId ? this.camera.director.getShot(programCameraId) : undefined;
-        if (programCameraId && programShot) {
-            return { shot: programShot, clip: this.motion.clipAt(programCameraId, timeSeconds) };
-        }
-        const previewClip = this.previewClipAt(timeSeconds);
-        const previewShot = previewClip ? this.camera.director.getShot(previewClip.cameraId) : undefined;
-        return previewClip && previewShot ? { shot: previewShot, clip: previewClip } : null;
-    }
-
-    private previewClipAt(timeSeconds: number): CameraMotionClip | null {
-        const clipId = this.preview.previewClipId;
-        const clip = clipId ? this.motion.clip(clipId) : undefined;
-        return clip && clip.covers(timeSeconds) ? clip : null;
+        return programShot ? { shot: programShot, clip: null } : null;
     }
 
     private writeStaticShot(shot: CameraShot): void {

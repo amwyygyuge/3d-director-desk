@@ -52,7 +52,13 @@ export class ProgramLinkage {
     }
 
     /** 同机位占用时的合并范围:输出片段吞掉新片段,保持「同一时刻唯一输出」不变量。 */
-    mergedClip(slot: ProgramSlot, cameraId: string, startSeconds: number, durationSeconds: number, fallbackId: string): CameraProgramClip {
+    mergedClip(
+        slot: ProgramSlot,
+        cameraId: string,
+        startSeconds: number,
+        durationSeconds: number,
+        fallbackId: string,
+    ): CameraProgramClip {
         const endSeconds = startSeconds + durationSeconds;
         const starts = [startSeconds, ...slot.clips.map((clip) => clip.startTimeSeconds)];
         const ends = [endSeconds, ...slot.clips.map((clip) => clip.endTimeSeconds)];

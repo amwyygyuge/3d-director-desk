@@ -27,7 +27,7 @@
     - **禁对 width/height/padding 做 CSS 过渡**:这三个属性无法交给合成器,过渡期每帧重排,与画布渲染叠加。只允许 `opacity` 过渡;`theme.ts` 因此不提供过渡时长 token。
     - **禁大半径 `box-shadow`**:同样按层重绘计价,壳层阴影上限 `0 2px 8px`。
     - **收起/不可见的重面板必须卸载**,不是 `opacity: 0` 留在树里——它照样跟着 observable 重渲(时间轴轨道编辑器就栽在这里)。
-    验收线:播放期用 `MutationObserver` 采样 3 秒,**DOM 节点增删必须为 0**,属性/文本变更数应等于「节流频率 × 直读帧级 observable 的叶子个数」。
+      验收线:播放期用 `MutationObserver` 采样 3 秒,**DOM 节点增删必须为 0**,属性/文本变更数应等于「节流频率 × 直读帧级 observable 的叶子个数」。
 
 ## 强制工程闸门（每次迭代必经）
 
