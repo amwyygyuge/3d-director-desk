@@ -8,6 +8,12 @@ import type { WorkspaceSection } from "@/workspace/workspaceSections";
  * high = 满设备像素比 + MSAA;performance = 限像素比 + 关 MSAA,换帧率。
  */
 export const RENDER_QUALITY = { HIGH: "high", PERFORMANCE: "performance" } as const;
+/** 参考地板尺寸合法域(米):宿主 prop 初始值与菜单滑杆共用同一围栏(裸数值入口纪律) */
+export const GRID_SIZE = { DEFAULT_METERS: 12, MIN_METERS: 2, MAX_METERS: 100 } as const;
+
+export function isGridSizeValid(value: number): boolean {
+    return Number.isFinite(value) && value >= GRID_SIZE.MIN_METERS && value <= GRID_SIZE.MAX_METERS;
+}
 export type RenderQuality = (typeof RENDER_QUALITY)[keyof typeof RENDER_QUALITY];
 
 /** 各档的画布参数(Canvas 直接消费,禁在组件里再拼一份) */
@@ -22,8 +28,9 @@ export const RENDER_QUALITY_PROFILES: Record<
 /**
  * 工作台壳层聚合(方案 D「液态悬浮界面」的状态边界)。
  *
- * 职责只有一件事:悬浮壳层的空间编排与显隐。它刻意不碰 gizmo、加载反馈、截图产物
- * (那些留在 UiStore),也不碰任何场景数据——壳层状态纯 UI 态,不入文档、不进撤销栈。
+ * 职责:悬浮壳层的空间编排与显隐 + 演播室环境档(渲染画质/参考地板)。
+ * 它刻意不碰 gizmo、加载反馈、截图产物(那些留在 UiStore),也不碰任何场景数据——
+ * 壳层与演播室档位是纯 UI 态,不入文档、不进撤销栈。
  *
  * 每 DirectorDesk 实例一套(实例化纪律);Monet 画布可同时挂多个导演台节点。
  */
@@ -36,9 +43,19 @@ export class WorkbenchLayoutStore {
     presentationMode = false;
     /** 渲染画质档:高性能 */
     renderQuality: RenderQuality = RENDER_QUALITY.PERFORMANCE;
+    /** 参考地板边长(米):视口辅助物档位,不入文档不进撤销栈 */
+    gridSizeMeters: number = GRID_SIZE.DEFAULT_METERS;
 
-    constructor() {
+    constructor(init?: { gridSizeMeters?: number | undefined }) {
         makeAutoObservable(this);
+        if (init?.gridSizeMeters === undefined) return;
+        if (isGridSizeValid(init.gridSizeMeters)) {
+            this.gridSizeMeters = init.gridSizeMeters;
+        } else if (import.meta.env.DEV) {
+            console.warn(
+                `[WorkbenchLayoutStore] gridSizeMeters 非法(${String(init.gridSizeMeters)}),回落 ${String(GRID_SIZE.DEFAULT_METERS)}m`,
+            );
+        }
     }
 
     /**
@@ -57,6 +74,11 @@ export class WorkbenchLayoutStore {
 
     setRenderQuality(quality: RenderQuality): void {
         this.renderQuality = quality;
+    }
+    /** 地板尺寸设置的唯一写口;非法值静默拒绝(UI 滑杆已被 min/max 钳制,这里是 prop/未来 AI 路径的兜底) */
+    setGridSizeMeters(value: number): void {
+        if (!isGridSizeValid(value)) return;
+        this.gridSizeMeters = value;
     }
 
     toggleTimelineExpanded(): void {

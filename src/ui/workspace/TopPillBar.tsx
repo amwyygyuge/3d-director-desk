@@ -18,6 +18,7 @@ import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Slider from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
@@ -29,7 +30,7 @@ import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/pre
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "@/store/UiStore";
 import type { GizmoMode } from "@/store/UiStore";
-import { RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
+import { GRID_SIZE, RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { ToolbarExtension } from "@/ui/shell/DeskShellPresentation";
@@ -53,10 +54,12 @@ const TEXT = {
     FULLSCREEN_PREVIEW: "全屏预览",
     GIZMO_TOOL: "变换工具",
     HELP: "快捷键速查",
+    GRID_SIZE: "地板尺寸",
     RENDER_QUALITY: "渲染画质",
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
+    METER_UNIT: "m",
     PLAYING: "播放中",
     PRESENTING: "预览中 · Esc 退出",
     REDO: "重做",
@@ -69,6 +72,7 @@ const MENU_ID = "project-pill-menu";
 const BUTTON_VARIANT = { CONTAINED: "contained", TEXT: "text" } as const;
 const ICON_BUTTON_COLOR = { DEFAULT: "default", ERROR: "error" } as const;
 const COMPACT_SIZE = "small" as const;
+const GRID_SLIDER_MIN_WIDTH_PX = 180;
 const FIRST_ITEM_INDEX = 0;
 const EMPTY_OBJECT_COUNT = 0;
 const JSON_INDENT_SPACES = 2;
@@ -214,6 +218,25 @@ const ProjectMenu = observer(function ProjectMenu({
                     {RENDER_QUALITY_PROFILES[stores.layout.renderQuality].label}
                 </Typography>
             </MenuItem>
+            {/* 滑杆直接在菜单内交互:stopPropagation 防方向键被 MenuList 抢走 */}
+            <Box
+                onKeyDown={(event) => event.stopPropagation()}
+                sx={{ px: 2, py: 0.5, minWidth: GRID_SLIDER_MIN_WIDTH_PX }}
+            >
+                <Typography color="text.secondary" variant="caption">
+                    {`${TEXT.GRID_SIZE}（${stores.layout.gridSizeMeters}${TEXT.METER_UNIT}）`}
+                </Typography>
+                <Slider
+                    aria-label={TEXT.GRID_SIZE}
+                    max={GRID_SIZE.MAX_METERS}
+                    min={GRID_SIZE.MIN_METERS}
+                    onChange={(_, value) => {
+                        if (typeof value === "number") stores.layout.setGridSizeMeters(value);
+                    }}
+                    size={COMPACT_SIZE}
+                    value={stores.layout.gridSizeMeters}
+                />
+            </Box>
             <Divider />
             <MenuItem onClick={() => closeMenuThen({ action: () => stores.ui.toggleHelp(), onClose })}>
                 {TEXT.HELP}

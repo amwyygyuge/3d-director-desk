@@ -58,7 +58,6 @@ interface MotionKeyMenuPosition {
 /** Canvas 相机初值与「重置视角」命令共用 HOME_DIRECTOR_POSE(单一真相源);Vec3 只读元组展开为可变 */
 const STUDIO_CAMERA_FOV_DEGREES = HOME_DIRECTOR_POSE.fov;
 const STUDIO_CAMERA_POSITION: [number, number, number] = [...HOME_DIRECTOR_POSE.position];
-const STUDIO_GRID_SIZE_METERS = 12;
 const STUDIO_CAMERA_MIN_DISTANCE_METERS = 2;
 const STUDIO_CAMERA_MAX_DISTANCE_METERS = 18;
 /** 根节点缺省尺寸:充满宿主容器(向后兼容基线) */
@@ -83,6 +82,8 @@ export interface DirectorDeskProps {
     width?: number | string;
     /** 桌面高度;同 width */
     height?: number | string;
+    /** 视口参考地板边长初始值(米);缺省 12。创建期注入——运行期由项目菜单滑杆接管(WorkbenchLayoutStore.gridSizeMeters) */
+    initialGridSizeMeters?: number;
 }
 
 /**
@@ -107,6 +108,7 @@ export const DirectorDesk = observer(function DirectorDesk({
     presentation,
     width = ROOT_FILL,
     height = ROOT_FILL,
+    initialGridSizeMeters,
 }: DirectorDeskProps) {
     const [stores] = useState<DirectorDeskStores>(() =>
         createDirectorDeskStores({
@@ -115,6 +117,7 @@ export const DirectorDesk = observer(function DirectorDesk({
             assetProviders,
             motionPathVisible: initialMotionPathVisible,
             presentation,
+            gridSizeMeters: initialGridSizeMeters,
         }),
     );
     const deskRef = useRef<HTMLDivElement>(null);
@@ -251,7 +254,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <color attach="background" args={[VIEWPORT_BACKGROUND]} />
                                 {stores.layout.authoringVisible && (
                                     <Grid
-                                        args={[STUDIO_GRID_SIZE_METERS, STUDIO_GRID_SIZE_METERS]}
+                                        args={[stores.layout.gridSizeMeters, stores.layout.gridSizeMeters]}
                                         cellColor="#333333"
                                         sectionColor="#555555"
                                         userData={{ helper: true }}

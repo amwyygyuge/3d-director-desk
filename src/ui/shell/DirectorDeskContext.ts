@@ -153,6 +153,8 @@ export function createDirectorDeskStores(options?: {
     motionPathVisible?: boolean | undefined;
     /** 壳层呈现定制(产品名/采集按钮文案/工具栏扩展位);仅创建期读取 */
     presentation?: DeskShellPresentationInit | undefined;
+    /** 参考地板边长初始值(米);运行期由项目菜单滑杆接管 */
+    gridSizeMeters?: number | undefined;
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
@@ -179,7 +181,7 @@ export function createDirectorDeskStores(options?: {
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);
     const camera = new CameraStore();
-    const layout = new WorkbenchLayoutStore();
+    const layout = new WorkbenchLayoutStore({ gridSizeMeters: options?.gridSizeMeters });
     const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
     const viewportCamera = new ViewportCameraAuthority(camera, motionAuthoring);
     const playback = new PlaybackCoordinator(

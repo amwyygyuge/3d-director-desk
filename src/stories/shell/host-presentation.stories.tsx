@@ -33,6 +33,7 @@ const STAGE_STYLE = {
  * - 扩展位落在采集区右侧,禁用态(保存模板)与可用态(从画布导入)并存;
  * - 最右扩展位(全屏预览右侧)承载宿主窗口控制类纯图标按钮(缩小/关闭节点);
  * - width/height 固定尺寸(模拟 Monet 节点嵌入);
+ * - initialGridSizeMeters 把参考地板初始化为 24m(对照「场景/场景画布」的默认 12m;运行期由项目菜单滑杆接管);
  * - 对照「场景/场景画布」:默认形态保持纯图标与内置文案。
  */
 export const HostPresentation: Story = {
@@ -42,6 +43,7 @@ export const HostPresentation: Story = {
             <DirectorDesk
                 height={NODE_SIZE.HEIGHT_PX}
                 width={NODE_SIZE.WIDTH_PX}
+                initialGridSizeMeters={24}
                 presentation={{
                     productName: "Monet 导演台",
                     captureImage: { label: "截图到画布", tooltip: "截图并添加到画布" },

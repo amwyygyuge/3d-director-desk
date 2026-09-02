@@ -277,7 +277,13 @@ export { SelectionStore } from "@/store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "@/store/UiStore";
 export type { CaptureMeta, VideoMeta } from "@/store/UiStore";
 export { TimelineStore } from "@/store/TimelineStore";
-export { RENDER_QUALITY, RENDER_QUALITY_PROFILES, WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
+export {
+    GRID_SIZE,
+    isGridSizeValid,
+    RENDER_QUALITY,
+    RENDER_QUALITY_PROFILES,
+    WorkbenchLayoutStore,
+} from "@/store/WorkbenchLayoutStore";
 export type { RenderQuality } from "@/store/WorkbenchLayoutStore";
 export { WORKSPACE_SECTION, WORKSPACE_SECTION_DEFS, WORKSPACE_SECTION_ORDER } from "@/workspace/workspaceSections";
 export type { WorkspaceSection, WorkspaceSectionDef } from "@/workspace/workspaceSections";
