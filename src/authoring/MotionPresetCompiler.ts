@@ -45,6 +45,29 @@ const ORBIT_DIRECTION_SIGN: Record<OrbitDirection, 1 | -1> = { cw: 1, ccw: -1 };
 /** 预设运镜的默认时长(秒):机位面板与快速创建共用 */
 export const DEFAULT_PRESET_DURATION_SECONDS = 2;
 
+/** 导演可选时长:两处入口必须产出同一档位,避免成片节奏漂移。 */
+export const MOTION_DURATION_OPTIONS_SECONDS = [2, 4, 8] as const;
+/** 成片占用时段按秒显示一位小数,与时间轴时长读数一致。 */
+export const MOTION_PROGRAM_RANGE_DECIMALS = 1;
+
+export interface MotionProgramRangeOptions {
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
+
+export interface MotionProgramRange {
+    readonly startTimeSeconds: number;
+    readonly endTimeSeconds: number;
+}
+
+/** 预设入口共用的成片占用范围:显示与命令载荷始终来自同一时长。 */
+export function motionProgramRangeFor(options: MotionProgramRangeOptions): MotionProgramRange {
+    return {
+        startTimeSeconds: options.startTimeSeconds,
+        endTimeSeconds: options.startTimeSeconds + options.durationSeconds,
+    };
+}
+
 /** 命令层围栏:payload 的 direction 先过枚举检查(hasOwn 挡原型链) */
 export function isOrbitDirection(value: unknown): value is OrbitDirection {
     return typeof value === "string" && Object.hasOwn(ORBIT_DIRECTION_SIGN, value);

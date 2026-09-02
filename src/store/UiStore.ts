@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import type { LiveCameraPose } from "@/capture/CaptureService";
+import type { VideoExportSource } from "@/capture/VideoExportSession";
 /** gizmo 模式:三态查表,工具条与控制器共享 */
 export const GIZMO_MODE = {
     TRANSLATE: "translate",
@@ -23,6 +24,7 @@ export interface VideoMeta {
     readonly width: number;
     readonly height: number;
     readonly requestId: string;
+    readonly source: VideoExportSource;
 }
 const ALL_AXES_FREE: Record<GizmoAxis, boolean> = { x: true, y: true, z: true };
 
@@ -61,8 +63,6 @@ export class UiStore {
     lastCaptureMeta: CaptureMeta | null = null;
     /** 最近视频产物;替换时回收旧 objectURL(同截图纪律) */
     lastVideoUrl: string | null = null;
-    /** 视频录制中(命令层在录制起止写入;工具条据此切换 录制/停止 按钮) */
-    videoRecording = false;
     lastVideoMeta: VideoMeta | null = null;
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
@@ -122,9 +122,6 @@ export class UiStore {
             this.lastCaptureUrl = url;
             this.lastCaptureMeta = meta;
         }
-    }
-    setVideoRecording(recording: boolean): void {
-        this.videoRecording = recording;
     }
 
     setLastVideo(url: string, meta: VideoMeta): void {

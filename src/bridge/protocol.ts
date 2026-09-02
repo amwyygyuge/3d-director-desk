@@ -1,3 +1,5 @@
+import type { CaptureProduct } from "@/capture/CaptureProduct";
+
 /** 宿主通信协议:Monet 画布节点嵌入的契约层 */
 
 /** 协议版本:主仓与本包独立发版后会漂移,ready 握手携带本版本。 */
@@ -40,12 +42,7 @@ export type HostOutboundRequest =
       }
     | {
           readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["CAPTURE_PRODUCED"];
-          readonly payload: {
-              readonly blobUrl: string;
-              readonly width: number;
-              readonly height: number;
-              readonly requestId: string;
-          };
+          readonly payload: CaptureProduct;
       }
     | {
           readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["COMMAND_FAILED"];

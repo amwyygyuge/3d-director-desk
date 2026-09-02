@@ -8,6 +8,7 @@ import type { CameraStore } from "@/store/CameraStore";
 import type { MotionAuthoringStore } from "@/store/MotionAuthoringStore";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { CaptureService } from "@/capture/CaptureService";
+import type { VideoExportSession } from "@/capture/VideoExportSession";
 import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import type { PoseGroundingService } from "@/pose/PoseGroundingService";
 import type { ActorRuntime } from "@/actor/ActorRuntime";
@@ -35,6 +36,8 @@ export interface DirectorContext {
     /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;
+    /** 视频导出生命周期的唯一权威；MediaRecorder 运行时句柄仍由 capture 持有。 */
+    readonly videoExport: VideoExportSession;
     /** 模型加载/缓存(文档导入时重取动作 clip) */
     readonly models: ModelImporter;
     /** 模型级局部动作预览，独立于 Timeline 的全局 playhead。 */

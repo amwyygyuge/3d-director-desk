@@ -30,9 +30,10 @@ import { ApplicationNotice } from "@/ui/workspace/ApplicationNotice";
 import { InspectorSheet } from "@/ui/workspace/InspectorSheet";
 import { TimelineConsole } from "@/ui/workspace/TimelineConsole";
 import { PresentationExitHint, TopPillBar } from "@/ui/workspace/TopPillBar";
-import { CapturePreview } from "@/ui/viewport/CapturePreview";
-import { HelpOverlay } from "@/ui/shell/HelpOverlay";
+import { RecordingHud } from "@/ui/workspace/RecordingHud";
+import { CaptureProductDock } from "@/ui/viewport/CaptureProductDock";
 import { CommandPalette } from "@/ui/shell/CommandPalette";
+import { HelpOverlay } from "@/ui/shell/HelpOverlay";
 import { Hotkeys } from "@/ui/shell/Hotkeys";
 import { FrameRateIndicator } from "@/ui/viewport/FrameRateIndicator";
 import { placementFor } from "@/ui/assets/importFiles";
@@ -285,7 +286,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <LensNavigation />
                             </Canvas>
                             <ShotFrameOverlay />
-                            <CapturePreview />
+                            <CaptureProductDock />
                             <LoadingChip />
                             <FrameRateIndicator />
                             <ViewportInteractionHints />
@@ -297,6 +298,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                             <InspectorSheet />
                             <TimelineConsole />
                             <PresentationExitHint />
+                            <RecordingHud />
                         </div>
                         <ApplicationNotice />
                         <Hotkeys deskRef={deskRef} />

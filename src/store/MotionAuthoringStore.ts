@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import { TimelineViewport } from "@/authoring/TimelineViewport";
+import { DEFAULT_PRESET_DURATION_SECONDS } from "@/authoring/MotionPresetCompiler";
 import type { ShotSize } from "@/camera/CameraShot";
 import type { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 
@@ -51,6 +52,8 @@ export class MotionAuthoringStore {
      * 与 subjectId 同住编排态——面板开合是壳层行为,不该把作者的编排选择清零。
      */
     landingShotSize: ShotSize | null = null;
+    /** 预设时长与目标/落幅同住编排态——面板开合不该把作者的选择清零。 */
+    presetDurationSeconds = DEFAULT_PRESET_DURATION_SECONDS;
     /** null = 未缩放,窗口跟随工程时长;一旦作者缩放/平移即固化为显式窗口 */
     timelineViewport: TimelineViewport | null = null;
 
@@ -137,6 +140,10 @@ export class MotionAuthoringStore {
 
     setLandingShotSize(shotSize: ShotSize | null): void {
         this.landingShotSize = shotSize;
+    }
+
+    setPresetDurationSeconds(seconds: number): void {
+        this.presetDurationSeconds = seconds;
     }
 
     setTimelineViewport(viewport: TimelineViewport): void {

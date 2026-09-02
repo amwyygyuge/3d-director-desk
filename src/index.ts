@@ -92,6 +92,13 @@ export { TimelineViewport } from "@/authoring/TimelineViewport";
 export type { TimelineViewportInit } from "@/authoring/TimelineViewport";
 export { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND, TIMELINE_ROW_KIND, TimelineLayout } from "@/authoring/TimelineLayout";
 export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/TimelineLayout";
+export { TIMELINE_DRAG_KIND, TimelineClipDragResolver } from "@/authoring/TimelineClipDrag";
+export type {
+    TimelineClipDragResolveOptions,
+    TimelineClipDragTransformOptions,
+    TimelineClipRange,
+    TimelineDragKind,
+} from "@/authoring/TimelineClipDrag";
 export { SNAP_THRESHOLD_PX, SnapResolver } from "@/authoring/SnapResolver";
 export type { SnapCandidates, SnapRequest } from "@/authoring/SnapResolver";
 export { KeyframeAuthoringService, isCommandIssue } from "@/authoring/KeyframeAuthoringService";
@@ -101,8 +108,11 @@ export type { WalkDraftInput } from "@/authoring/WalkDraftCompiler";
 export {
     DEFAULT_PRESET_DURATION_SECONDS,
     isOrbitDirection,
+    MOTION_DURATION_OPTIONS_SECONDS,
     MOTION_MOVE,
     MOTION_MOVE_LABEL,
+    MOTION_PROGRAM_RANGE_DECIMALS,
+    motionProgramRangeFor,
     MotionPresetCompiler,
     ORBIT_DIRECTION,
     ORBIT_MAX_DEGREES,
@@ -111,6 +121,8 @@ export type {
     MotionMove,
     MotionPresetContext,
     MotionPresetRequest,
+    MotionProgramRange,
+    MotionProgramRangeOptions,
     OrbitDirection,
 } from "@/authoring/MotionPresetCompiler";
 export { MotionAuthoringStore, VIEW_MODE } from "@/store/MotionAuthoringStore";
@@ -128,12 +140,21 @@ export type {
 export { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 export type { CameraMotionSink } from "@/camera/CameraMotionSampler";
 export type { DirectorPose } from "@/store/CameraStore";
-export { CaptureService } from "@/capture/CaptureService";
-export type { CaptureHelperLifecycle, FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { CaptureService, VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
+export type { FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
+export type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
+export { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
+export type { CaptureProduct, CaptureProductKind } from "@/capture/CaptureProduct";
+export { VIDEO_EXPORT_SOURCE, VIDEO_EXPORT_STATE, VideoExportSession } from "@/capture/VideoExportSession";
+export type { PlayheadSource, VideoExportSource, VideoExportState } from "@/capture/VideoExportSession";
+export { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
+export type { VideoExportSourcePolicy, VideoExportStage } from "@/capture/VideoExportSourcePolicy";
 export {
-    CaptureFrameCommand,
-    CaptureVideoCommand,
     CancelVideoCaptureCommand,
+    CaptureFrameCommand,
+    CaptureStopVideoCommand,
+    CaptureVideoCommand,
     registerCaptureCommands,
 } from "@/command/captureCommands";
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "@/command/documentCommands";
@@ -197,6 +218,7 @@ export {
     AddTimelineKeyCommand,
     MoveTimelineKeyCommand,
     RemoveTimelineKeyCommand,
+    RetimeTimelineTrackCommand,
     RestoreTimelineTracksCommand,
     SetTimelineDurationCommand,
     SetTimelineKeyEasingCommand,

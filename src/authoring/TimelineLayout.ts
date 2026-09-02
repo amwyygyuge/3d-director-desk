@@ -13,8 +13,12 @@ export type TimelineRowKind = (typeof TIMELINE_ROW_KIND)[keyof typeof TIMELINE_R
 export const TIMELINE_BAR_KIND = {
     PROGRAM: "program",
     MOTION: "motion",
+    TRANSFORM: "transform",
 } as const;
 export type TimelineBarKind = (typeof TIMELINE_BAR_KIND)[keyof typeof TIMELINE_BAR_KIND];
+export type TimelineMiniBar = TimelineBar & {
+    readonly kind: typeof TIMELINE_BAR_KIND.PROGRAM | typeof TIMELINE_BAR_KIND.MOTION;
+};
 
 export const TIMELINE_MARK_KIND = {
     CAMERA_KEY: "camera-key",
@@ -56,6 +60,18 @@ const PROGRAM_ROW_LABEL = "Program 输出";
 const MOTION_ROW_ID = "motion";
 const MOTION_ROW_LABEL = "运镜";
 const MOTION_LABEL_PREFIX = "运镜 ";
+const TRANSFORM_BAR_LABEL = "走位";
+const MINIMUM_TRANSFORM_KEYS_FOR_BAR = 2;
+
+const MINI_BAR_KIND: Record<TimelineBarKind, boolean> = {
+    [TIMELINE_BAR_KIND.PROGRAM]: true,
+    [TIMELINE_BAR_KIND.MOTION]: true,
+    [TIMELINE_BAR_KIND.TRANSFORM]: false,
+};
+
+function isMiniBar(bar: TimelineBar): bar is TimelineMiniBar {
+    return MINI_BAR_KIND[bar.kind];
+}
 
 /**
  * 时间轴视图模型(投影,应用层):Program 输出、独立运镜片段与走位轨三个数据源 → 统一行几何。
@@ -73,9 +89,9 @@ export class TimelineLayout {
         return [this.programRow(viewport), this.motionRow(viewport), ...this.transformRows(viewport)];
     }
 
-    /** 迷你轨只要片段几何,不需要行分组:收起态也得看得见运镜的时间位置。 */
-    bars(viewport: TimelineViewport): readonly TimelineBar[] {
-        return this.project(viewport).flatMap((row) => row.bars);
+    /** 迷你轨只画成片与运镜:走位仍以关键帧表达,避免与迷你轨已有菱形重叠。 */
+    bars(viewport: TimelineViewport): readonly TimelineMiniBar[] {
+        return this.project(viewport).flatMap((row) => row.bars).filter(isMiniBar);
     }
 
     private programRow(viewport: TimelineViewport): TimelineRow {
@@ -132,18 +148,37 @@ export class TimelineLayout {
     }
 
     private transformRows(viewport: TimelineViewport): readonly TimelineRow[] {
-        return this.timeline.document.tracks.map((track) => ({
-            kind: TIMELINE_ROW_KIND.TRANSFORM,
-            id: track.id,
-            label: track.targetId,
-            bars: [],
-            marks: track.keyframes.map((keyframe) => ({
-                id: keyframe.id,
-                kind: TIMELINE_MARK_KIND.TRANSFORM_KEY,
-                ownerId: track.id,
-                timeSeconds: keyframe.time,
-                ratio: viewport.ratioAt(keyframe.time),
-            })),
-        }));
+        return this.timeline.document.tracks.map((track) => {
+            const firstKeyframe = track.keyframes[0];
+            const lastKeyframe = track.keyframes.at(-1);
+            const hasEditableRange = track.keyframes.length >= MINIMUM_TRANSFORM_KEYS_FOR_BAR;
+            const bars = hasEditableRange && firstKeyframe && lastKeyframe
+                ? [
+                      {
+                          id: track.id,
+                          kind: TIMELINE_BAR_KIND.TRANSFORM,
+                          label: TRANSFORM_BAR_LABEL,
+                          startSeconds: firstKeyframe.time,
+                          durationSeconds: lastKeyframe.time - firstKeyframe.time,
+                          startRatio: viewport.ratioAt(firstKeyframe.time),
+                          widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
+                          linked: false,
+                      },
+                  ]
+                : [];
+            return {
+                kind: TIMELINE_ROW_KIND.TRANSFORM,
+                id: track.id,
+                label: track.targetId,
+                bars,
+                marks: track.keyframes.map((keyframe) => ({
+                    id: keyframe.id,
+                    kind: TIMELINE_MARK_KIND.TRANSFORM_KEY,
+                    ownerId: track.id,
+                    timeSeconds: keyframe.time,
+                    ratio: viewport.ratioAt(keyframe.time),
+                })),
+            };
+        });
     }
 }

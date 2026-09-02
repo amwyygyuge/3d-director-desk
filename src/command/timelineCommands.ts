@@ -30,6 +30,10 @@ const TIMELINE_COMMAND_VERSION = "1" as const;
 const TIMELINE_PERMISSION = "timeline:edit";
 const TIMELINE_READ_PERMISSION = "timeline:read";
 const EMPTY_PAYLOAD: Record<string, never> = {};
+const FIRST_KEYFRAME_INDEX = 0;
+const MINIMUM_RETIME_KEYFRAMES = 2;
+const LAST_KEYFRAME_INDEX_OFFSET = 1;
+const TIMELINE_START_SECONDS = 0;
 
 const ISSUE_CODE = {
     PAYLOAD: "timeline.invalid-payload",
@@ -90,6 +94,11 @@ interface SetTrackPayload {
     /** 缺省 = 沿用该对象既有策略(重画不重置作者调好的朝向/贴地/步幅) */
     readonly policies?: TrackPoliciesInit;
 }
+interface RetimeTrackPayload {
+    readonly trackId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
 
 /** 关键帧形状:单帧写入与整轨替换共用一份(Rule of Two),字段增减不会两处分叉。 */
 const KEYFRAME_SCHEMA: PayloadFieldSchema = {
@@ -122,6 +131,14 @@ const SetTimelineTrackContract: PayloadContract = {
         keyframes: { type: "array", items: KEYFRAME_SCHEMA },
     },
     required: ["trackId", "targetId", "keyframes"],
+};
+const RetimeTimelineTrackContract: PayloadContract = {
+    properties: {
+        trackId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+    },
+    required: ["trackId", "startTimeSeconds", "durationSeconds"],
 };
 
 const POLICIES_SCHEMA: PayloadFieldSchema = {
@@ -684,6 +701,96 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
 }
 
 /**
+ * 整条走位轨保持关键帧相对节奏的仿射重定时。时间轴条只改时域，不改姿态、切线或作者策略。
+ */
+export class RetimeTimelineTrackCommand extends DirectorCommand<RetimeTrackPayload> {
+    static readonly TYPE = "timeline.retime-track";
+    readonly type = RetimeTimelineTrackCommand.TYPE;
+
+    constructor(readonly payload: RetimeTrackPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const payload = this.payload;
+        const hasValidIdentity = isRecord(payload) && typeof payload.trackId === "string" && payload.trackId.length > 0;
+        if (!hasValidIdentity) return [issue(ISSUE_CODE.PAYLOAD, "trackId", "轨道 id 格式无效")];
+        const hasValidRange =
+            Number.isFinite(payload.startTimeSeconds) &&
+            Number.isFinite(payload.durationSeconds) &&
+            payload.startTimeSeconds >= TIMELINE_START_SECONDS &&
+            payload.durationSeconds > TIMELINE_START_SECONDS;
+        if (!hasValidRange) return [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围必须是正的有限秒数")];
+        const track = ctx.timeline.document.track(payload.trackId);
+        if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
+        const hasEditableRange = track.keyframes.length >= MINIMUM_RETIME_KEYFRAMES;
+        const firstKeyframe = track.keyframes[FIRST_KEYFRAME_INDEX];
+        const lastKeyframe = track.keyframes.at(-1);
+        const hasTemporalSpan =
+            hasEditableRange && firstKeyframe !== undefined && lastKeyframe !== undefined && lastKeyframe.time > firstKeyframe.time;
+        if (!hasTemporalSpan) return [issue(ISSUE_CODE.KEY, "trackId", "走位轨至少需要两枚不同时间的关键帧才能重定时")];
+        const endTimeSeconds = payload.startTimeSeconds + payload.durationSeconds;
+        return endTimeSeconds <= ctx.timeline.document.duration
+            ? []
+            : [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围不能超出时间轴时长")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const track = ctx.timeline.document.track(this.payload.trackId);
+        if (!track) return;
+        ctx.timeline.replaceTrack(retimedTrack(track, this.payload));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const track = ctx.timeline.document.track(this.payload.trackId);
+        return track
+            ? [
+                  {
+                      type: SetTimelineTrackCommand.TYPE,
+                      payload: {
+                          trackId: track.id,
+                          targetId: track.targetId,
+                          keyframes: track.keyframes.map((keyframe) => keyframe.toJSON()),
+                          policies: track.policies.toJSON(),
+                      },
+                  },
+              ]
+            : [];
+}
+}
+
+/** 仿射映射只换时间坐标，保留每枚关键帧承载的姿态与插值意图。 */
+function retimedTrack(track: TimelineTrack, payload: RetimeTrackPayload): TimelineTrack {
+    const firstKeyframe = track.keyframes[FIRST_KEYFRAME_INDEX];
+    const lastKeyframe = track.keyframes.at(-1);
+    if (!firstKeyframe || !lastKeyframe) return track;
+    const sourceDuration = lastKeyframe.time - firstKeyframe.time;
+    if (sourceDuration <= TIMELINE_START_SECONDS) return track;
+    const lastKeyframeIndex = track.keyframes.length - LAST_KEYFRAME_INDEX_OFFSET;
+    const timeScale = payload.durationSeconds / sourceDuration;
+    return new TimelineTrack({
+        id: track.id,
+        targetId: track.targetId,
+        kind: track.kind,
+        keyframes: track.keyframes.map((keyframe, index) => ({
+            ...keyframe.toJSON(),
+            time:
+                index === FIRST_KEYFRAME_INDEX
+                    ? payload.startTimeSeconds
+                    : index === lastKeyframeIndex
+                      ? payload.startTimeSeconds + payload.durationSeconds
+                      : payload.startTimeSeconds + (keyframe.time - firstKeyframe.time) * timeScale,
+        })),
+        policies: track.policies,
+    });
+}
+
+/**
  * 整帧替换(拖 key 小球 / 拖切线手柄的落点,自逆)。
  *
  * 拖拽改的可能是位置、可能是切线、也可能是恢复自动切线——与其为每个字段开一条命令,
@@ -883,6 +990,11 @@ export function registerTimelineCommands(dispatcher: CommandDispatcher): void {
         SetTimelineTrackCommand.TYPE,
         (payload: SetTrackPayload) => new SetTimelineTrackCommand(payload),
         capability(SetTimelineTrackCommand.TYPE, "command", [TIMELINE_PERMISSION], SetTimelineTrackContract),
+    );
+    dispatcher.register(
+        RetimeTimelineTrackCommand.TYPE,
+        (payload: RetimeTrackPayload) => new RetimeTimelineTrackCommand(payload),
+        capability(RetimeTimelineTrackCommand.TYPE, "command", [TIMELINE_PERMISSION], RetimeTimelineTrackContract),
     );
     dispatcher.register(
         SetTimelineKeyCommand.TYPE,

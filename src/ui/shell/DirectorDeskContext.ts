@@ -14,6 +14,7 @@ import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
 import { InertHostAdapter, PostMessageAdapter } from "@/host/HostAdapter";
 import type { HostAdapter } from "@/host/HostAdapter";
 import { CaptureService } from "@/capture/CaptureService";
+import { VideoExportSession } from "@/capture/VideoExportSession";
 import { DeskShellPresentation } from "@/ui/shell/DeskShellPresentation";
 import type { DeskShellPresentationInit } from "@/ui/shell/DeskShellPresentation";
 import { FrameRateMonitor } from "@/core/FrameRateMonitor";
@@ -105,6 +106,8 @@ export interface DirectorDeskStores {
     /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
+    /** 视频导出可观察生命周期；录制服务的 MediaRecorder 运行时句柄不进入 Store。 */
+    videoExport: VideoExportSession;
     /** 命令层唯一入口:UI/宿主/AI 的一切写操作经此分发 */
     dispatcher: CommandDispatcher;
     /** 已导入模型资产表(MobX 纯数据) */
@@ -201,6 +204,8 @@ export function createDirectorDeskStores(options?: {
     const catalog = new AssetCatalog();
     const lifecycle = new DeskLifecycleGuard();
     const documentImports = new DocumentImportService();
+    const playheadDisplay = new PlayheadDisplay(clock);
+    const videoExport = new VideoExportSession(playheadDisplay);
     // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
     void catalog.loadProvider(new BuiltinAssetProvider(), "builtin", lifecycle.signal);
     for (const provider of options?.assetProviders ?? []) {
@@ -215,6 +220,7 @@ export function createDirectorDeskStores(options?: {
         camera,
         clock,
         capture: new CaptureService(),
+        videoExport,
         frameRate: new FrameRateMonitor(),
         dispatcher,
         assets: new AssetLibrary(),
@@ -227,7 +233,7 @@ export function createDirectorDeskStores(options?: {
         timelineLayout: new TimelineLayout(motion, timeline),
         keyframeAuthoring: new KeyframeAuthoringService(),
         snapResolver: new SnapResolver(),
-        playheadDisplay: new PlayheadDisplay(clock),
+        playheadDisplay,
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,
         presentation: new DeskShellPresentation(options?.presentation),
