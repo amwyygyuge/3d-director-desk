@@ -13,7 +13,7 @@ import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
-import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "@/core/LightParams";
+import { isLightColor, isLightIntensity, isLightType, LIGHT_TYPES, normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "@/core/SceneObject";
@@ -29,8 +29,11 @@ import { registerCameraMotionCommands } from "@/command/cameraMotionCommands";
 import { registerAssetCatalogCommands } from "@/command/assetCatalogCommands";
 import { registerDocumentCommands } from "@/command/documentCommands";
 import { registerPresentationCommands } from "@/command/presentationCommands";
+import { registerPlacementCommands } from "@/command/placementCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 
 /** FOV 合法域:命令校验与 UI 滑杆共用(Rule of Two) */
 export const FOV_MIN = 1;
@@ -39,12 +42,18 @@ export const FOV_MAX = 179;
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
 const FOCUS_TARGET_IN_USE_CODE = "focus-target-in-use";
 const SCENE_EDIT_PERMISSION = "scene:edit";
+const SCENE_READ_PERMISSION = "scene:read";
 const CAMERA_EDIT_PERMISSION = "camera:edit";
 const SCENE_APPLIES_WHEN = "director-desk.scene-v1";
 const CAMERA_APPLIES_WHEN = "director-desk.camera-v1";
 
-function commandCapability(type: string, permission: string, appliesWhen: string): CommandCapability {
-    return { type, version: "1", kind: "command", permissions: [permission], appliesWhen };
+function commandCapability(
+    type: string,
+    permission: string,
+    appliesWhen: string,
+    payload: PayloadContract,
+): CommandCapability {
+    return { type, version: "1", kind: "command", permissions: [permission], appliesWhen, payload };
 }
 
 interface PlaceObjectPayload {
@@ -60,6 +69,27 @@ interface PlaceObjectPayload {
     /** kind="light" 的可序列化值对象；其他 kind 必须无此字段。 */
     light?: LightParams | null;
 }
+
+const PLACE_OBJECT_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        kind: { type: "string", enum: SCENE_OBJECT_KINDS },
+        sourceUrl: nullable({ type: "string" }),
+        transform: TRANSFORM_SCHEMA,
+        format: nullable({ type: "string", enum: Object.values(MODEL_FORMAT) }),
+        name: { type: "string" },
+        light: nullable({
+            type: "object",
+            properties: {
+                type: { type: "string", enum: LIGHT_TYPES },
+                color: { type: "string" },
+                intensity: { type: "number" },
+            },
+            required: ["type", "color", "intensity"],
+        }),
+    },
+    required: ["id", "kind"],
+};
 /** 校验与执行共用的格式解析(Rule of Two) */
 function resolveModelFormat(payload: PlaceObjectPayload): ModelFormat | null {
     return payload.format ?? (payload.sourceUrl ? formatFromUrl(payload.sourceUrl) : null);
@@ -129,6 +159,11 @@ interface MoveObjectPayload {
     transform: Transform;
 }
 
+const MOVE_OBJECT_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" }, transform: TRANSFORM_SCHEMA },
+    required: ["id", "transform"],
+};
+
 export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
     static readonly TYPE = "object.move";
     readonly type = MoveObjectCommand.TYPE;
@@ -163,6 +198,11 @@ export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
 interface RemoveObjectPayload {
     id: string;
 }
+
+const REMOVE_OBJECT_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" } },
+    required: ["id"],
+};
 
 export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     static readonly TYPE = "object.remove";
@@ -231,6 +271,22 @@ interface SetCameraShotPayload {
     shot: { position: Vec3; target: Vec3; fov?: number };
 }
 
+const SET_CAMERA_SHOT_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        shot: {
+            type: "object",
+            properties: {
+                position: VEC3_SCHEMA,
+                target: VEC3_SCHEMA,
+                fov: { type: "number" },
+            },
+            required: ["position", "target"],
+        },
+    },
+    required: ["id", "shot"],
+};
+
 export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> {
     static readonly TYPE = "camera.set-shot";
     readonly type = SetCameraShotCommand.TYPE;
@@ -275,6 +331,8 @@ interface SceneEntityDescription {
     readonly transform: Transform;
     /** none=非模型无装载;loading/loaded/failed 由 UiStore 装载结果表与运行时绑定共同判定 */
     readonly loadState: "none" | "loading" | "loaded" | "failed";
+    /** 挂载的 AnimationLibrary action id；未挂载为 null。 */
+    readonly mountedActionId: string | null;
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
 }
 
@@ -286,8 +344,9 @@ const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     type: "scene.describe",
     version: "1",
     kind: "query",
-    permissions: ["scene:read"],
-    appliesWhen: "director-desk.scene-v1",
+    permissions: [SCENE_READ_PERMISSION],
+    appliesWhen: SCENE_APPLIES_WHEN,
+    payload: EMPTY_PAYLOAD_CONTRACT,
 };
 
 function loadStateOf(ctx: DirectorContext, entity: SceneObject): SceneEntityDescription["loadState"] {
@@ -317,6 +376,7 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
         name: entity.name,
         transform: toJS(entity.transform),
         loadState: loadStateOf(ctx, entity),
+        mountedActionId: entity.actionId,
         bounds,
     };
 }
@@ -357,22 +417,27 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         PlaceObjectCommand.TYPE,
         (payload) => new PlaceObjectCommand(payload),
-        commandCapability(PlaceObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN),
+        commandCapability(PlaceObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, PLACE_OBJECT_CONTRACT),
     );
     dispatcher.register(
         MoveObjectCommand.TYPE,
         (payload) => new MoveObjectCommand(payload),
-        commandCapability(MoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN),
+        commandCapability(MoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, MOVE_OBJECT_CONTRACT),
     );
     dispatcher.register(
         RemoveObjectCommand.TYPE,
         (payload) => new RemoveObjectCommand(payload),
-        commandCapability(RemoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN),
+        commandCapability(RemoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, REMOVE_OBJECT_CONTRACT),
     );
     dispatcher.register(
         SetCameraShotCommand.TYPE,
         (payload) => new SetCameraShotCommand(payload),
-        commandCapability(SetCameraShotCommand.TYPE, CAMERA_EDIT_PERMISSION, CAMERA_APPLIES_WHEN),
+        commandCapability(
+            SetCameraShotCommand.TYPE,
+            CAMERA_EDIT_PERMISSION,
+            CAMERA_APPLIES_WHEN,
+            SET_CAMERA_SHOT_CONTRACT,
+        ),
     );
     dispatcher.registerQuery(
         SceneDescribeQuery.TYPE,
@@ -391,4 +456,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerDocumentCommands(dispatcher);
     registerPresentationCommands(dispatcher);
     registerAssetCatalogCommands(dispatcher);
+    registerPlacementCommands(dispatcher);
 }

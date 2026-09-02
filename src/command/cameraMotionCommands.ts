@@ -4,7 +4,7 @@ import { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyJSON } from "@/camera/CameraKey";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
-import { isCameraMotionEasing } from "@/camera/CameraMotionEasing";
+import { CAMERA_MOTION_EASING, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import { CameraProgramClip } from "@/camera/CameraProgramTrack";
 import type { CameraProgramClipJSON } from "@/camera/CameraProgramTrack";
@@ -13,6 +13,7 @@ import {
     isOrbitDirection,
     MotionPresetCompiler,
     MOTION_MOVE,
+    ORBIT_DIRECTION,
     ORBIT_MAX_DEGREES,
 } from "@/authoring/MotionPresetCompiler";
 import type { MotionMove, MotionPresetRequest, OrbitDirection } from "@/authoring/MotionPresetCompiler";
@@ -30,6 +31,8 @@ import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/comm
 import { finiteVec3 } from "@/core/SceneObject";
 import type { Vec3 } from "@/core/SceneObject";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
+import { EMPTY_PAYLOAD_CONTRACT, nullable, VEC3_SCHEMA } from "@/command/PayloadContract";
+import type { PayloadContract, PayloadFieldSchema } from "@/command/PayloadContract";
 
 const MOTION_COMMAND_VERSION = "1" as const;
 const MOTION_PERMISSION = "motion:edit";
@@ -37,6 +40,12 @@ const MOTION_READ_PERMISSION = "motion:read";
 const MOTION_APPLIES_WHEN = "director-desk.camera-motion-v3";
 const EMPTY_PAYLOAD: Record<string, never> = {};
 const MINIMUM_KEYS_PER_CLIP = 2;
+const CAMERA_FOCUS_MODE = "single" as const;
+const MOTION_KEY_HANDLE_KIND = {
+    IN: "in",
+    OUT: "out",
+} as const;
+type MotionKeyHandleKind = (typeof MOTION_KEY_HANDLE_KIND)[keyof typeof MOTION_KEY_HANDLE_KIND];
 
 const ISSUE_CODE = {
     PAYLOAD: "motion-invalid-payload",
@@ -105,7 +114,7 @@ interface MotionKeyPayload {
 }
 
 interface SetMotionKeyHandlePayload extends MotionKeyPayload {
-    readonly kind: "in" | "out";
+    readonly kind: MotionKeyHandleKind;
     readonly value: Vec3;
 }
 
@@ -138,6 +147,196 @@ interface PreviewClipPayload {
 interface SetViewModePayload {
     readonly mode: ViewMode;
 }
+
+const CAMERA_KEY_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string" },
+        progress: { type: "number" },
+        position: VEC3_SCHEMA,
+        target: VEC3_SCHEMA,
+        fov: nullable({ type: "number" }),
+        handleMode: { type: "string", enum: Object.values(MOTION_HANDLE_MODE) },
+        inHandle: VEC3_SCHEMA,
+        outHandle: VEC3_SCHEMA,
+    },
+    required: ["id", "progress", "position", "target", "fov", "handleMode", "inHandle", "outHandle"],
+};
+
+const FOCUS_TARGET_SCHEMA: PayloadFieldSchema = {
+    anyOf: [
+        {
+            type: "object",
+            properties: {
+                kind: { type: "string", enum: [FOCUS_TARGET_KIND.WORLD_POINT] },
+                position: VEC3_SCHEMA,
+            },
+            required: ["kind", "position"],
+        },
+        {
+            type: "object",
+            properties: {
+                kind: { type: "string", enum: [FOCUS_TARGET_KIND.SCENE_OBJECT] },
+                objectId: { type: "string" },
+                worldOffset: VEC3_SCHEMA,
+            },
+            required: ["kind", "objectId", "worldOffset"],
+        },
+    ],
+};
+
+const CAMERA_FOCUS_TRACK_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        mode: { type: "string", enum: [CAMERA_FOCUS_MODE] },
+        target: FOCUS_TARGET_SCHEMA,
+    },
+    required: ["mode", "target"],
+};
+
+const CAMERA_MOTION_CLIP_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string" },
+        cameraId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+        keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
+        focus: nullable(CAMERA_FOCUS_TRACK_SCHEMA),
+        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+    },
+    required: ["id", "cameraId", "startTimeSeconds", "durationSeconds", "keys", "focus", "easing"],
+};
+
+const CAMERA_PROGRAM_CLIP_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string" },
+        cameraId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+    },
+    required: ["id", "cameraId", "startTimeSeconds", "durationSeconds"],
+};
+
+const CREATE_MOTION_CLIP_CONTRACT: PayloadContract = {
+    properties: { clip: CAMERA_MOTION_CLIP_SCHEMA },
+    required: ["clip"],
+};
+
+const CREATE_MOTION_TAKE_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        cameraId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+        keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
+        focus: nullable(FOCUS_TARGET_SCHEMA),
+        program: { type: "string", enum: Object.values(PROGRAM_FOLLOW) },
+        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+    },
+    required: ["cameraId", "startTimeSeconds", "durationSeconds", "keys"],
+};
+
+const SET_MOTION_CLIP_RANGE_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+    },
+    required: ["id", "startTimeSeconds", "durationSeconds"],
+};
+
+const SET_MOTION_KEY_CONTRACT: PayloadContract = {
+    properties: { clipId: { type: "string" }, key: CAMERA_KEY_SCHEMA },
+    required: ["clipId", "key"],
+};
+
+const MOVE_MOTION_KEY_CONTRACT: PayloadContract = {
+    properties: { clipId: { type: "string" }, keyId: { type: "string" }, progress: { type: "number" } },
+    required: ["clipId", "keyId", "progress"],
+};
+
+const REMOVE_MOTION_KEY_CONTRACT: PayloadContract = {
+    properties: { clipId: { type: "string" }, keyId: { type: "string" } },
+    required: ["clipId", "keyId"],
+};
+
+const SET_MOTION_KEY_HANDLE_CONTRACT: PayloadContract = {
+    properties: {
+        clipId: { type: "string" },
+        keyId: { type: "string" },
+        kind: { type: "string", enum: Object.values(MOTION_KEY_HANDLE_KIND) },
+        value: VEC3_SCHEMA,
+    },
+    required: ["clipId", "keyId", "kind", "value"],
+};
+
+const RESET_MOTION_KEY_HANDLES_CONTRACT: PayloadContract = REMOVE_MOTION_KEY_CONTRACT;
+
+const SET_MOTION_CLIP_EASING_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" }, easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) } },
+    required: ["id", "easing"],
+};
+
+const SET_MOTION_CLIP_FOCUS_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" }, target: nullable(FOCUS_TARGET_SCHEMA) },
+    required: ["id", "target"],
+};
+
+const REMOVE_MOTION_CLIP_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" } },
+    required: ["id"],
+};
+
+const AUTHOR_MOTION_CONTRACT: PayloadContract = {
+    properties: {
+        cameraId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+        move: { type: "string", enum: Object.values(MOTION_MOVE) },
+        subjectId: { type: "string" },
+        shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
+        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+        degrees: { type: "number" },
+        direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
+    },
+    required: ["cameraId", "startTimeSeconds", "durationSeconds", "move"],
+};
+
+const QUICK_AUTHOR_MOTION_CONTRACT: PayloadContract = {
+    properties: {
+        subjectId: { type: "string" },
+        shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
+        move: { type: "string", enum: Object.values(MOTION_MOVE) },
+        durationSeconds: { type: "number" },
+        degrees: { type: "number" },
+        direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
+        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+    },
+    required: ["subjectId", "shotSize", "move", "durationSeconds"],
+};
+
+const SET_PROGRAM_CLIP_CONTRACT: PayloadContract = {
+    properties: { clip: CAMERA_PROGRAM_CLIP_SCHEMA },
+    required: ["clip"],
+};
+
+const REMOVE_PROGRAM_CLIP_CONTRACT: PayloadContract = REMOVE_MOTION_CLIP_CONTRACT;
+
+const ENTER_MOTION_PREVIEW_CONTRACT: PayloadContract = {
+    properties: { clipId: { type: "string" } },
+    required: ["clipId"],
+};
+
+const EXIT_MOTION_PREVIEW_CONTRACT: PayloadContract = EMPTY_PAYLOAD_CONTRACT;
+
+const SET_VIEW_MODE_CONTRACT: PayloadContract = {
+    properties: { mode: { type: "string", enum: Object.values(VIEW_MODE) } },
+    required: ["mode"],
+};
+
+const CAMERA_MOTION_GET_CONTRACT: PayloadContract = EMPTY_PAYLOAD_CONTRACT;
 
 function issue(code: string, path: string, message: string, options?: CommandIssue["options"]): CommandIssue {
     return { code, path, message, ...(options ? { options } : {}) };
@@ -335,7 +534,7 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
                 startTimeSeconds: this.payload.startTimeSeconds,
                 durationSeconds: this.payload.durationSeconds,
                 keys: this.payload.keys,
-                focus: this.payload.focus ? { mode: "single", target: this.payload.focus } : null,
+                focus: this.payload.focus ? { mode: CAMERA_FOCUS_MODE, target: this.payload.focus } : null,
                 ...(this.payload.easing ? { easing: this.payload.easing } : {}),
             });
         } catch {
@@ -618,7 +817,9 @@ export class SetMotionKeyHandleCommand extends DirectorCommand<SetMotionKeyHandl
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
         if (isIssue(located)) return [located];
-        const isValid = (this.payload.kind === "in" || this.payload.kind === "out") && finiteVec3(this.payload.value);
+        const isValid =
+            (this.payload.kind === MOTION_KEY_HANDLE_KIND.IN || this.payload.kind === MOTION_KEY_HANDLE_KIND.OUT) &&
+            finiteVec3(this.payload.value);
         return isValid ? [] : [issue(ISSUE_CODE.PAYLOAD, "value", "手柄必须是有限向量,kind 取 in 或 out")];
     }
 
@@ -1153,8 +1354,13 @@ export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>
     }
 }
 
-function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: MOTION_COMMAND_VERSION, kind, permissions, appliesWhen: MOTION_APPLIES_WHEN };
+function capability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return { type, version: MOTION_COMMAND_VERSION, kind, permissions, appliesWhen: MOTION_APPLIES_WHEN, payload };
 }
 
 /** Motion and Program commands share one discovery namespace while retaining independent write permissions. */
@@ -1179,16 +1385,37 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         ExitMotionPreviewCommand,
         SetViewModeCommand,
     ] as const;
+    type CameraMotionCommandType = (typeof commands)[number]["TYPE"];
+    const contracts: Record<CameraMotionCommandType, PayloadContract> = {
+        [CreateMotionClipCommand.TYPE]: CREATE_MOTION_CLIP_CONTRACT,
+        [CreateMotionTakeCommand.TYPE]: CREATE_MOTION_TAKE_CONTRACT,
+        [QuickAuthorMotionCommand.TYPE]: QUICK_AUTHOR_MOTION_CONTRACT,
+        [SetMotionClipRangeCommand.TYPE]: SET_MOTION_CLIP_RANGE_CONTRACT,
+        [SetMotionKeyCommand.TYPE]: SET_MOTION_KEY_CONTRACT,
+        [MoveMotionKeyCommand.TYPE]: MOVE_MOTION_KEY_CONTRACT,
+        [RemoveMotionKeyCommand.TYPE]: REMOVE_MOTION_KEY_CONTRACT,
+        [SetMotionKeyHandleCommand.TYPE]: SET_MOTION_KEY_HANDLE_CONTRACT,
+        [ResetMotionKeyHandlesCommand.TYPE]: RESET_MOTION_KEY_HANDLES_CONTRACT,
+        [SetMotionClipEasingCommand.TYPE]: SET_MOTION_CLIP_EASING_CONTRACT,
+        [SetMotionClipFocusCommand.TYPE]: SET_MOTION_CLIP_FOCUS_CONTRACT,
+        [RemoveMotionClipCommand.TYPE]: REMOVE_MOTION_CLIP_CONTRACT,
+        [AuthorMotionCommand.TYPE]: AUTHOR_MOTION_CONTRACT,
+        [SetProgramClipCommand.TYPE]: SET_PROGRAM_CLIP_CONTRACT,
+        [RemoveProgramClipCommand.TYPE]: REMOVE_PROGRAM_CLIP_CONTRACT,
+        [EnterMotionPreviewCommand.TYPE]: ENTER_MOTION_PREVIEW_CONTRACT,
+        [ExitMotionPreviewCommand.TYPE]: EXIT_MOTION_PREVIEW_CONTRACT,
+        [SetViewModeCommand.TYPE]: SET_VIEW_MODE_CONTRACT,
+    };
     for (const Command of commands) {
         dispatcher.register(
             Command.TYPE,
             (payload) => new Command(payload as never),
-            capability(Command.TYPE, "command", [MOTION_PERMISSION]),
+            capability(Command.TYPE, "command", [MOTION_PERMISSION], contracts[Command.TYPE]),
         );
     }
     dispatcher.registerQuery(
         CameraMotionGetQuery.TYPE,
         (payload: Record<string, never>) => new CameraMotionGetQuery(payload),
-        capability(CameraMotionGetQuery.TYPE, "query", [MOTION_READ_PERMISSION]),
+        capability(CameraMotionGetQuery.TYPE, "query", [MOTION_READ_PERMISSION], CAMERA_MOTION_GET_CONTRACT),
     );
 }

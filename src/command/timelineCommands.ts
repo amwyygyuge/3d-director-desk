@@ -7,6 +7,7 @@ import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatch
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import { EMPTY_PAYLOAD_CONTRACT, TRANSFORM_SCHEMA, type PayloadContract } from "@/command/PayloadContract";
 
 const TIMELINE_COMMAND_VERSION = "1" as const;
 const TIMELINE_PERMISSION = "timeline:edit";
@@ -53,6 +54,60 @@ interface SetDurationPayload {
 interface RestoreTracksPayload {
     readonly tracks: readonly TimelineTrackInit[];
 }
+
+const AddTimelineKeyContract: PayloadContract = {
+    properties: {
+        trackId: { type: "string" },
+        targetId: { type: "string" },
+        keyframe: {
+            type: "object",
+            properties: {
+                id: { type: "string" },
+                time: { type: "number" },
+                value: TRANSFORM_SCHEMA,
+                easing: { type: "string", enum: Object.values(TIMELINE_EASING) },
+            },
+            required: ["id", "time", "value", "easing"],
+        },
+    },
+    required: ["trackId", "targetId", "keyframe"],
+};
+
+const MoveTimelineKeyContract: PayloadContract = {
+    properties: {
+        trackId: { type: "string" },
+        keyframeId: { type: "string" },
+        time: { type: "number" },
+    },
+    required: ["trackId", "keyframeId", "time"],
+};
+
+const RemoveTimelineKeyContract: PayloadContract = {
+    properties: {
+        trackId: { type: "string" },
+        keyframeId: { type: "string" },
+    },
+    required: ["trackId", "keyframeId"],
+};
+
+const SetTimelineKeyEasingContract: PayloadContract = {
+    properties: {
+        trackId: { type: "string" },
+        keyframeId: { type: "string" },
+        easing: { type: "string", enum: Object.values(TIMELINE_EASING) },
+    },
+    required: ["trackId", "keyframeId", "easing"],
+};
+
+const SetTimelineDurationContract: PayloadContract = {
+    properties: { duration: { type: "number" } },
+    required: ["duration"],
+};
+
+const RestoreTimelineTracksContract: PayloadContract = {
+    properties: { tracks: { type: "array", items: { type: "object" } } },
+    required: ["tracks"],
+};
 
 function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
@@ -482,8 +537,20 @@ export function transformKeyCommandFor(ctx: DirectorContext, objectId: string): 
     };
 }
 
-function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: TIMELINE_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.timeline-v1" };
+function capability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return {
+        type,
+        version: TIMELINE_COMMAND_VERSION,
+        kind,
+        permissions,
+        appliesWhen: "director-desk.timeline-v1",
+        payload,
+    };
 }
 
 /** timeline.* 的命令、只读查询与 AI 发现元数据在同一个 Dispatcher 注册表中声明。 */
@@ -491,36 +558,36 @@ export function registerTimelineCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         AddTimelineKeyCommand.TYPE,
         (payload: AddKeyPayload) => new AddTimelineKeyCommand(payload),
-        capability(AddTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+        capability(AddTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION], AddTimelineKeyContract),
     );
     dispatcher.register(
         MoveTimelineKeyCommand.TYPE,
         (payload: MoveKeyPayload) => new MoveTimelineKeyCommand(payload),
-        capability(MoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+        capability(MoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION], MoveTimelineKeyContract),
     );
     dispatcher.register(
         RemoveTimelineKeyCommand.TYPE,
         (payload: RemoveKeyPayload) => new RemoveTimelineKeyCommand(payload),
-        capability(RemoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+        capability(RemoveTimelineKeyCommand.TYPE, "command", [TIMELINE_PERMISSION], RemoveTimelineKeyContract),
     );
     dispatcher.register(
         SetTimelineKeyEasingCommand.TYPE,
         (payload: SetEasingPayload) => new SetTimelineKeyEasingCommand(payload),
-        capability(SetTimelineKeyEasingCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+        capability(SetTimelineKeyEasingCommand.TYPE, "command", [TIMELINE_PERMISSION], SetTimelineKeyEasingContract),
     );
     dispatcher.register(
         SetTimelineDurationCommand.TYPE,
         (payload: SetDurationPayload) => new SetTimelineDurationCommand(payload),
-        capability(SetTimelineDurationCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+        capability(SetTimelineDurationCommand.TYPE, "command", [TIMELINE_PERMISSION], SetTimelineDurationContract),
     );
     dispatcher.register(
         RestoreTimelineTracksCommand.TYPE,
         (payload: RestoreTracksPayload) => new RestoreTimelineTracksCommand(payload),
-        capability(RestoreTimelineTracksCommand.TYPE, "command", [TIMELINE_PERMISSION]),
+        capability(RestoreTimelineTracksCommand.TYPE, "command", [TIMELINE_PERMISSION], RestoreTimelineTracksContract),
     );
     dispatcher.registerQuery(
         TimelineDocumentQuery.TYPE,
         (payload: Record<string, never>) => new TimelineDocumentQuery(payload),
-        capability(TimelineDocumentQuery.TYPE, "query", [TIMELINE_READ_PERMISSION]),
+        capability(TimelineDocumentQuery.TYPE, "query", [TIMELINE_READ_PERMISSION], EMPTY_PAYLOAD_CONTRACT),
     );
 }

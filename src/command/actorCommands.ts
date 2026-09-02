@@ -1,4 +1,4 @@
-import { ActorAppearance, isActorSurface, isColorHex } from "@/actor/ActorAppearance";
+import { ACTOR_SURFACE, ActorAppearance, isActorSurface, isColorHex } from "@/actor/ActorAppearance";
 import type { ActorSurface } from "@/actor/ActorAppearance";
 import { ActorBuild, ACTOR_GIRTH_SCALE, ACTOR_HEIGHT_METERS, ACTOR_SHOULDER_SCALE } from "@/actor/ActorBuild";
 import type { ActorBuildInit, ActorBuildRange } from "@/actor/ActorBuild";
@@ -7,6 +7,8 @@ import { BUILD_PRESETS, compileBuildPreset } from "@/actor/BuildPresetCompiler";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 import { SceneObject } from "@/core/SceneObject";
 
 const ACTOR_VERSION = "1" as const;
@@ -29,6 +31,41 @@ interface SetBuildPayload extends ObjectPayload {
 interface ApplyBuildPresetPayload extends ObjectPayload {
     readonly presetId: string;
 }
+
+const SET_ACTOR_APPEARANCE_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        baseColorHex: { type: "string" },
+        surface: { type: "string", enum: Object.values(ACTOR_SURFACE) },
+    },
+    required: ["objectId"],
+};
+const SET_ACTOR_BUILD_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        build: {
+            type: "object",
+            properties: {
+                heightMeters: { type: "number" },
+                girthScale: { type: "number" },
+                shoulderScale: { type: "number" },
+            },
+        },
+    },
+    required: ["objectId", "build"],
+};
+const APPLY_BUILD_PRESET_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        presetId: { type: "string" },
+    },
+    required: ["objectId", "presetId"],
+};
+const GET_ACTOR_CONTRACT: PayloadContract = {
+    properties: { objectId: { type: "string" } },
+    required: ["objectId"],
+};
+const ACTOR_PRESETS_LIST_CONTRACT: PayloadContract = EMPTY_PAYLOAD_CONTRACT;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -276,34 +313,39 @@ export class ActorPresetsQuery implements DirectorQuery<Record<string, never>> {
     }
 }
 
-function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: ACTOR_VERSION, kind, permissions, appliesWhen: "director-desk.actor-v1" };
+function capability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return { type, version: ACTOR_VERSION, kind, permissions, appliesWhen: "director-desk.actor-v1", payload };
 }
 
 export function registerActorCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         SetActorAppearanceCommand.TYPE,
         (payload: SetAppearancePayload) => new SetActorAppearanceCommand(payload),
-        capability(SetActorAppearanceCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(SetActorAppearanceCommand.TYPE, "command", [EDIT_PERMISSION], SET_ACTOR_APPEARANCE_CONTRACT),
     );
     dispatcher.register(
         SetActorBuildCommand.TYPE,
         (payload: SetBuildPayload) => new SetActorBuildCommand(payload),
-        capability(SetActorBuildCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(SetActorBuildCommand.TYPE, "command", [EDIT_PERMISSION], SET_ACTOR_BUILD_CONTRACT),
     );
     dispatcher.register(
         ApplyBuildPresetCommand.TYPE,
         (payload: ApplyBuildPresetPayload) => new ApplyBuildPresetCommand(payload),
-        capability(ApplyBuildPresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(ApplyBuildPresetCommand.TYPE, "command", [EDIT_PERMISSION], APPLY_BUILD_PRESET_CONTRACT),
     );
     dispatcher.registerQuery(
         GetActorQuery.TYPE,
         (payload: ObjectPayload) => new GetActorQuery(payload),
-        capability(GetActorQuery.TYPE, "query", [READ_PERMISSION]),
+        capability(GetActorQuery.TYPE, "query", [READ_PERMISSION], GET_ACTOR_CONTRACT),
     );
     dispatcher.registerQuery(
         ActorPresetsQuery.TYPE,
         (payload: Record<string, never>) => new ActorPresetsQuery(payload),
-        capability(ActorPresetsQuery.TYPE, "query", [READ_PERMISSION]),
+        capability(ActorPresetsQuery.TYPE, "query", [READ_PERMISSION], ACTOR_PRESETS_LIST_CONTRACT),
     );
 }

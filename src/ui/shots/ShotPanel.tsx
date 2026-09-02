@@ -7,20 +7,16 @@ import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
-import { Box3, Vector3 } from "three";
 
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
-import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 
-const shotSizePresets = new ShotSizePresets();
 const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
-const BOX_SIZE_TO_RADIUS_DIVISOR = 2;
 
 const SaveCurrentViewControl = observer(function SaveCurrentViewControl() {
     const stores = useDirectorDeskStores();
@@ -72,29 +68,20 @@ const SaveCurrentViewControl = observer(function SaveCurrentViewControl() {
 });
 const ShotSizeControl = observer(function ShotSizeControl() {
     const stores = useDirectorDeskStores();
-    const { camera, dispatcher, scene, selection } = stores;
+    const { camera, dispatcher, selection } = stores;
     const [shotSize, setShotSize] = useState<ShotSize>(SHOT_SIZE.MEDIUM);
-    const primaryRuntime = selection.primaryId ? scene.manager.getRuntime(selection.primaryId) : undefined;
+    const hasPrimaryId = selection.primaryId !== null;
 
     const applyShotSize = (size: ShotSize) => {
         setShotSize(size);
 
         const primaryId = selection.primaryId;
-        const runtime = primaryId ? scene.manager.getRuntime(primaryId) : undefined;
-        if (!runtime) return;
-        const box = new Box3().setFromObject(runtime);
-        const center = new Vector3();
-        const sphere = new Vector3();
-        box.getCenter(center);
-        box.getSize(sphere);
-        const radius = sphere.length() / BOX_SIZE_TO_RADIUS_DIVISOR;
-        const eye = camera.lastDirectorPose;
-        const azimuth = eye
-            ? azimuthAroundCenter(eye.position, [center.x, center.y, center.z])
-            : DEFAULT_SHOT_AZIMUTH_RADIANS;
-        const shot = shotSizePresets.resolve(size, [center.x, center.y, center.z], radius, azimuth);
+        if (primaryId === null) return;
         const result = dispatcher.dispatch(
-            { type: "camera.set-shot", payload: { id: camera.nextShotName(), shot: shot.toJSON() } },
+            {
+                type: "camera.frame-subject",
+                payload: { shotId: camera.nextShotName(), subjectId: primaryId, shotSize: size },
+            },
             stores,
         );
         reportCommandFailure(stores, result);
@@ -110,7 +97,7 @@ const ShotSizeControl = observer(function ShotSizeControl() {
                 fullWidth
                 value={shotSize}
                 onChange={(event) => applyShotSize(event.target.value as ShotSize)}
-                disabled={!primaryRuntime}
+                disabled={!hasPrimaryId}
                 aria-label="景别"
             >
                 {Object.entries(SHOT_SIZE_LABELS).map(([size, label]) => (

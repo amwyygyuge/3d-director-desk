@@ -64,7 +64,7 @@ export function EmbeddedDirectorNode(): JSX.Element {
 }
 ```
 
-`HostAdapter` is the direct-embedding contract: `onImportModel(handler)` returns its unsubscribe function; `reportCapture({ blobUrl, width, height })` receives captures; `reportReady(protocolVersion)` receives the readiness handshake; and `dispose?()` runs during desk teardown.
+`HostAdapter` is the direct-embedding contract: `onImportModel(handler)` returns its unsubscribe function; `reportCapture({ blobUrl, width, height, requestId })` receives captures (`requestId` echoes the capture command's idempotency key so hosts and agents can reconcile async artifacts); `reportReady(protocolVersion)` receives the readiness handshake; and `dispose?()` runs during desk teardown.
 
 The bridge exports `HostBridge`, `HostBridgeConfiguration`, `HostBridgeSession`, `HostAdapter`, `PostMessageAdapter`, `PROTOCOL_VERSION`, `HOST_INBOUND_MESSAGE_TYPE`, `HOST_OUTBOUND_MESSAGE_TYPE`, `HOST_BRIDGE_FAILURE_CODE`, `isDirectorDeskMessage`, `HostInboundMessage`, `HostOutboundRequest`, `HostOutboundMessage`, and `HostBridgeFailureCode`.
 
@@ -72,7 +72,7 @@ All bridged messages include the configured `sessionId` where applicable:
 
 - Inbound import: `{ type: "director-desk:import-model", sessionId, payload: { url, name } }`.
 - Outbound ready: `{ type: "director-desk:ready", sessionId, payload: { protocolVersion } }`.
-- Outbound capture: `{ type: "director-desk:capture-produced", sessionId, payload: { blobUrl, width, height } }`.
+- Outbound capture: `{ type: "director-desk:capture-produced", sessionId, payload: { blobUrl, width, height, requestId } }`.
 - Structured failure: `{ type: "director-desk:command-failed", sessionId, payload: { code: "invalid-message", message } }`.
 
 The bridge accepts an inbound message only when its origin, source window, session, message type, and full payload are valid. Wrong origin, source, or session messages are ignored. A malformed message from the configured trusted source receives `invalid-message`. Rejected imports are reported through `UiStore.setApplicationNotice(...)`, not as an outbound bridge event.

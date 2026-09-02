@@ -1,26 +1,58 @@
+import { SHOT_SIZE } from "@/camera/CameraShot";
+import type { ShotSize } from "@/camera/CameraShot";
 import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
 import { createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
-import { createPositionSample } from "@/motion/MotionTrajectory";
-import type { MotionPositionSample } from "@/motion/MotionTrajectory";
+import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { CreateMotionClipCommand, SetProgramClipCommand } from "@/command/cameraMotionCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
-import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
 import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
-import type { CommandDispatcher } from "@/command/CommandDispatcher";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
+import { subjectBoundsFor } from "@/command/subjectBounds";
+import { createPositionSample } from "@/motion/MotionTrajectory";
+import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 
 /** 采样缓冲:查询低频但遵守零分配纪律(命令层模块级临时对象先例) */
 const TMP_MOTION_SAMPLE: CameraMotionSample = createCameraMotionSample();
 const TMP_POSITION_SAMPLE: MotionPositionSample = createPositionSample();
 const TMP_FOCUS_SAMPLE = { x: 0, y: 0, z: 0 };
+const CAMERA_COMMAND_VERSION = "1" as const;
+const CAMERA_APPLIES_WHEN = "director-desk.camera-v1";
+const CAMERA_EDIT_PERMISSION = "camera:edit";
+const CAMERA_READ_PERMISSION = "camera:read";
+const shotSizePresets = new ShotSizePresets();
 
-const CAMERA_POSE_CAPABILITY: CommandCapability = {
-    type: "camera.get-pose",
-    version: "1",
-    kind: "query",
-    permissions: ["camera:read"],
-    appliesWhen: "director-desk.camera-v1",
+const SHOT_ID_PAYLOAD_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" } },
+    required: ["id"],
 };
+const FRAME_SUBJECT_PAYLOAD_CONTRACT: PayloadContract = {
+    properties: {
+        shotId: { type: "string" },
+        subjectId: { type: "string" },
+        shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
+        azimuth: { type: "number" },
+    },
+    required: ["shotId", "subjectId", "shotSize"],
+};
+
+function cameraCapability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return { type, version: CAMERA_COMMAND_VERSION, kind, permissions, appliesWhen: CAMERA_APPLIES_WHEN, payload };
+}
+
+const CAMERA_POSE_CAPABILITY = cameraCapability(
+    "camera.get-pose",
+    "query",
+    [CAMERA_READ_PERMISSION],
+    EMPTY_PAYLOAD_CONTRACT,
+);
 
 /**
  * 生效相机位姿查询(agent 断言用):live = 渲染器实际相机(运镜 sink 写入后的真值);
@@ -64,8 +96,36 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
         };
     }
 }
+/**
+ * 机位表此前只能直读 desk.camera.director; 注册查询让工具/宿主面可发现。
+ */
+export class CameraListShotsQuery implements DirectorQuery<Record<string, never>> {
+    static readonly TYPE = "camera.list-shots";
+    readonly type = CameraListShotsQuery.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {}
+
+    validate(): readonly string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): unknown {
+        return {
+            shots: ctx.camera.director.listShots().map(([id, shot]) => ({ id, shot: shot.toJSON() })),
+            activeShotId: ctx.camera.activeShotId,
+        };
+    }
+}
+
 interface ShotIdPayload {
     id: string;
+}
+
+interface FrameSubjectPayload {
+    shotId: string;
+    subjectId: string;
+    shotSize: ShotSize;
+    azimuth?: number;
 }
 
 /** 切入机位视角:机位必须已存在 */
@@ -154,13 +214,84 @@ export class RemoveShotCommand extends DirectorCommand<ShotIdPayload> {
     }
 }
 
+/** 按被摄体边界生成景别机位,让 UI 与工具复用同一构图语义。 */
+export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPayload> {
+    static readonly TYPE = "camera.frame-subject";
+    readonly type = CameraFrameSubjectCommand.TYPE;
+
+    constructor(readonly payload: FrameSubjectPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.shotId !== "string" || this.payload.shotId.length === 0) {
+            return ["机位 id 格式无效"];
+        }
+        if (typeof this.payload.subjectId !== "string" || this.payload.subjectId.length === 0) {
+            return ["被摄对象 id 格式无效"];
+        }
+        if (!ctx.scene.manager.getEntity(this.payload.subjectId)) return ["被摄对象不存在"];
+        if (!Object.values(SHOT_SIZE).includes(this.payload.shotSize)) return ["未知的景别"];
+        if (this.payload.azimuth !== undefined && !Number.isFinite(this.payload.azimuth)) {
+            return ["方位角须为有限数"];
+        }
+        return [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const subject = subjectBoundsFor(ctx, this.payload.subjectId);
+        if (!subject) return;
+        const eye = ctx.camera.lastDirectorPose;
+        const azimuth =
+            this.payload.azimuth ??
+            (eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS);
+        const shot = shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth);
+        ctx.camera.addShot(this.payload.shotId, shot);
+    }
+
+    /** 覆盖已有机位 → 回滚旧参数;新建 → 撤销即删除。 */
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const previousShot = ctx.camera.director.getShot(this.payload.shotId);
+        return previousShot
+            ? [{ type: "camera.set-shot", payload: { id: this.payload.shotId, shot: previousShot.toJSON() } }]
+            : [{ type: RemoveShotCommand.TYPE, payload: { id: this.payload.shotId } }];
+    }
+}
+
 export function registerCameraCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(ActivateShotCommand.TYPE, (payload: ShotIdPayload) => new ActivateShotCommand(payload));
-    dispatcher.register(DeactivateShotCommand.TYPE, () => new DeactivateShotCommand());
-    dispatcher.register(RemoveShotCommand.TYPE, (payload: ShotIdPayload) => new RemoveShotCommand(payload));
+    dispatcher.register(
+        ActivateShotCommand.TYPE,
+        (payload: ShotIdPayload) => new ActivateShotCommand(payload),
+        cameraCapability(ActivateShotCommand.TYPE, "command", [CAMERA_EDIT_PERMISSION], SHOT_ID_PAYLOAD_CONTRACT),
+    );
+    dispatcher.register(
+        DeactivateShotCommand.TYPE,
+        () => new DeactivateShotCommand(),
+        cameraCapability(DeactivateShotCommand.TYPE, "command", [CAMERA_EDIT_PERMISSION], EMPTY_PAYLOAD_CONTRACT),
+    );
+    dispatcher.register(
+        RemoveShotCommand.TYPE,
+        (payload: ShotIdPayload) => new RemoveShotCommand(payload),
+        cameraCapability(RemoveShotCommand.TYPE, "command", [CAMERA_EDIT_PERMISSION], SHOT_ID_PAYLOAD_CONTRACT),
+    );
+    dispatcher.register(
+        CameraFrameSubjectCommand.TYPE,
+        (payload: FrameSubjectPayload) => new CameraFrameSubjectCommand(payload),
+        cameraCapability(
+            CameraFrameSubjectCommand.TYPE,
+            "command",
+            [CAMERA_EDIT_PERMISSION],
+            FRAME_SUBJECT_PAYLOAD_CONTRACT,
+        ),
+    );
     dispatcher.registerQuery(
         CameraGetPoseQuery.TYPE,
         (payload: Record<string, never>) => new CameraGetPoseQuery(payload),
         CAMERA_POSE_CAPABILITY,
+    );
+    dispatcher.registerQuery(
+        CameraListShotsQuery.TYPE,
+        (payload: Record<string, never>) => new CameraListShotsQuery(payload),
+        cameraCapability(CameraListShotsQuery.TYPE, "query", [CAMERA_READ_PERMISSION], EMPTY_PAYLOAD_CONTRACT),
     );
 }

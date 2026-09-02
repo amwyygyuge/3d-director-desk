@@ -1,10 +1,12 @@
 import { Box3, Vector3 } from "three";
 
-import { FramingService, isViewDirection } from "@/camera/FramingService";
+import { FramingService, isViewDirection, VIEW_DIRECTION } from "@/camera/FramingService";
 import type { ViewDirection } from "@/camera/FramingService";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 import { HOME_DIRECTOR_POSE } from "@/store/CameraStore";
 
 const framing = new FramingService();
@@ -94,12 +96,29 @@ export class ViewResetCommand extends DirectorCommand<Record<string, never>> {
     }
 }
 
+const FRAME_VIEW_CONTRACT: PayloadContract = {
+    properties: {
+        ids: { type: "array", items: { type: "string" } },
+        direction: { type: "string", enum: Object.values(VIEW_DIRECTION) },
+    },
+};
+
 const FRAME_VIEW_CAPABILITY: CommandCapability = {
     type: FrameViewCommand.TYPE,
     version: "1",
     kind: "command",
     permissions: [VIEW_CONTROL_PERMISSION],
     appliesWhen: VIEW_APPLIES_WHEN,
+    payload: FRAME_VIEW_CONTRACT,
+};
+
+const VIEW_RESET_CAPABILITY: CommandCapability = {
+    type: ViewResetCommand.TYPE,
+    version: "1",
+    kind: "command",
+    permissions: [VIEW_CONTROL_PERMISSION],
+    appliesWhen: VIEW_APPLIES_WHEN,
+    payload: EMPTY_PAYLOAD_CONTRACT,
 };
 
 export function registerNavigationCommands(dispatcher: CommandDispatcher): void {
@@ -108,8 +127,9 @@ export function registerNavigationCommands(dispatcher: CommandDispatcher): void 
         (payload: FrameViewPayload) => new FrameViewCommand(payload),
         FRAME_VIEW_CAPABILITY,
     );
-    dispatcher.register(ViewResetCommand.TYPE, (payload: Record<string, never>) => new ViewResetCommand(payload), {
-        ...FRAME_VIEW_CAPABILITY,
-        type: ViewResetCommand.TYPE,
-    });
+    dispatcher.register(
+        ViewResetCommand.TYPE,
+        (payload: Record<string, never>) => new ViewResetCommand(payload),
+        VIEW_RESET_CAPABILITY,
+    );
 }

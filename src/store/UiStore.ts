@@ -9,12 +9,20 @@ export const GIZMO_MODE = {
 } as const;
 export type GizmoMode = (typeof GIZMO_MODE)[keyof typeof GIZMO_MODE];
 export type GizmoAxis = "x" | "y" | "z";
-/** 最近一次截图的溯源元数据(agent 断言用:拍的哪一秒、什么机位、多大) */
+/** 最近一次截图的溯源元数据(agent 按 requestId 对账 AI 连发/重试产物归属)。 */
 export interface CaptureMeta {
     readonly timeSeconds: number;
     readonly cameraPose: LiveCameraPose | null;
     readonly width: number;
     readonly height: number;
+    readonly requestId: string;
+}
+/** 最近一次视频的溯源元数据(agent 按 requestId 对账 AI 连发/重试产物归属)。 */
+export interface VideoMeta {
+    readonly durationSeconds: number;
+    readonly width: number;
+    readonly height: number;
+    readonly requestId: string;
 }
 const ALL_AXES_FREE: Record<GizmoAxis, boolean> = { x: true, y: true, z: true };
 
@@ -55,7 +63,7 @@ export class UiStore {
     lastVideoUrl: string | null = null;
     /** 视频录制中(命令层在录制起止写入;工具条据此切换 录制/停止 按钮) */
     videoRecording = false;
-    lastVideoMeta: { readonly durationSeconds: number; readonly width: number; readonly height: number } | null = null;
+    lastVideoMeta: VideoMeta | null = null;
     /** 姿态选择仅是瞬时 UI 身份；不进入 SceneObject、历史或序列化。 */
     posePickingObjectId: string | null = null;
     posePickingBoneKey: string | null = null;
@@ -119,7 +127,7 @@ export class UiStore {
         this.videoRecording = recording;
     }
 
-    setLastVideo(url: string, meta: { durationSeconds: number; width: number; height: number }): void {
+    setLastVideo(url: string, meta: VideoMeta): void {
         if (this.disposed) {
             URL.revokeObjectURL(url);
         } else {

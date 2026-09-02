@@ -37,7 +37,9 @@
 
 ## 三、遗留结构债
 
-### D1 命令 payload 没有契约校验(风险最高)
+### D1 命令 payload 没有契约校验(风险最高)—— 已修复(2026-09-02)
+
+> 落地:`src/command/PayloadContract.ts`(JSON Schema 子集契约 + 校验器)+ `CommandDispatcher` 外层契约闸门(dev throw / prod `payload-contract-violation` 结构化 issue)+ 全部 65 命令/15 查询随 `capability` 强制登记(`register` 缺契约即 tsc 报错)+ `listCapabilities()` 直接派生 AI tool schema。同批顺带补上权限闸门(`DispatchOptions.permissions`)与 4 条历史漏登记 capability(camera.activate/deactivate/remove-shot、capture.frame)。以下为原始登记,存档备查。
 
 **现象**:`dispatcher.dispatch(raw, ctx)` 收 `SerializedCommand`,`payload` 是 unknown。字段名写错 → 命令内部读到 `undefined` → 要么 `validate()` 兜住(报一句无关的错),要么静默无操作。`transport.seek { timeSeconds }` 就是这样哑火的,而 UI、HostBridge、AI 三个调用方共用这一个入口。
 
@@ -100,12 +102,12 @@ flowchart LR
 
 ## 四、优先级
 
-| 债              | 影响面                          | 触发频率               | 建议顺序                 |
-| --------------- | ------------------------------- | ---------------------- | ------------------------ |
-| D1 payload 契约 | UI + HostBridge + AI 三个调用方 | 每次新增/改命令        | 1                        |
-| D4 验收断言     | 运镜与视口全域                  | 每次改采样/裁决        | 2(投入最小,可与 D1 并行) |
-| D2 输入层统一   | 视口手势                        | 新增视口交互时         | 3                        |
-| D3 轨道所有权   | 视口相机                        | 引入新的 drei 控制器时 | 4                        |
+| 债                  | 影响面                   | 触发频率               | 建议顺序 |
+| ------------------- | ------------------------ | ---------------------- | -------- |
+| ~~D1 payload 契约~~ | ~~UI + HostBridge + AI~~ | ~~已修复~~             | ~~1~~    |
+| D4 验收断言         | 运镜与视口全域           | 每次改采样/裁决        | 1        |
+| D2 输入层统一       | 视口手势                 | 新增视口交互时         | 2        |
+| D3 轨道所有权       | 视口相机                 | 引入新的 drei 控制器时 | 3        |
 
 ## 五、判定规则(以后自评用)
 

@@ -9,10 +9,13 @@ import type { PoseSnapshotInit, QuaternionTuple } from "@/pose/PoseSnapshot";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
+import { nullable } from "@/command/PayloadContract";
+import type { PayloadContract, PayloadFieldSchema } from "@/command/PayloadContract";
 
 const POSE_VERSION = "1" as const;
 const EDIT_PERMISSION = "pose:edit";
 const READ_PERMISSION = "pose:read";
+const QUATERNION_COMPONENT_COUNT = 4;
 
 interface SetBonePayload {
     readonly objectId: string;
@@ -62,6 +65,86 @@ interface ClearPosePayload {
 interface ObjectPayload {
     readonly objectId: string;
 }
+
+const QUATERNION_SCHEMA: PayloadFieldSchema = {
+    type: "array",
+    items: { type: "number" },
+    minItems: QUATERNION_COMPONENT_COUNT,
+    maxItems: QUATERNION_COMPONENT_COUNT,
+};
+const POSE_SNAPSHOT_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        bones: { type: "object" },
+    },
+    required: ["bones"],
+};
+const POSE_PRESET_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string" },
+        labelZh: { type: "string" },
+        part: { type: "string", enum: Object.values(BODY_PART) },
+        skeletonFamily: { type: "string" },
+        bones: { type: "object" },
+        custom: { type: "boolean" },
+    },
+    required: ["id", "labelZh", "part", "skeletonFamily", "bones", "custom"],
+};
+const SET_POSE_BONE_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        boneKey: { type: "string" },
+        quaternion: QUATERNION_SCHEMA,
+    },
+    required: ["objectId", "boneKey", "quaternion"],
+};
+const REPLACE_POSE_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        pose: nullable(POSE_SNAPSHOT_SCHEMA),
+    },
+    required: ["objectId", "pose"],
+};
+const APPLY_POSE_PRESET_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        presetId: { type: "string" },
+        mode: { type: "string", enum: Object.values(APPLY_MODE) },
+    },
+    required: ["objectId", "presetId"],
+};
+const SAVE_POSE_PRESET_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        labelZh: { type: "string" },
+        part: { type: "string", enum: Object.values(BODY_PART) },
+    },
+    required: ["objectId", "labelZh", "part"],
+};
+const REMOVE_POSE_PRESET_CONTRACT: PayloadContract = {
+    properties: { presetId: { type: "string" } },
+    required: ["presetId"],
+};
+const RESTORE_POSE_PRESET_CONTRACT: PayloadContract = {
+    properties: { preset: POSE_PRESET_SCHEMA },
+    required: ["preset"],
+};
+const CLEAR_POSE_CONTRACT: PayloadContract = {
+    properties: { objectId: { type: "string" } },
+    required: ["objectId"],
+};
+const DISCOVER_POSE_BONES_CONTRACT: PayloadContract = {
+    properties: { objectId: { type: "string" } },
+    required: ["objectId"],
+};
+const GET_POSE_CONTRACT: PayloadContract = {
+    properties: { objectId: { type: "string" } },
+    required: ["objectId"],
+};
+const POSE_PRESETS_LIST_CONTRACT: PayloadContract = {
+    properties: { part: { type: "string", enum: Object.values(BODY_PART) } },
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -544,8 +627,13 @@ export class PosePresetsQuery implements DirectorQuery<PosePresetsPayload> {
     }
 }
 
-function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: POSE_VERSION, kind, permissions, appliesWhen: "director-desk.pose-v1" };
+function capability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return { type, version: POSE_VERSION, kind, permissions, appliesWhen: "director-desk.pose-v1", payload };
 }
 
 /** Dispatcher registration is the serializable boundary for preset pose authoring. */
@@ -553,51 +641,51 @@ export function registerPoseCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         SetPoseBoneCommand.TYPE,
         (payload: SetBonePayload) => new SetPoseBoneCommand(payload),
-        capability(SetPoseBoneCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(SetPoseBoneCommand.TYPE, "command", [EDIT_PERMISSION], SET_POSE_BONE_CONTRACT),
     );
     dispatcher.register(
         ReplacePoseCommand.TYPE,
         (payload: ReplacePosePayload) => new ReplacePoseCommand(payload),
-        capability(ReplacePoseCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(ReplacePoseCommand.TYPE, "command", [EDIT_PERMISSION], REPLACE_POSE_CONTRACT),
     );
     dispatcher.register(
         ApplyPosePresetCommand.TYPE,
         (payload: ApplyPosePresetPayload) => new ApplyPosePresetCommand(payload),
-        capability(ApplyPosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(ApplyPosePresetCommand.TYPE, "command", [EDIT_PERMISSION], APPLY_POSE_PRESET_CONTRACT),
     );
     dispatcher.register(
         SavePosePresetCommand.TYPE,
         (payload: SavePosePresetPayload) => new SavePosePresetCommand(payload),
-        capability(SavePosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(SavePosePresetCommand.TYPE, "command", [EDIT_PERMISSION], SAVE_POSE_PRESET_CONTRACT),
     );
     dispatcher.register(
         RemovePosePresetCommand.TYPE,
         (payload: RemovePosePresetPayload) => new RemovePosePresetCommand(payload),
-        capability(RemovePosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(RemovePosePresetCommand.TYPE, "command", [EDIT_PERMISSION], REMOVE_POSE_PRESET_CONTRACT),
     );
     dispatcher.register(
         RestorePosePresetCommand.TYPE,
         (payload: RestorePosePresetPayload) => new RestorePosePresetCommand(payload),
-        capability(RestorePosePresetCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(RestorePosePresetCommand.TYPE, "command", [EDIT_PERMISSION], RESTORE_POSE_PRESET_CONTRACT),
     );
     dispatcher.register(
         ClearPoseCommand.TYPE,
         (payload: ClearPosePayload) => new ClearPoseCommand(payload),
-        capability(ClearPoseCommand.TYPE, "command", [EDIT_PERMISSION]),
+        capability(ClearPoseCommand.TYPE, "command", [EDIT_PERMISSION], CLEAR_POSE_CONTRACT),
     );
     dispatcher.registerQuery(
         DiscoverPoseBonesQuery.TYPE,
         (payload: ObjectPayload) => new DiscoverPoseBonesQuery(payload),
-        capability(DiscoverPoseBonesQuery.TYPE, "query", [READ_PERMISSION]),
+        capability(DiscoverPoseBonesQuery.TYPE, "query", [READ_PERMISSION], DISCOVER_POSE_BONES_CONTRACT),
     );
     dispatcher.registerQuery(
         GetPoseQuery.TYPE,
         (payload: ObjectPayload) => new GetPoseQuery(payload),
-        capability(GetPoseQuery.TYPE, "query", [READ_PERMISSION]),
+        capability(GetPoseQuery.TYPE, "query", [READ_PERMISSION], GET_POSE_CONTRACT),
     );
     dispatcher.registerQuery(
         PosePresetsQuery.TYPE,
         (payload: PosePresetsPayload) => new PosePresetsQuery(payload),
-        capability(PosePresetsQuery.TYPE, "query", [READ_PERMISSION]),
+        capability(PosePresetsQuery.TYPE, "query", [READ_PERMISSION], POSE_PRESETS_LIST_CONTRACT),
     );
 }

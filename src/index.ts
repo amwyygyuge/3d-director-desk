@@ -202,6 +202,8 @@ export {
     DeactivateShotCommand,
     registerCameraCommands,
     RemoveShotCommand,
+    CameraFrameSubjectCommand,
+    CameraListShotsQuery,
 } from "@/command/cameraCommands";
 export {
     MountActionCommand,
@@ -211,6 +213,7 @@ export {
     TransportSeekCommand,
     UnmountActionCommand,
     TransportStopCommand,
+    TransportGetStateQuery,
 } from "@/command/actionCommands";
 export type {
     CommandIssue,
@@ -220,6 +223,16 @@ export type {
     SerializedCommand,
 } from "@/command/DirectorCommand";
 export type { CommandCapability, DirectorQuery, QueryResult } from "@/command/CommandDispatcher";
+export type { DispatchOptions } from "@/command/CommandDispatcher";
+export { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
+export type { ContractViolation, PayloadContract, PayloadFieldSchema } from "@/command/PayloadContract";
+export {
+    PLACEMENT_RELATION,
+    PlaceRelativeCommand,
+    PlacementCompiler,
+    registerPlacementCommands,
+} from "@/command/placementCommands";
+export type { PlacementRelation } from "@/command/placementCommands";
 export {
     ApplyPosePresetCommand,
     ClearPoseCommand,
@@ -257,6 +270,7 @@ export { CameraMotionStore } from "@/store/CameraMotionStore";
 export { SceneStore } from "@/store/SceneStore";
 export { SelectionStore } from "@/store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "@/store/UiStore";
+export type { CaptureMeta, VideoMeta } from "@/store/UiStore";
 export { TimelineStore } from "@/store/TimelineStore";
 export { RENDER_QUALITY, RENDER_QUALITY_PROFILES, WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 export type { RenderQuality } from "@/store/WorkbenchLayoutStore";

@@ -29,8 +29,9 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 资源目录(发现可用模型/动作) | `query({ type: "assets.list", payload: { kind?: "model"\|"action", category?: "character.human"\|"character.animal"\|"plant"\|"furniture" } })` → 条目含 license/skeletonFamily/embeddedClips                                                                                                        |
 | 生效相机位姿                | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                                                                                                                                     |
-| 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → timeSeconds/cameraPose/尺寸                                                                                                                                                                                                                                 |
-| 机位表                      | `desk.camera.director.listShots()` → `[id, CameraShot]`;当前激活:`desk.camera.activeShotId`                                                                                                                                                                                                          |
+| 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → requestId/timeSeconds/cameraPose/尺寸(requestId = 命令幂等键,连发截图按它对账)                                                                                                                                                                              |
+| 机位表                      | `query({ type: "camera.list-shots", payload: {} })` → `{ shots: [{ id, shot }], activeShotId }`                                                                                                                                                                                                      |
+| 播放态                      | `query({ type: "transport.get-state", payload: {} })` → `{ time, isPlaying, isLooping, durationSeconds }`                                                                                                                                                                                            |
 | 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                                                                                                                          |
 | 运镜编排                    | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
 | 灯光                        | `query({ type: "lighting.list", payload: {} })`                                                                                                                                                                                                                                                      |
@@ -48,15 +49,15 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ### 断言驱动验收协议
 
-| 步骤     | 断言(query/直读)                                                                    | 失败时                                                |
-| -------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理(≈2 单位×scale) | `failed` → 换资产;`loading` 超 10s → 查 URL           |
-| 尺度断言 | `bounds.size` 之比 = 设计尺度比(如机甲:怪兽 ≈ 1.4:1)                                | 调 transform.scale,勿目测                             |
-| 挂动作   | `pose.bones.discover` ready → mount 返回 ok                                         | bone 类 issue → 按 suggestions 换方案                 |
-| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                             | 不符 → 检查是否播放中录 key 被拒                      |
-| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                           | 不符 → capture 时机错,重新 seek+capture               |
-| 视频     | `lastVideoMeta.durationSeconds` == 目标时长,文件头 EBML(0x1A45DFA3)                 | 录制被拒 → 已有录制在进行(cancel 或等完成)            |
-| 文档接管 | import 后 `scene.describe` 与导出前一致;动作 actionId 恢复                          | 动作恢复失败 → 看 applicationNotice(资产 URL 不可达?) |
+| 步骤     | 断言(query/直读)                                                                                                 | 失败时                                                |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理(≈2 单位×scale);`mountedActionId` 回读挂载态 | `failed` → 换资产;`loading` 超 10s → 查 URL           |
+| 尺度断言 | `bounds.size` 之比 = 设计尺度比(如机甲:怪兽 ≈ 1.4:1)                                                             | 调 transform.scale,勿目测                             |
+| 挂动作   | `pose.bones.discover` ready → mount 返回 ok                                                                      | bone 类 issue → 按 suggestions 换方案                 |
+| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                                                          | 不符 → 检查是否播放中录 key 被拒                      |
+| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                                                        | 不符 → capture 时机错,重新 seek+capture               |
+| 视频     | `lastVideoMeta.durationSeconds` == 目标时长,文件头 EBML(0x1A45DFA3)                                              | 录制被拒 → 已有录制在进行(cancel 或等完成)            |
+| 文档接管 | import 后 `scene.describe` 与导出前一致;动作 actionId 恢复                                                       | 动作恢复失败 → 看 applicationNotice(资产 URL 不可达?) |
 
 ## 核心命令速查
 
@@ -65,14 +66,15 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 ### 布景
 
 ```js
-// 放几何体
-dispatch({ type: "object.place", payload: { id: "box-1", kind: "primitive",
-  transform: { position: [0, 0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } })
-// 放模型(url 由宿主/资产侧提供)
+// 放模型(url 由宿主/资产侧提供);kind 只有 model/camera/light,摆几何体请用 assets.place 的内置条目
 dispatch({ type: "object.place", payload: { id: "mecha", kind: "model", sourceUrl, format: "glb" } })
 // 移动/删除
 dispatch({ type: "object.move", payload: { id: "mecha", transform: {...} } })
 dispatch({ type: "object.remove", payload: { id: "mecha" } })
+// 语义摆位(别手算坐标):参考系 = 当前导演相机视线;距离 = 双方包围球表面间距(米)
+dispatch({ type: "object.place-relative", payload: { id: "mecha", anchorId: "monster", relation: "left-of", distance: 2 } })
+dispatch({ type: "object.place-relative", payload: { id: "mecha", anchorId: "monster", relation: "facing" } }) // 面朝锚点,不动位置
+// relation 词表:left-of | right-of | in-front-of(更靠近相机) | behind | facing
 ```
 
 ### 动作与播放
@@ -122,6 +124,10 @@ dispatch({
     type: "camera.set-shot",
     payload: { id: "机位 01", shot: { position: [0, 1.6, 4.2], target: [0, 0.9, 0], fov: 45 } },
 });
+
+// 景别机位(别手算距离):按被摄体包围球定距,方位角缺省取当前导演相机朝向
+dispatch({ type: "camera.frame-subject", payload: { shotId: "机位 02", subjectId: "mecha", shotSize: "close-up" } });
+// shotSize 词表:extreme-long | long | medium-long | medium | medium-close | close-up | extreme-close-up
 
 // 推荐入口：一次落地可编辑的运镜片段和 Program 输出。
 dispatch({
@@ -174,8 +180,8 @@ dispatch({
 ````js
 dispatch({ type: "scene.set-lighting-mode", payload: { mode: "studio" | "custom" } })
 dispatch({ type: "light.adjust", payload: {...} })   // 细节先 lighting.list 看现状
-dispatch({ type: "capture.frame", payload: {} })     // 截图(隐藏辅助物)
-dispatch({ type: "capture.video", payload: {} })     // 录 WebM(缺省=时间轴时长;产物在 ui.lastVideoUrl/lastVideoMeta)
+dispatch({ type: "capture.frame", payload: { requestId: "shot-01" } }) // 截图(隐藏辅助物);requestId 可选,缺省自动生成,产物元数据原样回带
+dispatch({ type: "capture.video", payload: {} })     // 录 WebM(缺省=时间轴时长;产物在 ui.lastVideoUrl/lastVideoMeta,含 requestId)
 dispatch({ type: "capture.video-cancel", payload: {} }) // 提前终止录制(丢弃产物)
 dispatch({ type: "view.frame", payload: {} })        // 导演视角取景到场景内容
 
@@ -216,6 +222,7 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 ## 纪律
 
 - 一切数值先过脑子再过围栏:NaN/Infinity 必被拦;id 不存在必被拦——先 `list()` 确认。
+- payload 结构有契约:字段名写错、缺必填、类型不符会被 `payload-contract-violation` 拦下并指名字段(dev/playground 直接 throw)。按报错改字段名,不要换格式乱试;字段定义以 `listCapabilities()` 返回的 `payload` 契约为准。
 - 撤销/重做是命令层自动的(逆命令回放),你不需要管理历史。
 - 禁止把 three 对象(Object3D/Material)抓出来玩;你碰不到也不该碰。
 - 同一批相关改动连续 dispatch 即可,每条的 issues 独立返回。

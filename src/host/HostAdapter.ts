@@ -9,7 +9,7 @@ export interface HostAdapter {
     /** 宿主侧注册资源条目进目录(外部注入通道;条目逐条过校验围栏) */
     readonly onRegisterAssets: (handler: (payload: { assets: readonly unknown[] }) => void) => () => void;
     /** 截图产物回传宿主(成为节点 outputs) */
-    readonly reportCapture: (payload: { blobUrl: string; width: number; height: number }) => void;
+    readonly reportCapture: (payload: { blobUrl: string; width: number; height: number; requestId: string }) => void;
     /** ready 握手(带协议版本;直嵌形态是空操作) */
     readonly reportReady: (protocolVersion: number) => void;
     /** 实例卸载回收(可选;iframe 形态释放 message 监听) */
@@ -68,7 +68,7 @@ export class PostMessageAdapter implements HostAdapter {
         return this.addSubscription(HOST_INBOUND_MESSAGE_TYPE.REGISTER_ASSETS, handler);
     }
 
-    reportCapture(payload: { blobUrl: string; width: number; height: number }): void {
+    reportCapture(payload: { blobUrl: string; width: number; height: number; requestId: string }): void {
         this.bridge?.post({ type: HOST_OUTBOUND_MESSAGE_TYPE.CAPTURE_PRODUCED, payload });
     }
 

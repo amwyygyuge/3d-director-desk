@@ -2,10 +2,14 @@ import { VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 
 interface CaptureFramePayload {
+    /** AI 连发/重试时按 requestId 对账产物归属。 */
+    readonly requestId?: string;
     /** 默认 true:网格/gizmo/高亮框不入镜 */
-    hideHelpers?: boolean;
+    readonly hideHelpers?: boolean;
 }
 
 /**
@@ -26,14 +30,16 @@ export class CaptureFrameCommand extends DirectorCommand<CaptureFramePayload> {
     }
 
     execute(ctx: DirectorContext): void {
+        const requestId = this.payload.requestId ?? crypto.randomUUID();
         void ctx.capture.capture({ hideHelpers: this.payload.hideHelpers ?? true }).then((blob) => {
             if (!blob) return;
             const size = ctx.capture.size ?? { width: 0, height: 0 };
             const blobUrl = URL.createObjectURL(blob);
-            ctx.host.reportCapture({ blobUrl, ...size });
+            ctx.host.reportCapture({ blobUrl, requestId, ...size });
             ctx.ui.setLastCapture(blobUrl, {
                 timeSeconds: ctx.clock.time,
                 cameraPose: ctx.capture.readCameraPose(),
+                requestId,
                 ...size,
             });
         });
@@ -53,17 +59,30 @@ export function requestFrameCapture({ dispatcher, context }: CaptureFrameRequest
 }
 
 interface CaptureVideoPayload {
+    /** AI 连发/重试时按 requestId 对账产物归属。 */
+    readonly requestId?: string;
     /** 录制时长(秒);缺省 = 时间轴时长 */
     readonly durationSeconds?: number;
 }
 
-function captureCapability(type: string): CommandCapability {
+const CAPTURE_VERSION = "1" as const;
+const CAPTURE_PERMISSION = "capture:write";
+const CAPTURE_APPLIES_WHEN = "director-desk.capture-v1";
+const CAPTURE_FRAME_CONTRACT: PayloadContract = {
+    properties: { hideHelpers: { type: "boolean" }, requestId: { type: "string" } },
+};
+const CAPTURE_VIDEO_CONTRACT: PayloadContract = {
+    properties: { durationSeconds: { type: "number" }, requestId: { type: "string" } },
+};
+
+function captureCapability(type: string, payload: PayloadContract): CommandCapability {
     return {
         type,
-        version: "1",
+        version: CAPTURE_VERSION,
         kind: "command",
-        permissions: ["capture:write"],
-        appliesWhen: "director-desk.capture-v1",
+        permissions: [CAPTURE_PERMISSION],
+        appliesWhen: CAPTURE_APPLIES_WHEN,
+        payload,
     };
 }
 
@@ -91,6 +110,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     }
 
     execute(ctx: DirectorContext): void {
+        const requestId = this.payload.requestId ?? crypto.randomUUID();
         const durationSeconds = this.payload.durationSeconds ?? ctx.timeline.document.duration;
         void (async () => {
             ctx.clock.pause();
@@ -103,7 +123,9 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
             ctx.clock.pause();
             if (!blob) return;
             const size = ctx.capture.size ?? { width: 0, height: 0 };
-            ctx.ui.setLastVideo(URL.createObjectURL(blob), { durationSeconds, ...size });
+            const blobUrl = URL.createObjectURL(blob);
+            ctx.host.reportCapture({ blobUrl, requestId, ...size });
+            ctx.ui.setLastVideo(blobUrl, { durationSeconds, requestId, ...size });
         })();
     }
 }
@@ -127,15 +149,19 @@ export class CancelVideoCaptureCommand extends DirectorCommand<Record<string, ne
 }
 
 export function registerCaptureCommands(dispatcher: CommandDispatcher): void {
-    dispatcher.register(CaptureFrameCommand.TYPE, (payload: CaptureFramePayload) => new CaptureFrameCommand(payload));
+    dispatcher.register(
+        CaptureFrameCommand.TYPE,
+        (payload: CaptureFramePayload) => new CaptureFrameCommand(payload),
+        captureCapability(CaptureFrameCommand.TYPE, CAPTURE_FRAME_CONTRACT),
+    );
     dispatcher.register(
         CaptureVideoCommand.TYPE,
         (payload: CaptureVideoPayload) => new CaptureVideoCommand(payload),
-        captureCapability(CaptureVideoCommand.TYPE),
+        captureCapability(CaptureVideoCommand.TYPE, CAPTURE_VIDEO_CONTRACT),
     );
     dispatcher.register(
         CancelVideoCaptureCommand.TYPE,
         (payload: Record<string, never>) => new CancelVideoCaptureCommand(payload),
-        captureCapability(CancelVideoCaptureCommand.TYPE),
+        captureCapability(CancelVideoCaptureCommand.TYPE, EMPTY_PAYLOAD_CONTRACT),
     );
 }

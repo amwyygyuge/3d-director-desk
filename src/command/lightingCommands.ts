@@ -1,12 +1,14 @@
-import { isLightingMode } from "@/store/SceneStore";
+import { isLightingMode, LIGHTING_MODE } from "@/store/SceneStore";
 import type { LightingMode } from "@/store/SceneStore";
 
+import { LIGHT_TYPES, isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
-import { isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "@/core/LightParams";
 import type { SceneObject } from "@/core/SceneObject";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 
 const LIGHTING_COMMAND_VERSION = "1" as const;
 const LIGHTING_PERMISSION = "lighting:edit";
@@ -38,6 +40,32 @@ export interface LightingObjectSnapshot {
     readonly transform: SceneObject["transform"];
     readonly light: LightParams;
 }
+
+const ADJUST_LIGHT_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        light: {
+            type: "object",
+            properties: {
+                type: { type: "string", enum: LIGHT_TYPES },
+                color: { type: "string" },
+                intensity: { type: "number" },
+            },
+            required: ["type", "color", "intensity"],
+        },
+    },
+    required: ["id", "light"],
+};
+
+const SET_LIGHTING_MODE_CONTRACT: PayloadContract = {
+    properties: { mode: { type: "string", enum: Object.values(LIGHTING_MODE) } },
+    required: ["mode"],
+};
+
+const GET_LIGHT_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" } },
+    required: ["id"],
+};
 
 function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
@@ -200,8 +228,20 @@ export class LightingGetQuery implements DirectorQuery<GetLightPayload> {
     }
 }
 
-function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: LIGHTING_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.lighting-v1" };
+function capability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return {
+        type,
+        version: LIGHTING_COMMAND_VERSION,
+        kind,
+        permissions,
+        appliesWhen: "director-desk.lighting-v1",
+        payload,
+    };
 }
 
 /** lighting.* 在同一注册表提供写、读与发现元数据；返回值只有可 JSON 化领域数据。 */
@@ -209,21 +249,21 @@ export function registerLightingCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         AdjustLightCommand.TYPE,
         (payload: AdjustLightPayload) => new AdjustLightCommand(payload),
-        capability(AdjustLightCommand.TYPE, "command", [LIGHTING_PERMISSION]),
+        capability(AdjustLightCommand.TYPE, "command", [LIGHTING_PERMISSION], ADJUST_LIGHT_CONTRACT),
     );
     dispatcher.register(
         SetLightingModeCommand.TYPE,
         (payload: SetLightingModePayload) => new SetLightingModeCommand(payload),
-        capability(SetLightingModeCommand.TYPE, "command", [LIGHTING_PERMISSION]),
+        capability(SetLightingModeCommand.TYPE, "command", [LIGHTING_PERMISSION], SET_LIGHTING_MODE_CONTRACT),
     );
     dispatcher.registerQuery(
         LightingListQuery.TYPE,
         (payload: Record<string, never>) => new LightingListQuery(payload),
-        capability(LightingListQuery.TYPE, "query", [LIGHTING_READ_PERMISSION]),
+        capability(LightingListQuery.TYPE, "query", [LIGHTING_READ_PERMISSION], EMPTY_PAYLOAD_CONTRACT),
     );
     dispatcher.registerQuery(
         LightingGetQuery.TYPE,
         (payload: GetLightPayload) => new LightingGetQuery(payload),
-        capability(LightingGetQuery.TYPE, "query", [LIGHTING_READ_PERMISSION]),
+        capability(LightingGetQuery.TYPE, "query", [LIGHTING_READ_PERMISSION], GET_LIGHT_CONTRACT),
     );
 }

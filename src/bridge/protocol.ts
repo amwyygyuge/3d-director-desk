@@ -40,7 +40,12 @@ export type HostOutboundRequest =
       }
     | {
           readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["CAPTURE_PRODUCED"];
-          readonly payload: { readonly blobUrl: string; readonly width: number; readonly height: number };
+          readonly payload: {
+              readonly blobUrl: string;
+              readonly width: number;
+              readonly height: number;
+              readonly requestId: string;
+          };
       }
     | {
           readonly type: (typeof HOST_OUTBOUND_MESSAGE_TYPE)["COMMAND_FAILED"];

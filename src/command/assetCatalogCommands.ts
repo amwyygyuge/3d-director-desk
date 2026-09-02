@@ -1,4 +1,4 @@
-import { ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
+import { ASSET_CATEGORY, ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
 import type { AssetEntry } from "@/assets/catalog/AssetEntry";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import { finiteTransform } from "@/core/SceneObject";
@@ -7,13 +7,26 @@ import { DirectorCommand } from "@/command/DirectorCommand";
 import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
-
+import { TRANSFORM_SCHEMA } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 const ASSETS_COMMAND_VERSION = "1" as const;
 const ASSETS_READ_PERMISSION = "assets:read";
 const ASSETS_EDIT_PERMISSION = "assets:edit";
 
-function capability(type: string, kind: "command" | "query", permissions: readonly string[]): CommandCapability {
-    return { type, version: ASSETS_COMMAND_VERSION, kind, permissions, appliesWhen: "director-desk.assets-v1" };
+function capability(
+    type: string,
+    kind: "command" | "query",
+    permissions: readonly string[],
+    payload: PayloadContract,
+): CommandCapability {
+    return {
+        type,
+        version: ASSETS_COMMAND_VERSION,
+        kind,
+        permissions,
+        appliesWhen: "director-desk.assets-v1",
+        payload,
+    };
 }
 
 interface AssetsListPayload {
@@ -22,6 +35,30 @@ interface AssetsListPayload {
     readonly category?: string;
 }
 const ASSET_ENTITY_ID_PREFIX = "asset-";
+
+const ASSETS_LIST_CONTRACT: PayloadContract = {
+    properties: {
+        kind: { type: "string", enum: Object.values(ASSET_KIND) },
+        category: { type: "string", enum: Object.values(ASSET_CATEGORY) },
+    },
+};
+
+const ASSETS_PLACE_CONTRACT: PayloadContract = {
+    properties: {
+        assetId: { type: "string" },
+        id: { type: "string" },
+        transform: TRANSFORM_SCHEMA,
+    },
+    required: ["assetId"],
+};
+
+const ASSETS_MOUNT_CONTRACT: PayloadContract = {
+    properties: {
+        assetId: { type: "string" },
+        objectId: { type: "string" },
+    },
+    required: ["assetId", "objectId"],
+};
 
 /** 资源目录查询:AI 发现面的主入口(过滤 kind/category;许可与骨骼家族随条目返回) */
 export class AssetsListQuery implements DirectorQuery<AssetsListPayload> {
@@ -152,16 +189,16 @@ export function registerAssetCatalogCommands(dispatcher: CommandDispatcher): voi
     dispatcher.register(
         AssetsPlaceCommand.TYPE,
         (payload: AssetsPlacePayload) => new AssetsPlaceCommand(payload),
-        capability(AssetsPlaceCommand.TYPE, "command", [ASSETS_EDIT_PERMISSION]),
+        capability(AssetsPlaceCommand.TYPE, "command", [ASSETS_EDIT_PERMISSION], ASSETS_PLACE_CONTRACT),
     );
     dispatcher.register(
         AssetsMountCommand.TYPE,
         (payload: AssetsMountPayload) => new AssetsMountCommand(payload),
-        capability(AssetsMountCommand.TYPE, "command", [ASSETS_EDIT_PERMISSION]),
+        capability(AssetsMountCommand.TYPE, "command", [ASSETS_EDIT_PERMISSION], ASSETS_MOUNT_CONTRACT),
     );
     dispatcher.registerQuery(
         AssetsListQuery.TYPE,
         (payload: AssetsListPayload) => new AssetsListQuery(payload),
-        capability(AssetsListQuery.TYPE, "query", [ASSETS_READ_PERMISSION]),
+        capability(AssetsListQuery.TYPE, "query", [ASSETS_READ_PERMISSION], ASSETS_LIST_CONTRACT),
     );
 }

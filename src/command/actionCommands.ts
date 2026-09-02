@@ -3,8 +3,9 @@ import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
 import type { AnimationClip, Object3D } from "three";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
-import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
-
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 class BoneCompatibilityIndex {
     private readonly nodeNamesByRoot = new WeakMap<Object3D, ReadonlySet<string>>();
     private readonly resultsByRoot = new WeakMap<Object3D, Map<AnimationClip, BoneCheckResult>>();
@@ -40,11 +41,17 @@ class BoneCompatibilityIndex {
 const boneCompatibilityIndex = new BoneCompatibilityIndex();
 const ACTION_EDIT_PERMISSION = "action:edit";
 const TRANSPORT_CONTROL_PERMISSION = "transport:control";
+const TRANSPORT_READ_PERMISSION = "transport:read";
 const ACTION_APPLIES_WHEN = "director-desk.action-v1";
 const TRANSPORT_APPLIES_WHEN = "director-desk.transport-v1";
 
-function capability(type: string, permission: string, appliesWhen: string): CommandCapability {
-    return { type, version: "1", kind: "command", permissions: [permission], appliesWhen };
+function capability(
+    type: string,
+    permission: string,
+    appliesWhen: string,
+    payload: PayloadContract,
+): CommandCapability {
+    return { type, version: "1", kind: "command", permissions: [permission], appliesWhen, payload };
 }
 
 interface MountActionPayload {
@@ -52,13 +59,34 @@ interface MountActionPayload {
     actionId: string;
 }
 
+const MOUNT_ACTION_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        actionId: { type: "string" },
+    },
+    required: ["objectId", "actionId"],
+};
+
 interface PreviewActionPayload {
     readonly objectId: string;
 }
 
+const ACTION_PREVIEW_PLAY_CONTRACT: PayloadContract = {
+    properties: { objectId: { type: "string" } },
+    required: ["objectId"],
+};
+
 interface PreviewSeekPayload extends PreviewActionPayload {
     readonly timeSeconds: number;
 }
+
+const ACTION_PREVIEW_SEEK_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        timeSeconds: { type: "number" },
+    },
+    required: ["objectId", "timeSeconds"],
+};
 
 function previewTargetFor(
     ctx: DirectorContext,
@@ -128,6 +156,11 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
 interface UnmountActionPayload {
     objectId: string;
 }
+
+const UNMOUNT_ACTION_CONTRACT: PayloadContract = {
+    properties: { objectId: { type: "string" } },
+    required: ["objectId"],
+};
 
 export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> {
     static readonly TYPE = "action.unmount";
@@ -277,6 +310,11 @@ interface TransportSeekPayload {
     time: number;
 }
 
+const TRANSPORT_SEEK_CONTRACT: PayloadContract = {
+    properties: { time: { type: "number" } },
+    required: ["time"],
+};
+
 export class TransportSeekCommand extends DirectorCommand<TransportSeekPayload> {
     static readonly TYPE = "transport.seek";
     readonly type = TransportSeekCommand.TYPE;
@@ -298,6 +336,11 @@ interface TransportLoopPayload {
     readonly loop: boolean;
 }
 
+const TRANSPORT_SET_LOOP_CONTRACT: PayloadContract = {
+    properties: { loop: { type: "boolean" } },
+    required: ["loop"],
+};
+
 /** 循环开关(瞬态,不入撤销栈):反复看同一段是评估运镜节奏的唯一手段。 */
 export class TransportSetLoopCommand extends DirectorCommand<TransportLoopPayload> {
     static readonly TYPE = "transport.set-loop";
@@ -316,55 +359,130 @@ export class TransportSetLoopCommand extends DirectorCommand<TransportLoopPayloa
     }
 }
 
+/** 播放态此前只能直读 observable；跨 iframe/工具面需经注册查询返回稳定 DTO。 */
+export class TransportGetStateQuery implements DirectorQuery<Record<string, never>> {
+    static readonly TYPE = "transport.get-state";
+    readonly type = TransportGetStateQuery.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {}
+
+    validate(): readonly string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): {
+        readonly time: number;
+        readonly isPlaying: boolean;
+        readonly isLooping: boolean;
+        readonly durationSeconds: number;
+    } {
+        return {
+            time: ctx.clock.time,
+            isPlaying: ctx.clock.isPlaying,
+            isLooping: ctx.clock.isLooping,
+            durationSeconds: ctx.clock.durationSeconds,
+        };
+    }
+}
+
+const TRANSPORT_GET_STATE_CAPABILITY: CommandCapability = {
+    type: TransportGetStateQuery.TYPE,
+    version: "1",
+    kind: "query",
+    permissions: [TRANSPORT_READ_PERMISSION],
+    appliesWhen: TRANSPORT_APPLIES_WHEN,
+    payload: EMPTY_PAYLOAD_CONTRACT,
+};
+
 export function registerActionCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         MountActionCommand.TYPE,
         (payload: MountActionPayload) => new MountActionCommand(payload),
-        capability(MountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+        capability(MountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, MOUNT_ACTION_CONTRACT),
     );
     dispatcher.register(
         UnmountActionCommand.TYPE,
         (payload: UnmountActionPayload) => new UnmountActionCommand(payload),
-        capability(UnmountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+        capability(UnmountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, UNMOUNT_ACTION_CONTRACT),
     );
     dispatcher.register(
         ActionPreviewPlayCommand.TYPE,
         (payload: PreviewActionPayload) => new ActionPreviewPlayCommand(payload),
-        capability(ActionPreviewPlayCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+        capability(
+            ActionPreviewPlayCommand.TYPE,
+            ACTION_EDIT_PERMISSION,
+            ACTION_APPLIES_WHEN,
+            ACTION_PREVIEW_PLAY_CONTRACT,
+        ),
     );
     dispatcher.register(
         ActionPreviewPauseCommand.TYPE,
         () => new ActionPreviewPauseCommand(),
-        capability(ActionPreviewPauseCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+        capability(ActionPreviewPauseCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, EMPTY_PAYLOAD_CONTRACT),
     );
     dispatcher.register(
         ActionPreviewSeekCommand.TYPE,
         (payload: PreviewSeekPayload) => new ActionPreviewSeekCommand(payload),
-        capability(ActionPreviewSeekCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN),
+        capability(
+            ActionPreviewSeekCommand.TYPE,
+            ACTION_EDIT_PERMISSION,
+            ACTION_APPLIES_WHEN,
+            ACTION_PREVIEW_SEEK_CONTRACT,
+        ),
     );
     dispatcher.register(
         TransportSetLoopCommand.TYPE,
         (payload: TransportLoopPayload) => new TransportSetLoopCommand(payload),
-        capability(TransportSetLoopCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+        capability(
+            TransportSetLoopCommand.TYPE,
+            TRANSPORT_CONTROL_PERMISSION,
+            TRANSPORT_APPLIES_WHEN,
+            TRANSPORT_SET_LOOP_CONTRACT,
+        ),
     );
     dispatcher.register(
         TransportPlayCommand.TYPE,
         () => new TransportPlayCommand(),
-        capability(TransportPlayCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+        capability(
+            TransportPlayCommand.TYPE,
+            TRANSPORT_CONTROL_PERMISSION,
+            TRANSPORT_APPLIES_WHEN,
+            EMPTY_PAYLOAD_CONTRACT,
+        ),
     );
     dispatcher.register(
         TransportPauseCommand.TYPE,
         () => new TransportPauseCommand(),
-        capability(TransportPauseCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+        capability(
+            TransportPauseCommand.TYPE,
+            TRANSPORT_CONTROL_PERMISSION,
+            TRANSPORT_APPLIES_WHEN,
+            EMPTY_PAYLOAD_CONTRACT,
+        ),
     );
     dispatcher.register(
         TransportSeekCommand.TYPE,
         (payload: TransportSeekPayload) => new TransportSeekCommand(payload),
-        capability(TransportSeekCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+        capability(
+            TransportSeekCommand.TYPE,
+            TRANSPORT_CONTROL_PERMISSION,
+            TRANSPORT_APPLIES_WHEN,
+            TRANSPORT_SEEK_CONTRACT,
+        ),
     );
     dispatcher.register(
         TransportStopCommand.TYPE,
         () => new TransportStopCommand(),
-        capability(TransportStopCommand.TYPE, TRANSPORT_CONTROL_PERMISSION, TRANSPORT_APPLIES_WHEN),
+        capability(
+            TransportStopCommand.TYPE,
+            TRANSPORT_CONTROL_PERMISSION,
+            TRANSPORT_APPLIES_WHEN,
+            EMPTY_PAYLOAD_CONTRACT,
+        ),
+    );
+    dispatcher.registerQuery(
+        TransportGetStateQuery.TYPE,
+        () => new TransportGetStateQuery(),
+        TRANSPORT_GET_STATE_CAPABILITY,
     );
 }

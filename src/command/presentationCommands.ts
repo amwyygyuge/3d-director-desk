@@ -1,6 +1,8 @@
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
+import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import type { PayloadContract } from "@/command/PayloadContract";
 
 const PRESENTATION_COMMAND_VERSION = "1" as const;
 const PRESENTATION_PERMISSION = "desk:present";
@@ -11,6 +13,9 @@ const ISSUE_CODE = {
 } as const;
 
 type EmptyPayload = Record<string, never>;
+
+const ENTER_PRESENTATION_CONTRACT: PayloadContract = EMPTY_PAYLOAD_CONTRACT;
+const EXIT_PRESENTATION_CONTRACT: PayloadContract = EMPTY_PAYLOAD_CONTRACT;
 
 /**
  * 进入全屏预览:悬浮壳层与场景辅助物隐去,Program 输出轨接管视口相机并从头播放。
@@ -76,13 +81,14 @@ export class ExitPresentationCommand extends DirectorCommand<EmptyPayload> {
     }
 }
 
-function capability(type: string): CommandCapability {
+function capability(type: string, payload: PayloadContract): CommandCapability {
     return {
         type,
         version: PRESENTATION_COMMAND_VERSION,
         kind: "command",
         permissions: [PRESENTATION_PERMISSION],
         appliesWhen: PRESENTATION_APPLIES_WHEN,
+        payload,
     };
 }
 
@@ -91,11 +97,11 @@ export function registerPresentationCommands(dispatcher: CommandDispatcher): voi
     dispatcher.register(
         EnterPresentationCommand.TYPE,
         () => new EnterPresentationCommand(),
-        capability(EnterPresentationCommand.TYPE),
+        capability(EnterPresentationCommand.TYPE, ENTER_PRESENTATION_CONTRACT),
     );
     dispatcher.register(
         ExitPresentationCommand.TYPE,
         () => new ExitPresentationCommand(),
-        capability(ExitPresentationCommand.TYPE),
+        capability(ExitPresentationCommand.TYPE, EXIT_PRESENTATION_CONTRACT),
     );
 }
