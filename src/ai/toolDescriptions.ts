@@ -18,7 +18,9 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "camera.activate": "切入指定机位视角(机位须已存在)",
     "camera.deactivate": "退出机位视角,回导演自由视角",
     "camera.remove-shot": "删除机位,连带清理其运镜片段与 Program 排期",
-    "camera.frame-subject": "按景别(大远景~大特写七档)为被摄体生成机位,方位角缺省取当前导演相机朝向",
+    "camera.frame-subject": "按景别(大远景~大特写七档)为一个或多个被摄体生成同框机位(联合包围球定距)",
+    "camera.check-framing": "视锥同框断言:逐被摄体返回 inFrame 与 NDC 边距,负值即出画——布景验收不截图",
+    "scene.stage": "布景配方一键成组:对峙/并肩/三角/纵深,槽位绑定实体即可,距离按包围球半径自适应尺度",
     // 运镜
     "motion.create-clip": "创建运镜片段(完整 CameraKey 序列,不落 Program)",
     "motion.create-take": "推荐入口:一次创建运镜片段并落 Program 输出;时段冲突返回结构化 options",

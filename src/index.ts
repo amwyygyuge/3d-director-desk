@@ -123,7 +123,7 @@ export { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 export type { CameraMotionSink } from "@/camera/CameraMotionSampler";
 export type { DirectorPose } from "@/store/CameraStore";
 export { CaptureService } from "@/capture/CaptureService";
-export type { CaptureHelperLifecycle, RenderHandles } from "@/capture/CaptureService";
+export type { CaptureHelperLifecycle, FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
 export {
     CaptureFrameCommand,
     CaptureVideoCommand,
@@ -202,6 +202,7 @@ export {
     DeactivateShotCommand,
     registerCameraCommands,
     RemoveShotCommand,
+    CameraCheckFramingQuery,
     CameraFrameSubjectCommand,
     CameraListShotsQuery,
 } from "@/command/cameraCommands";
@@ -235,6 +236,8 @@ export {
     registerPlacementCommands,
 } from "@/command/placementCommands";
 export type { PlacementRelation } from "@/command/placementCommands";
+export { registerStageCommands, STAGE_PRESET, StagePresetCompiler, StageSceneCommand } from "@/command/stageCommands";
+export type { StagePresetId, StageSlotBinding, StageSlotSpec } from "@/command/stageCommands";
 export {
     ApplyPosePresetCommand,
     ClearPoseCommand,

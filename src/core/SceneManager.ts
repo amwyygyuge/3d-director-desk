@@ -3,6 +3,7 @@ import type { Object3D } from "three";
 
 import { DisposeBag } from "@/core/DisposeBag";
 import { type SceneObject } from "@/core/SceneObject";
+import type { Transform } from "@/core/SceneObject";
 
 /**
  * 场景管理器:场景对象的身份注册、查询与生命周期编排。
@@ -40,6 +41,18 @@ export class SceneManager {
 
     getRuntime(id: string): Object3D | undefined {
         return this.runtimes.get(id);
+    }
+
+    /**
+     * 同任务内同步运行时变换:React  props 提交在下一帧,命令层连续布景(stage→frame)读包围盒
+     * 会读到旧位姿——实体写后立刻推齐运行时,React 再提交同值属幂等。
+     */
+    syncRuntimeTransform(id: string, transform: Transform): void {
+        const runtime = this.runtimes.get(id);
+        if (!runtime) return;
+        runtime.position.set(...transform.position);
+        runtime.rotation.set(...transform.rotation);
+        runtime.scale.set(...transform.scale);
     }
     /** 仅解除运行时绑定(React 卸载 ref 回调用);实体仍保留,与 unregister 区分 */
     unbindRuntime(id: string): void {

@@ -80,7 +80,7 @@ const ShotSizeControl = observer(function ShotSizeControl() {
         const result = dispatcher.dispatch(
             {
                 type: "camera.frame-subject",
-                payload: { shotId: camera.nextShotName(), subjectId: primaryId, shotSize: size },
+                payload: { shotId: camera.nextShotName(), subjectIds: [primaryId], shotSize: size },
             },
             stores,
         );

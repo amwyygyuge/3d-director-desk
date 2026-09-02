@@ -1,3 +1,5 @@
+import { Box3 } from "three";
+
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
 import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
@@ -11,6 +13,9 @@ import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/comm
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
 import { subjectBoundsFor } from "@/command/subjectBounds";
+import type { SubjectBounds } from "@/command/subjectBounds";
+import type { Vec3 } from "@/core/SceneObject";
+import { measureModelBox } from "@/core/measureModelBox";
 import { createPositionSample } from "@/motion/MotionTrajectory";
 import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 
@@ -31,11 +36,16 @@ const SHOT_ID_PAYLOAD_CONTRACT: PayloadContract = {
 const FRAME_SUBJECT_PAYLOAD_CONTRACT: PayloadContract = {
     properties: {
         shotId: { type: "string" },
-        subjectId: { type: "string" },
+        subjectIds: { type: "array", items: { type: "string" }, minItems: 1 },
         shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
         azimuth: { type: "number" },
     },
-    required: ["shotId", "subjectId", "shotSize"],
+    required: ["shotId", "subjectIds", "shotSize"],
+};
+
+const CHECK_FRAMING_CONTRACT: PayloadContract = {
+    properties: { subjectIds: { type: "array", items: { type: "string" }, minItems: 1 } },
+    required: ["subjectIds"],
 };
 
 function cameraCapability(
@@ -123,7 +133,8 @@ interface ShotIdPayload {
 
 interface FrameSubjectPayload {
     shotId: string;
-    subjectId: string;
+    /** 多被摄体联合取景:中点取各中心均值,半径覆盖全体(双人同框由此成为构造保证) */
+    subjectIds: string[];
     shotSize: ShotSize;
     azimuth?: number;
 }
@@ -214,7 +225,30 @@ export class RemoveShotCommand extends DirectorCommand<ShotIdPayload> {
     }
 }
 
-/** 按被摄体边界生成景别机位,让 UI 与工具复用同一构图语义。 */
+/** 联合包围球:中点 = 各中心均值;半径 = 各中心到均值距离 + 各自半径 的最大值 */
+function jointSubjectBounds(ctx: DirectorContext, subjectIds: readonly string[]): SubjectBounds | null {
+    const subjects = subjectIds.flatMap((id) => {
+        const bounds = subjectBoundsFor(ctx, id);
+        return bounds ? [bounds] : [];
+    });
+    if (subjects.length === 0) return null;
+    const center: Vec3 = [
+        subjects.reduce((sum, s) => sum + s.center[0], 0) / subjects.length,
+        subjects.reduce((sum, s) => sum + s.center[1], 0) / subjects.length,
+        subjects.reduce((sum, s) => sum + s.center[2], 0) / subjects.length,
+    ];
+    const radius = subjects.reduce(
+        (furthest, s) =>
+            Math.max(
+                furthest,
+                Math.hypot(s.center[0] - center[0], s.center[1] - center[1], s.center[2] - center[2]) + s.radius,
+            ),
+        0,
+    );
+    return { center, radius };
+}
+
+/** 按被摄体边界生成景别机位,让 UI 与工具复用同一构图语义;多被摄体按联合包围球同框。 */
 export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPayload> {
     static readonly TYPE = "camera.frame-subject";
     readonly type = CameraFrameSubjectCommand.TYPE;
@@ -227,10 +261,11 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
         if (typeof this.payload.shotId !== "string" || this.payload.shotId.length === 0) {
             return ["机位 id 格式无效"];
         }
-        if (typeof this.payload.subjectId !== "string" || this.payload.subjectId.length === 0) {
-            return ["被摄对象 id 格式无效"];
+        if (!Array.isArray(this.payload.subjectIds) || this.payload.subjectIds.length === 0) {
+            return ["被摄对象列表须非空"];
         }
-        if (!ctx.scene.manager.getEntity(this.payload.subjectId)) return ["被摄对象不存在"];
+        const missing = this.payload.subjectIds.filter((id) => !ctx.scene.manager.getEntity(id));
+        if (missing.length > 0) return [`被摄对象不存在: ${missing.join(", ")}`];
         if (!Object.values(SHOT_SIZE).includes(this.payload.shotSize)) return ["未知的景别"];
         if (this.payload.azimuth !== undefined && !Number.isFinite(this.payload.azimuth)) {
             return ["方位角须为有限数"];
@@ -239,7 +274,7 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
     }
 
     execute(ctx: DirectorContext): void {
-        const subject = subjectBoundsFor(ctx, this.payload.subjectId);
+        const subject = jointSubjectBounds(ctx, this.payload.subjectIds);
         if (!subject) return;
         const eye = ctx.camera.lastDirectorPose;
         const azimuth =
@@ -255,6 +290,43 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
         return previousShot
             ? [{ type: "camera.set-shot", payload: { id: this.payload.shotId, shot: previousShot.toJSON() } }]
             : [{ type: RemoveShotCommand.TYPE, payload: { id: this.payload.shotId } }];
+    }
+}
+
+interface CheckFramingPayload {
+    readonly subjectIds: string[];
+}
+
+const TMP_FRAMING_BOX = new Box3();
+
+/**
+ * 视锥同框查询:消灭布景链路的截图依赖——「出画没有」是数据断言,不用眼睛。
+ * marginNdc 为负即出画,绝对值是回正所需的归一化边距。
+ */
+export class CameraCheckFramingQuery implements DirectorQuery<CheckFramingPayload> {
+    static readonly TYPE = "camera.check-framing";
+    readonly type = CameraCheckFramingQuery.TYPE;
+
+    constructor(readonly payload: CheckFramingPayload) {}
+
+    validate(ctx: DirectorContext): readonly string[] {
+        return this.payload.subjectIds
+            .filter((id) => !ctx.scene.manager.getEntity(id))
+            .map((id) => `对象 "${id}" 不存在`);
+    }
+
+    execute(ctx: DirectorContext): unknown {
+        // 激活机位存在 → 按机位定义解析式测量(渲染相机下一帧才就位,同任务链读不到)
+        const activeShot = ctx.camera.activeShotId ? ctx.camera.director.getShot(ctx.camera.activeShotId) : undefined;
+        const pose = activeShot
+            ? { position: activeShot.position, target: activeShot.target, fov: activeShot.fov }
+            : undefined;
+        return this.payload.subjectIds.map((id) => {
+            const runtime = ctx.scene.manager.getRuntime(id);
+            if (runtime) measureModelBox(runtime, TMP_FRAMING_BOX);
+            const measure = runtime ? ctx.capture.measureFraming(TMP_FRAMING_BOX, pose) : null;
+            return { id, inFrame: measure?.inFrame ?? false, marginNdc: measure?.marginNdc ?? null };
+        });
     }
 }
 
@@ -293,5 +365,10 @@ export function registerCameraCommands(dispatcher: CommandDispatcher): void {
         CameraListShotsQuery.TYPE,
         (payload: Record<string, never>) => new CameraListShotsQuery(payload),
         cameraCapability(CameraListShotsQuery.TYPE, "query", [CAMERA_READ_PERMISSION], EMPTY_PAYLOAD_CONTRACT),
+    );
+    dispatcher.registerQuery(
+        CameraCheckFramingQuery.TYPE,
+        (payload: CheckFramingPayload) => new CameraCheckFramingQuery(payload),
+        cameraCapability(CameraCheckFramingQuery.TYPE, "query", [CAMERA_READ_PERMISSION], CHECK_FRAMING_CONTRACT),
     );
 }

@@ -1,8 +1,38 @@
 import { Box3, Vector3 } from "three";
 
-import type { DirectorContext } from "@/command/DirectorCommand";
 import { measureModelBox } from "@/core/measureModelBox";
-import type { Vec3 } from "@/core/SceneObject";
+import type { CommandIssue, CommandIssueOption, DirectorContext } from "@/command/DirectorCommand";
+import type { SceneObject, Vec3 } from "@/core/SceneObject";
+
+/** 实体装载态:场景描述与装载闸门(place-relative/scene.stage)共用同一判定(Rule of Two) */
+export type EntityLoadState = "none" | "loading" | "loaded" | "failed";
+
+/** 装载态判定:结局表是唯一事实源——runtime 外层组在内容加载前就绑定,不能当 loaded 证据 */
+export function entityLoadState(ctx: DirectorContext, entity: SceneObject): EntityLoadState {
+    if (entity.kind !== "model") return "none";
+    if (ctx.ui.loading.has(entity.id)) return "loading";
+    return ctx.ui.modelOutcomes.get(entity.id) ?? "loading";
+}
+
+/** 装载闸门的下一步建议:AI 按断言协议等待 loaded 后重试 */
+export const WAIT_FOR_MODEL_OPTION: readonly CommandIssueOption[] = [
+    { type: "wait-for-model", label: "等待模型加载完成后重试" },
+];
+
+/**
+ * 装载闸门:间距语义强依赖包围球半径——未装载时半径回退 0 会摆出互穿结果,故拒绝而非降级
+ * (取景类命令保持宽松,不卡作者)。place-relative 与 scene.stage 共用。
+ */
+export function entityReadinessIssue(ctx: DirectorContext, entity: SceneObject, path: string): CommandIssue | null {
+    const state = entityLoadState(ctx, entity);
+    if (state === "loaded" || state === "none") return null;
+    return {
+        code: "model-not-loaded",
+        path,
+        message: `对象 "${entity.id}" 尚未装载完成(当前 ${state}),间距语义需要真实包围球`,
+        options: WAIT_FOR_MODEL_OPTION,
+    };
+}
 
 /** 被摄体的构图度量:中心与包围球半径,景别与环绕预设据此定距。 */
 export interface SubjectBounds {

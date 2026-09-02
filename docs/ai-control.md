@@ -1,6 +1,6 @@
 # AI 语言控制导演台 — 方案设计(未来铺垫)
 
-> 状态:命令层 65 命令 + 15 查询全部落地并携带 payload 契约(`PayloadContract`,债 D1 已清);语义编译双落地——运镜 `MotionPresetCompiler` + `motion.author`、摆位 `PlacementCompiler` + `object.place-relative`;`listCapabilities()` 即 AI tool schema 真相源。Monet agent 工具接入属阶段一尾声/阶段二。
+> 状态:命令层 66 命令 + 16 查询全部落地并携带 payload 契约(`PayloadContract`,债 D1 已清);语义编译三落地——运镜 `MotionPresetCompiler`、摆位 `PlacementCompiler`、布景 `StagePresetCompiler`(`scene.stage`,间距按包围球半径和自适应);装载闸门拒绝未就绪实体的间距语义命令(`wait-for-model` 结构化重试);`camera.frame-subject` 多被摄体联合取景 + `camera.check-framing` 视锥断言使布景全程零截图;`listCapabilities()` 即 AI tool schema 真相源。
 
 ## 场景分级
 
@@ -73,18 +73,19 @@ LLM 不擅长数值、擅长语义。禁止 LLM 直接输出世界坐标。运�
 | 「推近」「环绕」「横移」   | `MotionPresetCompiler` → `motion.author` → 可编辑 `CameraKey` 序列(已落地)            |
 | 「特写」「大远景」等景别   | `camera.frame-subject` → `ShotSizePresets` 按被摄体包围球定距(已落地)                 |
 | 「A 的左边两米」「面对面」 | `PlacementCompiler` → `object.place-relative`:相机视线参考系 + 包围球表面间距(已落地) |
+| 「两人对峙」「三角站位」   | `StagePresetCompiler` → `scene.stage`:配方槽位 × 半径和偏移,撤销一步全组回原(已落地)  |
 | 「跑起来」                 | 动作名 → `assets.list` 目录发现 + `assets.mount` 骨骼预检(已落地)                     |
 
 失败路径返回结构化错误(如 `{error:"bone-incompatible", availableActions:[...]}`),让 LLM 换方案而非终止。
 
 ## AI 的「眼睛」与「手」
 
-| 能力     | 机制                                                                                                                                                                                              | 现状                                        |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| 眼睛     | 注册查询(15 条:scene.describe/camera.get-pose/camera.list-shots/motion.get/timeline.get-document/transport.get-state/lighting.×2/pose.×3/actor.×2/assets.list/desk.export-document)+ 截图喂多模态 | 已就位;截图/录制产物经 requestId 幂等键对账 |
-| 手       | tool call → 语义编译 → 命令层                                                                                                                                                                     | 运镜/摆位双编译器 + 命令层已就位            |
-| 资产目录 | `assets.list`/`assets.place`/`assets.mount`(内置目录已入库,宿主注入经 register-assets)                                                                                                            | 已就位                                      |
-| 撤销     | 一批 AI 命令 = Monet undoManager 一个 record                                                                                                                                                      | 命令层逆命令历史已就位;Monet 侧归口待集成   |
+| 能力     | 机制                                                                                                                                                                                                                   | 现状                                      |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 眼睛     | 注册查询(16 条:scene.describe/camera.get-pose/camera.list-shots/camera.check-framing/motion.get/timeline.get-document/transport.get-state/lighting.×2/pose.×3/actor.×2/assets.list/desk.export-document)+ 截图喂多模态 | 已就位;布景验收零截图,截图只留美学终审    |
+| 手       | tool call → 语义编译 → 命令层                                                                                                                                                                                          | 运镜/摆位双编译器 + 命令层已就位          |
+| 资产目录 | `assets.list`/`assets.place`/`assets.mount`(内置目录已入库,宿主注入经 register-assets)                                                                                                                                 | 已就位                                    |
+| 撤销     | 一批 AI 命令 = Monet undoManager 一个 record                                                                                                                                                                           | 命令层逆命令历史已就位;Monet 侧归口待集成 |
 
 ## 接入路线(2026-09-02 定稿)
 

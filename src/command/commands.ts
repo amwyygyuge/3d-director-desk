@@ -13,6 +13,8 @@ import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
+import type { ActorProfileInit } from "@/actor/ActorProfile";
+import type { PoseSnapshotInit } from "@/pose/PoseSnapshot";
 import { isLightColor, isLightIntensity, isLightType, LIGHT_TYPES, normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
@@ -30,6 +32,9 @@ import { registerAssetCatalogCommands } from "@/command/assetCatalogCommands";
 import { registerDocumentCommands } from "@/command/documentCommands";
 import { registerPresentationCommands } from "@/command/presentationCommands";
 import { registerPlacementCommands } from "@/command/placementCommands";
+import { registerStageCommands } from "@/command/stageCommands";
+import { entityLoadState } from "@/command/subjectBounds";
+import type { EntityLoadState } from "@/command/subjectBounds";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
@@ -68,6 +73,9 @@ interface PlaceObjectPayload {
     name?: string;
     /** kind="light" 的可序列化值对象；其他 kind 必须无此字段。 */
     light?: LightParams | null;
+    /** 撤销回放/文档还原的实体快照字段(SceneObject.toJSON 携带);常规放置不带 */
+    pose?: PoseSnapshotInit | null;
+    actor?: ActorProfileInit | null;
 }
 
 const PLACE_OBJECT_CONTRACT: PayloadContract = {
@@ -78,6 +86,9 @@ const PLACE_OBJECT_CONTRACT: PayloadContract = {
         transform: TRANSFORM_SCHEMA,
         format: nullable({ type: "string", enum: Object.values(MODEL_FORMAT) }),
         name: { type: "string" },
+        // 撤销回放带实体全快照:pose/actor 必须进契约,否则 redo/undo 删除在闸门处崩
+        pose: nullable({ type: "object" }),
+        actor: nullable({ type: "object" }),
         light: nullable({
             type: "object",
             properties: {
@@ -330,7 +341,7 @@ interface SceneEntityDescription {
     readonly name: string;
     readonly transform: Transform;
     /** none=非模型无装载;loading/loaded/failed 由 UiStore 装载结果表与运行时绑定共同判定 */
-    readonly loadState: "none" | "loading" | "loaded" | "failed";
+    readonly loadState: EntityLoadState;
     /** 挂载的 AnimationLibrary action id；未挂载为 null。 */
     readonly mountedActionId: string | null;
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
@@ -348,13 +359,6 @@ const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     appliesWhen: SCENE_APPLIES_WHEN,
     payload: EMPTY_PAYLOAD_CONTRACT,
 };
-
-function loadStateOf(ctx: DirectorContext, entity: SceneObject): SceneEntityDescription["loadState"] {
-    // 结局表是唯一事实源:runtime 外层组在内容加载前就绑定,不能当 loaded 证据
-    if (entity.kind !== "model") return "none";
-    if (ctx.ui.loading.has(entity.id)) return "loading";
-    return ctx.ui.modelOutcomes.get(entity.id) ?? "loading";
-}
 
 function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityDescription {
     const runtime = ctx.scene.manager.getRuntime(entity.id);
@@ -375,7 +379,7 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
         kind: entity.kind,
         name: entity.name,
         transform: toJS(entity.transform),
-        loadState: loadStateOf(ctx, entity),
+        loadState: entityLoadState(ctx, entity),
         mountedActionId: entity.actionId,
         bounds,
     };
@@ -457,4 +461,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerPresentationCommands(dispatcher);
     registerAssetCatalogCommands(dispatcher);
     registerPlacementCommands(dispatcher);
+    registerStageCommands(dispatcher);
 }

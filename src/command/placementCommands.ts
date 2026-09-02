@@ -3,7 +3,7 @@ import { toJS } from "mobx";
 import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
-import { subjectBoundsFor } from "@/command/subjectBounds";
+import { entityReadinessIssue, subjectBoundsFor } from "@/command/subjectBounds";
 import type { PayloadContract } from "@/command/PayloadContract";
 import type { Transform, Vec3 } from "@/core/SceneObject";
 import { HOME_DIRECTOR_POSE } from "@/store/CameraStore";
@@ -44,8 +44,8 @@ const DEFAULT_HORIZONTAL_FORWARD: Vec3 = [0, 0, 1];
 const UP: Vec3 = [0, 1, 0];
 const LEFT_DIRECTION = -1;
 const RIGHT_DIRECTION = 1;
-// 与 MoveObjectCommand.TYPE 同值但不得 import:commands.ts 聚合依赖本文件,反向引用成环
-const MOVE_OBJECT_COMMAND_TYPE = "object.move";
+// 与 MoveObjectCommand.TYPE 同值但不得 import commands.ts(聚合依赖成环);scene.stage 的 invert 也复用它
+export const MOVE_OBJECT_COMMAND_TYPE = "object.move";
 const SCENE_EDIT_PERMISSION = "scene:edit";
 const SCENE_APPLIES_WHEN = "director-desk.scene-v1";
 const PLACEMENT_RELATIONS = Object.values(PLACEMENT_RELATION) as readonly PlacementRelation[];
@@ -70,13 +70,15 @@ const placeRelativeContract: PayloadContract = {
     required: ["id", "anchorId", "relation"],
 };
 
-function horizontalForward(forward: Vec3): Vec3 {
+/** 水平化视线前向(scene.stage 配方与 place-relative 共用参考系) */
+export function horizontalForward(forward: Vec3): Vec3 {
     const [x, , z] = forward;
     const length = Math.hypot(x, z);
     return length > 0 ? [x / length, 0, z / length] : DEFAULT_HORIZONTAL_FORWARD;
 }
 
-function rightFor(forward: Vec3): Vec3 {
+/** 水平右向 = forward × up(画面右方;scene.stage 配方与 place-relative 共用) */
+export function rightFor(forward: Vec3): Vec3 {
     const [forwardX, forwardY, forwardZ] = forward;
     const [upX, upY, upZ] = UP;
     return [forwardY * upZ - forwardZ * upY, forwardZ * upX - forwardX * upZ, forwardX * upY - forwardY * upX];
@@ -149,6 +151,16 @@ function isValidObjectId(id: unknown): id is string {
     return typeof id === "string" && id.length > 0;
 }
 
+/** 装载闸门:subject/anchor 任一方未就绪即拒(ready 判定见 readinessIssue) */
+function readinessIssues(ctx: DirectorContext, payload: PlaceRelativePayload): readonly CommandIssue[] {
+    const subject = isValidObjectId(payload.id) ? ctx.scene.manager.getEntity(payload.id) : undefined;
+    const anchor = isValidObjectId(payload.anchorId) ? ctx.scene.manager.getEntity(payload.anchorId) : undefined;
+    return [
+        ...(subject ? [entityReadinessIssue(ctx, subject, "id")] : []),
+        ...(anchor ? [entityReadinessIssue(ctx, anchor, "anchorId")] : []),
+    ].filter((item) => item !== null);
+}
+
 function placementIssues(ctx: DirectorContext, payload: PlaceRelativePayload): readonly CommandIssue[] {
     const hasValidSubjectId = isValidObjectId(payload.id);
     const hasValidAnchorId = isValidObjectId(payload.anchorId);
@@ -165,10 +177,12 @@ function placementIssues(ctx: DirectorContext, payload: PlaceRelativePayload): r
         ...(subject ? [] : [issue(ISSUE_CODE.SUBJECT_NOT_FOUND, "id", `对象 "${payload.id}" 不存在`)]),
         ...(anchor ? [] : [issue(ISSUE_CODE.ANCHOR_NOT_FOUND, "anchorId", `锚点对象 "${payload.anchorId}" 不存在`)]),
         ...(payload.id === payload.anchorId ? [issue(ISSUE_CODE.SAME_OBJECT, "anchorId", "对象不能相对自身摆位")] : []),
+        ...readinessIssues(ctx, payload),
     ];
 }
 
-function forwardFromDirectorPose(ctx: DirectorContext): Vec3 {
+/** 导演视线前向:scene.stage 配方与 place-relative 共用同一参考系(Rule of Two) */
+export function forwardFromDirectorPose(ctx: DirectorContext): Vec3 {
     const pose = ctx.camera.lastDirectorPose ?? HOME_DIRECTOR_POSE;
     return [pose.target[0] - pose.position[0], pose.target[1] - pose.position[1], pose.target[2] - pose.position[2]];
 }

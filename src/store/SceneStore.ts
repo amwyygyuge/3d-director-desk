@@ -55,6 +55,7 @@ export class SceneStore {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
         entity.applyTransform(transform);
+        this.manager.syncRuntimeTransform(id, transform);
     }
 
     setLightParams(id: string, light: LightParams): void {

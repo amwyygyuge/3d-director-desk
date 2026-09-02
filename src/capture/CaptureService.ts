@@ -1,4 +1,5 @@
 import { PerspectiveCamera, Vector3 } from "three";
+import type { Box3 } from "three";
 
 import { waitMs } from "@/core/waitMs";
 import type { Camera, Scene, WebGLRenderer } from "three";
@@ -8,6 +9,9 @@ import type { Vec3 } from "@/core/SceneObject";
 
 const PNG_MIME_TYPE = "image/png";
 const TMP_DIRECTION = new Vector3();
+const TMP_CORNER = new Vector3();
+const NDC_EDGE = 1;
+const TMP_SHOT_CAMERA = new PerspectiveCamera();
 const VIDEO_FPS = 30;
 /** 录制时长上限(秒):参考片段场景,防失控长录 */
 export const VIDEO_MAX_DURATION_SECONDS = 120;
@@ -26,6 +30,20 @@ export interface RenderHandles {
     scene: Scene;
     camera: Camera;
     invalidate: () => void;
+}
+
+/** 视锥测量:包围盒投影到 NDC 的边距;负值 = 出画。AI「同框断言」的数据面,消灭布景链路的截图依赖 */
+export interface FramingMeasure {
+    readonly inFrame: boolean;
+    /** 四边到视口边缘的最小余量(NDC 单位,-1~1 轴向) */
+    readonly marginNdc: number;
+}
+
+/** 机位解析式取景输入:check-framing 断言按机位定义测量,不等渲染相机下一帧 */
+export interface ShotFramingPose {
+    readonly position: Vec3;
+    readonly target: Vec3;
+    readonly fov: number | null;
 }
 
 /** Runtime-only observation of the most recent capture helper hide/restore transaction. */
@@ -85,6 +103,54 @@ export class CaptureService {
     }
     get isRecording(): boolean {
         return this.recorder !== null;
+    }
+
+    /**
+     * 包围盒八顶点投影 NDC,量出画边距;未 attach 或空盒返回 null。查询低频,不在渲染热路径。
+     * pose 缺省读当前生效相机;传入机位位姿则按机位解析式测量——
+     * camera.activate 的写入下一帧才到渲染相机,同任务内的「机位→同框断言」链必须用后者。
+     */
+    measureFraming(box: Box3, pose?: ShotFramingPose): FramingMeasure | null {
+        if (box.isEmpty()) return null;
+        const canvas = this.handles?.gl.domElement;
+        if (pose && canvas) {
+            TMP_SHOT_CAMERA.position.set(...pose.position);
+            TMP_SHOT_CAMERA.up.set(0, 1, 0);
+            TMP_SHOT_CAMERA.lookAt(...pose.target);
+            TMP_SHOT_CAMERA.fov = pose.fov ?? TMP_SHOT_CAMERA.fov; // fov null 时沿用 50° 默认
+            TMP_SHOT_CAMERA.aspect = canvas.width / canvas.height;
+            TMP_SHOT_CAMERA.updateProjectionMatrix();
+            TMP_SHOT_CAMERA.updateMatrixWorld(true);
+            return this.measureFramingWith(TMP_SHOT_CAMERA, box);
+        }
+        const camera = this.handles?.camera;
+        if (!camera) return null;
+        return this.measureFramingWith(camera, box);
+    }
+
+    private measureFramingWith(camera: Camera, box: Box3): FramingMeasure {
+        const corners = [box.min.x, box.max.x].flatMap((x) =>
+            [box.min.y, box.max.y].flatMap((y) => [box.min.z, box.max.z].map((z) => [x, y, z] as const)),
+        );
+        const extents = corners.reduce(
+            (acc, [x, y, z]) => {
+                TMP_CORNER.set(x, y, z).project(camera);
+                return {
+                    minX: Math.min(acc.minX, TMP_CORNER.x),
+                    maxX: Math.max(acc.maxX, TMP_CORNER.x),
+                    minY: Math.min(acc.minY, TMP_CORNER.y),
+                    maxY: Math.max(acc.maxY, TMP_CORNER.y),
+                };
+            },
+            { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
+        );
+        const marginNdc = Math.min(
+            extents.minX + NDC_EDGE,
+            NDC_EDGE - extents.maxX,
+            extents.minY + NDC_EDGE,
+            NDC_EDGE - extents.maxY,
+        );
+        return { inFrame: marginNdc >= 0, marginNdc };
     }
 
     /**

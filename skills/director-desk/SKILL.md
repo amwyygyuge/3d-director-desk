@@ -31,6 +31,7 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 | 生效相机位姿                | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                                                                                                                                     |
 | 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → requestId/timeSeconds/cameraPose/尺寸(requestId = 命令幂等键,连发截图按它对账)                                                                                                                                                                              |
 | 机位表                      | `query({ type: "camera.list-shots", payload: {} })` → `{ shots: [{ id, shot }], activeShotId }`                                                                                                                                                                                                      |
+| 同框断言                    | `query({ type: "camera.check-framing", payload: { subjectIds: [...] } })` → `[{ id, inFrame, marginNdc }]`;`marginNdc < 0` 即出画。激活机位时按机位定义测量,与渲染帧时序无关                                                                                                                         |
 | 播放态                      | `query({ type: "transport.get-state", payload: {} })` → `{ time, isPlaying, isLooping, durationSeconds }`                                                                                                                                                                                            |
 | 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                                                                                                                          |
 | 运镜编排                    | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
@@ -76,6 +77,35 @@ dispatch({ type: "object.place-relative", payload: { id: "mecha", anchorId: "mon
 dispatch({ type: "object.place-relative", payload: { id: "mecha", anchorId: "monster", relation: "facing" } }) // 面朝锚点,不动位置
 // relation 词表:left-of | right-of | in-front-of(更靠近相机) | behind | facing
 ```
+
+#### 布景配方(多人/组合构图的首选入口)
+
+一条命令摆好一组实体,距离按包围球半径和自适应尺度(人偶与机甲同配方同呼吸感):
+
+```js
+dispatch({
+    type: "scene.stage",
+    payload: {
+        presetId: "face-off",
+        slots: [
+            { slot: "a", objectId: "hero" },
+            { slot: "b", objectId: "monster" },
+        ],
+    },
+});
+```
+
+| presetId       | 槽位    | 效果                                          |
+| -------------- | ------- | --------------------------------------------- |
+| `face-off`     | a, b    | 对峙双人:b 在画面右 1.5×半径和,互朝           |
+| `side-by-side` | a, b    | 并肩:b 在画面右 0.6×半径和,同朝观众           |
+| `triangle`     | a, b, c | 三角群像:a 顶角靠前,b/c 两翼对称靠后,同朝观众 |
+| `depth-lineup` | a, b    | 前后纵深:b 沿视线拉开 3×半径和,互朝           |
+
+- 原点槽(a)保持其当前位置,其余槽位向它收拢——先把主角放到位,再以它为锚 stage。
+- 撤销一步全组回原。
+- 装载闸门:涉及实体未 `loaded` 时 stage/place-relative 拒绝并带 `wait-for-model` 选项——先等 `scene.describe` 全 loaded,别硬试。
+- **零截图验收协议**:stage → `camera.frame-subject { subjectIds: [...全体槽位实体] }` → `camera.check-framing { subjectIds }` 全部 `inFrame: true` → `scene.describe` 对账间距(表面间距 ≈ (factor−1)×半径和,蒙皮模型包围盒首帧会收敛,容差 ±30%)。全程不需要截图;截图只留美学终审。
 
 ### 动作与播放
 
@@ -125,8 +155,12 @@ dispatch({
     payload: { id: "机位 01", shot: { position: [0, 1.6, 4.2], target: [0, 0.9, 0], fov: 45 } },
 });
 
-// 景别机位(别手算距离):按被摄体包围球定距,方位角缺省取当前导演相机朝向
-dispatch({ type: "camera.frame-subject", payload: { shotId: "机位 02", subjectId: "mecha", shotSize: "close-up" } });
+// 景别机位(别手算距离):按被摄体联合包围球定距,多被摄体同框是构造保证;方位角缺省取当前导演相机朝向
+dispatch({ type: "camera.frame-subject", payload: { shotId: "机位 02", subjectIds: ["mecha"], shotSize: "close-up" } });
+dispatch({
+    type: "camera.frame-subject",
+    payload: { shotId: "双人 01", subjectIds: ["mecha", "monster"], shotSize: "medium-long" },
+});
 // shotSize 词表:extreme-long | long | medium-long | medium | medium-close | close-up | extreme-close-up
 
 // 推荐入口：一次落地可编辑的运镜片段和 Program 输出。
