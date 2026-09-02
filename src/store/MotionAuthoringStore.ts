@@ -115,6 +115,10 @@ export class MotionAuthoringStore {
     setDraftActive(active: boolean): void {
         this.draftActive = active;
     }
+    /** 选中整条走位轨:右栏编辑轨级策略或删除轨;关键帧保持未选，避免 Delete 误删一枚帧。 */
+    selectWalkTrack(trackId: string | null): void {
+        this.selectWalkKey(trackId, null);
+    }
 
     selectWalkKey(trackId: string | null, keyframeId: string | null): void {
         this.selectedWalkTrackId = trackId;

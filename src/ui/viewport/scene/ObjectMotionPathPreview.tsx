@@ -101,7 +101,7 @@ interface ObjectTrackPathProps {
  * Three ref,播放期零 DOM 变更、零调和。
  */
 const ObjectTrackPath = observer(function ObjectTrackPath({ trackId }: ObjectTrackPathProps) {
-    const { timeline, clock } = useDirectorDeskStores();
+    const { timeline, clock, motionAuthoring, selection } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const markerRef = useRef<Mesh>(null);
     const track = timeline.document.track(trackId);
@@ -139,7 +139,14 @@ const ObjectTrackPath = observer(function ObjectTrackPath({ trackId }: ObjectTra
 
     if (!track || !geometry) return null;
     return (
-        <group userData={{ helper: true, timelineTrackId: track.id }}>
+        <group
+            onPointerDown={(event) => {
+                event.stopPropagation();
+                selection.clear();
+                motionAuthoring.selectWalkTrack(track.id);
+            }}
+            userData={{ helper: true, timelineTrackId: track.id }}
+        >
             <line>
                 <primitive object={geometry.path} attach="geometry" />
                 <lineBasicMaterial vertexColors toneMapped={false} />

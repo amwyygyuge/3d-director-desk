@@ -11,9 +11,8 @@ import { useState } from "react";
 import { SetTimelineTrackPoliciesCommand } from "@/command/timelineCommands";
 import { GROUNDING_MODE, LOCOMOTION_MODE, ORIENTATION_MODE } from "@/timeline/TrackPolicies";
 import type { OrientationMode, TrackPoliciesInit } from "@/timeline/TrackPolicies";
-import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import type { ReportCommandResult } from "@/ui/inspector/Inspector";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import type { InspectorSectionProps } from "@/ui/inspector/Inspector";
 import { INSPECTOR_FIELD_SX } from "@/ui/inspector/TransformFields";
 
 const STRIDE_STEP = 0.1;
@@ -30,9 +29,15 @@ const ORIENTATION_ORDER = [ORIENTATION_MODE.PATH, ORIENTATION_MODE.KEYED] as con
  * 三者都是整条轨的意图(不是单帧属性),故按轨编辑、按轨撤销;写入一律经
  * timeline.set-track-policies,组件不碰 store。
  */
-export const WalkPolicySection = observer(function WalkPolicySection({ primaryId, report }: InspectorSectionProps) {
+export const WalkPolicySection = observer(function WalkPolicySection({
+    trackId,
+    report,
+}: {
+    readonly trackId: string;
+    readonly report: ReportCommandResult;
+}) {
     const stores = useDirectorDeskStores();
-    const track = stores.timeline.document.trackForTarget(primaryId, TIMELINE_TRACK_KIND.TRANSFORM);
+    const track = stores.timeline.document.track(trackId);
     const [strideDraft, setStrideDraft] = useState<string | null>(null);
     if (!track) return null;
     const policies = track.policies;

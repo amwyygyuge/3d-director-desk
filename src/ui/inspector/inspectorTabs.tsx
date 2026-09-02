@@ -12,12 +12,13 @@ import { CameraMotionSection, MotionClipSection } from "@/ui/inspector/MotionCli
 import { ActorImageSection, hasActorProfile } from "@/ui/actor/ActorImageSection";
 import { PoseComposerSection } from "@/ui/pose/PoseComposerSection";
 import { QuickMotionSection } from "@/ui/inspector/QuickMotionSection";
+import { ObjectMotionTrackSection } from "@/ui/inspector/ObjectMotionTrackInspector";
 import { TabSectionRegistry } from "@/ui/patterns/TabbedSections";
 import type { SceneObjectKind } from "@/core/SceneObject";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** 右栏检查器的选中上下文类型;新增类型时在 INSPECTOR_SELECTION_LABEL(InspectorSheet)补文案。 */
-export type InspectorSelectionKind = SceneObjectKind | "camera-shot" | "motion-clip";
+export type InspectorSelectionKind = SceneObjectKind | "camera-shot" | "motion-clip" | "motion-track";
 
 /**
  * tab 内容上下文:primaryId/report 同时是 section 组件的 props;
@@ -43,6 +44,7 @@ export const inspectorTabs = new TabSectionRegistry<InspectorSelectionKind, Insp
 inspectorTabs.register("camera-shot", { id: "shot", label: "机位", content: ShotCameraSection });
 inspectorTabs.register("camera-shot", { id: "motion", label: "运镜", content: CameraMotionTabContent });
 inspectorTabs.register("motion-clip", { id: "motion", label: "运镜", content: MotionClipTabContent });
+inspectorTabs.register("motion-track", { id: "motion", label: "走位", content: ObjectMotionTrackSection });
 inspectorTabs.register("model", { id: "transform", label: "变换", content: EntityTransformSection });
 inspectorTabs.register("model", { id: "quick-motion", label: "运镜", content: QuickMotionSection });
 inspectorTabs.register("model", {

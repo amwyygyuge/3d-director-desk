@@ -15,6 +15,7 @@ import { DEFAULT_CAMERA_FOV } from "@/camera/CameraShot";
 import { FOV_MAX, FOV_MIN } from "@/command/commands";
 import type { CommandResult } from "@/command/DirectorCommand";
 import { transformKeyCommandFor } from "@/command/timelineCommands";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "@/core/LightParams";
 import type { LightParams, LightType } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
@@ -540,6 +541,13 @@ const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, re
     );
 });
 
+/** 对象变换 tab 只按对象身份查轨;轨级策略控件自身只接收轨 id。 */
+const ObjectWalkPolicySection = observer(function ObjectWalkPolicySection({ objectId, report }: ObjectControlsProps) {
+    const stores = useDirectorDeskStores();
+    const track = stores.timeline.document.trackForTarget(objectId, TIMELINE_TRACK_KIND.TRANSFORM);
+    return track ? <WalkPolicySection trackId={track.id} report={report} /> : null;
+});
+
 /** 变换 tab:数值变换 + 打关键帧(灯光/相机实体即单 tab 面板)。 */
 export const EntityTransformSection = observer(function EntityTransformSection({
     primaryId,
@@ -552,7 +560,7 @@ export const EntityTransformSection = observer(function EntityTransformSection({
                 <TransformFields objectId={primaryId} />
             </Box>
             <TimelineKeyControls objectId={primaryId} report={report} />
-            <WalkPolicySection primaryId={primaryId} report={report} />
+            <ObjectWalkPolicySection objectId={primaryId} report={report} />
         </>
     );
 });

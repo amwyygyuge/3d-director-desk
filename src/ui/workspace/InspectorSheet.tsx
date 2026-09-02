@@ -42,6 +42,7 @@ const INSPECTOR_SELECTION_LABEL: Record<InspectorSelectionKind, string> = {
     camera: "已选相机",
     "camera-shot": "已选机位",
     "motion-clip": "已选运镜片段",
+    "motion-track": "已选走位轨迹",
 };
 
 function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup): InspectorSelection | null {
@@ -56,7 +57,8 @@ export const InspectorSheet = observer(function InspectorSheet() {
     const stores = useDirectorDeskStores();
     const { layout, selection, ui } = stores;
     const motionClipId = selection.primaryId === null ? stores.motionAuthoring.selectedClipId : null;
-    const primaryId = motionClipId ?? selection.primaryId;
+    const walkTrackId = selection.primaryId === null ? stores.motionAuthoring.selectedWalkTrackId : null;
+    const primaryId = motionClipId ?? walkTrackId ?? selection.primaryId;
 
     // 选中对象切换时退出骨骼点选:姿态选择是瞬时 UI 身份,不跨对象残留
     useEffect(() => {
@@ -69,7 +71,9 @@ export const InspectorSheet = observer(function InspectorSheet() {
     const selected =
         motionClipId && stores.motion.clip(motionClipId)
             ? { kind: "motion-clip" as const, name: motionClipId, isSceneEntity: false }
-            : inspectorSelectionFor({ stores, primaryId });
+            : walkTrackId && stores.timeline.document.track(walkTrackId)
+              ? { kind: "motion-track" as const, name: walkTrackId, isSceneEntity: false }
+              : inspectorSelectionFor({ stores, primaryId });
     if (selected === null) return null;
 
     // 命令失败只走全局 ApplicationNotice 一条通道;右栏不再自带 Snackbar
@@ -78,6 +82,18 @@ export const InspectorSheet = observer(function InspectorSheet() {
         ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
     };
     const context: InspectorSectionContext = { primaryId, report, stores };
+    const clearInspector = (): void => {
+        switch (selected.kind) {
+            case "motion-clip":
+                stores.motionAuthoring.selectClip(null);
+                return;
+            case "motion-track":
+                stores.motionAuthoring.selectWalkTrack(null);
+                return;
+            default:
+                selection.clear();
+        }
+    };
 
     return (
         <Paper
@@ -113,14 +129,9 @@ export const InspectorSheet = observer(function InspectorSheet() {
                         {selected.name}
                     </Typography>
                 </Box>
+
                 <Tooltip title={`清除选中 (${formatShortcutHint(SHORTCUT_ID.CLEAR_SELECTION)})`}>
-                    <IconButton
-                        size="small"
-                        aria-label="关闭检查器"
-                        onClick={() =>
-                            selected.kind === "motion-clip" ? stores.motionAuthoring.selectClip(null) : selection.clear()
-                        }
-                    >
+                    <IconButton size="small" aria-label="关闭检查器" onClick={clearInspector}>
                         <CloseIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
