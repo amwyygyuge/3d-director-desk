@@ -30,9 +30,17 @@ export class MotionAuthoringStore {
     previewClipId: string | null = null;
     selectedClipId: string | null = null;
     selectedKeyId: string | null = null;
-    /** 轨迹辅助物开关:与壳层显隐解耦,掌镜/镜头视角下仍可见 */
+    /** 轨迹辅助物开关:与壳层显隐解耦,掌镜/镜头视角下仍可见;导演台是编排工具,默认开 */
     pathVisible: boolean;
     snapEnabled = true;
+    /**
+     * 走位草绘模式(钉住式):开启时视口左键归绘制,导航让位给右键/中键/滚轮。
+     * 不做弹簧键——WASD+Space/Shift 已被飞行导航持续占用,任何裸字母弹簧键都会在飞行中误触发。
+     */
+    draftActive = false;
+    /** 选中的走位关键帧(轨道 id + 帧 id):把手渲染、Delete 归属与检查器都读它 */
+    selectedWalkTrackId: string | null = null;
+    selectedWalkKeyframeId: string | null = null;
     /**
      * 被摄目标(场景对象 id):运镜预设的取景中心与新片段的跟拍绑定共用它。
      * 它不能从「当前选中」推导——选中机位时右栏才显示运镜,此时选中的就不可能是模型。
@@ -50,7 +58,7 @@ export class MotionAuthoringStore {
         private readonly layout: WorkbenchLayoutStore,
         options?: MotionAuthoringStoreOptions,
     ) {
-        this.pathVisible = options?.pathVisible ?? false;
+        this.pathVisible = options?.pathVisible ?? true;
         makeAutoObservable<MotionAuthoringStore, "layout">(this, { layout: false });
     }
 
@@ -102,6 +110,21 @@ export class MotionAuthoringStore {
 
     setSnapEnabled(enabled: boolean): void {
         this.snapEnabled = enabled;
+    }
+
+    setDraftActive(active: boolean): void {
+        this.draftActive = active;
+    }
+
+    selectWalkKey(trackId: string | null, keyframeId: string | null): void {
+        this.selectedWalkTrackId = trackId;
+        this.selectedWalkKeyframeId = keyframeId;
+    }
+
+    /** 轨道被整体重画/清空后收敛选中态,避免把手指向已消失的帧。 */
+    forgetWalkTrack(trackId: string): void {
+        if (this.selectedWalkTrackId !== trackId) return;
+        this.selectWalkKey(null, null);
     }
 
     setSubject(objectId: string | null): void {

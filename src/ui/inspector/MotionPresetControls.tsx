@@ -175,13 +175,6 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                     playhead 已到时间轴末尾,先回退再创建运镜
                 </Typography>
             )}
-            <Button
-                size="small"
-                aria-pressed={motionAuthoring.pathVisible}
-                onClick={() => motionAuthoring.setPathVisible(!motionAuthoring.pathVisible)}
-            >
-                {motionAuthoring.pathVisible ? "隐藏运镜路径" : "显示运镜路径"}
-            </Button>
         </Box>
     );
 });

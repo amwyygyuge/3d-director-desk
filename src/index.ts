@@ -95,6 +95,9 @@ export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/Timelin
 export { SNAP_THRESHOLD_PX, SnapResolver } from "@/authoring/SnapResolver";
 export type { SnapCandidates, SnapRequest } from "@/authoring/SnapResolver";
 export { KeyframeAuthoringService, isCommandIssue } from "@/authoring/KeyframeAuthoringService";
+export { PathSimplifier } from "@/authoring/PathSimplifier";
+export { DEFAULT_WALK_SPEED_MPS, WalkDraftCompiler } from "@/authoring/WalkDraftCompiler";
+export type { WalkDraftInput } from "@/authoring/WalkDraftCompiler";
 export {
     DEFAULT_PRESET_DURATION_SECONDS,
     isOrbitDirection,
@@ -194,6 +197,9 @@ export {
     RestoreTimelineTracksCommand,
     SetTimelineDurationCommand,
     SetTimelineKeyEasingCommand,
+    SetTimelineTrackCommand,
+    SetTimelineKeyCommand,
+    SetTimelineTrackPoliciesCommand,
     registerTimelineCommands,
 } from "@/command/timelineCommands";
 export { DirectorCommand } from "@/command/DirectorCommand";
@@ -310,7 +316,22 @@ export type { KeyframeCodec } from "@/timeline/keyframeCodecs";
 export type { TimelineTrackInit, TimelineTrackKind } from "@/timeline/TimelineTrack";
 export { TransformKeyframe, TIMELINE_EASING } from "@/timeline/TransformKeyframe";
 export type { TimelineEasing, TransformKeyframeInit } from "@/timeline/TransformKeyframe";
-export { TimelineSampler, evaluateTimelineTransform, evaluateTransformTrack } from "@/timeline/TimelineSampler";
+export { buildTransformTrajectory } from "@/timeline/transformTrajectory";
+export {
+    TrackPolicies,
+    GROUNDING_MODE,
+    GROUND_HEIGHT_METERS,
+    LOCOMOTION_MODE,
+    ORIENTATION_MODE,
+    DEFAULT_STRIDE_METERS,
+} from "@/timeline/TrackPolicies";
+export type { GroundingMode, LocomotionMode, OrientationMode, TrackPoliciesInit } from "@/timeline/TrackPolicies";
+export {
+    TimelineSampler,
+    createTransformSample,
+    evaluateTimelineTransform,
+    evaluateTransformTrack,
+} from "@/timeline/TimelineSampler";
 export type { TransformSample } from "@/timeline/TimelineSampler";
 export { PlaybackCoordinator } from "@/timeline/PlaybackCoordinator";
 export type { TimelineInvalidator } from "@/timeline/PlaybackCoordinator";

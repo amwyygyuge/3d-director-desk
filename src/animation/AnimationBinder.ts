@@ -13,7 +13,10 @@ import type { TimeTransport } from "@/time/TimeTransport";
  */
 export class AnimationBinder {
     private readonly mixers = new Map<string, AnimationMixer>();
+    /** 循环时长按对象缓存:相位换算要用它,不必每帧回问 mixer 的 action 表 */
+    private readonly clipDurations = new Map<string, number>();
     private transport: TimeTransport | null = null;
+
     /** PlaybackCoordinator owns the frame pipeline; this keeps current time for mount-time alignment only. */
     bindTransport(transport: TimeTransport): void {
         this.transport = transport;
@@ -25,6 +28,7 @@ export class AnimationBinder {
         const action = mixer.clipAction(clip);
         action.play();
         this.mixers.set(objectId, mixer);
+        this.clipDurations.set(objectId, clip.duration);
         // 挂上即对齐当前 playhead:暂停态挂载也能立刻呈现正确帧,不必等下一次 tick
         mixer.setTime(this.transport?.time ?? 0);
     }
@@ -34,6 +38,7 @@ export class AnimationBinder {
         if (!mixer) return;
         mixer.stopAllAction();
         this.mixers.delete(objectId);
+        this.clipDurations.delete(objectId);
     }
     /** 切换工程时释放全部 mixer，但保留每桌共享时钟绑定。 */
     clear(): void {
@@ -48,6 +53,18 @@ export class AnimationBinder {
     /** 模型级动作预览只推进目标 mixer，避免多个模型被同一预览按钮联动。 */
     setTimeFor(objectId: string, timeSeconds: number): void {
         this.mixers.get(objectId)?.setTime(timeSeconds);
+    }
+
+    /**
+     * 步幅相位定位:phase = 已走弧长 ÷ 步幅,即「走了几步」。
+     *
+     * 它是位移的纯函数,不积累状态——scrub、倒放、跳帧都精确复现同一条腿的同一格,
+     * 这正是不用 timeScale 逐帧缩放的原因(那会把动作相位变成播放历史的函数)。
+     */
+    setStridePhaseFor(objectId: string, phase: number): void {
+        const duration = this.clipDurations.get(objectId);
+        if (duration === undefined || !Number.isFinite(phase)) return;
+        this.mixers.get(objectId)?.setTime(phase * duration);
     }
 
     has(objectId: string): boolean {

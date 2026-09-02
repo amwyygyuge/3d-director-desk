@@ -44,9 +44,17 @@ export class ViewportCameraAuthority {
         return this.camera.activeShotId === null ? VIEWPORT_CAMERA_OWNER.DIRECTOR : VIEWPORT_CAMERA_OWNER.SHOT;
     }
 
-    /** 自由导演机:轨道公转 + 飞行,手势不落命令 */
+    /**
+     * 自由导演机:轨道公转 + 飞行,手势不落命令。
+     * 草绘期不成立——左键归绘制,WASD 再推相机就会边画边飞。
+     */
     get isDirectorFree(): boolean {
-        return this.owner === VIEWPORT_CAMERA_OWNER.DIRECTOR;
+        return this.owner === VIEWPORT_CAMERA_OWNER.DIRECTOR && !this.authoring.draftActive;
+    }
+
+    /** 草绘落笔的前提:导演视角下才有稳定的世界坐标可画(成片接管/掌镜期相机归别人)。 */
+    get isDraftActive(): boolean {
+        return this.owner === VIEWPORT_CAMERA_OWNER.DIRECTOR && this.authoring.draftActive;
     }
 
     /** 掌镜摆位:pan/tilt + 飞行 + 变焦,落 camera.set-shot */
@@ -59,7 +67,7 @@ export class ViewportCameraAuthority {
         return this.owner === VIEWPORT_CAMERA_OWNER.PROGRAM && this.authoring.lensViewActive;
     }
 
-    /** OrbitControls 启停的唯一判据:导演视角且无手势让位 */
+    /** OrbitControls 启停的唯一判据:导演视角、无手势让位、且不在草绘中 */
     get isOrbitEnabled(): boolean {
         return this.isDirectorFree && this.orbitSuspensions === 0;
     }

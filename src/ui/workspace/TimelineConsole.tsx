@@ -20,6 +20,7 @@ import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { CHROME, MONO_FONT_STACK, SURFACE_PANEL_RADIUS_PX } from "@/ui/shell/theme";
 import { useScrubGesture } from "@/ui/timeline/useScrubGesture";
 import { TimelinePanel } from "@/ui/timeline/TimelinePanel";
+import { TimelineDurationField } from "@/ui/workspace/TimelineDurationField";
 
 const PREVIEW_FRAME_RATE = 30;
 const SECONDS_PER_MINUTE = 60;
@@ -109,8 +110,9 @@ const TimecodeReadout = observer(function TimecodeReadout() {
                 {formatTimecode(Math.min(playheadDisplay.value, duration))}
             </Box>
             <Box component="span" sx={{ color: "text.secondary", fontWeight: 400 }}>
-                {` / ${formatTimecode(duration)}`}
+                {" / "}
             </Box>
+            <TimelineDurationField />
         </Typography>
     );
 });

@@ -3,6 +3,8 @@ import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import MenuIcon from "@mui/icons-material/Menu";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
+import PolylineIcon from "@mui/icons-material/Polyline";
+import GestureIcon from "@mui/icons-material/Gesture";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RedoIcon from "@mui/icons-material/Redo";
@@ -54,6 +56,10 @@ const TEXT = {
     FULLSCREEN_PREVIEW: "全屏预览",
     GIZMO_TOOL: "变换工具",
     HELP: "快捷键速查",
+    PATH_HELPERS: "编排轨迹",
+    PATH_HELPERS_HINT: "运镜与走位轨迹的显隐",
+    WALK_DRAFT: "绘制走位",
+    WALK_DRAFT_HINT: "选中对象后在地面拖出路线,松手成轨;Esc 退出",
     GRID_SIZE: "地板尺寸",
     RENDER_QUALITY: "渲染画质",
     IMPORT_DOCUMENT: "导入工程…",
@@ -377,6 +383,50 @@ const GizmoToggle = observer(function GizmoToggle() {
     );
 });
 
+/**
+ * 编排轨迹显隐:运镜与走位共用同一个开关(都是编排辅助物,不按领域各开一个)。
+ * 放顶栏常驻,是因为它与"当前选中什么"无关——选着模型也要能关掉运镜轨迹,反之亦然。
+ */
+const PathHelperToggle = observer(function PathHelperToggle() {
+    const { motionAuthoring } = useDirectorDeskStores();
+    const active = motionAuthoring.pathVisible;
+    return (
+        <Tooltip title={`${TEXT.PATH_HELPERS} · ${TEXT.PATH_HELPERS_HINT}`}>
+            <IconButton
+                aria-label={TEXT.PATH_HELPERS}
+                aria-pressed={active}
+                onClick={() => motionAuthoring.setPathVisible(!active)}
+                size={COMPACT_SIZE}
+                sx={active ? ACTIVE_TOOL_SX : undefined}
+            >
+                <PolylineIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
+
+/**
+ * 走位草绘模式(钉住式)。
+ * 不给弹簧快捷键:WASD+Space/Shift 归飞行导航持续占用,裸字母弹簧键会在飞行途中误触发。
+ */
+const WalkDraftToggle = observer(function WalkDraftToggle() {
+    const { motionAuthoring } = useDirectorDeskStores();
+    const active = motionAuthoring.draftActive;
+    return (
+        <Tooltip title={`${TEXT.WALK_DRAFT} · ${TEXT.WALK_DRAFT_HINT}`}>
+            <IconButton
+                aria-label={TEXT.WALK_DRAFT}
+                aria-pressed={active}
+                onClick={() => motionAuthoring.setDraftActive(!active)}
+                size={COMPACT_SIZE}
+                sx={active ? ACTIVE_TOOL_SX : undefined}
+            >
+                <GestureIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
+
 /** 输出药丸:历史 → 变换工具 → 采集 → 动作扩展位 → 主行动 → 尾部扩展位,变换工具居中,顶部不再需要独立的视口药丸。 */
 const OutputPill = observer(function OutputPill() {
     return (
@@ -384,6 +434,9 @@ const OutputPill = observer(function OutputPill() {
             <HistoryControls />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <GizmoToggle />
+            <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
+            <PathHelperToggle />
+            <WalkDraftToggle />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <CaptureControls />
             <ToolbarExtensionButtons />

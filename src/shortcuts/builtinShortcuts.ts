@@ -35,6 +35,8 @@ export const SHORTCUT_ID = {
     LENS_EXIT: "lens.exit",
     MOTION_KEY_DELETE: "motion.key.delete",
     TRANSPORT_LOOP: "transport.loop",
+    DRAFT_EXIT: "draft.exit",
+    WALK_KEY_DELETE: "walk.key.delete",
     PALETTE_OPEN: "palette.open",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
@@ -59,11 +61,18 @@ export const SHORTCUT_SPECS: readonly {
 }[] = [
     { id: SHORTCUT_ID.PRESENTATION_EXIT, chords: ["escape"], scope: "presentation", label: "退出全屏预览" },
     { id: SHORTCUT_ID.LENS_EXIT, chords: ["escape"], scope: "lens", label: "退出镜头视角" },
+    { id: SHORTCUT_ID.DRAFT_EXIT, chords: ["escape"], scope: "draft", label: "退出绘制走位" },
     {
         id: SHORTCUT_ID.MOTION_KEY_DELETE,
         chords: ["delete", "backspace"],
         scope: "motion-key",
         label: "删除选中镜头关键帧",
+    },
+    {
+        id: SHORTCUT_ID.WALK_KEY_DELETE,
+        chords: ["delete", "backspace"],
+        scope: "walk-key",
+        label: "删除选中走位关键帧",
     },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
@@ -142,6 +151,21 @@ function removeSelectedMotionKey(stores: DirectorDeskStores): void {
     if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
 }
 
+/** 删掉最后两枚之一会让轨迹退化,交由命令层与轨道容器裁决,快捷键不预判。 */
+function removeSelectedWalkKey(stores: DirectorDeskStores): void {
+    const { selectedWalkTrackId, selectedWalkKeyframeId } = stores.motionAuthoring;
+    if (!selectedWalkTrackId || !selectedWalkKeyframeId) return;
+    const result = stores.dispatcher.dispatch(
+        { type: "timeline.remove-key", payload: { trackId: selectedWalkTrackId, keyframeId: selectedWalkKeyframeId } },
+        stores,
+    );
+    if (!result.ok) {
+        stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+        return;
+    }
+    stores.motionAuthoring.selectWalkKey(null, null);
+}
+
 function enterPresentation(stores: DirectorDeskStores): void {
     const result = stores.dispatcher.dispatch({ type: EnterPresentationCommand.TYPE, payload: {} }, stores);
     if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
@@ -175,6 +199,8 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.LENS_EXIT]: (s) =>
         s.dispatcher.dispatch({ type: SetViewModeCommand.TYPE, payload: { mode: VIEW_MODE.DIRECTOR } }, s),
     [SHORTCUT_ID.MOTION_KEY_DELETE]: removeSelectedMotionKey,
+    [SHORTCUT_ID.WALK_KEY_DELETE]: removeSelectedWalkKey,
+    [SHORTCUT_ID.DRAFT_EXIT]: (s) => s.motionAuthoring.setDraftActive(false),
     [SHORTCUT_ID.TRANSPORT_LOOP]: (s) =>
         s.dispatcher.dispatch({ type: TransportSetLoopCommand.TYPE, payload: { loop: !s.clock.isLooping } }, s),
 };
@@ -212,6 +238,8 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         stores.camera.director.getShot(primaryId) !== undefined;
     return new Set<ShortcutScope>([
         "global",
+        ...(stores.motionAuthoring.selectedWalkKeyframeId !== null ? ["walk-key" as const] : []),
+        ...(stores.motionAuthoring.draftActive ? ["draft" as const] : []),
         ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
         ...(stores.motionAuthoring.selectedKeyId !== null ? ["motion-key" as const] : []),
         ...(primaryId ? ["selected" as const] : []),

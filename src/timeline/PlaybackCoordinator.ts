@@ -8,6 +8,7 @@ import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import { PoseLayer } from "@/pose/PoseLayer";
 import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import type { SceneManager } from "@/core/SceneManager";
 import type { CameraStore } from "@/store/CameraStore";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
@@ -140,6 +141,12 @@ export class PlaybackCoordinator {
         this.invalidator = null;
     }
 
+    /**
+     * 单次采样的定序:动作先按墙钟对齐 → 变换/轨迹求值 → 步频同步的对象用弧长相位覆写动作 →
+     * 机位采样 → 姿态层。
+     * 相位必须在变换之后:它是「已走弧长」的函数,而弧长只有采样完轨迹才知道;
+     * 机位采样必须在变换之后:跟拍要读到本帧的新位置,否则镜头永远慢一帧。
+     */
     private sample(timeSeconds: number): void {
         this.restorePoseBaselines();
         this.binder.setTime(timeSeconds);
@@ -150,8 +157,11 @@ export class PlaybackCoordinator {
             const runtime = this.scene.getRuntime(entity.id);
             if (!runtime) continue;
             const transformTrack = this.timeline.document.trackForTarget(entity.id, TIMELINE_TRACK_KIND.TRANSFORM);
-            if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, timeSeconds, runtime))
+            if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, timeSeconds, runtime)) {
                 this.restoreObject(entity.id, false);
+                continue;
+            }
+            this.syncLocomotion(entity.id, transformTrack);
         }
         this.motionSampler.sampleCurrent(timeSeconds);
         for (let index = 0; index < entities.length; index += 1) {
@@ -159,6 +169,12 @@ export class PlaybackCoordinator {
             if (entity) this.applyPose(entity.id);
         }
         this.invalidate();
+    }
+
+    /** 步频同步:动作相位由本帧已走弧长决定,未开启同步的对象保持墙钟对齐。 */
+    private syncLocomotion(targetId: string, track: TimelineTrack): void {
+        if (!track.policies.isLocomotionSynced) return;
+        this.binder.setStridePhaseFor(targetId, track.policies.stridePhaseAt(this.sampler.lastArcLengthMeters));
     }
 
     private applyPose(targetId: string): void {

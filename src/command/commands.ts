@@ -11,6 +11,7 @@ import { registerKeyframeCodec } from "@/timeline/keyframeCodecs";
 import { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import { buildTransformTrajectory } from "@/timeline/transformTrajectory";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
@@ -413,6 +414,7 @@ export function registerBuiltinKeyframeCodecs(): void {
         kind: TIMELINE_TRACK_KIND.TRANSFORM,
         owns: (keyframe): keyframe is TransformKeyframe => keyframe instanceof TransformKeyframe,
         fromInit: (init) => new TransformKeyframe(init as TransformKeyframeInit),
+        trajectory: buildTransformTrajectory,
     });
 }
 

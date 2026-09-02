@@ -44,6 +44,8 @@ import { StudioRig } from "@/ui/viewport/scene/StudioRig";
 import { CameraMotionRig } from "@/ui/viewport/scene/CameraMotionRig";
 import { OrbitAuthorityRig } from "@/ui/viewport/scene/OrbitAuthorityRig";
 import { MotionPathPreview } from "@/ui/viewport/scene/MotionPathPreview";
+import { ObjectMotionPathPreview } from "@/ui/viewport/scene/ObjectMotionPathPreview";
+import { WalkDraftController } from "@/ui/viewport/scene/WalkDraftController";
 import type { MotionKeyContextRequest } from "@/ui/viewport/scene/MotionClipPathPreview";
 import { ShotCameraRig } from "@/ui/viewport/scene/ShotCameraRig";
 import { ShotMarkers } from "@/ui/viewport/scene/ShotMarkers";
@@ -72,7 +74,7 @@ export interface DirectorDeskProps {
     assetProviders?: readonly AssetProvider[];
     /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
     hostBridge?: HostBridgeConfiguration;
-    /** 运镜轨迹辅助物的初始可见性(Storybook/宿主播种);运行时开关在运镜编排态。 */
+    /** 编排轨迹辅助物的初始可见性(Storybook/宿主播种);缺省即编排态默认(可见),运行时开关在顶栏。 */
     initialMotionPathVisible?: boolean;
     /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
     onReady?: (stores: DirectorDeskStores) => void;
@@ -104,7 +106,7 @@ export const DirectorDesk = observer(function DirectorDesk({
     hostBridge,
     assetProviders,
     onReady,
-    initialMotionPathVisible = false,
+    initialMotionPathVisible,
     presentation,
     width = ROOT_FILL,
     height = ROOT_FILL,
@@ -276,7 +278,9 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <OrbitAuthorityRig />
                                 <CameraMotionRig />
                                 <MotionPathPreview onKeyContextMenu={openMotionKeyMenu} />
+                                <ObjectMotionPathPreview />
                                 <FlyDrive />
+                                <WalkDraftController />
                                 <ShotNavigation />
                                 <LensNavigation />
                             </Canvas>

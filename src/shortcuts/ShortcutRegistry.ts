@@ -6,10 +6,21 @@ import type { ShortcutChord } from "@/shortcuts/ShortcutChord";
  * shot-selected 只在选中未激活机位时激活;shot 在掌镜时激活;
  * lens 在镜头视角(视口跟随时间轴输出、手势写镜头关键帧)时激活;
  * motion-key 在选中一枚镜头关键帧时激活(它必须排在 selected 之前,否则 Delete 会先命中删除选中);
+ * walk-key 在选中一枚走位关键帧时激活,同理排在 selected 之前;
+ * draft 在走位草绘模式时激活(只有 Esc 退出,排在 gizmo/selected 的 Esc 之前);
  * presentation 在全屏预览时独占(壳层已隐,编辑类键位一律让位)。
  */
 export type ShortcutScope =
-    "global" | "selected" | "gizmo" | "shot-selected" | "shot" | "lens" | "motion-key" | "presentation";
+    | "global"
+    | "selected"
+    | "gizmo"
+    | "shot-selected"
+    | "shot"
+    | "lens"
+    | "motion-key"
+    | "walk-key"
+    | "draft"
+    | "presentation";
 
 /** 快捷键绑定:spec(数据)× action(行为)的合体,注册表持有 */
 export interface ShortcutBinding<TEnv> {

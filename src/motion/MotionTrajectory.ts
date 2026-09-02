@@ -17,6 +17,9 @@ const MINIMUM_TRAJECTORY_KEYS = 2;
 /** 每段缓存 2 个绝对控制点(c1、c2),共 6 个分量 */
 const COMPONENTS_PER_SEGMENT = 6;
 const CUBIC_BEZIER_CONTROL_WEIGHT = 3;
+/** 每段弧长采样点数:16 足以让走位长度误差落在毫米级,表本身也只有几百个 float */
+const ARC_SAMPLES_PER_SEGMENT = 16;
+const DERIVATIVE_WEIGHT = 3;
 
 const handleSolver = new AutoHandleSolver();
 const solvedHandles = createHandlePair();
@@ -68,6 +71,17 @@ function cubicComponent(from: number, control1: number, control2: number, to: nu
     );
 }
 
+/** 三次 Bézier 一阶导:B'(t) = 3[(c1-p0)(1-t)² + 2(c2-c1)(1-t)t + (p1-c2)t²] */
+function cubicDerivative(from: number, control1: number, control2: number, to: number, progress: number): number {
+    const inverse = 1 - progress;
+    return (
+        DERIVATIVE_WEIGHT *
+        (inverse * inverse * (control1 - from) +
+            2 * inverse * progress * (control2 - control1) +
+            progress * progress * (to - control2))
+    );
+}
+
 /**
  * 空间轨迹聚合(不可变):一组按 progress 排序的关键点 + 段级预解算控制点。
  *
@@ -78,6 +92,8 @@ function cubicComponent(from: number, control1: number, control2: number, to: nu
 export class MotionTrajectory<K extends MotionKeyLike = MotionKey> {
     readonly keys: readonly K[];
     private readonly controls: Float32Array;
+    /** 累计弧长表(按 progress 均匀采样):步频相位与等距刻度共用,构造期算一次 */
+    private readonly arcLengths: Float32Array;
 
     constructor(keys: readonly K[]) {
         if (keys.length < MINIMUM_TRAJECTORY_KEYS) throw new Error("MotionTrajectory requires at least two keys");
@@ -85,7 +101,85 @@ export class MotionTrajectory<K extends MotionKeyLike = MotionKey> {
         assertUniqueKeys(ordered);
         this.keys = Object.freeze(ordered);
         this.controls = solveControlPoints(this.keys);
+        this.arcLengths = this.solveArcLengths();
         Object.freeze(this);
+    }
+
+    /** 弧长表的采样点数(段数 × 每段采样 + 1);表内相邻点等 progress 间隔,查表即线性插值。 */
+    private get arcSampleCount(): number {
+        return this.segmentCount * ARC_SAMPLES_PER_SEGMENT;
+    }
+
+    private solveArcLengths(): Float32Array {
+        const sampleCount = this.arcSampleCount;
+        const lengths = new Float32Array(sampleCount + 1);
+        const current = createPositionSample();
+        const previous = createPositionSample();
+        this.samplePosition(0, previous);
+        for (let step = 1; step <= sampleCount; step += 1) {
+            this.samplePosition(step / sampleCount, current);
+            const dx = current.x - previous.x;
+            const dy = current.y - previous.y;
+            const dz = current.z - previous.z;
+            lengths[step] = (lengths[step - 1] ?? 0) + Math.sqrt(dx * dx + dy * dy + dz * dz);
+            previous.x = current.x;
+            previous.y = current.y;
+            previous.z = current.z;
+        }
+        return lengths;
+    }
+
+    /** 整条轨迹的空间长度(米):走位时长与步频相位都由它换算。 */
+    get totalLength(): number {
+        return this.arcLengths[this.arcSampleCount] ?? 0;
+    }
+
+    /** progress → 已走弧长;表内线性插值,查询期零分配。 */
+    arcLengthAt(progress: number): number {
+        if (!Number.isFinite(progress)) return 0;
+        const sampleCount = this.arcSampleCount;
+        const clamped = Math.min(Math.max(progress, 0), 1);
+        const position = clamped * sampleCount;
+        const index = Math.min(Math.floor(position), sampleCount - 1);
+        const from = this.arcLengths[index] ?? 0;
+        const to = this.arcLengths[index + 1] ?? from;
+        return from + (to - from) * (position - index);
+    }
+
+    /** 段内三次 Bézier 一阶导 = 前进方向(未归一化);与 sampleSegment 同参,保证切线与位置同点。 */
+    sampleSegmentTangent(segmentIndex: number, localProgress: number, sample: MotionPositionSample): boolean {
+        const from = this.keys[segmentIndex];
+        const to = this.keys[segmentIndex + 1];
+        if (!from || !to) return false;
+        const offset = segmentIndex * COMPONENTS_PER_SEGMENT;
+        sample.x = cubicDerivative(
+            from.position[0],
+            this.controls[offset] ?? 0,
+            this.controls[offset + 3] ?? 0,
+            to.position[0],
+            localProgress,
+        );
+        sample.y = cubicDerivative(
+            from.position[1],
+            this.controls[offset + 1] ?? 0,
+            this.controls[offset + 4] ?? 0,
+            to.position[1],
+            localProgress,
+        );
+        sample.z = cubicDerivative(
+            from.position[2],
+            this.controls[offset + 2] ?? 0,
+            this.controls[offset + 5] ?? 0,
+            to.position[2],
+            localProgress,
+        );
+        return true;
+    }
+
+    sampleTangent(progress: number, sample: MotionPositionSample): boolean {
+        if (!Number.isFinite(progress)) return false;
+        const segmentIndex = this.segmentIndexAt(progress);
+        return this.sampleSegmentTangent(segmentIndex, this.segmentProgress(progress, segmentIndex), sample);
     }
 
     get segmentCount(): number {

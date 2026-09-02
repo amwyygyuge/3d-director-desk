@@ -1,19 +1,17 @@
 import Box from "@mui/material/Box";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
-import { type KeyboardEvent, useState } from "react";
+
 import type { Transform, Vec3 } from "@/core/SceneObject";
-import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
-import { MONO_FONT_STACK } from "@/ui/shell/theme";
+import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
 const AXIS_X = 0;
 const AXIS_Y = 1;
 const AXIS_Z = 2;
-const DISPLAY_DECIMAL_PLACES = 4;
 const FIELD_GROUP_GAP = 0.75;
 const INSPECTOR_FIELD_RADIUS = 1;
 const INSPECTOR_FIELD_PADDING = 1;
@@ -30,13 +28,6 @@ export const INSPECTOR_FIELD_SX = {
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type TransformKey = keyof Transform;
-
-interface TransformFieldProps {
-    axisLabel: string;
-    label: string;
-    value: number;
-    onCommit: (value: number) => void;
-}
 
 interface TransformGroup {
     key: TransformKey;
@@ -55,14 +46,11 @@ const AXES: readonly { label: string; index: AxisIndex }[] = [
     { label: "Z", index: AXIS_Z },
 ];
 
-function formatValue(value: number): string {
-    return String(Number(value.toFixed(DISPLAY_DECIMAL_PLACES)));
-}
+/** Object3D 的 position/rotation/scale 与实体 Transform 同构,预览按轴名直写运行时 */
+const RUNTIME_AXIS = ["x", "y", "z"] as const;
 
-function finiteNumber(value: string): number | null {
-    const parsed = Number(value);
-    return value.trim() !== "" && Number.isFinite(parsed) ? parsed : null;
-}
+/** 值语义档位:旋转按 DCC 习惯显示角度(提交/预览时换算弧度),位置缩放不同步长 */
+const FIELD_KIND = { position: "position", rotation: "rotationDeg", scale: "scale" } as const;
 
 function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     switch (axis) {
@@ -75,42 +63,7 @@ function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     }
 }
 
-const TransformField = observer(function TransformField({ axisLabel, label, value, onCommit }: TransformFieldProps) {
-    const [inputValue, setInputValue] = useState(() => formatValue(value));
-
-    const commit = () => {
-        const parsed = finiteNumber(inputValue);
-        if (parsed === null) {
-            setInputValue(formatValue(value));
-            return;
-        }
-        onCommit(parsed);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            commit();
-        }
-    };
-
-    return (
-        <TextField
-            aria-label={label}
-            label={axisLabel}
-            fullWidth
-            size="small"
-            type="number"
-            value={inputValue}
-            onBlur={commit}
-            onChange={(event) => setInputValue(event.target.value)}
-            onKeyDown={handleKeyDown}
-            sx={{ "& .MuiInputBase-input": { fontFamily: MONO_FONT_STACK } }}
-        />
-    );
-});
-
-/** 数值变换编辑器：旋转按 DCC 习惯显示为角度，提交时统一转换为弧度。 */
+/** 数值变换编辑器:刮擦期只写 three 运行时预览,松手收敛为一条 object.move(与 gizmo 同模式)。 */
 export const TransformFields = observer(function TransformFields({ objectId }: { objectId: string }) {
     const stores = useDirectorDeskStores();
     const { dispatcher, scene } = stores;
@@ -137,6 +90,13 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
         reportCommandFailure(stores, result);
     };
 
+    const previewAxis = (key: TransformKey, axis: AxisIndex, displayedValue: number) => {
+        const runtime = scene.manager.getRuntime(objectId);
+        if (!runtime) return;
+        runtime[key][RUNTIME_AXIS[axis]] = key === "rotation" ? displayedValue * DEG_TO_RAD : displayedValue;
+        stores.playback.requestRender();
+    };
+
     return (
         <Box sx={{ display: "grid", gap: FIELD_GROUP_GAP }}>
             {TRANSFORM_GROUPS.map((group) => (
@@ -155,13 +115,17 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
                     {AXES.map((axis) => {
                         const value = entity.transform[group.key][axis.index];
                         const displayedValue = group.key === "rotation" ? value * RAD_TO_DEG : value;
+                        const fieldLabel = `${group.label}${axis.label}`;
                         return (
-                            <TransformField
-                                key={`${axis.label}-${displayedValue}`}
-                                axisLabel={axis.label}
-                                label={`${group.label}${axis.label}`}
+                            <ScrubNumberField
+                                key={axis.label}
+                                label={axis.label}
+                                ariaLabel={fieldLabel}
+                                kind={FIELD_KIND[group.key]}
                                 value={displayedValue}
                                 onCommit={(nextValue) => commitAxis(group.key, axis.index, nextValue)}
+                                onPreview={(nextValue) => previewAxis(group.key, axis.index, nextValue)}
+                                onInvalid={() => stores.ui.setApplicationNotice(`${fieldLabel} 必须是有限数值`)}
                             />
                         );
                     })}

@@ -5,9 +5,9 @@ import {
     type InspectorSectionProps,
     LightEntitySection,
     modelHasActionContent,
-    ModelPoseSection,
     ShotCameraSection,
 } from "@/ui/inspector/Inspector";
+import { ModelPoseSection } from "@/ui/pose/BoneTreePanel";
 import { CameraMotionSection } from "@/ui/inspector/MotionClipInspector";
 import { ActorImageSection, hasActorProfile } from "@/ui/actor/ActorImageSection";
 import { PoseComposerSection } from "@/ui/pose/PoseComposerSection";

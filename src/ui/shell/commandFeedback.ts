@@ -1,4 +1,6 @@
 import type { CommandResult } from "@/command/DirectorCommand";
+import { INVALID_REASON } from "@/ui/controls/numberFieldConfig";
+import type { InvalidReason } from "@/ui/controls/numberFieldConfig";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** 只需要通知通道的最小依赖:调用方传整份 stores 即可满足。 */
@@ -24,4 +26,24 @@ export function commandFailureMessage(result: CommandFailure): string {
 export function reportCommandFailure(stores: NoticeSink, result: CommandResult): void {
     if (result.ok) return;
     stores.ui.setApplicationNotice(commandFailureMessage(result));
+}
+
+/**
+ * 数值输入非法的统一落点(与命令失败同通道)。
+ * 各字段调用点只给字段名与边界,文案口径不再分叉。
+ */
+export function invalidInputNotice(
+    stores: NoticeSink,
+    label: string,
+    bounds?: { readonly min?: number; readonly max?: number },
+): (reason: InvalidReason) => void {
+    return (reason) => {
+        const rangeText =
+            bounds?.min !== undefined && bounds?.max !== undefined
+                ? `${label}需在 ${bounds.min} ~ ${bounds.max} 之间`
+                : null;
+        stores.ui.setApplicationNotice(
+            reason === INVALID_REASON.OUT_OF_RANGE ? (rangeText ?? `${label}超出允许范围`) : `${label}必须是有限数值`,
+        );
+    };
 }

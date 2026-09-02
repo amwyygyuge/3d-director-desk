@@ -3,15 +3,13 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
 import MenuItem from "@mui/material/MenuItem";
 import Slider from "@mui/material/Slider";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { useState } from "react";
 
 import { DEFAULT_CAMERA_FOV } from "@/camera/CameraShot";
 import { FOV_MAX, FOV_MIN } from "@/command/commands";
@@ -22,14 +20,15 @@ import type { LightParams, LightType } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { listActionClips } from "@/pose/PosePresetCatalog";
 import type { EmbeddedClipPresentation } from "@/pose/PosePresetCatalog";
-import type { BoneTreeNodeDto, SkeletonDiscoveryDto } from "@/pose/SkeletonRuntimeRegistry";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
+import { SCRUB_STEP } from "@/ui/controls/numberFieldConfig";
+import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
+import { invalidInputNotice } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { INSPECTOR_FIELD_SX, TransformFields } from "@/ui/inspector/TransformFields";
-import { MONO_FONT_STACK } from "@/ui/shell/theme";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { WalkPolicySection } from "@/ui/inspector/WalkPolicyControls";
 
-const DISPLAY_DECIMAL_PLACES = 4;
 const AXIS_X = 0;
 const AXIS_Y = 1;
 const AXIS_Z = 2;
@@ -39,10 +38,8 @@ const FIELD_COLUMN_GAP = 0.5;
 const PRESET_GRID_TEMPLATE_COLUMNS = "repeat(2, minmax(0, 1fr))";
 const PRESET_BUTTON_MIN_HEIGHT_PX = 40;
 const FIELD_LABEL_WIDTH_PX = 32;
-const FOV_INPUT_WIDTH_PX = 80;
-const FOV_STEP = 1;
+const NUMBER_COMPANION_WIDTH_PX = 96;
 const CONTROL_GAP = 1;
-const LIGHT_INTENSITY_STEP = 0.1;
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type ShotVectorKey = "position" | "target";
@@ -50,15 +47,6 @@ type ShotVectorKey = "position" | "target";
 export interface InspectorSectionProps {
     readonly primaryId: string;
     readonly report: ReportCommandResult;
-}
-
-interface ShotNumberFieldProps {
-    axisLabel: string;
-    label: string;
-    value: number;
-    min?: number;
-    max?: number;
-    onCommit: (value: number) => void;
 }
 
 interface ShotFieldsProps {
@@ -87,15 +75,6 @@ const SHOT_VECTOR_GROUPS: readonly { key: ShotVectorKey; label: string }[] = [
     { key: "target", label: "目标" },
 ];
 
-function formatValue(value: number): string {
-    return String(Number(value.toFixed(DISPLAY_DECIMAL_PLACES)));
-}
-
-function finiteNumber(value: string): number | null {
-    const parsed = Number(value);
-    return value.trim() !== "" && Number.isFinite(parsed) ? parsed : null;
-}
-
 function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     switch (axis) {
         case AXIS_X:
@@ -107,58 +86,10 @@ function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     }
 }
 
-const ShotNumberField = observer(function ShotNumberField({
-    axisLabel,
-    label,
-    value,
-    min,
-    max,
-    onCommit,
-}: ShotNumberFieldProps) {
-    const [inputValue, setInputValue] = useState(() => formatValue(value));
-    const hasCommitted = useRef(false);
-
-    const commit = () => {
-        if (hasCommitted.current) return;
-        const parsed = finiteNumber(inputValue);
-        hasCommitted.current = true;
-        if (parsed === null || (min !== undefined && parsed < min) || (max !== undefined && parsed > max)) {
-            setInputValue(formatValue(value));
-            return;
-        }
-        onCommit(parsed);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        commit();
-        event.currentTarget.blur();
-    };
-
-    return (
-        <TextField
-            aria-label={label}
-            label={axisLabel}
-            fullWidth
-            size="small"
-            type="number"
-            value={inputValue}
-            onBlur={commit}
-            onChange={(event) => {
-                hasCommitted.current = false;
-                setInputValue(event.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            sx={{ "& .MuiInputBase-input": { fontFamily: MONO_FONT_STACK } }}
-        />
-    );
-});
-
 /** props 只收机位身份与提交回调;向量值自取,父组件不因坐标改动整片重渲。 */
 const ShotVectorFields = observer(function ShotVectorFields({ shotId, onCommit }: ShotVectorFieldsProps) {
-    const { camera } = useDirectorDeskStores();
-    const shot = camera.director.getShot(shotId);
+    const stores = useDirectorDeskStores();
+    const shot = stores.camera.director.getShot(shotId);
     if (!shot) return null;
     return (
         <>
@@ -177,13 +108,16 @@ const ShotVectorFields = observer(function ShotVectorFields({ shotId, onCommit }
                     </Typography>
                     {AXES.map((axis) => {
                         const value = shot[group.key][axis.index];
+                        const fieldLabel = `${group.label}${axis.label}`;
                         return (
-                            <ShotNumberField
-                                key={`${group.key}-${axis.label}-${value}`}
-                                axisLabel={axis.label}
-                                label={`${group.label}${axis.label}`}
+                            <ScrubNumberField
+                                key={axis.label}
+                                label={axis.label}
+                                ariaLabel={fieldLabel}
+                                kind="position"
                                 value={value}
                                 onCommit={(nextValue) => onCommit(group.key, axis.index, nextValue)}
+                                onInvalid={invalidInputNotice(stores, fieldLabel)}
                             />
                         );
                     })}
@@ -195,15 +129,16 @@ const ShotVectorFields = observer(function ShotVectorFields({ shotId, onCommit }
 
 /** props 只收机位身份与提交回调;fov 自取,滑杆草稿仍是一次拖拽的局部瞬时态。 */
 const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFovFieldProps) {
-    const { camera } = useDirectorDeskStores();
-    const fov = camera.director.getShot(shotId)?.fov ?? DEFAULT_CAMERA_FOV;
+    const stores = useDirectorDeskStores();
+    const fov = stores.camera.director.getShot(shotId)?.fov ?? DEFAULT_CAMERA_FOV;
     const [draftFov, setDraftFov] = useState<number | null>(null);
+    const shownFov = draftFov ?? fov;
 
     return (
         <Box
             sx={{
                 display: "grid",
-                gridTemplateColumns: `${FIELD_LABEL_WIDTH_PX}px 1fr ${FOV_INPUT_WIDTH_PX}px`,
+                gridTemplateColumns: `${FIELD_LABEL_WIDTH_PX}px 1fr ${NUMBER_COMPANION_WIDTH_PX}px`,
                 gap: FIELD_COLUMN_GAP,
                 alignItems: "center",
             }}
@@ -215,8 +150,8 @@ const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFo
                 size="small"
                 min={FOV_MIN}
                 max={FOV_MAX}
-                step={FOV_STEP}
-                value={draftFov ?? fov}
+                step={SCRUB_STEP.angleDeg}
+                value={shownFov}
                 aria-label="FOV"
                 onChange={(_, value) => {
                     if (Array.isArray(value)) return;
@@ -224,18 +159,19 @@ const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFo
                 }}
                 onChangeCommitted={(_, value) => {
                     if (Array.isArray(value)) return;
-                    onCommit(value);
                     setDraftFov(null);
+                    if (value !== fov) onCommit(value);
                 }}
             />
-            <ShotNumberField
-                key={`fov-${fov}`}
-                axisLabel="度"
-                label="FOV"
-                value={fov}
+            <ScrubNumberField
+                label="度"
+                ariaLabel="FOV"
+                kind="angleDeg"
                 min={FOV_MIN}
                 max={FOV_MAX}
+                value={shownFov}
                 onCommit={onCommit}
+                onInvalid={invalidInputNotice(stores, "FOV", { min: FOV_MIN, max: FOV_MAX })}
             />
         </Box>
     );
@@ -347,31 +283,55 @@ interface LightIntensityControlProps {
     readonly onCommit: (intensity: number) => void;
 }
 
-/** 输入草稿仅服务于一次 slider 拖拽；权威 LightParams 始终留在实体。 */
+/** 滑杆与数字输入同显一份草稿:任一交互中另一侧实时跟随;权威 LightParams 始终留在实体。 */
 const LightIntensityControl = observer(function LightIntensityControl({
     intensity,
     onCommit,
 }: LightIntensityControlProps) {
-    const [draft, setDraft] = useState(intensity);
+    const stores = useDirectorDeskStores();
+    const [draft, setDraft] = useState<number | null>(null);
+    const shown = draft ?? intensity;
 
     return (
-        <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: MONO_FONT_STACK }}>
-                强度 {draft}
-            </Typography>
+        <Box
+            sx={{
+                display: "grid",
+                gridTemplateColumns: `1fr ${NUMBER_COMPANION_WIDTH_PX}px`,
+                gap: FIELD_COLUMN_GAP,
+                alignItems: "center",
+            }}
+        >
             <Slider
                 size="small"
                 min={LIGHT_INTENSITY_MIN}
                 max={LIGHT_INTENSITY_MAX}
-                step={LIGHT_INTENSITY_STEP}
-                value={draft}
+                step={SCRUB_STEP.intensity}
+                value={shown}
                 aria-label="灯光强度"
                 onChange={(_, value) => {
                     if (typeof value === "number") setDraft(value);
                 }}
                 onChangeCommitted={(_, value) => {
-                    if (typeof value === "number" && value !== intensity) onCommit(value);
+                    if (typeof value !== "number") return;
+                    setDraft(null);
+                    if (value !== intensity) onCommit(value);
                 }}
+            />
+            <ScrubNumberField
+                label="强度"
+                ariaLabel="灯光强度"
+                kind="intensity"
+                min={LIGHT_INTENSITY_MIN}
+                max={LIGHT_INTENSITY_MAX}
+                value={shown}
+                onCommit={(value) => {
+                    setDraft(null);
+                    onCommit(value);
+                }}
+                onInvalid={invalidInputNotice(stores, "灯光强度", {
+                    min: LIGHT_INTENSITY_MIN,
+                    max: LIGHT_INTENSITY_MAX,
+                })}
             />
         </Box>
     );
@@ -543,11 +503,7 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
                     slotProps={{ htmlInput: { "aria-label": "灯光颜色" } }}
                     onChange={(event) => adjust({ color: event.target.value })}
                 />
-                <LightIntensityControl
-                    key={`${objectId}-${light.intensity}`}
-                    intensity={light.intensity}
-                    onCommit={(intensity) => adjust({ intensity })}
-                />
+                <LightIntensityControl intensity={light.intensity} onCommit={(intensity) => adjust({ intensity })} />
             </Stack>
         </Box>
     );
@@ -560,116 +516,6 @@ export const LightEntitySection = observer(function LightEntitySection({ primary
             <EntityTransformSection primaryId={primaryId} report={report} />
             <LightControls objectId={primaryId} report={report} />
         </>
-    );
-});
-
-const BoneTree = observer(function BoneTree({
-    objectId,
-    nodes,
-    editing,
-}: {
-    objectId: string;
-    nodes: readonly BoneTreeNodeDto[];
-    editing: boolean;
-}) {
-    const { ui } = useDirectorDeskStores();
-    return (
-        <List dense disablePadding>
-            {nodes.map((node) => (
-                <ListItem key={node.key} disableGutters sx={{ display: "block", pl: node.key.split("/").length - 2 }}>
-                    <Button
-                        size="small"
-                        variant={
-                            ui.posePickingObjectId === objectId && ui.posePickingBoneKey === node.key
-                                ? "contained"
-                                : "text"
-                        }
-                        disabled={!editing}
-                        onClick={() => ui.setPosePicking(objectId, node.key)}
-                    >
-                        {node.name}{" "}
-                        <Typography component="span" variant="caption">
-                            ({node.key})
-                        </Typography>
-                    </Button>
-                    {node.children.length > 0 && (
-                        <BoneTree objectId={objectId} nodes={node.children} editing={editing} />
-                    )}
-                </ListItem>
-            ))}
-        </List>
-    );
-});
-
-/** 姿态 tab:骨骼发现、骨骼树点选与姿态清除;骨骼发现是瞬时 UI 态,持久变更一律走 Dispatcher。 */
-export const ModelPoseSection = observer(function ModelPoseSection({ primaryId, report }: InspectorSectionProps) {
-    const objectId = primaryId;
-    const stores = useDirectorDeskStores();
-    const entity = stores.scene.manager.getEntity(objectId);
-    const [discovery, setDiscovery] = useState<SkeletonDiscoveryDto | null>(null);
-    if (!entity || entity.kind !== "model") return null;
-    const editing = !stores.clock.isPlaying;
-    const discover = () => {
-        const result = stores.dispatcher.query({ type: "pose.bones.discover", payload: { objectId } }, stores);
-        if (!result.ok) {
-            report(result);
-            return;
-        }
-        setDiscovery(result.value as SkeletonDiscoveryDto);
-    };
-    return (
-        <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">姿态精修 / POSE</Typography>
-            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
-                <Button size="small" variant="outlined" disabled={!editing} onClick={discover}>
-                    发现骨骼
-                </Button>
-                {stores.ui.posePickingObjectId === objectId && (
-                    <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>
-                        退出骨骼编辑
-                    </Button>
-                )}
-                {discovery && !discovery.ready && (
-                    <Typography variant="caption">模型骨骼尚未就绪，请等待加载完成后重试。</Typography>
-                )}
-                {discovery?.ready && (
-                    <>
-                        {discovery.semanticCandidates.length > 0 && (
-                            <Box>
-                                <Typography variant="caption">语义候选（唯一匹配）</Typography>
-                                <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
-                                    {discovery.semanticCandidates.map((candidate) => (
-                                        <Button
-                                            key={candidate.label}
-                                            size="small"
-                                            disabled={!editing}
-                                            onClick={() => stores.ui.setPosePicking(objectId, candidate.boneKey)}
-                                        >
-                                            {candidate.label}
-                                        </Button>
-                                    ))}
-                                </Stack>
-                            </Box>
-                        )}
-                        <Box>
-                            <Typography variant="caption">原始骨骼树（歧义或未命名时请从此处选择）</Typography>
-                            <BoneTree objectId={objectId} nodes={discovery.roots} editing={editing} />
-                        </Box>
-                    </>
-                )}
-                <Button
-                    size="small"
-                    color="warning"
-                    disabled={!editing || entity.pose === null}
-                    onClick={() =>
-                        report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
-                    }
-                >
-                    清除姿态
-                </Button>
-                {!editing && <Typography variant="caption">播放期间姿态编辑已禁用。</Typography>}
-            </Stack>
-        </Box>
     );
 });
 
@@ -705,6 +551,7 @@ export const EntityTransformSection = observer(function EntityTransformSection({
                 <TransformFields objectId={primaryId} />
             </Box>
             <TimelineKeyControls objectId={primaryId} report={report} />
+            <WalkPolicySection primaryId={primaryId} report={report} />
         </>
     );
 });

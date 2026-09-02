@@ -1,3 +1,4 @@
+import type { MotionTrajectory } from "@/motion/MotionTrajectory";
 import type { TimelineKeyframe, TimelineTrackKind } from "@/timeline/TimelineTrack";
 
 /**
@@ -11,6 +12,8 @@ export interface KeyframeCodec {
     owns(keyframe: unknown): keyframe is TimelineKeyframe;
     /** 从可序列化 init 构造实例;形状合法性由生产方/命令层校验保证,kind 在此处已被鉴别 */
     fromInit(init: unknown): TimelineKeyframe;
+    /** 该种类关键帧序列的空间轨迹派生;无空间语义或退化序列返回 null。 */
+    trajectory(keyframes: readonly TimelineKeyframe[]): MotionTrajectory | null;
 }
 
 /**

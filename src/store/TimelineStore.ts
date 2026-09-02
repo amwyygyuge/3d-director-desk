@@ -41,6 +41,11 @@ export class TimelineStore {
         this.currentDocument = this.currentDocument.withTrack(track.withKeyframe(keyframe));
     }
 
+    /** 整轨替换(策略变更等场景):轨道不可变,替换即写回同 id 的新实例。 */
+    replaceTrack(track: TimelineTrack): void {
+        this.currentDocument = this.currentDocument.withTrack(track);
+    }
+
     removeKey(trackId: string, keyframeId: string): void {
         const track = this.currentDocument.track(trackId);
         if (!track) return;

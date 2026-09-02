@@ -3,7 +3,6 @@ import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import IconButton from "@mui/material/IconButton";
@@ -17,15 +16,17 @@ import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { Vec3 } from "@/core/SceneObject";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import { RemoveMotionKeyCommand } from "@/command/cameraMotionCommands";
+import { subjectBoundsFor } from "@/command/subjectBounds";
 import { MotionPresetControls } from "@/ui/inspector/MotionPresetControls";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
+import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { reportCommandFailure } from "@/ui/shell/commandFeedback";
+import { invalidInputNotice, reportCommandFailure } from "@/ui/shell/commandFeedback";
 
 const FIELD_GAP = 0.75;
 const FIELD_GRID_COLUMNS = "repeat(3, minmax(0, 1fr))";
 const KEY_ROW_GRID_COLUMNS = "1fr auto";
-const NUMBER_STEP = 0.1;
+const MIN_CLIP_DURATION_SECONDS = 0.1;
 const ORIGIN: Vec3 = [0, 0, 0];
 const NO_FOCUS = "none";
 const AXIS_X = 0;
@@ -86,7 +87,7 @@ const MotionClipProperties = observer(function MotionClipProperties({ clipId }: 
 
 const ClipRangeEditor = observer(function ClipRangeEditor({ clipId }: { clipId: string }) {
     const stores = useDirectorDeskStores();
-    const { dispatcher, motion, ui } = stores;
+    const { dispatcher, motion } = stores;
     const clip = motion.clip(clipId);
 
     if (!clip) return null;
@@ -101,37 +102,24 @@ const ClipRangeEditor = observer(function ClipRangeEditor({ clipId }: { clipId: 
 
     return (
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: FIELD_GAP }}>
-            <TextField
-                key={`${clip.id}-start-${clip.startTimeSeconds}`}
-                size="small"
-                type="number"
-                label="起始时间"
-                defaultValue={clip.startTimeSeconds}
-                slotProps={{ htmlInput: { step: NUMBER_STEP } }}
-                onBlur={(event) => {
-                    const startTimeSeconds = Number(event.currentTarget.value);
-                    if (!Number.isFinite(startTimeSeconds)) {
-                        ui.setApplicationNotice("起始时间必须是有限数值");
-                        return;
-                    }
-                    commitRange(startTimeSeconds, clip.durationSeconds);
-                }}
+            <ScrubNumberField
+                key={clip.id}
+                label="起始"
+                ariaLabel="起始时间"
+                kind="timeSeconds"
+                value={clip.startTimeSeconds}
+                onCommit={(startTimeSeconds) => commitRange(startTimeSeconds, clip.durationSeconds)}
+                onInvalid={invalidInputNotice(stores, "起始时间")}
             />
-            <TextField
-                key={`${clip.id}-duration-${clip.durationSeconds}`}
-                size="small"
-                type="number"
+            <ScrubNumberField
+                key={clip.id}
                 label="时长"
-                defaultValue={clip.durationSeconds}
-                slotProps={{ htmlInput: { min: NUMBER_STEP, step: NUMBER_STEP } }}
-                onBlur={(event) => {
-                    const durationSeconds = Number(event.currentTarget.value);
-                    if (!Number.isFinite(durationSeconds)) {
-                        ui.setApplicationNotice("时长必须是有限数值");
-                        return;
-                    }
-                    commitRange(clip.startTimeSeconds, durationSeconds);
-                }}
+                ariaLabel="时长"
+                kind="timeSeconds"
+                min={MIN_CLIP_DURATION_SECONDS}
+                value={clip.durationSeconds}
+                onCommit={(durationSeconds) => commitRange(clip.startTimeSeconds, durationSeconds)}
+                onInvalid={invalidInputNotice(stores, "时长", { min: MIN_CLIP_DURATION_SECONDS })}
             />
         </Box>
     );
@@ -153,7 +141,13 @@ const ClipFocusControls = observer(function ClipFocusControls({ clipId }: { clip
 
     const lockFocus = (objectId: string): void => {
         const target =
-            objectId === NO_FOCUS ? null : { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId, worldOffset: ORIGIN };
+            objectId === NO_FOCUS
+                ? null
+                : {
+                      kind: FOCUS_TARGET_KIND.SCENE_OBJECT,
+                      objectId,
+                      worldOffset: subjectBoundsFor(stores, objectId)?.focusOffset ?? ORIGIN,
+                  };
         const result = dispatcher.dispatch({ type: "motion.set-focus", payload: { id: clip.id, target } }, stores);
         reportCommandFailure(stores, result);
         if (objectId !== NO_FOCUS) motionAuthoring.setSubject(objectId);
@@ -338,21 +332,16 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
                         {AXES.map((axis) => {
                             const vector = key[group.property];
                             const disabled = group.property === "target" && clip.isFocusOverriding;
+                            const fieldLabel = `${group.label}${axis.label}`;
                             return (
-                                <TextField
-                                    key={`${key.id}-${group.property}-${axis.index}-${vector[axis.index]}`}
-                                    size="small"
-                                    type="number"
+                                <ScrubNumberField
+                                    key={`${key.id}-${group.property}-${axis.index}`}
                                     label={axis.label}
-                                    defaultValue={vector[axis.index]}
+                                    ariaLabel={fieldLabel}
+                                    kind="position"
+                                    value={vector[axis.index]}
                                     disabled={disabled}
-                                    slotProps={{ htmlInput: { step: NUMBER_STEP } }}
-                                    onBlur={(event) => {
-                                        const value = Number(event.currentTarget.value);
-                                        if (!Number.isFinite(value)) {
-                                            ui.setApplicationNotice(`${group.label}${axis.label}必须是有限数值`);
-                                            return;
-                                        }
+                                    onCommit={(value) => {
                                         const position =
                                             group.property === "position"
                                                 ? replaceAxis(key.position, axis.index, value)
@@ -363,29 +352,24 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
                                                 : key.target;
                                         commitPose(key.withPose({ position, target, fov: key.fov }));
                                     }}
+                                    onInvalid={invalidInputNotice(stores, fieldLabel)}
                                 />
                             );
                         })}
                     </Box>
                 </Box>
             ))}
-            <TextField
-                key={`${key.id}-fov-${key.fov}`}
-                size="small"
-                type="number"
-                label="视角 (FOV)"
-                defaultValue={key.fov ?? ""}
+            <ScrubNumberField
+                key={key.id}
+                label="FOV"
+                ariaLabel="视角 (FOV)"
+                kind="angleDeg"
+                allowEmpty
                 placeholder="跟随机位"
-                slotProps={{ htmlInput: { step: NUMBER_STEP } }}
-                onBlur={(event) => {
-                    const rawValue = event.currentTarget.value;
-                    const fov = rawValue.length === 0 ? null : Number(rawValue);
-                    if (fov !== null && !Number.isFinite(fov)) {
-                        ui.setApplicationNotice("视角必须是有限数值，或留空以跟随机位");
-                        return;
-                    }
-                    commitPose(key.withPose({ position: key.position, target: key.target, fov }));
-                }}
+                value={key.fov}
+                onCommit={(fov) => commitPose(key.withPose({ position: key.position, target: key.target, fov }))}
+                onClear={() => commitPose(key.withPose({ position: key.position, target: key.target, fov: null }))}
+                onInvalid={() => ui.setApplicationNotice("视角必须是有限数值，或留空以跟随机位")}
             />
         </Box>
     );
@@ -434,7 +418,7 @@ const ClipEasingControl = observer(function ClipEasingControl({ clipId }: { clip
 
 const ManualHandleFields = observer(function ManualHandleFields({ clipId, keyId }: { clipId: string; keyId: string }) {
     const stores = useDirectorDeskStores();
-    const { dispatcher, motion, ui } = stores;
+    const { dispatcher, motion } = stores;
     const clip = motion.clip(clipId);
     const key = clip?.key(keyId);
 
@@ -460,20 +444,15 @@ const ManualHandleFields = observer(function ManualHandleFields({ clipId, keyId 
                     <Box sx={{ display: "grid", gridTemplateColumns: FIELD_GRID_COLUMNS, gap: FIELD_GAP }}>
                         {AXES.map((axis) => {
                             const vector = key[group.property];
+                            const fieldLabel = `${group.label}${axis.label}`;
                             return (
-                                <TextField
-                                    key={`${key.id}-${group.kind}-${axis.index}-${vector[axis.index]}`}
-                                    size="small"
-                                    type="number"
+                                <ScrubNumberField
+                                    key={`${key.id}-${group.kind}-${axis.index}`}
                                     label={axis.label}
-                                    defaultValue={vector[axis.index]}
-                                    slotProps={{ htmlInput: { step: NUMBER_STEP } }}
-                                    onBlur={(event) => {
-                                        const value = Number(event.currentTarget.value);
-                                        if (!Number.isFinite(value)) {
-                                            ui.setApplicationNotice(`${group.label}${axis.label}必须是有限数值`);
-                                            return;
-                                        }
+                                    ariaLabel={fieldLabel}
+                                    kind="position"
+                                    value={vector[axis.index]}
+                                    onCommit={(value) => {
                                         const result = dispatcher.dispatch(
                                             {
                                                 type: "motion.set-key-handle",
@@ -488,6 +467,7 @@ const ManualHandleFields = observer(function ManualHandleFields({ clipId, keyId 
                                         );
                                         reportCommandFailure(stores, result);
                                     }}
+                                    onInvalid={invalidInputNotice(stores, fieldLabel)}
                                 />
                             );
                         })}
