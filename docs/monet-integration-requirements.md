@@ -1,7 +1,7 @@
 # Monet 宿主接入需求 — 截图/录制产物出口定制
 
 > 需求方：Monet（dm-tapnow）画布，经 `input-3d-director` 节点嵌入导演台。
-> 状态：R1 / R2 / R3 / R4 组件方已交付且 Monet 已接线（2026-09-02）。
+> 状态：R1 / R2 / R3 / R4 组件方已交付且 Monet 已接线（2026-09-02）；**R5 待组件方实现**（停止录制应完成并交付视频）。
 
 ## 背景
 
@@ -58,6 +58,18 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 - 缩小/关闭按钮位于工具栏最右，与内置按钮同区同风格，不遮挡「全屏预览」
 - 窗口无边框，尺寸与主窗口一致，主窗口移动/缩放时实时跟随；主窗口关闭时导演台跟随销毁
+
+### R5 停止录制必须交付视频 —— 🔴 待组件方实现
+
+**现状**：录制中点击工具栏 Stop 会派发 `capture.video-cancel`，该命令调用 `CaptureService.cancelRecording()`；服务按契约丢弃 chunks 并返回 `null`，因此不会执行 `host.reportCapture`，Monet 无法创建 `input-video` 节点。
+
+**期望**：Stop 表示「结束并交付」，不得等同取消。组件方需提供 `capture.video-stop`（或等价公开能力）：停止 `MediaRecorder`、保留已采集 chunks、产出 WebM blob，并沿既有 `host.reportCapture` 通道交付。放弃录制应是独立、明确命名的 cancel 动作。
+
+**验收**：
+
+- 录制中点击 Stop 后，`host.reportCapture` 恰好收到一次 `video/webm` blobUrl
+- Monet 上传后创建 `input-video` 节点，并与导演台建立溯源边
+- 点击明确的 Cancel 才丢弃视频且不创建节点
 
 ### R4 内置资产目录混入测试资产引用 —— ✅ 已修复（2026-09-02）
 
