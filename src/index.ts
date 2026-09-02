@@ -307,4 +307,11 @@ export { createDirectorDeskStores, DirectorDeskProvider, useDirectorDeskStores }
 export type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 export { DirectorDesk } from "@/ui/shell/DirectorDesk";
 export type { DirectorDeskProps } from "@/ui/shell/DirectorDesk";
+export { DeskShellPresentation, ToolbarExtension } from "@/ui/shell/DeskShellPresentation";
+export type {
+    CaptureActionPresentationInit,
+    CaptureVideoPresentationInit,
+    DeskShellPresentationInit,
+    ToolbarExtensionInit,
+} from "@/ui/shell/DeskShellPresentation";
 export { TimelinePanel } from "@/ui/timeline/TimelinePanel";

@@ -13,6 +13,7 @@ import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
 import { PROTOCOL_VERSION } from "@/bridge/protocol";
 import { PostMessageAdapter } from "@/host/HostAdapter";
 import type { HostAdapter } from "@/host/HostAdapter";
+import type { DeskShellPresentationInit } from "@/ui/shell/DeskShellPresentation";
 import { HOME_DIRECTOR_POSE } from "@/store/CameraStore";
 import { GIZMO_CLICK_GUARD_MS } from "@/store/UiStore";
 import { RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
@@ -60,6 +61,8 @@ const STUDIO_CAMERA_POSITION: [number, number, number] = [...HOME_DIRECTOR_POSE.
 const STUDIO_GRID_SIZE_METERS = 12;
 const STUDIO_CAMERA_MIN_DISTANCE_METERS = 2;
 const STUDIO_CAMERA_MAX_DISTANCE_METERS = 18;
+/** 根节点缺省尺寸:充满宿主容器(向后兼容基线) */
+const ROOT_FILL = "100%" as const;
 
 export interface DirectorDeskProps {
     /** 宿主可传 MUI theme 覆盖默认暗色主题 */
@@ -74,6 +77,12 @@ export interface DirectorDeskProps {
     initialMotionPathVisible?: boolean;
     /** 实例就绪回调(每实例一次):Storybook 播种/宿主调试挂点;AI 面永远走命令层,不经此 */
     onReady?: (stores: DirectorDeskStores) => void;
+    /** 壳层呈现定制(产品名/采集按钮文案/工具栏扩展位);仅创建期读取,运行期变更不生效 */
+    presentation?: DeskShellPresentationInit;
+    /** 桌面宽度:数字 = px,字符串 = CSS 长度;缺省充满宿主容器。渲染期响应式(Monet 节点缩放即时生效) */
+    width?: number | string;
+    /** 桌面高度;同 width */
+    height?: number | string;
 }
 
 /**
@@ -95,6 +104,9 @@ export const DirectorDesk = observer(function DirectorDesk({
     assetProviders,
     onReady,
     initialMotionPathVisible = false,
+    presentation,
+    width = ROOT_FILL,
+    height = ROOT_FILL,
 }: DirectorDeskProps) {
     const [stores] = useState<DirectorDeskStores>(() =>
         createDirectorDeskStores({
@@ -102,6 +114,7 @@ export const DirectorDesk = observer(function DirectorDesk({
             hostBridge,
             assetProviders,
             motionPathVisible: initialMotionPathVisible,
+            presentation,
         }),
     );
     const deskRef = useRef<HTMLDivElement>(null);
@@ -197,7 +210,8 @@ export const DirectorDesk = observer(function DirectorDesk({
                 <DirectorDeskProvider value={stores}>
                     <div
                         ref={deskRef}
-                        className="relative h-full w-full overflow-hidden"
+                        className="relative overflow-hidden"
+                        style={{ width, height }}
                         tabIndex={-1}
                         onPointerDown={(event) => event.currentTarget.focus()}
                     >

@@ -14,6 +14,8 @@ import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
 import { InertHostAdapter, PostMessageAdapter } from "@/host/HostAdapter";
 import type { HostAdapter } from "@/host/HostAdapter";
 import { CaptureService } from "@/capture/CaptureService";
+import { DeskShellPresentation } from "@/ui/shell/DeskShellPresentation";
+import type { DeskShellPresentationInit } from "@/ui/shell/DeskShellPresentation";
 import { FrameRateMonitor } from "@/core/FrameRateMonitor";
 import { CommandDispatcher } from "@/command/CommandDispatcher";
 import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "@/command/commands";
@@ -118,6 +120,8 @@ export interface DirectorDeskStores {
     shortcuts: ShortcutRegistry<DirectorDeskStores>;
     /** 宿主适配器:注入直嵌适配器，或由 hostBridge 配置可信 postMessage；无配置时惰性无通信 */
     host: HostAdapter;
+    /** 壳层呈现配置:宿主品牌化/出口文案/工具栏扩展(创建期注入、运行期不变的值对象) */
+    presentation: DeskShellPresentation;
     /** 撤销/重做历史(命令层红利;回放经 dispatcher record:false) */
     history: CommandHistory;
     /** 动作库(纯数据表 + clip 运行时表) */
@@ -147,6 +151,8 @@ export function createDirectorDeskStores(options?: {
     assetProviders?: readonly AssetProvider[] | undefined;
     /** 运镜轨迹辅助物的初始可见性(Storybook/宿主播种) */
     motionPathVisible?: boolean | undefined;
+    /** 壳层呈现定制(产品名/采集按钮文案/工具栏扩展位);仅创建期读取 */
+    presentation?: DeskShellPresentationInit | undefined;
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
     registerBuiltinCommands(dispatcher);
@@ -217,6 +223,7 @@ export function createDirectorDeskStores(options?: {
         playheadDisplay: new PlayheadDisplay(clock),
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,
+        presentation: new DeskShellPresentation(options?.presentation),
         history,
         animations: new AnimationLibrary(),
         skeletons,

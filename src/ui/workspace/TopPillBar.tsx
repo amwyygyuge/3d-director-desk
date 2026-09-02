@@ -22,7 +22,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useRef, useState } from "react";
-import type { ChangeEvent, RefObject } from "react";
+import type { ChangeEvent, ReactNode, RefObject } from "react";
 
 import { requestFrameCapture } from "@/command/captureCommands";
 import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
@@ -32,6 +32,7 @@ import type { GizmoMode } from "@/store/UiStore";
 import { RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import type { ToolbarExtension } from "@/ui/shell/DeskShellPresentation";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { importModelFile } from "@/ui/assets/importFiles";
 import { CHROME } from "@/ui/shell/theme";
@@ -58,13 +59,7 @@ const TEXT = {
     MENU: "项目菜单",
     PLAYING: "播放中",
     PRESENTING: "预览中 · Esc 退出",
-    PROJECT_NAME: "3D 导演台",
-    RECORDING_TIMELINE_PREFIX: "录制时间轴(0~",
-    RECORDING_TIMELINE_SUFFIX: "s)为 WebM",
-    RECORD_VIDEO: "录制视频",
     REDO: "重做",
-    SCREENSHOT: "截图",
-    STOP_RECORDING: "停止录制",
     UNDO: "撤销",
 } as const;
 const DOCUMENT_MIME_TYPE = "application/json";
@@ -88,6 +83,10 @@ const PREVIEW_BUTTON_BACKGROUND = "#fff";
 const PREVIEW_BUTTON_COLOR = "#000";
 const PREVIEW_BUTTON_HOVER_BACKGROUND = "#e5e5e5";
 const PREVIEW_BUTTON_SHADOW = "0 0 15px rgba(255,255,255,0.2)";
+/** 药丸内文字按钮:防折行,高度跟随药丸 */
+const TEXT_ACTION_SX = { whiteSpace: "nowrap" } as const;
+/** Button 无 "default" 色档;文字按钮缺省色 = inherit(IconButton 的 default 等价物) */
+const TEXT_BUTTON_COLOR_INHERIT = "inherit" as const;
 const PILL_SX = {
     alignItems: "center",
     display: "flex",
@@ -106,6 +105,8 @@ const PREVIEW_BUTTON_SX = {
     borderRadius: PILL_HEIGHT_PX,
     boxShadow: PREVIEW_BUTTON_SHADOW,
     color: PREVIEW_BUTTON_COLOR,
+    // 窄桌面(小尺寸 Monet 节点)下内容超宽时裁切,绝不竖排折行
+    whiteSpace: "nowrap",
     "&:hover": { bgcolor: PREVIEW_BUTTON_HOVER_BACKGROUND },
 } as const;
 
@@ -129,6 +130,7 @@ const ProjectPill = observer(function ProjectPill() {
     const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
     const modelInputRef = useRef<HTMLInputElement>(null);
     const documentInputRef = useRef<HTMLInputElement>(null);
+    const { presentation } = useDirectorDeskStores();
 
     return (
         <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
@@ -145,7 +147,7 @@ const ProjectPill = observer(function ProjectPill() {
             </Tooltip>
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <Typography className="whitespace-nowrap" sx={{ fontWeight: 700 }} variant="body2">
-                {TEXT.PROJECT_NAME}
+                {presentation.productName}
             </Typography>
             <ProjectMenu
                 documentInputRef={documentInputRef}
@@ -352,7 +354,7 @@ const GizmoToggle = observer(function GizmoToggle() {
     );
 });
 
-/** 输出药丸:历史 → 变换工具 → 采集 → 主行动,变换工具居中,顶部不再需要独立的视口药丸。 */
+/** 输出药丸:历史 → 变换工具 → 采集 → 动作扩展位 → 主行动 → 尾部扩展位,变换工具居中,顶部不再需要独立的视口药丸。 */
 const OutputPill = observer(function OutputPill() {
     return (
         <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
@@ -361,7 +363,9 @@ const OutputPill = observer(function OutputPill() {
             <GizmoToggle />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <CaptureControls />
+            <ToolbarExtensionButtons />
             <PresentationControl />
+            <TrailingExtensionButtons />
         </Paper>
     );
 });
@@ -398,37 +402,123 @@ const HistoryControls = observer(function HistoryControls() {
     );
 });
 
+/**
+ * 药丸动作按钮的单一渲染规范(内置采集按钮与宿主扩展位共用):
+ * 有文案 = 图标+文字 Button,无文案 = 纯图标 IconButton;禁用态包 span 供 Tooltip 挂事件。
+ */
+const PillActionButton = observer(function PillActionButton({
+    ariaLabel,
+    color,
+    disabled = false,
+    icon,
+    label,
+    onClick,
+    tooltip,
+}: PillActionButtonProps) {
+    return (
+        <Tooltip title={tooltip}>
+            <span>
+                {label === null ? (
+                    <IconButton
+                        aria-label={ariaLabel}
+                        color={color}
+                        disabled={disabled}
+                        onClick={onClick}
+                        size={COMPACT_SIZE}
+                    >
+                        {icon}
+                    </IconButton>
+                ) : (
+                    <Button
+                        aria-label={ariaLabel}
+                        color={color === ICON_BUTTON_COLOR.ERROR ? color : TEXT_BUTTON_COLOR_INHERIT}
+                        disabled={disabled}
+                        onClick={onClick}
+                        size={COMPACT_SIZE}
+                        startIcon={icon}
+                        sx={TEXT_ACTION_SX}
+                        variant={BUTTON_VARIANT.TEXT}
+                    >
+                        {label}
+                    </Button>
+                )}
+            </span>
+        </Tooltip>
+    );
+});
+
+interface PillActionButtonProps {
+    readonly ariaLabel: string;
+    readonly color?: (typeof ICON_BUTTON_COLOR)[keyof typeof ICON_BUTTON_COLOR];
+    readonly disabled?: boolean;
+    readonly icon: ReactNode;
+    /** 可见文案;null = 纯图标(内置默认形态) */
+    readonly label: string | null;
+    readonly onClick: () => void;
+    readonly tooltip: string;
+}
+
 const CaptureControls = observer(function CaptureControls() {
     const stores = useDirectorDeskStores();
-    const { timeline, ui } = stores;
+    const { presentation, timeline, ui } = stores;
     const recording = ui.videoRecording;
-    const recordingTitle = `${TEXT.RECORDING_TIMELINE_PREFIX}${timeline.document.duration}${TEXT.RECORDING_TIMELINE_SUFFIX}`;
-    const RecordingIcon = recording ? StopIcon : VideocamIcon;
-    const recordingLabel = recording ? TEXT.STOP_RECORDING : TEXT.RECORD_VIDEO;
+    const image = presentation.captureImage;
+    const video = presentation.captureVideo;
+    // 可见文案仅在宿主定制 label 后出现;录制中切换为 stopLabel,未定制时保持纯图标
+    const videoLabel = video.label !== null && recording ? video.stopLabel : video.label;
     return (
         <>
-            <Tooltip title={TEXT.SCREENSHOT}>
-                <IconButton
-                    aria-label={TEXT.SCREENSHOT}
-                    onClick={() => requestFrameCapture({ context: stores, dispatcher: stores.dispatcher })}
-                    size={COMPACT_SIZE}
-                >
-                    <PhotoCameraIcon fontSize={COMPACT_SIZE} />
-                </IconButton>
-            </Tooltip>
-            <Tooltip title={recordingTitle}>
-                <IconButton
-                    aria-label={recordingLabel}
-                    color={recording ? ICON_BUTTON_COLOR.ERROR : ICON_BUTTON_COLOR.DEFAULT}
-                    onClick={() => toggleRecording(stores)}
-                    size={COMPACT_SIZE}
-                >
-                    <RecordingIcon fontSize={COMPACT_SIZE} />
-                </IconButton>
-            </Tooltip>
+            <PillActionButton
+                ariaLabel={image.ariaLabel}
+                icon={<PhotoCameraIcon fontSize={COMPACT_SIZE} />}
+                label={image.label}
+                onClick={() => requestFrameCapture({ context: stores, dispatcher: stores.dispatcher })}
+                tooltip={image.tooltip}
+            />
+            <PillActionButton
+                ariaLabel={recording ? video.stopLabel : video.ariaLabel}
+                color={recording ? ICON_BUTTON_COLOR.ERROR : ICON_BUTTON_COLOR.DEFAULT}
+                icon={recording ? <StopIcon fontSize={COMPACT_SIZE} /> : <VideocamIcon fontSize={COMPACT_SIZE} />}
+                label={videoLabel}
+                onClick={() => toggleRecording(stores)}
+                tooltip={presentation.captureVideoTooltip(timeline.document.duration)}
+            />
             {ui.lastVideoUrl ? <VideoDownloadButton url={ui.lastVideoUrl} /> : null}
         </>
     );
+});
+
+/** 宿主扩展按钮的单一渲染实现(两槽位共用):空表不渲染、不占位;点击回调宿主全接管,组件不附加默认行为 */
+function renderExtensionButtons(extensions: readonly ToolbarExtension[]): ReactNode {
+    if (extensions.length === 0) return null;
+    return (
+        <>
+            <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
+            {extensions.map((extension) => (
+                <PillActionButton
+                    ariaLabel={extension.ariaLabel}
+                    disabled={extension.isDisabled()}
+                    icon={extension.icon}
+                    key={extension.key}
+                    label={extension.label}
+                    onClick={extension.onClick}
+                    tooltip={extension.tooltip ?? ""}
+                />
+            ))}
+        </>
+    );
+}
+
+/** 动作区扩展位(截图/录制右侧) */
+const ToolbarExtensionButtons = observer(function ToolbarExtensionButtons() {
+    const { presentation } = useDirectorDeskStores();
+    return renderExtensionButtons(presentation.toolbarExtensions);
+});
+
+/** 最右扩展位(全屏预览右侧;宿主窗口控制类动作落位,典型为纯图标形态) */
+const TrailingExtensionButtons = observer(function TrailingExtensionButtons() {
+    const { presentation } = useDirectorDeskStores();
+    return renderExtensionButtons(presentation.trailingExtensions);
 });
 
 const VideoDownloadButton = observer(function VideoDownloadButton({ url }: { readonly url: string }) {
