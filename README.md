@@ -77,6 +77,21 @@ All bridged messages include the configured `sessionId` where applicable:
 
 The bridge accepts an inbound message only when its origin, source window, session, message type, and full payload are valid. Wrong origin, source, or session messages are ignored. A malformed message from the configured trusted source receives `invalid-message`. Rejected imports are reported through `UiStore.setApplicationNotice(...)`, not as an outbound bridge event.
 
+## AI agent bridge
+
+`AgentBridge` is a standalone module (`src/ai/`) that turns a desk instance into an agent-facing tool surface; feature modules never know the agent exists. Construct one per desk from the `onReady` stores:
+
+```ts
+import { AgentBridge } from "@dm/3d-director-desk";
+
+const bridge = new AgentBridge(stores); // stores from DirectorDesk onReady
+const tools = bridge.listToolSchemas(); // { name, description, kind, permissions, inputSchema }[]
+```
+
+- Tool schemas are derived from the same capability contracts the dispatcher enforces, so tool definitions never drift from validation; a capability missing its description throws in dev (fail-closed warn-and-skip in production).
+- Relay a tool call with `dispatcher.dispatch({ type, payload }, stores, { permissions })`; omit `permissions` only for same-process UI paths. `bridge.fullPermissions` is the grant-everything set.
+- `capture.frame` / `capture.video` are fire-and-forget; pair them with `await bridge.awaitFrameCapture(requestId)` / `awaitVideoCapture(requestId)` to reconcile the async artifact by idempotency key (`null` on timeout).
+
 ## Public API
 
 The root entry exports the UI and integration surface above, plus:

@@ -86,8 +86,10 @@ LLM 不擅长数值、擅长语义。禁止 LLM 直接输出世界坐标。运�
 | 资产目录 | `assets.list`/`assets.place`/`assets.mount`(内置目录已入库,宿主注入经 register-assets)                                                                                                            | 已就位                                      |
 | 撤销     | 一批 AI 命令 = Monet undoManager 一个 record                                                                                                                                                      | 命令层逆命令历史已就位;Monet 侧归口待集成   |
 
-## 接入路线
+## 接入路线(2026-09-02 定稿)
 
-1. 阶段一尾声:Monet agent 侧定义 director-desk 工具组(schema 从命令层派生),跑通 S1~S5。
-2. 阶段二:时间轴命令(轨迹段写入 TimeTransport),解锁 S6。
-3. 阶段三:截图回传多模态形成 S7 闭环。
+已定:**Monet 同页 npm 包嵌入**(非 iframe——HostBridge 命令通道不建);**权限全开**(`AgentBridge.fullPermissions` 直传 dispatch);**AI 桥独立模块**(`src/ai/AgentBridge`,功能模块零感知)。
+
+1. 本仓(已落地):`AgentBridge.listToolSchemas()` 由能力契约派生工具组(描述缺登记 dev 即抛);`awaitFrameCapture/awaitVideoCapture` 按 requestId 对账异步产物;契约/权限闸门在 dispatcher。
+2. Monet 侧(待排期):agent 工具组注册 + 前端中继(tool call → `dispatcher.dispatch(cmd, stores, { permissions })`;一次 tool call 的命令序列收口为 undoManager 一个 record),跑通 S1~S6。
+3. 阶段三:截图产物经 `capture-produced → OSS → 画布节点` 回 agent 多模态,S7 闭环。

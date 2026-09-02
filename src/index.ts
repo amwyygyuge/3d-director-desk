@@ -225,6 +225,8 @@ export type {
 export type { CommandCapability, DirectorQuery, QueryResult } from "@/command/CommandDispatcher";
 export type { DispatchOptions } from "@/command/CommandDispatcher";
 export { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
+export { AgentBridge } from "@/ai/AgentBridge";
+export type { AgentToolInputSchema, AgentToolSchema } from "@/ai/AgentBridge";
 export type { ContractViolation, PayloadContract, PayloadFieldSchema } from "@/command/PayloadContract";
 export {
     PLACEMENT_RELATION,
