@@ -34,15 +34,21 @@ export function entityReadinessIssue(ctx: DirectorContext, entity: SceneObject, 
     };
 }
 
-/** 被摄体的构图度量:中心与包围球半径,景别与环绕预设据此定距。 */
+/** 被摄体的构图度量:包围球的世界中心与半径。 */
 export interface SubjectBounds {
     readonly center: Vec3;
     readonly radius: number;
 }
 
+/** 可跟拍被摄体的构图度量:附带从运行时根节点到构图中心的世界偏移。 */
+export interface SubjectFocusBounds extends SubjectBounds {
+    readonly focusOffset: Vec3;
+}
+
 const TMP_BOX = new Box3();
 const TMP_SIZE = new Vector3();
 const TMP_CENTER = new Vector3();
+const TMP_ROOT_POSITION = new Vector3();
 const RADIUS_DIVISOR = 2;
 
 /**
@@ -51,14 +57,24 @@ const RADIUS_DIVISOR = 2;
  * 运行时未就绪(模型仍在加载)时回退到实体权威 transform 的位置,半径为 0——
  * 预设仍可生成,只是不做景别定距,失败路径不把作者卡住。
  */
-export function subjectBoundsFor(ctx: DirectorContext, objectId: string): SubjectBounds | null {
+export function subjectBoundsFor(ctx: DirectorContext, objectId: string): SubjectFocusBounds | null {
     const entity = ctx.scene.manager.getEntity(objectId);
     if (!entity) return null;
     const runtime = ctx.scene.manager.getRuntime(objectId);
-    if (!runtime) return { center: entity.transform.position, radius: 0 };
+    if (!runtime) return { center: entity.transform.position, radius: 0, focusOffset: [0, 0, 0] };
     measureModelBox(runtime, TMP_BOX);
-    if (TMP_BOX.isEmpty()) return { center: entity.transform.position, radius: 0 };
+    if (TMP_BOX.isEmpty()) return { center: entity.transform.position, radius: 0, focusOffset: [0, 0, 0] };
     TMP_BOX.getCenter(TMP_CENTER);
     TMP_BOX.getSize(TMP_SIZE);
-    return { center: [TMP_CENTER.x, TMP_CENTER.y, TMP_CENTER.z], radius: TMP_SIZE.length() / RADIUS_DIVISOR };
+    runtime.getWorldPosition(TMP_ROOT_POSITION);
+    const center: Vec3 = [TMP_CENTER.x, TMP_CENTER.y, TMP_CENTER.z];
+    return {
+        center,
+        radius: TMP_SIZE.length() / RADIUS_DIVISOR,
+        focusOffset: [
+            center[0] - TMP_ROOT_POSITION.x,
+            center[1] - TMP_ROOT_POSITION.y,
+            center[2] - TMP_ROOT_POSITION.z,
+        ],
+    };
 }

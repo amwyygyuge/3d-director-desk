@@ -21,7 +21,7 @@ import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
-import type { SubjectBounds } from "@/command/subjectBounds";
+import type { SubjectFocusBounds } from "@/command/subjectBounds";
 import { SetTimelineDurationCommand } from "@/command/timelineCommands";
 import { VIEW_MODE } from "@/store/MotionAuthoringStore";
 import type { ViewMode } from "@/store/MotionAuthoringStore";
@@ -988,7 +988,7 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
 function takeCommandFor(
     request: MotionPresetRequest,
     shot: CameraShot,
-    subject: SubjectBounds | null,
+    subject: SubjectFocusBounds | null,
     takeId: string,
 ): CreateMotionTakeCommand {
     const keys = presetCompiler.compile(request, { shot, subject });
@@ -999,9 +999,14 @@ function takeCommandFor(
         durationSeconds: request.durationSeconds,
         keys,
         ...(request.easing ? { easing: request.easing } : {}),
-        focus: request.subjectId
-            ? { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId: request.subjectId, worldOffset: [0, 0, 0] }
-            : null,
+        focus:
+            request.subjectId && subject
+                ? {
+                      kind: FOCUS_TARGET_KIND.SCENE_OBJECT,
+                      objectId: request.subjectId,
+                      worldOffset: subject.focusOffset,
+                  }
+                : null,
     });
 }
 
