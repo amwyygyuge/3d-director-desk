@@ -1,9 +1,7 @@
-/** 骨骼显示标签:原始名留给 tooltip,主视觉是中文语义;isFinger 供树层做手指链折叠。 */
+/** 骨骼显示标签:主视觉使用中文语义;isFinger 供树层做手指链折叠。 */
 export interface BoneLabel {
     /** 中文语义名:如「左肩」「右手食指·近节」;非 Mixamo 骨回退为分词后的原名 */
     readonly zh: string;
-    /** 驼峰分词的拉丁名:如「Left Shoulder」,tooltip 与搜索用 */
-    readonly latin: string;
     /** 手指链成员:树层据此把整链折叠成一个分组行 */
     readonly isFinger: boolean;
 }
@@ -76,7 +74,6 @@ export function labelBone(boneName: string): BoneLabel {
     const baseZh = BASE_ZH[base] ?? splitCamelCase(afterSide);
     return {
         zh: `${side ? (SIDE_ZH[side] ?? "") : ""}${baseZh}${orderSuffix(base, order)}`,
-        latin: splitCamelCase(stripped),
         isFinger: FINGER_BASES[base] === true,
     };
 }
