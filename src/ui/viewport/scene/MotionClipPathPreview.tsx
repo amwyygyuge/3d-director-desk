@@ -32,11 +32,10 @@ const HANDLE_SOLVER = new AutoHandleSolver();
 /** 屏幕坐标 → NDC 的量程(0~1 映射到 -1~1) */
 const NDC_SPAN = 2;
 
-/** 选中一枚关键帧即把右栏收敛到它所属机位:运镜编辑与机位面板是同一个上下文。 */
+/** 选中一枚关键帧即把右栏收敛到独立运镜资产,不再选择创建来源机位。 */
 function selectMotionKey(stores: DirectorDeskStores, clipId: string, keyId: string): void {
-    const cameraId = stores.motion.clip(clipId)?.cameraId;
+    stores.selection.clear();
     stores.motionAuthoring.selectKey(clipId, keyId);
-    if (cameraId) stores.selection.select(cameraId);
 }
 
 interface PreviewGeometry {

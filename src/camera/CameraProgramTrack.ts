@@ -1,13 +1,51 @@
+export const PROGRAM_SOURCE_KIND = {
+    STATIC_SHOT: "static-shot",
+    MOTION_CLIP: "motion-clip",
+} as const;
+
+export interface StaticShotProgramSource {
+    readonly kind: typeof PROGRAM_SOURCE_KIND.STATIC_SHOT;
+    readonly shotId: string;
+}
+
+export interface MotionClipProgramSource {
+    readonly kind: typeof PROGRAM_SOURCE_KIND.MOTION_CLIP;
+    readonly motionClipId: string;
+}
+
+export type ProgramSource = StaticShotProgramSource | MotionClipProgramSource;
+
+function sourceFrom(source: ProgramSource): ProgramSource {
+    switch (source.kind) {
+        case PROGRAM_SOURCE_KIND.STATIC_SHOT:
+            if (source.shotId.length === 0) throw new Error("StaticShotProgramSource requires a stable shot id");
+            return Object.freeze({ kind: source.kind, shotId: source.shotId });
+        case PROGRAM_SOURCE_KIND.MOTION_CLIP:
+            if (source.motionClipId.length === 0)
+                throw new Error("MotionClipProgramSource requires a stable motion clip id");
+            return Object.freeze({ kind: source.kind, motionClipId: source.motionClipId });
+    }
+}
+
+export function sameProgramSource(left: ProgramSource, right: ProgramSource): boolean {
+    switch (left.kind) {
+        case PROGRAM_SOURCE_KIND.STATIC_SHOT:
+            return right.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT && left.shotId === right.shotId;
+        case PROGRAM_SOURCE_KIND.MOTION_CLIP:
+            return right.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP && left.motionClipId === right.motionClipId;
+    }
+}
+
 export interface CameraProgramClipInit {
     readonly id: string;
-    readonly cameraId: string;
+    readonly source: ProgramSource;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
 }
 
 export interface CameraProgramClipJSON {
     readonly id: string;
-    readonly cameraId: string;
+    readonly source: ProgramSource;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
 }
@@ -23,14 +61,14 @@ export interface CameraProgramTrackJSON {
 /** One immutable Program segment. Adjacent segments hard-cut; transitions are a later domain concern. */
 export class CameraProgramClip {
     readonly id: string;
-    readonly cameraId: string;
+    readonly source: ProgramSource;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
 
     constructor(init: CameraProgramClipInit) {
+        const source = sourceFrom(init.source);
         if (
             init.id.length === 0 ||
-            init.cameraId.length === 0 ||
             !Number.isFinite(init.startTimeSeconds) ||
             init.startTimeSeconds < 0 ||
             !Number.isFinite(init.durationSeconds) ||
@@ -39,7 +77,7 @@ export class CameraProgramClip {
             throw new Error("CameraProgramClip requires stable identifiers and a finite positive time range");
         }
         this.id = init.id;
-        this.cameraId = init.cameraId;
+        this.source = source;
         this.startTimeSeconds = init.startTimeSeconds;
         this.durationSeconds = init.durationSeconds;
         Object.freeze(this);
@@ -56,17 +94,14 @@ export class CameraProgramClip {
     toJSON(): CameraProgramClipJSON {
         return {
             id: this.id,
-            cameraId: this.cameraId,
+            source: this.source,
             startTimeSeconds: this.startTimeSeconds,
             durationSeconds: this.durationSeconds,
         };
     }
 }
 
-/**
- * The sequence's sole final-output selector. It intentionally permits gaps but never overlapping
- * segments, so one time maps to at most one Program camera.
- */
+/** The sequence's sole final-output selector. It intentionally permits gaps but never overlapping segments. */
 export class CameraProgramTrack {
     readonly clips: readonly CameraProgramClip[];
 
@@ -86,17 +121,11 @@ export class CameraProgramTrack {
     }
 
     clip(clipId: string): CameraProgramClip | undefined {
-        for (const clip of this.clips) {
-            if (clip.id === clipId) return clip;
-        }
-        return undefined;
+        return this.clips.find((clip) => clip.id === clipId);
     }
 
-    cameraAt(timeSeconds: number): string | null {
-        for (const clip of this.clips) {
-            if (clip.covers(timeSeconds)) return clip.cameraId;
-        }
-        return null;
+    sourceAt(timeSeconds: number): ProgramSource | null {
+        return this.clips.find((clip) => clip.covers(timeSeconds))?.source ?? null;
     }
 
     withClip(clip: CameraProgramClip): CameraProgramTrack {
@@ -108,8 +137,8 @@ export class CameraProgramTrack {
         return new CameraProgramTrack({ clips: this.clips.filter((clip) => clip.id !== clipId) });
     }
 
-    withoutCamera(cameraId: string): CameraProgramTrack {
-        return new CameraProgramTrack({ clips: this.clips.filter((clip) => clip.cameraId !== cameraId) });
+    withoutSource(source: ProgramSource): CameraProgramTrack {
+        return new CameraProgramTrack({ clips: this.clips.filter((clip) => !sameProgramSource(clip.source, source)) });
     }
 
     toJSON(): CameraProgramTrackJSON {

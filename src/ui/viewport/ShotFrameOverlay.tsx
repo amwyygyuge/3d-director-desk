@@ -2,6 +2,7 @@ import Button from "@mui/material/Button";
 import { observer } from "mobx-react-lite";
 
 import type { CameraKeyJSON } from "@/camera/CameraKey";
+import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import type { DirectorPose } from "@/store/CameraStore";
 import { MONO_FONT_STACK } from "@/ui/shell/theme";
@@ -34,10 +35,7 @@ function resolveFrameMode(presentationMode: boolean, lensViewActive: boolean, ac
 }
 
 /** 生效片段的裁决与采样器/打点服务同源:取景框角标不得自成一套判据。 */
-function clipAtLensTime(
-    stores: DirectorDeskStores,
-    timeSeconds: number,
-): { readonly id: string; readonly cameraId: string } | null {
+function clipAtLensTime(stores: DirectorDeskStores, timeSeconds: number): CameraMotionClip | null {
     return stores.motion.resolveOutputClipAt(timeSeconds, stores.motionAuthoring.previewClipId);
 }
 
@@ -59,10 +57,10 @@ const LensFrameLabel = observer(function LensFrameLabel() {
     const stores = useDirectorDeskStores();
     const timeSeconds = stores.playheadDisplay.value;
     const clip = clipAtLensTime(stores, timeSeconds);
-    const cameraLabel = clip?.cameraId ?? "—";
+    const motionLabel = clip?.id ?? "—";
     return (
         <span className="absolute left-5 top-20 text-xs text-indigo-200">
-            镜头 · {cameraLabel} · t={timeSeconds.toFixed(2)}s
+            镜头 · {motionLabel} · t={timeSeconds.toFixed(2)}s
         </span>
     );
 });
@@ -72,23 +70,16 @@ const LensNoClipToast = observer(function LensNoClipToast() {
     const stores = useDirectorDeskStores();
     const timeSeconds = stores.playheadDisplay.value;
     const clip = clipAtLensTime(stores, timeSeconds);
-    const preview = stores.motionAuthoring.previewClipId
-        ? stores.motion.clip(stores.motionAuthoring.previewClipId)
-        : undefined;
-    const selectedId = stores.selection.primaryId;
-    const selectedCameraId = selectedId && stores.camera.director.getShot(selectedId) ? selectedId : null;
-    const cameraId = preview?.cameraId ?? selectedCameraId;
     const pose = stores.camera.lastDirectorPose;
-    const canCreateTake = clip === null && cameraId !== null && pose !== null;
+    const canCreateTake = clip === null && pose !== null;
 
     const createTake = (): void => {
-        if (!cameraId || !pose) return;
+        if (!pose) return;
         const result = stores.dispatcher.dispatch(
             {
                 type: "motion.create-take",
                 payload: {
                     id: crypto.randomUUID(),
-                    cameraId,
                     startTimeSeconds: stores.clock.time,
                     durationSeconds: TAKE_DURATION_SECONDS,
                     keys: [keyAtPose(crypto.randomUUID(), 0, pose), keyAtPose(crypto.randomUUID(), 1, pose)],

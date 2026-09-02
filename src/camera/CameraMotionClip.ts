@@ -10,13 +10,11 @@ import {
     isCameraMotionEasing,
 } from "@/camera/CameraMotionEasing";
 import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
-import type { CameraShot } from "@/camera/CameraShot";
 import { MotionTrajectory } from "@/motion/MotionTrajectory";
 import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 
 export interface CameraMotionClipInit {
     readonly id: string;
-    readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly keys: readonly (CameraKey | CameraKeyInit)[];
@@ -28,7 +26,6 @@ export interface CameraMotionClipInit {
 
 export interface CameraMotionClipJSON {
     readonly id: string;
-    readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly keys: readonly CameraKeyJSON[];
@@ -62,17 +59,17 @@ function trajectoryFrom(init: CameraMotionClipInit): MotionTrajectory<CameraKey>
 }
 
 /**
- * 时序聚合根:一台机位在一段时间内的运镜。
+ * 时序聚合根:一段可独立播放的运镜。
  *
  * 空间形状交给通用 MotionTrajectory(模型走位将复用同一实现),
  * 本类只负责时间边界、跟拍覆盖层与「时间 → 归一化进度」的换算。
+ * 运镜 key 自带完整 position/target/fov,永不回读静态机位。
  *
  * 缓动是**整段**的时间曲线,不是每段各自的:段内缓动会让每个关键帧处速度归零
  * (环绕会「走一段停一下」)。段与段之间的快慢由关键帧的 progress 分布表达。
  */
 export class CameraMotionClip {
     readonly id: string;
-    readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly trajectory: MotionTrajectory<CameraKey>;
@@ -88,7 +85,6 @@ export class CameraMotionClip {
         if (
             !isCameraMotionEasing(easing) ||
             init.id.length === 0 ||
-            init.cameraId.length === 0 ||
             !Number.isFinite(init.startTimeSeconds) ||
             init.startTimeSeconds < 0 ||
             !Number.isFinite(init.durationSeconds) ||
@@ -97,7 +93,6 @@ export class CameraMotionClip {
             throw new Error("CameraMotionClip requires stable identifiers and a finite positive time range");
         }
         this.id = init.id;
-        this.cameraId = init.cameraId;
         this.startTimeSeconds = init.startTimeSeconds;
         this.durationSeconds = init.durationSeconds;
         this.trajectory = trajectory;
@@ -171,7 +166,6 @@ export class CameraMotionClip {
     toJSON(): CameraMotionClipJSON {
         return {
             id: this.id,
-            cameraId: this.cameraId,
             startTimeSeconds: this.startTimeSeconds,
             durationSeconds: this.durationSeconds,
             keys: this.keys.map((key) => key.toJSON()),
@@ -183,7 +177,6 @@ export class CameraMotionClip {
     private replicate(overrides: Partial<CameraMotionClipInit>): CameraMotionClip {
         return new CameraMotionClip({
             id: this.id,
-            cameraId: this.cameraId,
             startTimeSeconds: this.startTimeSeconds,
             durationSeconds: this.durationSeconds,
             keys: this.keys,
@@ -204,7 +197,6 @@ export class CameraMotionClip {
 export function sampleCameraMotionClip(
     clip: CameraMotionClip,
     timeSeconds: number,
-    shot: CameraShot,
     focusTarget: FocusTargetSample | null,
     positionSample: MotionPositionSample,
     sample: CameraMotionSample,
@@ -224,8 +216,6 @@ export function sampleCameraMotionClip(
     sample.targetX = focusTarget ? focusTarget.x : from.target[0] + (to.target[0] - from.target[0]) * local;
     sample.targetY = focusTarget ? focusTarget.y : from.target[1] + (to.target[1] - from.target[1]) * local;
     sample.targetZ = focusTarget ? focusTarget.z : from.target[2] + (to.target[2] - from.target[2]) * local;
-    const fromFov = from.fov ?? shot.fov;
-    const toFov = to.fov ?? shot.fov;
-    sample.fov = fromFov + (toFov - fromFov) * local;
+    sample.fov = from.fov + (to.fov - from.fov) * local;
     return true;
 }

@@ -1,6 +1,7 @@
 import type { FocusTargetSample } from "@/camera/CameraFocusTrack";
 import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
 import type { SceneManager } from "@/core/SceneManager";
+import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { CameraStore } from "@/store/CameraStore";
 import { createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
@@ -24,8 +25,8 @@ export interface MotionPreviewSource {
 }
 
 interface ResolvedTake {
-    readonly shot: CameraShot;
     readonly clip: CameraMotionClip | null;
+    readonly shot: CameraShot | null;
 }
 
 /**
@@ -68,14 +69,19 @@ export class CameraMotionSampler {
     sampleCurrent(timeSeconds: number): boolean {
         const take = this.resolveTake(timeSeconds);
         if (!take) return false;
-        const { shot, clip } = take;
-        const focusTarget =
-            clip?.focus && this.focusResolver.resolve(clip.focus, this.focusSample) ? this.focusSample : null;
-        const hasClipSample =
-            clip !== null &&
-            (clip.focus === null || focusTarget !== null) &&
-            sampleCameraMotionClip(clip, timeSeconds, shot, focusTarget, this.positionSample, this.sample);
-        if (!hasClipSample) this.writeStaticShot(shot);
+        const { clip, shot } = take;
+        if (clip) {
+            const focusTarget =
+                clip.focus && this.focusResolver.resolve(clip.focus, this.focusSample) ? this.focusSample : null;
+            const hasClipSample =
+                (clip.focus === null || focusTarget !== null) &&
+                sampleCameraMotionClip(clip, timeSeconds, focusTarget, this.positionSample, this.sample);
+            if (!hasClipSample) return false;
+        } else if (shot) {
+            this.writeStaticShot(shot);
+        } else {
+            return false;
+        }
         this.sink?.applyMotion(this.sample);
         return true;
     }
@@ -86,11 +92,11 @@ export class CameraMotionSampler {
 
     private resolveTake(timeSeconds: number): ResolvedTake | null {
         const clip = this.motion.resolveOutputClipAt(timeSeconds, this.preview.previewClipId);
-        const clipShot = clip ? this.camera.director.getShot(clip.cameraId) : undefined;
-        if (clip && clipShot) return { shot: clipShot, clip };
-        const programCameraId = this.motion.program.cameraAt(timeSeconds);
-        const programShot = programCameraId ? this.camera.director.getShot(programCameraId) : undefined;
-        return programShot ? { shot: programShot, clip: null } : null;
+        if (clip) return { clip, shot: null };
+        const source = this.motion.program.sourceAt(timeSeconds);
+        if (source?.kind !== PROGRAM_SOURCE_KIND.STATIC_SHOT) return null;
+        const shot = this.camera.director.getShot(source.shotId);
+        return shot ? { clip: null, shot } : null;
     }
 
     private writeStaticShot(shot: CameraShot): void {

@@ -6,7 +6,8 @@ import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
 import { createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
-import { CreateMotionClipCommand, SetProgramClipCommand } from "@/command/cameraMotionCommands";
+import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
+import { SetProgramClipCommand } from "@/command/cameraMotionCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
@@ -79,21 +80,22 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
     }
 
     execute(ctx: DirectorContext): unknown {
-        const programCameraId = ctx.motion.program.cameraAt(ctx.clock.time);
-        const shot = programCameraId ? ctx.camera.director.getShot(programCameraId) : undefined;
-        const clip = programCameraId ? ctx.motion.clipAt(programCameraId, ctx.clock.time) : null;
+        const programSource = ctx.motion.program.sourceAt(ctx.clock.time);
+        const clip =
+            programSource?.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP
+                ? (ctx.motion.clip(programSource.motionClipId) ?? null)
+                : null;
         const focusResolver = new FocusTargetResolver(ctx.scene.manager);
         const focusTarget =
             clip?.focus && focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) ? TMP_FOCUS_SAMPLE : null;
         const isSampled =
             clip !== null &&
-            shot !== undefined &&
             (clip.focus === null || focusTarget !== null) &&
-            sampleCameraMotionClip(clip, ctx.clock.time, shot, focusTarget, TMP_POSITION_SAMPLE, TMP_MOTION_SAMPLE);
+            sampleCameraMotionClip(clip, ctx.clock.time, focusTarget, TMP_POSITION_SAMPLE, TMP_MOTION_SAMPLE);
         const sampled = isSampled ? TMP_MOTION_SAMPLE : null;
         return {
             activeShotId: ctx.camera.activeShotId,
-            programCameraId,
+            programSource,
             live: ctx.capture.readCameraPose(),
             motionSampled: sampled
                 ? {
@@ -201,24 +203,23 @@ export class RemoveShotCommand extends DirectorCommand<ShotIdPayload> {
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.motion.removeCamera(this.payload.id);
+        ctx.motion.removeStaticShot(this.payload.id);
         ctx.camera.removeShot(this.payload.id);
     }
 
-    /** Restores the static camera before its dependent temporal data, preserving command invariants on redo. */
+    /** Restores the static camera and only Program segments that directly referenced it. */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const previousShot = ctx.camera.director.getShot(this.payload.id);
         if (!previousShot) return null;
         const wasActive = ctx.camera.activeShotId === this.payload.id;
-        const motionCommands = ctx.motion
-            .clipsForCamera(this.payload.id)
-            .map((clip) => ({ type: CreateMotionClipCommand.TYPE, payload: { clip: clip.toJSON() } }));
         const programCommands = ctx.motion.program.clips
-            .filter((clip) => clip.cameraId === this.payload.id)
+            .filter(
+                (clip) =>
+                    clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT && clip.source.shotId === this.payload.id,
+            )
             .map((clip) => ({ type: SetProgramClipCommand.TYPE, payload: { clip: clip.toJSON() } }));
         return [
             { type: "camera.set-shot", payload: { id: this.payload.id, shot: previousShot.toJSON() } },
-            ...motionCommands,
             ...programCommands,
             ...(wasActive ? [{ type: ActivateShotCommand.TYPE, payload: { id: this.payload.id } }] : []),
         ];

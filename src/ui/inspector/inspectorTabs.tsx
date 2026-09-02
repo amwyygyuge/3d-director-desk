@@ -8,7 +8,7 @@ import {
     ShotCameraSection,
 } from "@/ui/inspector/Inspector";
 import { ModelPoseSection } from "@/ui/pose/BoneTreePanel";
-import { CameraMotionSection } from "@/ui/inspector/MotionClipInspector";
+import { CameraMotionSection, MotionClipSection } from "@/ui/inspector/MotionClipInspector";
 import { ActorImageSection, hasActorProfile } from "@/ui/actor/ActorImageSection";
 import { PoseComposerSection } from "@/ui/pose/PoseComposerSection";
 import { QuickMotionSection } from "@/ui/inspector/QuickMotionSection";
@@ -30,6 +30,9 @@ export interface InspectorSectionContext extends InspectorSectionProps {
 const CameraMotionTabContent = observer(function CameraMotionTabContent({ primaryId }: InspectorSectionProps) {
     return <CameraMotionSection cameraId={primaryId} />;
 });
+const MotionClipTabContent = observer(function MotionClipTabContent({ primaryId }: InspectorSectionProps) {
+    return <MotionClipSection clipId={primaryId} />;
+});
 
 /**
  * 检查器 tab 注册表:按选中类型装配内容分类。
@@ -39,6 +42,7 @@ export const inspectorTabs = new TabSectionRegistry<InspectorSelectionKind, Insp
 
 inspectorTabs.register("camera-shot", { id: "shot", label: "机位", content: ShotCameraSection });
 inspectorTabs.register("camera-shot", { id: "motion", label: "运镜", content: CameraMotionTabContent });
+inspectorTabs.register("motion-clip", { id: "motion", label: "运镜", content: MotionClipTabContent });
 inspectorTabs.register("model", { id: "transform", label: "变换", content: EntityTransformSection });
 inspectorTabs.register("model", { id: "quick-motion", label: "运镜", content: QuickMotionSection });
 inspectorTabs.register("model", {

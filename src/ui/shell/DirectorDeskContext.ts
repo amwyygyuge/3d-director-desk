@@ -219,7 +219,7 @@ export function createDirectorDeskStores(options?: {
         layout,
         motionAuthoring,
         viewportCamera,
-        timelineLayout: new TimelineLayout(motion, timeline, camera),
+        timelineLayout: new TimelineLayout(motion, timeline),
         keyframeAuthoring: new KeyframeAuthoringService(),
         snapResolver: new SnapResolver(),
         playheadDisplay: new PlayheadDisplay(clock),

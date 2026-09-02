@@ -7,6 +7,7 @@ import { observer } from "mobx-react-lite";
 import { type WheelEvent, useRef, useState } from "react";
 
 import { TIMELINE_ROW_KIND } from "@/authoring/TimelineLayout";
+import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import type { TimelineViewport } from "@/authoring/TimelineViewport";
 import type { TimelineEasing } from "@/timeline/TransformKeyframe";
 import { TIMELINE_EASING } from "@/timeline/TransformKeyframe";
@@ -138,7 +139,7 @@ const ProgramCutInButton = observer(function ProgramCutInButton() {
                 payload: {
                     clip: {
                         id: crypto.randomUUID(),
-                        cameraId,
+                        source: { kind: PROGRAM_SOURCE_KIND.STATIC_SHOT, shotId: cameraId },
                         startTimeSeconds: playhead,
                         durationSeconds: clipDuration,
                     },

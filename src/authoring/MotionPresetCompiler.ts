@@ -51,7 +51,6 @@ export function isOrbitDirection(value: unknown): value is OrbitDirection {
 }
 
 export interface MotionPresetRequest {
-    readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly move: MotionMove;
@@ -246,8 +245,8 @@ export class MotionPresetCompiler {
             outHandle: [0, 0, 0],
             handleMode: MOTION_HANDLE_MODE.AUTO,
             target: pose.target,
-            // 落幅的 fov 经 landing pose 随 resolved 序列流入;滑动变焦的中间覆盖同理
-            fov: pose.fov ?? null,
+            // 每枚 key 都携带完整焦距，成片不再回退读取起幅机位。
+            fov: pose.fov ?? context.shot.fov,
         }));
     }
 

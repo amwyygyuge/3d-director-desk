@@ -55,7 +55,8 @@ function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup):
 export const InspectorSheet = observer(function InspectorSheet() {
     const stores = useDirectorDeskStores();
     const { layout, selection, ui } = stores;
-    const primaryId = selection.primaryId;
+    const motionClipId = selection.primaryId === null ? stores.motionAuthoring.selectedClipId : null;
+    const primaryId = motionClipId ?? selection.primaryId;
 
     // 选中对象切换时退出骨骼点选:姿态选择是瞬时 UI 身份,不跨对象残留
     useEffect(() => {
@@ -65,7 +66,10 @@ export const InspectorSheet = observer(function InspectorSheet() {
     }, [ui, primaryId]);
 
     if (!layout.authoringVisible || primaryId === null) return null;
-    const selected = inspectorSelectionFor({ stores, primaryId });
+    const selected =
+        motionClipId && stores.motion.clip(motionClipId)
+            ? { kind: "motion-clip" as const, name: motionClipId, isSceneEntity: false }
+            : inspectorSelectionFor({ stores, primaryId });
     if (selected === null) return null;
 
     // 命令失败只走全局 ApplicationNotice 一条通道;右栏不再自带 Snackbar
@@ -110,7 +114,13 @@ export const InspectorSheet = observer(function InspectorSheet() {
                     </Typography>
                 </Box>
                 <Tooltip title={`清除选中 (${formatShortcutHint(SHORTCUT_ID.CLEAR_SELECTION)})`}>
-                    <IconButton size="small" aria-label="关闭检查器" onClick={() => selection.clear()}>
+                    <IconButton
+                        size="small"
+                        aria-label="关闭检查器"
+                        onClick={() =>
+                            selected.kind === "motion-clip" ? stores.motionAuthoring.selectClip(null) : selection.clear()
+                        }
+                    >
                         <CloseIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>

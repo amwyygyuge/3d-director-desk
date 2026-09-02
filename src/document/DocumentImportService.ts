@@ -4,7 +4,7 @@ import { provisionAction, mountWhenReady } from "@/command/actionProvisioning";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
-import { CameraProgramTrack } from "@/camera/CameraProgramTrack";
+import { CameraProgramTrack, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import { CameraShot } from "@/camera/CameraShot";
 import { finiteTransform, finiteVec3, SceneObject, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
 import { TimelineDoc } from "@/timeline/TimelineDoc";
@@ -144,40 +144,44 @@ function trackIssues(
 }
 
 function motionIssues(plan: DocumentImportPlan): readonly string[] {
-    const cameraIds = new Set(plan.shots.map(({ id }) => id));
+    const shotIds = new Set(plan.shots.map(({ id }) => id));
     const entityIds = new Set(plan.entities.map((entity) => entity.id));
     const clipIds = new Set<string>();
-    const clipsByCamera = new Map<string, CameraMotionClip[]>();
+    const clipsById = new Map<string, CameraMotionClip>();
     const clipIssues = plan.motionClips.flatMap((clip) => {
         const isDuplicate = clipIds.has(clip.id);
         clipIds.add(clip.id);
-        const cameraClips = clipsByCamera.get(clip.cameraId) ?? [];
-        clipsByCamera.set(clip.cameraId, [...cameraClips, clip]);
+        clipsById.set(clip.id, clip);
         const focusTarget = clip.focus?.target;
         const focusObjectId = focusTarget?.kind === FOCUS_TARGET_KIND.SCENE_OBJECT ? focusTarget.objectId : null;
-        const issues = [
+        return [
             ...(isDuplicate ? [`运镜片段 id 重复: ${clip.id}`] : []),
-            ...(!cameraIds.has(clip.cameraId) ? [`运镜片段 "${clip.id}" 引用不存在的机位`] : []),
             ...(focusObjectId !== null && !entityIds.has(focusObjectId)
                 ? [`运镜注视绑定对象不存在: ${focusObjectId}`]
                 : []),
             ...(clip.endTimeSeconds > plan.timeline.duration ? [`运镜片段 "${clip.id}" 超出时间轴时长`] : []),
         ];
-        return issues;
     });
-    const overlapIssues = [...clipsByCamera.values()].flatMap((clips) => {
-        const ordered = [...clips].sort((left, right) => left.startTimeSeconds - right.startTimeSeconds);
-        const hasOverlap = ordered.some((clip, index) => {
-            const next = ordered[index + 1];
-            return next ? clip.endTimeSeconds > next.startTimeSeconds : false;
-        });
-        return hasOverlap ? [`同一机位的运镜片段不能重叠: ${ordered[0]?.cameraId ?? ""}`] : [];
+    const programIssues = plan.program.clips.flatMap((clip) => {
+        const sourceIssue =
+            clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT
+                ? !shotIds.has(clip.source.shotId)
+                    ? [`Program 片段 "${clip.id}" 引用不存在的机位`]
+                    : []
+                : (() => {
+                      const motion = clipsById.get(clip.source.motionClipId);
+                      const isAligned =
+                          motion !== undefined &&
+                          motion.startTimeSeconds === clip.startTimeSeconds &&
+                          motion.durationSeconds === clip.durationSeconds;
+                      return isAligned ? [] : [`Program 片段 "${clip.id}" 引用不存在或未对齐的运镜`];
+                  })();
+        return [
+            ...sourceIssue,
+            ...(clip.endTimeSeconds > plan.timeline.duration ? [`Program 片段 "${clip.id}" 超出时间轴时长`] : []),
+        ];
     });
-    const programIssues = plan.program.clips.flatMap((clip) => [
-        ...(!cameraIds.has(clip.cameraId) ? [`Program 片段 "${clip.id}" 引用不存在的机位`] : []),
-        ...(clip.endTimeSeconds > plan.timeline.duration ? [`Program 片段 "${clip.id}" 超出时间轴时长`] : []),
-    ]);
-    return [...clipIssues, ...overlapIssues, ...programIssues];
+    return [...clipIssues, ...programIssues];
 }
 
 function preparePlan(document: unknown): DocumentImportPreparation {

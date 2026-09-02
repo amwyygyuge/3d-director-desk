@@ -242,7 +242,7 @@ function motionDragKind(event: PointerEvent<HTMLDivElement>): MotionDragKind {
 function trackAccent(kind: TimelineRowKind): TrackAccent {
     const accents: Record<TimelineRowKind, TrackAccent> = {
         [TIMELINE_ROW_KIND.PROGRAM]: PROGRAM_TRACK_ACCENT,
-        [TIMELINE_ROW_KIND.CAMERA]: MOTION_TRACK_ACCENT,
+        [TIMELINE_ROW_KIND.MOTION]: MOTION_TRACK_ACCENT,
         [TIMELINE_ROW_KIND.TRANSFORM]: KEYFRAME_TRACK_ACCENT,
     };
     return accents[kind];
@@ -293,7 +293,7 @@ const ProgramClipBar = observer(function ProgramClipBar({ barId, onSelect }: Pro
         <Box
             role="button"
             tabIndex={0}
-            aria-label={`${bar.cameraId} 输出片段 ${bar.startSeconds.toFixed(2)} 秒`}
+            aria-label={`${bar.label} 输出片段 ${bar.startSeconds.toFixed(2)} 秒`}
             onClick={() => onSelect(bar.id)}
             sx={{
                 position: "absolute",
@@ -364,15 +364,14 @@ const MotionClipBar = observer(function MotionClipBar({ clipId }: { readonly cli
         <Box
             role="button"
             tabIndex={0}
-            aria-label={`${clip.cameraId} 运镜片段 ${clip.startTimeSeconds.toFixed(2)} 秒`}
+            aria-label={`${bar.label} 运镜片段 ${clip.startTimeSeconds.toFixed(2)} 秒`}
             onClick={() => {
                 if (ignoreClick.current) {
                     ignoreClick.current = false;
                     return;
                 }
-                // 运镜片段的属性面板挂在机位上:点片段即把右栏收敛到它所属机位
+                stores.selection.clear();
                 stores.motionAuthoring.selectClip(clipId);
-                stores.selection.select(clip.cameraId);
                 const result = stores.dispatcher.dispatch(
                     { type: "motion.preview.enter", payload: { clipId } },
                     stores,
@@ -441,7 +440,9 @@ const MotionKeyDiamond = observer(function MotionKeyDiamond({
     readonly keyId: string;
 }) {
     const stores = useDirectorDeskStores();
-    const row = projectedRow(stores, stores.motion.clip(clipId)?.cameraId ?? "");
+    const row = stores.timelineLayout
+        .project(motionViewport(stores))
+        .find((candidate) => candidate.kind === TIMELINE_ROW_KIND.MOTION);
     const mark = row?.marks.find(
         (candidate) =>
             candidate.id === keyId && candidate.ownerId === clipId && candidate.kind === TIMELINE_MARK_KIND.CAMERA_KEY,
@@ -727,7 +728,7 @@ const ROW_CONTENT: Record<
     [TIMELINE_ROW_KIND.PROGRAM]: (rowId, onSelectProgramClip) => (
         <ProgramTrackBody rowId={rowId} onSelect={onSelectProgramClip} />
     ),
-    [TIMELINE_ROW_KIND.CAMERA]: (rowId) => <MotionTrackBody rowId={rowId} />,
+    [TIMELINE_ROW_KIND.MOTION]: (rowId) => <MotionTrackBody rowId={rowId} />,
     [TIMELINE_ROW_KIND.TRANSFORM]: (rowId, _onSelectProgramClip, onSelectTransformKey) => (
         <TransformTrackBody rowId={rowId} onSelect={onSelectTransformKey} />
     ),

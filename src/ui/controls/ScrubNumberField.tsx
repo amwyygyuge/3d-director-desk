@@ -22,13 +22,13 @@ export interface ScrubNumberFieldProps {
     /** 轴/单位标签,渲染为可拖拽刮擦的手柄 */
     readonly label: string;
     readonly ariaLabel: string;
-    /** 当前值;配合 allowEmpty 可传 null(显示为空,如 FOV 留空跟随机位) */
+    /** 当前值;配合 allowEmpty 可传 null。 */
     readonly value: number | null;
     readonly kind?: ScrubKind;
     readonly min?: number;
     readonly max?: number;
     readonly disabled?: boolean;
-    /** 允许清空:草稿为空时提交走 onClear 而非 onCommit(如 FOV 留空跟随机位) */
+    /** 允许清空:草稿为空时提交走 onClear 而非 onCommit。 */
     readonly allowEmpty?: boolean;
     readonly placeholder?: string;
     readonly onCommit: (value: number) => void;

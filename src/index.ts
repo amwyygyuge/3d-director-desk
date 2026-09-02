@@ -115,12 +115,15 @@ export type {
 } from "@/authoring/MotionPresetCompiler";
 export { MotionAuthoringStore, VIEW_MODE } from "@/store/MotionAuthoringStore";
 export type { ViewMode } from "@/store/MotionAuthoringStore";
-export { CameraProgramClip, CameraProgramTrack } from "@/camera/CameraProgramTrack";
+export { CameraProgramClip, CameraProgramTrack, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 export type {
     CameraProgramClipInit,
     CameraProgramClipJSON,
     CameraProgramTrackInit,
     CameraProgramTrackJSON,
+    MotionClipProgramSource,
+    ProgramSource,
+    StaticShotProgramSource,
 } from "@/camera/CameraProgramTrack";
 export { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 export type { CameraMotionSink } from "@/camera/CameraMotionSampler";

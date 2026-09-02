@@ -73,9 +73,6 @@ const MotionClipProperties = observer(function MotionClipProperties({ clipId }: 
     return (
         <Box sx={{ display: "grid", gap: FIELD_GAP, p: FIELD_GAP }}>
             <Typography variant="subtitle2">片段属性</Typography>
-            <Typography variant="caption" color="text.secondary">
-                所属机位：{clip.cameraId}
-            </Typography>
             <ClipRangeEditor clipId={clip.id} />
             <ClipEasingControl clipId={clip.id} />
             <Divider />
@@ -364,12 +361,9 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
                 label="FOV"
                 ariaLabel="视角 (FOV)"
                 kind="angleDeg"
-                allowEmpty
-                placeholder="跟随机位"
                 value={key.fov}
                 onCommit={(fov) => commitPose(key.withPose({ position: key.position, target: key.target, fov }))}
-                onClear={() => commitPose(key.withPose({ position: key.position, target: key.target, fov: null }))}
-                onInvalid={() => ui.setApplicationNotice("视角必须是有限数值，或留空以跟随机位")}
+                onInvalid={() => ui.setApplicationNotice("视角必须是范围内的有限数值")}
             />
         </Box>
     );
@@ -481,47 +475,25 @@ const ManualHandleFields = observer(function ManualHandleFields({ clipId, keyId 
     );
 });
 
-/**
- * 机位面板里的运镜区:一台机位的全部片段与选中片段的编辑。
- *
- * 运镜不是独立的选中对象——它属于某台机位,故与机位属性同住一个右栏面板,
- * 作者点机位标记就能顺势编排它的运镜,不必先在时间轴上找到片段。
- */
+/** 静态机位可作为创建期起幅,但不会拥有或展示生成后的运镜资产。 */
 export const CameraMotionSection = observer(function CameraMotionSection({ cameraId }: { cameraId: string }) {
-    const { motion, motionAuthoring } = useDirectorDeskStores();
-    const clips = motion.clipsForCamera(cameraId);
-    const selectedClip = motionAuthoring.selectedClipId ? motion.clip(motionAuthoring.selectedClipId) : undefined;
-    const activeClip = selectedClip?.cameraId === cameraId ? selectedClip : undefined;
-
     return (
         <Box sx={{ display: "grid", gap: FIELD_GAP, p: FIELD_GAP }}>
             <MotionPresetControls cameraId={cameraId} />
-            <Divider />
-            <Typography variant="subtitle2">运镜片段 ({clips.length})</Typography>
-            {clips.length === 0 && (
-                <Typography variant="caption" color="text.secondary">
-                    该机位暂无运镜;用上方运镜预设或在时间线上创建。
-                </Typography>
-            )}
-            {clips.map((clip) => (
-                <Button
-                    key={clip.id}
-                    size="small"
-                    variant={activeClip?.id === clip.id ? "contained" : "text"}
-                    sx={{ justifyContent: "flex-start" }}
-                    onClick={() => motionAuthoring.selectClip(clip.id)}
-                >
-                    {clip.startTimeSeconds.toFixed(2)}s — {clip.endTimeSeconds.toFixed(2)}s · {clip.keys.length} 关键帧
-                </Button>
-            ))}
-            {activeClip && (
-                <>
-                    <Divider />
-                    <MotionClipProperties clipId={activeClip.id} />
-                    <Divider />
-                    <MotionKeyList clipId={activeClip.id} />
-                </>
-            )}
         </Box>
+    );
+});
+
+/** 独立运镜资产的检查器:片段与关键帧只由自身 id 定位。 */
+export const MotionClipSection = observer(function MotionClipSection({ clipId }: { clipId: string }) {
+    const { motion } = useDirectorDeskStores();
+    const clip = motion.clip(clipId);
+    if (!clip) return null;
+    return (
+        <>
+            <MotionClipProperties clipId={clip.id} />
+            <Divider />
+            <MotionKeyList clipId={clip.id} />
+        </>
     );
 });

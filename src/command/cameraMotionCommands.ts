@@ -6,8 +6,8 @@ import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
 import { CAMERA_MOTION_EASING, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
 import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
-import { CameraProgramClip } from "@/camera/CameraProgramTrack";
-import type { CameraProgramClipJSON } from "@/camera/CameraProgramTrack";
+import { CameraProgramClip, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
+import type { CameraProgramClipJSON, ProgramSource } from "@/camera/CameraProgramTrack";
 import { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
 import {
     isOrbitDirection,
@@ -81,7 +81,6 @@ interface CreateMotionClipPayload {
 
 interface CreateTakePayload {
     readonly id?: string;
-    readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly keys: readonly CameraKeyJSON[];
@@ -89,6 +88,10 @@ interface CreateTakePayload {
     readonly program?: ProgramFollow;
     /** 整段时间曲线;缺省 smooth */
     readonly easing?: CameraMotionEasing;
+}
+interface AuthorMotionPayload extends MotionPresetRequest {
+    /** 仅创建期读取的静态起幅机位;不会写入运镜资产。 */
+    readonly cameraId: string;
 }
 
 interface SetMotionClipRangePayload {
@@ -155,7 +158,7 @@ const CAMERA_KEY_SCHEMA: PayloadFieldSchema = {
         progress: { type: "number" },
         position: VEC3_SCHEMA,
         target: VEC3_SCHEMA,
-        fov: nullable({ type: "number" }),
+        fov: { type: "number" },
         handleMode: { type: "string", enum: Object.values(MOTION_HANDLE_MODE) },
         inHandle: VEC3_SCHEMA,
         outHandle: VEC3_SCHEMA,
@@ -198,25 +201,45 @@ const CAMERA_MOTION_CLIP_SCHEMA: PayloadFieldSchema = {
     type: "object",
     properties: {
         id: { type: "string" },
-        cameraId: { type: "string" },
         startTimeSeconds: { type: "number" },
         durationSeconds: { type: "number" },
         keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
         focus: nullable(CAMERA_FOCUS_TRACK_SCHEMA),
         easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
     },
-    required: ["id", "cameraId", "startTimeSeconds", "durationSeconds", "keys", "focus", "easing"],
+    required: ["id", "startTimeSeconds", "durationSeconds", "keys", "focus", "easing"],
+};
+
+const PROGRAM_SOURCE_SCHEMA: PayloadFieldSchema = {
+    anyOf: [
+        {
+            type: "object",
+            properties: {
+                kind: { type: "string", enum: [PROGRAM_SOURCE_KIND.STATIC_SHOT] },
+                shotId: { type: "string" },
+            },
+            required: ["kind", "shotId"],
+        },
+        {
+            type: "object",
+            properties: {
+                kind: { type: "string", enum: [PROGRAM_SOURCE_KIND.MOTION_CLIP] },
+                motionClipId: { type: "string" },
+            },
+            required: ["kind", "motionClipId"],
+        },
+    ],
 };
 
 const CAMERA_PROGRAM_CLIP_SCHEMA: PayloadFieldSchema = {
     type: "object",
     properties: {
         id: { type: "string" },
-        cameraId: { type: "string" },
+        source: PROGRAM_SOURCE_SCHEMA,
         startTimeSeconds: { type: "number" },
         durationSeconds: { type: "number" },
     },
-    required: ["id", "cameraId", "startTimeSeconds", "durationSeconds"],
+    required: ["id", "source", "startTimeSeconds", "durationSeconds"],
 };
 
 const CREATE_MOTION_CLIP_CONTRACT: PayloadContract = {
@@ -227,7 +250,6 @@ const CREATE_MOTION_CLIP_CONTRACT: PayloadContract = {
 const CREATE_MOTION_TAKE_CONTRACT: PayloadContract = {
     properties: {
         id: { type: "string" },
-        cameraId: { type: "string" },
         startTimeSeconds: { type: "number" },
         durationSeconds: { type: "number" },
         keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
@@ -235,7 +257,7 @@ const CREATE_MOTION_TAKE_CONTRACT: PayloadContract = {
         program: { type: "string", enum: Object.values(PROGRAM_FOLLOW) },
         easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
     },
-    required: ["cameraId", "startTimeSeconds", "durationSeconds", "keys"],
+    required: ["startTimeSeconds", "durationSeconds", "keys"],
 };
 
 const SET_MOTION_CLIP_RANGE_CONTRACT: PayloadContract = {
@@ -369,9 +391,12 @@ function presetParamIssues(payload: {
 /** Program 跟随三件套只消费这个切片(拓宽签名:quick-author 的计划结构免构造整个 clip) */
 interface ProgramRangeLike {
     readonly id: string;
-    readonly cameraId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
+}
+
+function motionProgramSource(clip: ProgramRangeLike): ProgramSource {
+    return { kind: PROGRAM_SOURCE_KIND.MOTION_CLIP, motionClipId: clip.id };
 }
 
 function motionClipFrom(clip: CameraMotionClipJSON): CameraMotionClip | null {
@@ -394,30 +419,20 @@ function existingClip(ctx: DirectorContext, id: unknown): CameraMotionClip | nul
     return typeof id === "string" && id.length > 0 ? (ctx.motion.clip(id) ?? null) : null;
 }
 
-function clipRangeIssue(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): CommandIssue | null {
-    const isOutsideDuration = clip.endTimeSeconds > ctx.timeline.document.duration;
-    if (isOutsideDuration) return issue(ISSUE_CODE.DURATION, "clip", "运镜片段不能超出时间轴时长");
-    const overlaps = ctx.motion
-        .clipsForCamera(clip.cameraId)
-        .some(
-            (current) =>
-                current.id !== excludedId &&
-                current.startTimeSeconds < clip.endTimeSeconds &&
-                clip.startTimeSeconds < current.endTimeSeconds,
-        );
-    return overlaps ? issue(ISSUE_CODE.OVERLAP, "clip", "同一机位的运镜片段不能重叠") : null;
+function clipRangeIssue(ctx: DirectorContext, clip: CameraMotionClip): CommandIssue | null {
+    return clip.endTimeSeconds > ctx.timeline.document.duration
+        ? issue(ISSUE_CODE.DURATION, "clip", "运镜片段不能超出时间轴时长")
+        : null;
 }
 
-function clipIssues(ctx: DirectorContext, clip: CameraMotionClip, excludedId: string | null): readonly CommandIssue[] {
-    const camera = ctx.camera.director.getShot(clip.cameraId);
+function clipIssues(ctx: DirectorContext, clip: CameraMotionClip): readonly CommandIssue[] {
     const target = clip.focus?.target;
     const hasFocusObject =
         !target ||
         target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT ||
         ctx.scene.manager.getEntity(target.objectId) !== undefined;
-    if (!camera) return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "运镜引用的机位不存在")];
     if (!hasFocusObject) return [issue(ISSUE_CODE.FOCUS_OBJECT, "clip.focus.target.objectId", "注视绑定对象不存在")];
-    const range = clipRangeIssue(ctx, clip, excludedId);
+    const range = clipRangeIssue(ctx, clip);
     return range ? [range] : [];
 }
 
@@ -447,7 +462,7 @@ function replaceKey(ctx: DirectorContext, clip: CameraMotionClip, key: CameraKey
     ctx.playback.sampleCurrent();
 }
 
-/** Creates a serialized, camera-owned time segment. Trajectory and temporal range remain independently editable. */
+/** Creates a serialized, independent motion segment. Trajectory and temporal range remain independently editable. */
 export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPayload> {
     static readonly TYPE = "motion.create-clip";
     readonly type = CreateMotionClipCommand.TYPE;
@@ -464,7 +479,7 @@ export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPay
         const clip = motionClipFrom(this.payload.clip);
         if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段格式无效")];
         if (ctx.motion.clip(clip.id)) return [issue(ISSUE_CODE.PAYLOAD, "clip.id", "运镜片段 id 已存在")];
-        return clipIssues(ctx, clip, null);
+        return clipIssues(ctx, clip);
     }
 
     execute(ctx: DirectorContext): void {
@@ -499,7 +514,7 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const clip = this.clip();
         if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "keys", "镜头关键帧格式无效或少于两个")];
-        const clipProblems = clipIssues(ctx, clip, null);
+        const clipProblems = clipIssues(ctx, clip);
         if (clipProblems.length > 0) return clipProblems;
         return programIssues(ctx, clip, this.programMode());
     }
@@ -530,7 +545,6 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
         try {
             return new CameraMotionClip({
                 id: this.payload.id ?? takeIdFor(this.payload),
-                cameraId: this.payload.cameraId,
                 startTimeSeconds: this.payload.startTimeSeconds,
                 durationSeconds: this.payload.durationSeconds,
                 keys: this.payload.keys,
@@ -543,18 +557,19 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
     }
 }
 
-/** take id 必须在 validate 与 execute 之间稳定,故由 payload 决定,缺省时按机位与起始时刻派生。 */
+/** take id 必须在 validate 与 execute 之间稳定,故由 payload 的时间范围决定。 */
 function takeIdFor(payload: CreateTakePayload): string {
-    return `take-${payload.cameraId}-${payload.startTimeSeconds}-${payload.durationSeconds}`;
+    return `take-${payload.startTimeSeconds}-${payload.durationSeconds}`;
 }
 
 function programIssues(ctx: DirectorContext, clip: ProgramRangeLike, mode: ProgramFollow): readonly CommandIssue[] {
     if (mode !== PROGRAM_FOLLOW.FOLLOW) return [];
-    const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
+    const source = motionProgramSource(clip);
+    const slot = programLinkage.slotFor(ctx.motion.program, source, clip.startTimeSeconds, clip.durationSeconds);
     if (slot.kind !== PROGRAM_SLOT_KIND.CONFLICT) return [];
     return [
-        issue(ISSUE_CODE.PROGRAM_OVERLAP, "program", "该时段的 Program 输出已被其它机位占用", [
-            { type: "motion.create-take:replace-program", label: "替换为本机位输出" },
+        issue(ISSUE_CODE.PROGRAM_OVERLAP, "program", "该时段的 Program 输出已被其它来源占用", [
+            { type: "motion.create-take:replace-program", label: "替换为本运镜输出" },
             { type: "motion.create-take:keep-current", label: "保留现有输出" },
         ]),
     ];
@@ -562,11 +577,12 @@ function programIssues(ctx: DirectorContext, clip: ProgramRangeLike, mode: Progr
 
 function applyProgramFollow(ctx: DirectorContext, clip: ProgramRangeLike, mode: ProgramFollow): void {
     if (mode === PROGRAM_FOLLOW.NONE) return;
-    const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
+    const source = motionProgramSource(clip);
+    const slot = programLinkage.slotFor(ctx.motion.program, source, clip.startTimeSeconds, clip.durationSeconds);
     const cleared = slot.clips.reduce((program, current) => program.withoutClip(current.id), ctx.motion.program);
     const merged = programLinkage.mergedClip(
         slot.kind === PROGRAM_SLOT_KIND.CONFLICT ? { kind: slot.kind, clips: [] } : slot,
-        clip.cameraId,
+        source,
         clip.startTimeSeconds,
         clip.durationSeconds,
         `program-${clip.id}`,
@@ -580,19 +596,13 @@ function invertProgramFollow(
     mode: ProgramFollow,
 ): readonly SerializedCommand[] {
     if (mode === PROGRAM_FOLLOW.NONE) return [];
-    const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
-    const restored = slot.clips.map((current) => ({
+    const source = motionProgramSource(clip);
+    const slot = programLinkage.slotFor(ctx.motion.program, source, clip.startTimeSeconds, clip.durationSeconds);
+    // RemoveMotionClip cascades deletion of the generated Program source; only the pre-existing output needs restoration.
+    return slot.clips.map((current) => ({
         type: SetProgramClipCommand.TYPE,
         payload: { clip: current.toJSON() },
     }));
-    const merged = programLinkage.mergedClip(
-        slot.kind === PROGRAM_SLOT_KIND.CONFLICT ? { kind: slot.kind, clips: [] } : slot,
-        clip.cameraId,
-        clip.startTimeSeconds,
-        clip.durationSeconds,
-        `program-${clip.id}`,
-    );
-    return [{ type: RemoveProgramClipCommand.TYPE, payload: { id: merged.id } }, ...restored];
 }
 
 /** 重定时一段运镜而不重画轨迹;跟随态的 Program 片段一并移动。 */
@@ -613,7 +623,7 @@ export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRang
         if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
         const candidate = this.retimed(current);
         if (!candidate) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围必须是有限正数")];
-        return clipIssues(ctx, candidate, current.id);
+        return clipIssues(ctx, candidate);
     }
 
     execute(ctx: DirectorContext): void {
@@ -627,7 +637,7 @@ export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRang
                 ctx.motion.program.withoutClip(following.id).withClip(
                     new CameraProgramClip({
                         id: following.id,
-                        cameraId: following.cameraId,
+                        source: following.source,
                         startTimeSeconds: candidate.startTimeSeconds,
                         durationSeconds: candidate.durationSeconds,
                     }),
@@ -980,7 +990,14 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const current = existingClip(ctx, this.payload.id);
-        return current ? [{ type: CreateMotionClipCommand.TYPE, payload: { clip: current.toJSON() } }] : null;
+        if (!current) return null;
+        const programCommands = ctx.motion.program.clips
+            .filter(
+                (clip) =>
+                    clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP && clip.source.motionClipId === current.id,
+            )
+            .map((clip) => ({ type: SetProgramClipCommand.TYPE, payload: { clip: clip.toJSON() } }));
+        return [{ type: CreateMotionClipCommand.TYPE, payload: { clip: current.toJSON() } }, ...programCommands];
     }
 }
 
@@ -994,7 +1011,6 @@ function takeCommandFor(
     const keys = presetCompiler.compile(request, { shot, subject });
     return new CreateMotionTakeCommand({
         id: takeId,
-        cameraId: request.cameraId,
         startTimeSeconds: request.startTimeSeconds,
         durationSeconds: request.durationSeconds,
         keys,
@@ -1014,11 +1030,11 @@ function takeCommandFor(
  * 语义层入口:导演语汇 → 标准关键帧序列 → 与 create-take 同一条落地路径。
  * UI 的预设按钮与 AI 工具调用共用它,产出可再编辑,不是黑盒。
  */
-export class AuthorMotionCommand extends DirectorCommand<MotionPresetRequest> {
+export class AuthorMotionCommand extends DirectorCommand<AuthorMotionPayload> {
     static readonly TYPE = "motion.author";
     readonly type = AuthorMotionCommand.TYPE;
 
-    constructor(readonly payload: MotionPresetRequest) {
+    constructor(readonly payload: AuthorMotionPayload) {
         super();
     }
 
@@ -1030,7 +1046,7 @@ export class AuthorMotionCommand extends DirectorCommand<MotionPresetRequest> {
         const paramIssues = presetParamIssues(this.payload);
         if (paramIssues.length > 0) return paramIssues;
         const shot = ctx.camera.director.getShot(this.payload.cameraId);
-        if (!shot) return [issue(ISSUE_CODE.CAMERA, "cameraId", "运镜引用的机位不存在")];
+        if (!shot) return [issue(ISSUE_CODE.CAMERA, "cameraId", "创建来源机位不存在")];
         const subjectId = this.payload.subjectId;
         if (subjectId && !ctx.scene.manager.getEntity(subjectId)) {
             return [issue(ISSUE_CODE.SUBJECT, "subjectId", "跟拍对象不存在")];
@@ -1072,23 +1088,20 @@ interface QuickAuthorPayload {
     readonly easing?: CameraMotionEasing;
 }
 
-/** 快建机位 id:由被摄体与语汇派生——确定性(undo/redo 重放不漂移),同参数重复创建 = 复用同机位 */
-function quickShotIdFor(subjectId: string, move: MotionMove): string {
-    return `快建机位-${subjectId}-${move}`;
+/** 快建运镜 id:由被摄体、语汇与起始时刻派生,确保 undo/redo 重放不漂移。 */
+function quickMotionIdFor(subjectId: string, move: MotionMove, startTimeSeconds: number): string {
+    return `motion-${subjectId}-${move}-${startTimeSeconds}`;
 }
 
 interface QuickAuthorPlan {
-    readonly shotId: string;
-    readonly shot: CameraShot;
     readonly range: ProgramRangeLike;
     readonly take: CreateMotionTakeCommand;
     readonly extendDuration: SetTimelineDurationCommand | null;
 }
 
 /**
- * 快速成片(聚合命令,地基优先红线 15):被摄对象 + 景别 + 语汇 → 建机位 + 运镜片段一次落地。
- * 起始时刻 = Program 末尾(追加编排,不覆盖既有);超出时间轴时一并扩时长。
- * 机位进大纲、可见可复用;撤销一步回滚全部副产物(片段/Program 跟随/机位/时长)。
+ * 快速成片(聚合命令,地基优先红线 15):被摄对象 + 景别 + 语汇 → 独立运镜片段一次落地。
+ * 起幅机位仅作为编译期 pose 快照,不创建、不持久化为运镜依赖。
  */
 export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload> {
     static readonly TYPE = "motion.quick-author";
@@ -1116,25 +1129,18 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         }
         const plan = this.plan(ctx);
         if (!plan) return [issue(ISSUE_CODE.PAYLOAD, "keys", "预设编译失败")];
-        // 机位由本命令创建,跳过 clipIssues 的机位存在性检查;Program 冲突沿用 create-take 的结构化二选一
         return programIssues(ctx, plan.range, PROGRAM_FOLLOW.FOLLOW);
     }
 
     execute(ctx: DirectorContext): void {
         const plan = this.plan(ctx);
         if (!plan) return;
-        ctx.camera.addShot(plan.shotId, plan.shot);
         plan.extendDuration?.execute(ctx);
         plan.take.execute(ctx);
     }
 
-    /** pre-state 求逆(dispatcher 在 execute 前调用):全部 id 由 payload 决定,无需读取已创建数据 */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
-        const { shotId, range } = this.planIdentity(ctx);
-        const previousShot = ctx.camera.director.getShot(shotId);
-        const shotRestore: readonly SerializedCommand[] = previousShot
-            ? [{ type: "camera.set-shot", payload: { id: shotId, shot: previousShot.toJSON() } }]
-            : [{ type: "camera.remove-shot", payload: { id: shotId } }];
+        const range = this.planIdentity(ctx);
         const end = range.startTimeSeconds + range.durationSeconds;
         const durationRestore: readonly SerializedCommand[] =
             end > ctx.timeline.document.duration
@@ -1143,23 +1149,16 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         return [
             { type: RemoveMotionClipCommand.TYPE, payload: { id: range.id } },
             ...invertProgramFollow(ctx, range, PROGRAM_FOLLOW.FOLLOW),
-            ...shotRestore,
             ...durationRestore,
         ];
     }
 
-    /** 计划的身份面(不编译 keys):invert 在 pre-state 调用,只依赖 payload 与 Program 末尾 */
-    private planIdentity(ctx: DirectorContext): { readonly shotId: string; readonly range: ProgramRangeLike } {
-        const shotId = quickShotIdFor(this.payload.subjectId, this.payload.move);
+    private planIdentity(ctx: DirectorContext): ProgramRangeLike {
         const startTimeSeconds = programEndSeconds(ctx);
         return {
-            shotId,
-            range: {
-                id: `take-${shotId}-${this.payload.move}-${startTimeSeconds}`,
-                cameraId: shotId,
-                startTimeSeconds,
-                durationSeconds: this.payload.durationSeconds,
-            },
+            id: quickMotionIdFor(this.payload.subjectId, this.payload.move, startTimeSeconds),
+            startTimeSeconds,
+            durationSeconds: this.payload.durationSeconds,
         };
     }
 
@@ -1169,9 +1168,8 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         const eye = ctx.camera.lastDirectorPose;
         const azimuth = eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS;
         const shot = shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth);
-        const { shotId, range } = this.planIdentity(ctx);
+        const range = this.planIdentity(ctx);
         const request: MotionPresetRequest = {
-            cameraId: shotId,
             startTimeSeconds: range.startTimeSeconds,
             durationSeconds: this.payload.durationSeconds,
             move: this.payload.move,
@@ -1182,8 +1180,6 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         };
         const end = range.startTimeSeconds + range.durationSeconds;
         return {
-            shotId,
-            shot,
             range,
             take: takeCommandFor(request, shot, subject, range.id),
             extendDuration:
@@ -1195,6 +1191,25 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
 /** Program 末尾时刻:快速创建在此追加编排;空 Program 从 0 开始 */
 function programEndSeconds(ctx: DirectorContext): number {
     return ctx.motion.program.clips.reduce((end, clip) => Math.max(end, clip.endTimeSeconds), 0);
+}
+
+function programSourceIssues(ctx: DirectorContext, clip: CameraProgramClip): readonly CommandIssue[] {
+    switch (clip.source.kind) {
+        case PROGRAM_SOURCE_KIND.STATIC_SHOT:
+            return ctx.camera.director.getShot(clip.source.shotId)
+                ? []
+                : [issue(ISSUE_CODE.CAMERA, "clip.source.shotId", "输出片段引用的机位不存在")];
+        case PROGRAM_SOURCE_KIND.MOTION_CLIP: {
+            const motion = ctx.motion.clip(clip.source.motionClipId);
+            const isAligned =
+                motion !== undefined &&
+                motion.startTimeSeconds === clip.startTimeSeconds &&
+                motion.durationSeconds === clip.durationSeconds;
+            return isAligned
+                ? []
+                : [issue(ISSUE_CODE.CLIP, "clip.source.motionClipId", "输出片段必须与引用运镜的时间范围一致")];
+        }
+    }
 }
 
 /** Updates the sole Program output track. A program segment may reference a static or moving camera. */
@@ -1213,9 +1228,8 @@ export class SetProgramClipCommand extends DirectorCommand<SetProgramClipPayload
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const clip = programClipFrom(this.payload);
         if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "输出片段格式无效")];
-        if (!ctx.camera.director.getShot(clip.cameraId)) {
-            return [issue(ISSUE_CODE.CAMERA, "clip.cameraId", "输出片段引用的机位不存在")];
-        }
+        const sourceIssues = programSourceIssues(ctx, clip);
+        if (sourceIssues.length > 0) return sourceIssues;
         if (clip.endTimeSeconds > ctx.timeline.document.duration) {
             return [issue(ISSUE_CODE.DURATION, "clip", "输出片段不能超出时间轴时长")];
         }
@@ -1350,7 +1364,7 @@ export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>
         return {
             clips: ctx.motion.clips.map((clip) => clip.toJSON()),
             program: ctx.motion.program.toJSON(),
-            activeProgramCameraId: ctx.motion.program.cameraAt(ctx.clock.time),
+            activeProgramSource: ctx.motion.program.sourceAt(ctx.clock.time),
             timelineDurationSeconds: ctx.timeline.document.duration,
             viewMode: ctx.motionAuthoring.viewMode,
             previewClipId: ctx.motionAuthoring.previewClipId,

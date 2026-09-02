@@ -18,6 +18,7 @@ const TAKE_DURATION_SECONDS = 3;
 /** 断言用的可辨识焦距:与任何预设产物的缺省值都不相同 */
 const EDITED_KEY_FOV = 33;
 const ZERO_VECTOR: [number, number, number] = [0, 0, 0];
+const DEFAULT_KEY_FOV = 45;
 
 interface MotionGetValue {
     readonly clips: readonly {
@@ -39,7 +40,7 @@ function cameraKey(
         progress,
         position,
         target,
-        fov: null,
+        fov: DEFAULT_KEY_FOV,
         handleMode: "auto",
         inHandle: ZERO_VECTOR,
         outHandle: ZERO_VECTOR,
@@ -58,7 +59,6 @@ function createTakePayload(
     const end: [number, number, number] = isPrimary ? [0, 2, 2] : [0, 2.5, 3];
     return {
         id,
-        cameraId,
         startTimeSeconds,
         durationSeconds: TAKE_DURATION_SECONDS,
         keys: [

@@ -7,26 +7,24 @@ import type { Vec3 } from "@/core/SceneObject";
 export interface CameraKeyInit extends MotionKeyInit {
     /** 该刻画面注视的世界点;被跟拍目标覆盖时该值仍保留,解绑即恢复 */
     readonly target: Vec3;
-    /** null = 跟随机位的静态 fov(不改变焦距的运镜无需重复声明) */
-    readonly fov?: number | null;
+    /** 运镜自有焦距;关键帧必须是可独立播放的完整镜头姿态。 */
+    readonly fov: number;
 }
 
 export interface CameraKeyJSON extends MotionKeyJSON {
     readonly target: Vec3;
-    readonly fov: number | null;
+    readonly fov: number;
 }
 
 /** 作者摆位手势天然产出的一帧画面:位置 + 注视 + 焦距。 */
 export interface CameraKeyPose {
     readonly position: Vec3;
     readonly target: Vec3;
-    readonly fov?: number | null;
+    readonly fov: number;
 }
 
-export function isCameraKeyFov(value: unknown): value is number | null {
-    return (
-        value === null || (typeof value === "number" && Number.isFinite(value) && value >= FOV_MIN && value <= FOV_MAX)
-    );
+export function isCameraKeyFov(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value >= FOV_MIN && value <= FOV_MAX;
 }
 
 /**
@@ -39,16 +37,15 @@ export function isCameraKeyFov(value: unknown): value is number | null {
  */
 export class CameraKey extends MotionKey {
     readonly target: Vec3;
-    readonly fov: number | null;
+    readonly fov: number;
 
     constructor(init: CameraKeyInit) {
         super(init);
-        const fov = init.fov ?? null;
-        if (!finiteVec3(init.target) || !isCameraKeyFov(fov)) {
+        if (!finiteVec3(init.target) || !isCameraKeyFov(init.fov)) {
             throw new Error("CameraKey requires a finite target and an in-range fov");
         }
         this.target = copyVec3(init.target);
-        this.fov = fov;
+        this.fov = init.fov;
         Object.freeze(this);
     }
 
@@ -74,7 +71,7 @@ export class CameraKey extends MotionKey {
 
     /** 视口摆位落点:一次手势同时定死位置、注视与焦距。 */
     withPose(pose: CameraKeyPose): CameraKey {
-        return this.replicate({ position: pose.position, target: pose.target, fov: pose.fov ?? null });
+        return this.replicate({ position: pose.position, target: pose.target, fov: pose.fov });
     }
 
     override toJSON(): CameraKeyJSON {
