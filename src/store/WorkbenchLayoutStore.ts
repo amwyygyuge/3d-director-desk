@@ -43,6 +43,8 @@ export class WorkbenchLayoutStore {
     presentationMode = false;
     /** 渲染画质档:高性能 */
     renderQuality: RenderQuality = RENDER_QUALITY.PERFORMANCE;
+    /** 帧率读数按需展示:默认收起,不入文档与撤销栈 */
+    frameRateVisible = false;
     /** 参考地板边长(米):视口辅助物档位,不入文档不进撤销栈 */
     gridSizeMeters: number = GRID_SIZE.DEFAULT_METERS;
 
@@ -74,6 +76,10 @@ export class WorkbenchLayoutStore {
 
     setRenderQuality(quality: RenderQuality): void {
         this.renderQuality = quality;
+    }
+    /** 帧率读数是调试观测信息,默认隐藏,仅由项目菜单显式切换。 */
+    toggleFrameRateVisible(): void {
+        this.frameRateVisible = !this.frameRateVisible;
     }
     /** 地板尺寸设置的唯一写口;非法值静默拒绝(UI 滑杆已被 min/max 钳制,这里是 prop/未来 AI 路径的兜底) */
     setGridSizeMeters(value: number): void {

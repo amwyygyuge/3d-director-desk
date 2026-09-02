@@ -21,6 +21,7 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
+import Switch from "@mui/material/Switch";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
@@ -62,6 +63,7 @@ const TEXT = {
     WALK_DRAFT_HINT: "选中对象后在地面拖出路线,松手成轨;Esc 退出",
     GRID_SIZE: "地板尺寸",
     RENDER_QUALITY: "渲染画质",
+    SHOW_FRAME_RATE: "显示帧率",
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
@@ -243,6 +245,17 @@ const ProjectMenu = observer(function ProjectMenu({
                     value={stores.layout.gridSizeMeters}
                 />
             </Box>
+            <MenuItem onClick={() => stores.layout.toggleFrameRateVisible()}>
+                {TEXT.SHOW_FRAME_RATE}
+                <Switch
+                    checked={stores.layout.frameRateVisible}
+                    onChange={() => stores.layout.toggleFrameRateVisible()}
+                    onClick={(event) => event.stopPropagation()}
+                    size={COMPACT_SIZE}
+                    slotProps={{ input: { "aria-label": TEXT.SHOW_FRAME_RATE } }}
+                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
+                />
+            </MenuItem>
             <Divider />
             <MenuItem onClick={() => closeMenuThen({ action: () => stores.ui.toggleHelp(), onClose })}>
                 {TEXT.HELP}

@@ -6,11 +6,11 @@ import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const EMPTY_FPS_LABEL = "帧率 —";
 
-/** 右上角真实 render FPS:让位顶部输出药丸(48px 药丸 + 上下 16px 安全区),仅展示不参与帧循环。 */
+/** 右上角真实渲染帧率:让位顶部输出药丸(48px 药丸 + 上下 16px 安全区),仅展示不参与帧循环。 */
 export const FrameRateIndicator = observer(function FrameRateIndicator() {
-    const { frameRate, layout } = useDirectorDeskStores();
-    const label = frameRate.fps === 0 ? EMPTY_FPS_LABEL : `帧率 ${frameRate.fps}`;
-    if (!layout.authoringVisible) return null;
+    const stores = useDirectorDeskStores();
+    if (!stores.layout.authoringVisible || !stores.layout.frameRateVisible) return null;
+    const label = stores.frameRate.fps === 0 ? EMPTY_FPS_LABEL : `帧率 ${stores.frameRate.fps}`;
     return (
         <Paper
             variant="pill"
