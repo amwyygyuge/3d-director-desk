@@ -1,7 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { CameraKeyJSON } from "@/camera/CameraKey";
+import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
+import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
+import type { CameraMotionSample } from "@/camera/CameraMotionClip";
+import type { CameraMotionSink } from "@/camera/CameraMotionSampler";
 import type { FocusTargetJSON } from "@/camera/CameraFocusTrack";
+import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
+import { isCommandIssue } from "@/authoring/KeyframeAuthoringService";
+import { VIEW_MODE } from "@/store/MotionAuthoringStore";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { TEST_ASSETS } from "@/stories/seeds";
 import { assertAcceptance, dispatchOk as dispatch, required } from "@/stories/harness";
@@ -19,6 +26,12 @@ const TAKE_DURATION_SECONDS = 3;
 const EDITED_KEY_FOV = 33;
 const ZERO_VECTOR: [number, number, number] = [0, 0, 0];
 const DEFAULT_KEY_FOV = 45;
+const ROUND_TRIP_EPSILON = 1e-6;
+const ROUND_TRIP_PROGRESS = 0.37;
+const GAP_TIME_SECONDS = 7;
+const MOTION_SET_KEY_TYPE = "motion.set-key";
+const TIMELINE_ADD_KEY_TYPE = "timeline.add-key";
+const PROGRAM_OVERLAP_ISSUE_CODE = "program-overlapping-clip";
 
 interface MotionGetValue {
     readonly clips: readonly {
@@ -27,6 +40,44 @@ interface MotionGetValue {
         readonly easing: string;
     }[];
     readonly program: { readonly clips: readonly unknown[] };
+}
+
+interface MotionSetKeyPayload {
+    readonly clipId: string;
+    readonly key: { readonly progress: number };
+}
+
+class StoryCameraMotionSink implements CameraMotionSink {
+    applyCount = 0;
+    restoreCount = 0;
+
+    applyMotion(sample: CameraMotionSample): void {
+        void sample;
+        this.applyCount += 1;
+    }
+
+    restoreFreeDirectorPose(): void {
+        this.restoreCount += 1;
+    }
+}
+
+class StoryViewportPoseSource implements ViewportPoseSource {
+    readPose(sample: CameraMotionSample): boolean {
+        sample.positionX = 1;
+        sample.positionY = 2;
+        sample.positionZ = 3;
+        sample.targetX = 0;
+        sample.targetY = 1;
+        sample.targetZ = 0;
+        sample.fov = DEFAULT_KEY_FOV;
+        return true;
+    }
+}
+
+function isMotionSetKeyPayload(value: unknown): value is MotionSetKeyPayload {
+    if (typeof value !== "object" || value === null) return false;
+    const payload = value as { readonly clipId?: unknown; readonly key?: { readonly progress?: unknown } };
+    return typeof payload.clipId === "string" && typeof payload.key?.progress === "number";
 }
 
 function cameraKey(
@@ -99,6 +150,75 @@ function verifyTakeAndProgram(stores: DirectorDeskStores): void {
     assertAcceptance(motion.program.clips.length === 2, "motion.create-take 未自动建立 Program 输出片段");
 }
 
+function verifyPreviewPriority(stores: DirectorDeskStores): void {
+    const primary = required(stores.motion.clip(PRIMARY_MOTION_ID), "主运镜片段缺失");
+    const side = required(stores.motion.clip(SIDE_MOTION_ID), "侧运镜片段缺失");
+    dispatch(stores, "transport.seek", { time: primary.startTimeSeconds });
+    assertAcceptance(
+        stores.motion.resolveOutputClipAt(stores.clock.time, SIDE_MOTION_ID)?.id === PRIMARY_MOTION_ID,
+        "预览片段不覆盖当前时刻时不应抢占 Program",
+    );
+    dispatch(stores, "motion.preview.enter", { clipId: SIDE_MOTION_ID });
+    assertAcceptance(stores.clock.time === side.startTimeSeconds, "进入预览未定位到片段起点");
+    assertAcceptance(
+        stores.motion.resolveOutputClipAt(stores.clock.time, stores.motionAuthoring.previewClipId)?.id === SIDE_MOTION_ID,
+        "进入预览后未优先输出预览片段",
+    );
+    dispatch(stores, "motion.preview.exit", {});
+}
+
+function verifyTimeProgressRoundTrip(stores: DirectorDeskStores): void {
+    const clip = required(stores.motion.clip(PRIMARY_MOTION_ID), "主运镜片段缺失");
+    const timeSeconds = clip.startTimeSeconds + clip.durationSeconds * ROUND_TRIP_PROGRESS;
+    for (const candidate of [clip, clip.withEasing(CAMERA_MOTION_EASING.LINEAR)]) {
+        const restoredTime = candidate.timeAtProgress(candidate.trajectoryProgressAt(timeSeconds));
+        assertAcceptance(
+            Math.abs(restoredTime - timeSeconds) <= ROUND_TRIP_EPSILON,
+            `${candidate.easing} 时间与轨迹进度换算未闭环`,
+        );
+    }
+}
+
+function verifyKeyframeClosureAndWriteTarget(stores: DirectorDeskStores): void {
+    const side = required(stores.motion.clip(SIDE_MOTION_ID), "侧运镜片段缺失");
+    const poseSource = new StoryViewportPoseSource();
+    dispatch(stores, "motion.preview.enter", { clipId: SIDE_MOTION_ID });
+    stores.playback.bindPoseSource(poseSource);
+    const lensResult = stores.keyframeAuthoring.resolve(stores);
+    stores.playback.unbindPoseSource(poseSource);
+    assertAcceptance(
+        !isCommandIssue(lensResult) &&
+            lensResult.type === MOTION_SET_KEY_TYPE &&
+            isMotionSetKeyPayload(lensResult.payload),
+        "镜头视角未产出 motion.set-key",
+    );
+    if (isCommandIssue(lensResult) || lensResult.type !== MOTION_SET_KEY_TYPE || !isMotionSetKeyPayload(lensResult.payload)) {
+        return;
+    }
+    assertAcceptance(lensResult.payload.clipId === SIDE_MOTION_ID, "镜头关键帧未写入当前预览片段");
+    assertAcceptance(
+        Math.abs(side.timeAtProgress(lensResult.payload.key.progress) - stores.clock.time) <= ROUND_TRIP_EPSILON,
+        "镜头关键帧进度不能还原当前时间",
+    );
+    dispatch(stores, "motion.preview.exit", {});
+    dispatch(stores, "view.set-mode", { mode: VIEW_MODE.DIRECTOR });
+    stores.selection.select(FOCUS_OBJECT_ID);
+    const directorResult = stores.keyframeAuthoring.resolve(stores);
+    assertAcceptance(
+        !isCommandIssue(directorResult) && directorResult.type === TIMELINE_ADD_KEY_TYPE,
+        "导演视角未产出 timeline.add-key",
+    );
+}
+
+function verifyGapKeepsCurrentCamera(stores: DirectorDeskStores): void {
+    const sampler = new CameraMotionSampler(stores.motion, stores.camera, stores.scene.manager, stores.motionAuthoring);
+    const sink = new StoryCameraMotionSink();
+    sampler.bindSink(sink);
+    assertAcceptance(!sampler.sampleCurrent(GAP_TIME_SECONDS), "空档不应产出镜头采样");
+    assertAcceptance(sink.applyCount === 0, "空档不应写入新的镜头姿态");
+    assertAcceptance(sink.restoreCount === 0, "空档不应复位镜头姿态");
+}
+
 function verifyOverlapRejected(stores: DirectorDeskStores): void {
     const conflict = stores.dispatcher.dispatch(
         {
@@ -108,7 +228,7 @@ function verifyOverlapRejected(stores: DirectorDeskStores): void {
         stores,
     );
     const issue = conflict.ok ? undefined : conflict.issueDetails?.[0];
-    assertAcceptance(issue?.code === "motion-overlapping-clip", "同机位片段重叠未被拒绝");
+    assertAcceptance(issue?.code === PROGRAM_OVERLAP_ISSUE_CODE, "Program 重叠未被结构化拒绝");
 }
 
 function verifyKeyUndoRedo(stores: DirectorDeskStores): void {
@@ -217,6 +337,10 @@ function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
     verifyTakeAndProgram(stores);
     verifyOverlapRejected(stores);
     verifyKeyUndoRedo(stores);
+    verifyPreviewPriority(stores);
+    verifyTimeProgressRoundTrip(stores);
+    verifyKeyframeClosureAndWriteTarget(stores);
+    verifyGapKeepsCurrentCamera(stores);
     verifyFocusIntegrity(stores);
     verifyTransportClamp(stores);
     verifyAuthoringOutput(stores);

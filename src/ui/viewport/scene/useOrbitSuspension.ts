@@ -16,20 +16,22 @@ export interface OrbitSuspension {
  * (选中被清、片段被删)也会在卸载时归还,不把轨道永久锁死。
  */
 export function useOrbitSuspension(): OrbitSuspension {
-    const { viewportCamera } = useDirectorDeskStores();
+    const { viewportCamera, viewportOrbit } = useDirectorDeskStores();
     const suspended = useRef(false);
 
     const suspend = useCallback(() => {
         if (suspended.current) return;
         suspended.current = true;
         viewportCamera.suspendOrbit();
-    }, [viewportCamera]);
+        viewportOrbit.setEnabled(viewportCamera.isOrbitEnabled);
+    }, [viewportCamera, viewportOrbit]);
 
     const release = useCallback(() => {
         if (!suspended.current) return;
         suspended.current = false;
         viewportCamera.resumeOrbit();
-    }, [viewportCamera]);
+        viewportOrbit.setEnabled(viewportCamera.isOrbitEnabled);
+    }, [viewportCamera, viewportOrbit]);
 
     useEffect(() => release, [release]);
 

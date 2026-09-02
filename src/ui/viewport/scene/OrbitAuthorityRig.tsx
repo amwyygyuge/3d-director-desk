@@ -13,16 +13,21 @@ import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
  * 都经 suspendOrbit/resumeOrbit 走同一条 observable,结束时本 effect 重跑即把状态拨正。
  */
 export const OrbitAuthorityRig = observer(function OrbitAuthorityRig() {
-    const { viewportCamera } = useDirectorDeskStores();
+    const { viewportCamera, viewportOrbit } = useDirectorDeskStores();
     const controls = useOrbitControls();
     const invalidate = useThree((state) => state.invalidate);
     const isOrbitEnabled = viewportCamera.isOrbitEnabled;
 
     useEffect(() => {
         if (!controls) return;
-        controls.enabled = isOrbitEnabled;
+        viewportOrbit.attach(controls);
+        return () => viewportOrbit.detach(controls);
+    }, [controls, viewportOrbit]);
+
+    useEffect(() => {
+        viewportOrbit.setEnabled(isOrbitEnabled);
         invalidate();
-    }, [controls, invalidate, isOrbitEnabled]);
+    }, [invalidate, isOrbitEnabled, viewportOrbit]);
 
     return null;
 });

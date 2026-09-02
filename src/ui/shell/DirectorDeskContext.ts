@@ -27,6 +27,7 @@ import { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { PoseGroundingService } from "@/pose/PoseGroundingService";
 import { CameraStore } from "@/store/CameraStore";
 import { ViewportCameraAuthority } from "@/camera/ViewportCameraAuthority";
+import { ViewportOrbitController } from "@/camera/ViewportOrbitController";
 import { CameraMotionStore } from "@/store/CameraMotionStore";
 import { KeyframeAuthoringService } from "@/authoring/KeyframeAuthoringService";
 import { SnapResolver } from "@/authoring/SnapResolver";
@@ -93,6 +94,8 @@ export interface DirectorDeskStores {
     motionAuthoring: MotionAuthoringStore;
     /** 视口相机所有权裁决:导航路径与轨道控制器的启停唯一判据 */
     viewportCamera: ViewportCameraAuthority;
+    /** 轨道控制器唯一写方：托管 Three controls 的启停与阻尼刷新，不进入 observable。 */
+    viewportOrbit: ViewportOrbitController;
     /** 三数据源 → 统一行几何的时间轴视图模型(展开轨与迷你轨共用) */
     timelineLayout: TimelineLayout;
     /** 打点上下文分派(K:镜头关键帧 / 走位关键帧) */
@@ -184,6 +187,7 @@ export function createDirectorDeskStores(options?: {
     const layout = new WorkbenchLayoutStore({ gridSizeMeters: options?.gridSizeMeters });
     const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
     const viewportCamera = new ViewportCameraAuthority(camera, motionAuthoring);
+    const viewportOrbit = new ViewportOrbitController();
     const playback = new PlaybackCoordinator(
         timeline,
         scene.manager,
@@ -219,6 +223,7 @@ export function createDirectorDeskStores(options?: {
         layout,
         motionAuthoring,
         viewportCamera,
+        viewportOrbit,
         timelineLayout: new TimelineLayout(motion, timeline),
         keyframeAuthoring: new KeyframeAuthoringService(),
         snapResolver: new SnapResolver(),
