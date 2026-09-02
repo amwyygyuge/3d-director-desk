@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { HostBridgeConfiguration, HostBridgeSession } from "@/bridge/HostBridge";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
-import { AcceptancePanel } from "@/stories/acceptance/AcceptancePanel";
-import { placeModel, seedShots, TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { AcceptancePanel } from "@/stories/AcceptancePanel";
+import { placeModel, seedShots, TEST_ASSETS } from "@/stories/seeds";
 
-const meta: Meta = { title: "验收/07 预演画面输出" };
+const meta: Meta = { title: "输出/截图与录制" };
 export default meta;
 
 const STORY_SESSION_ID = "capture-output-story";
@@ -19,6 +19,7 @@ const CHECKLIST = [
 
 /** 预置狐狸 + 两个机位;选中态/机位切入在走查中手动完成 */
 export const CaptureOutput: StoryObj = {
+    name: "截图与录制",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk
@@ -30,7 +31,7 @@ export const CaptureOutput: StoryObj = {
                     seedShots(stores);
                 }}
             />
-            <AcceptancePanel task="07 · 预演画面输出" items={CHECKLIST} />
+            <AcceptancePanel task="输出 · 截图与录制" items={CHECKLIST} />
         </div>
     ),
 };

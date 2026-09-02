@@ -2,22 +2,14 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
-import { TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { TEST_ASSETS } from "@/stories/seeds";
+import { assertAcceptance, dispatchCatching, dispatchOk as dispatch } from "@/stories/harness";
 
 const SUBJECT_ID = "quick-motion-subject";
 const ORBIT_SHOT_ID = `快建机位-${SUBJECT_ID}-orbit`;
 const ZOOM_SHOT_ID = `快建机位-${SUBJECT_ID}-dolly-zoom`;
 const ORBIT_KEY_COUNT_360 = 13;
 const DEFAULT_TIMELINE_DURATION = 10;
-
-function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): void {
-    const result = stores.dispatcher.dispatch({ type, payload }, stores);
-    if (!result.ok) throw new Error(result.issues?.join(";") ?? result.error);
-}
-
-function assertAcceptance(condition: unknown, message: string): asserts condition {
-    if (!condition) throw new Error(`快速运镜验收: ${message}`);
-}
 
 function seedQuickMotionAcceptance(stores: DirectorDeskStores): void {
     const capabilityTypes = stores.dispatcher.listCapabilities().map((capability) => capability.type);
@@ -30,22 +22,22 @@ function seedQuickMotionAcceptance(stores: DirectorDeskStores): void {
         transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
     });
 
-    // 围栏:环绕参数越界/非法枚举必须结构化拒绝
-    const badDegrees = stores.dispatcher.dispatch(
-        {
-            type: "motion.quick-author",
-            payload: { subjectId: SUBJECT_ID, shotSize: "medium", move: "orbit", durationSeconds: 2, degrees: 500 },
-        },
-        stores,
-    );
+    // 围栏:参数越界走领域拒绝(!ok);非法枚举撞契约闸门(dev throw/生产 !ok,dispatchCatching 归一两态)
+    const badDegrees = dispatchCatching(stores, "motion.quick-author", {
+        subjectId: SUBJECT_ID,
+        shotSize: "medium",
+        move: "orbit",
+        durationSeconds: 2,
+        degrees: 500,
+    });
     assertAcceptance(!badDegrees.ok && badDegrees.issues?.[0]?.includes("环绕转角"), "degrees 围栏未生效");
-    const badDirection = stores.dispatcher.dispatch(
-        {
-            type: "motion.quick-author",
-            payload: { subjectId: SUBJECT_ID, shotSize: "medium", move: "orbit", durationSeconds: 2, direction: "x" },
-        },
-        stores,
-    );
+    const badDirection = dispatchCatching(stores, "motion.quick-author", {
+        subjectId: SUBJECT_ID,
+        shotSize: "medium",
+        move: "orbit",
+        durationSeconds: 2,
+        direction: "x",
+    });
     assertAcceptance(!badDirection.ok, "direction 围栏未生效");
 
     // 360° 环绕:机位自动落大纲、片段追加 Program 末尾、跟拍绑定、键数按角度自适应
@@ -104,7 +96,7 @@ function seedQuickMotionAcceptance(stores: DirectorDeskStores): void {
 }
 
 const meta: Meta<typeof DirectorDesk> = {
-    title: "DirectorDesk/阶段二/快速运镜验收",
+    title: "镜头/快速运镜",
     component: DirectorDesk,
 };
 
@@ -117,7 +109,8 @@ type Story = StoryObj<typeof DirectorDesk>;
  * 播种已断言:围栏拒绝非法参数、360° 环绕键数自适应、Program 追加、跟拍绑定、滑动变焦 fov、
  * 超轴扩时长与单步撤销/重放。右侧检查器应显示「运镜」tab 可直接再走查一遍 UI 路径。
  */
-export const 快速运镜与预设语汇: Story = {
+export const QuickMotionPresets: Story = {
+    name: "快速运镜与预设语汇",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk onReady={seedQuickMotionAcceptance} />

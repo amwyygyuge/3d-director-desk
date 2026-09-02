@@ -23,7 +23,7 @@ import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
 
 /** UI 套件走查:MUI 组件在默认暗色主题下的观感 */
 const meta: Meta = {
-    title: "DirectorDesk/UIKit",
+    title: "壳层/UIKit 套件",
 };
 
 export default meta;
@@ -31,6 +31,7 @@ export default meta;
 type Story = StoryObj;
 
 export const Panel: Story = {
+    name: "面板组件",
     render: function UIKitPanel() {
         const [fov, setFov] = useState(45);
         const [gridOn, setGridOn] = useState(true);

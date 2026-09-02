@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
-import { AcceptancePanel } from "@/stories/acceptance/AcceptancePanel";
-import { placeModels } from "@/stories/acceptance/seeds";
+import { AcceptancePanel } from "@/stories/AcceptancePanel";
+import { placeModels } from "@/stories/seeds";
 
-const meta: Meta = { title: "验收/04 摆位操作" };
+const meta: Meta = { title: "场景/摆位变换" };
 export default meta;
 
 const CHECKLIST = [
@@ -17,10 +17,11 @@ const CHECKLIST = [
 
 /** 预置 3 个模型供 gizmo 走查 */
 export const GizmoOps: StoryObj = {
+    name: "变换三态与多选",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk onReady={(stores) => placeModels(stores, 3)} />
-            <AcceptancePanel task="04 · 摆位操作(gizmo + 快捷键)" items={CHECKLIST} />
+            <AcceptancePanel task="场景 · 摆位变换(gizmo + 快捷键)" items={CHECKLIST} />
         </div>
     ),
 };

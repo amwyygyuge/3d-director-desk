@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
-import { AcceptancePanel } from "@/stories/acceptance/AcceptancePanel";
-import { placeModel, seedShots, TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { AcceptancePanel } from "@/stories/AcceptancePanel";
+import { placeModel, seedShots, TEST_ASSETS } from "@/stories/seeds";
 
-const meta: Meta = { title: "验收/06 基础虚拟摄像机" };
+const meta: Meta = { title: "镜头/基础机位" };
 export default meta;
 
 const CHECKLIST = [
@@ -17,6 +17,7 @@ const CHECKLIST = [
 
 /** 预置狐狸 + 两个机位 */
 export const CameraShots: StoryObj = {
+    name: "机位与景别",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk
@@ -25,7 +26,7 @@ export const CameraShots: StoryObj = {
                     seedShots(stores);
                 }}
             />
-            <AcceptancePanel task="06 · 基础虚拟摄像机" items={CHECKLIST} />
+            <AcceptancePanel task="镜头 · 基础机位" items={CHECKLIST} />
         </div>
     ),
 };

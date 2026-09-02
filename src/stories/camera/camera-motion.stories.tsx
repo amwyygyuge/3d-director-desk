@@ -3,7 +3,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { CameraKeyJSON } from "@/camera/CameraKey";
 import type { FocusTargetJSON } from "@/camera/CameraFocusTrack";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { TEST_ASSETS } from "@/stories/seeds";
+import { assertAcceptance, dispatchOk as dispatch, required } from "@/stories/harness";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 
 const PRIMARY_CAMERA_ID = "主机位";
@@ -25,20 +26,6 @@ interface MotionGetValue {
         readonly easing: string;
     }[];
     readonly program: { readonly clips: readonly unknown[] };
-}
-
-function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): void {
-    const result = stores.dispatcher.dispatch({ type, payload }, stores);
-    if (!result.ok) throw new Error(result.issues?.join(";") ?? result.error);
-}
-
-function assertAcceptance(condition: unknown, message: string): asserts condition {
-    if (!condition) throw new Error(`运镜验收: ${message}`);
-}
-
-function required<T>(value: T | undefined, message: string): T {
-    if (value === undefined) throw new Error(`运镜验收: ${message}`);
-    return value;
 }
 
 function cameraKey(
@@ -164,9 +151,10 @@ function verifyTransportClamp(stores: DirectorDeskStores): void {
     dispatch(stores, "transport.seek", { time: TIMELINE_DURATION_SECONDS + 1 });
     const clampedUpper = stores.clock.time;
     assertAcceptance(clampedUpper === TIMELINE_DURATION_SECONDS, "transport.seek 未 clamp 到时长上界");
-    dispatch(stores, "transport.seek", { time: -1 });
-    const clampedLower = stores.clock.time;
-    assertAcceptance(clampedLower === 0, "transport.seek 未 clamp 到零下界");
+    // 零下界由命令围栏接管:负值结构化拒绝(裸数值围栏),不再是静默钳制
+    const rejected = stores.dispatcher.dispatch({ type: "transport.seek", payload: { time: -1 } }, stores);
+    assertAcceptance(!rejected.ok, "负值 seek 未被围栏拒绝");
+    assertAcceptance(stores.clock.time === TIMELINE_DURATION_SECONDS, "被拒 seek 不应改变 playhead");
 }
 
 function verifyAuthoringOutput(stores: DirectorDeskStores): void {
@@ -235,7 +223,7 @@ function seedCameraMotionAcceptance(stores: DirectorDeskStores): void {
 }
 
 const meta: Meta<typeof DirectorDesk> = {
-    title: "验收/阶段二 运镜轨迹",
+    title: "镜头/运镜编排",
     component: DirectorDesk,
 };
 
@@ -243,7 +231,8 @@ export default meta;
 type Story = StoryObj<typeof DirectorDesk>;
 
 /** 双机位 take 自动接管 Program；验收 key 编辑、跟拍引用、传输封顶与语义预设。 */
-export const 双机位Program运镜验收: Story = {
+export const ProgramMotion: Story = {
+    name: "双机位 Program 运镜",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk initialMotionPathVisible onReady={seedCameraMotionAcceptance} />

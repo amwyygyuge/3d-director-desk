@@ -8,17 +8,25 @@ export const TEST_ASSETS = {
     sambaFbx: "/test-assets/desk-test.fbx",
     maleObj: "/test-assets/desk-test.obj",
 } as const;
-/** 经命令层放模型(与 UI 导入同一路径);模型归一化后底面贴地,y 一律 0;可显式覆盖位置 */
-export function placeModel(stores: DirectorDeskStores, url: string, position?: [number, number, number]): void {
+/** 经命令层放模型(与 UI 导入同一路径);模型归一化后底面贴地,y 一律 0;可显式指定 id/位置 */
+export function placeModel(
+    stores: DirectorDeskStores,
+    url: string,
+    init?: { id?: string; position?: [number, number, number] },
+): void {
     const spiral = placementFor(stores.scene.objectCount);
     stores.dispatcher.dispatch(
         {
             type: "object.place",
             payload: {
-                id: `model-${crypto.randomUUID()}`,
+                id: init?.id ?? `model-${crypto.randomUUID()}`,
                 kind: "model",
                 sourceUrl: url,
-                transform: { position: position ?? [spiral[0], 0, spiral[2]], rotation: [0, 0, 0], scale: [1, 1, 1] },
+                transform: {
+                    position: init?.position ?? [spiral[0], 0, spiral[2]],
+                    rotation: [0, 0, 0],
+                    scale: [1, 1, 1],
+                },
             },
         },
         stores,

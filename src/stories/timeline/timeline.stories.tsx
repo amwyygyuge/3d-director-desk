@@ -2,17 +2,13 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
-import { TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { TEST_ASSETS } from "@/stories/seeds";
+import { dispatchOk as dispatch } from "@/stories/harness";
 
 const ACTOR_ID = "timeline-actor";
 const REMOVED_ACTOR_ID = "timeline-deleted";
 const ACTOR_TRACK_ID = "transform-timeline-actor";
 const REMOVED_TRACK_ID = "transform-timeline-deleted";
-
-function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): void {
-    const result = stores.dispatcher.dispatch({ type, payload }, stores);
-    if (!result.ok) throw new Error(result.issues?.join(";") ?? result.error);
-}
 
 function seedTimelineAcceptance(stores: DirectorDeskStores): void {
     dispatch(stores, "object.place", {
@@ -100,7 +96,7 @@ function seedTimelineAcceptance(stores: DirectorDeskStores): void {
 }
 
 const meta: Meta<typeof DirectorDesk> = {
-    title: "DirectorDesk/Phase 2/Timeline Acceptance",
+    title: "时间轴/编排与回放",
     component: DirectorDesk,
 };
 
@@ -113,6 +109,7 @@ type Story = StoryObj<typeof DirectorDesk>;
  * 回放只影响 Three 运行时，停止按钮可恢复权威实体变换。
  */
 export const TimelineAuthoringAndPlayback: Story = {
+    name: "打点与回放",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk onReady={seedTimelineAcceptance} />

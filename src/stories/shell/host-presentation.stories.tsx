@@ -7,7 +7,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 
 const meta: Meta<typeof DirectorDesk> = {
-    title: "DirectorDesk/DirectorDesk",
+    title: "壳层/宿主接入与尺寸",
     component: DirectorDesk,
 };
 
@@ -15,7 +15,7 @@ export default meta;
 
 type Story = StoryObj<typeof DirectorDesk>;
 
-/** 模拟 Monet 节点嵌入的固定尺寸(走查 width/height prop 与小尺寸下壳层排布) */
+/** 模拟 Monet 节点嵌入的固定尺寸(走查 width/height prop 与小尺寸下壳层排布;充满容器的缺省形态见「场景/场景画布」) */
 const NODE_SIZE = { WIDTH_PX: 1080, HEIGHT_PX: 640 } as const;
 const STAGE_STYLE = {
     alignItems: "center",
@@ -26,24 +26,17 @@ const STAGE_STYLE = {
     width: "100vw",
 } as const;
 
-export const Empty: Story = {
-    render: () => (
-        <div style={{ width: "100vw", height: "100vh" }}>
-            <DirectorDesk />
-        </div>
-    ),
-};
-
 /**
  * 宿主壳层呈现定制走查(Monet 接入验收 R1/R2):
  * - 项目药丸显示宿主产品名;
  * - 截图/录制按钮带「到画布」可见文案与 tooltip;
  * - 扩展位落在采集区右侧,禁用态(保存模板)与可用态(从画布导入)并存;
  * - 最右扩展位(全屏预览右侧)承载宿主窗口控制类纯图标按钮(缩小/关闭节点);
- * - width/height 固定尺寸(模拟 Monet 节点嵌入;对照 Empty 的充满容器);
- * - 对照 Empty:默认形态保持纯图标与内置文案。
+ * - width/height 固定尺寸(模拟 Monet 节点嵌入);
+ * - 对照「场景/场景画布」:默认形态保持纯图标与内置文案。
  */
 export const HostPresentation: Story = {
+    name: "宿主定制与尺寸",
     render: () => (
         <div style={STAGE_STYLE}>
             <DirectorDesk

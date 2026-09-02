@@ -2,9 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { AcceptancePanel } from "@/stories/acceptance/AcceptancePanel";
+import { AcceptancePanel } from "@/stories/AcceptancePanel";
 
-const meta: Meta = { title: "验收/08 人偶形象与姿势" };
+const meta: Meta = { title: "演员/形象与姿势" };
 export default meta;
 
 const HUMANOID_ASSET_ID = "builtin.humanoid-generic";
@@ -39,10 +39,11 @@ function seedActors(stores: DirectorDeskStores): void {
 
 /** 两个人偶:验证外观/体型的每实例隔离与姿势组合 */
 export const TwoActors: StoryObj = {
+    name: "形象/体型/姿势组合",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk onReady={seedActors} />
-            <AcceptancePanel task="08 · 人偶形象(颜色/体型)与姿势组合" items={CHECKLIST} />
+            <AcceptancePanel task="演员 · 形象与姿势(颜色/体型/组合)" items={CHECKLIST} />
         </div>
     ),
 };

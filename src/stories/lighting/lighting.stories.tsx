@@ -2,21 +2,13 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
-import { TEST_ASSETS } from "@/stories/acceptance/seeds";
+import { TEST_ASSETS } from "@/stories/seeds";
+import { assertAcceptance, dispatchOk as dispatch } from "@/stories/harness";
 
 const SUBJECT_ID = "lighting-subject";
 const DIRECTIONAL_ID = "lighting-directional";
 const POINT_ID = "lighting-point";
 const SPOT_ID = "lighting-spot";
-
-function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): void {
-    const result = stores.dispatcher.dispatch({ type, payload }, stores);
-    if (!result.ok) throw new Error(result.issues?.join(";") ?? result.error);
-}
-
-function assertAcceptance(condition: unknown, message: string): asserts condition {
-    if (!condition) throw new Error(`Lighting acceptance: ${message}`);
-}
 
 function seedLightingAcceptance(stores: DirectorDeskStores): void {
     const capabilityTypes = stores.dispatcher.listCapabilities().map((capability) => capability.type);
@@ -88,7 +80,7 @@ function seedLightingAcceptance(stores: DirectorDeskStores): void {
 }
 
 const meta: Meta<typeof DirectorDesk> = {
-    title: "DirectorDesk/阶段二/灯光验收",
+    title: "灯光/灯光命令与截图纪律",
     component: DirectorDesk,
 };
 
@@ -100,7 +92,8 @@ type Story = StoryObj<typeof DirectorDesk>;
  * 验收：三种灯光均由 dispatcher 播种。依次点击 Outliner 灯光可验证选择与 gizmo 变换；Inspector 验证类型、颜色、强度都经 light.adjust。
  * 点击截图后，成图应保留受光体的照明且不出现灯光标记、LightHelper 或方向箭头；撤销/重做与删除/恢复已在播种中断言。
  */
-export const 三种灯光命令与截图纪律: Story = {
+export const LightingCommands: Story = {
+    name: "三种灯光与截图纪律",
     render: () => (
         <div style={{ width: "100vw", height: "100vh" }}>
             <DirectorDesk onReady={seedLightingAcceptance} />
