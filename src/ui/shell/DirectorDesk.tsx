@@ -136,6 +136,8 @@ export const DirectorDesk = observer(function DirectorDesk({
                 stores.binder.dispose();
                 stores.models.dispose();
                 stores.skeletons.dispose();
+                // 人偶运行时持克隆材质/骨骼壳(DisposeBag):漏挂会在 Monet 画布反复挂卸载节点时漏 GPU 资源
+                stores.actorRuntime.dispose();
                 stores.scene.manager.dispose();
                 stores.host.dispose?.();
             });
