@@ -31,19 +31,6 @@
             "tags": ["human", "generic", "animated", "humanoid", "pose-presets"]
         },
         {
-            "id": "builtin.fox",
-            "kind": "model",
-            "category": "character.animal",
-            "name": "狐狸",
-            "source": "builtin",
-            "url": "/test-assets/fox.glb",
-            "format": "gltf",
-            "license": "CC0 模型 / CC-BY 4.0 纹理 (Khronos)",
-            "skeletonFamily": "fox",
-            "embeddedClips": ["Survey", "Walk", "Run"],
-            "tags": ["animal", "fox", "animated", "quadruped"]
-        },
-        {
             "id": "builtin.armchair",
             "kind": "model",
             "category": "furniture",

@@ -1,7 +1,7 @@
 # Monet 宿主接入需求 — 截图/录制产物出口定制
 
 > 需求方：Monet（dm-tapnow）画布，经 `input-3d-director` 节点嵌入导演台。
-> 状态：R1 / R2 / R3 组件方已交付且 Monet 已接线（2026-09-02）；**R4 待组件方修复**（内置资产目录混入测试资产引用）。
+> 状态：R1 / R2 / R3 / R4 组件方已交付且 Monet 已接线（2026-09-02）。
 
 ## 背景
 
@@ -59,11 +59,9 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 - 缩小/关闭按钮位于工具栏最右，与内置按钮同区同风格，不遮挡「全屏预览」
 - 窗口无边框，尺寸与主窗口一致，主窗口移动/缩放时实时跟随；主窗口关闭时导演台跟随销毁
 
-### R4 内置资产目录混入测试资产引用 —— 🔴 待组件方修复
+### R4 内置资产目录混入测试资产引用 —— ✅ 已修复（2026-09-02）
 
-**现象（2026-09-02 实测）**：`public/builtin-assets/catalog.json` 中 `builtin.fox` 条目的 `url` 为 `/test-assets/fox.glb` —— 该路径是 Storybook 播种专用资产，不在 `builtin-assets/` 目录内。宿主环境只挂载 `/builtin-assets`，此条目的请求落到宿主 SPA 兜底（返回 `text/html`），GLB 解析必败 → 资产面板出现一个必坏的「fox」条目（Monet 环境已实测复现）。
-
-**期望**：移除该条目，或把资产文件迁入 `builtin-assets/` 并将 url 改回站内路径。
+`builtin.fox` 已从 `public/builtin-assets/catalog.json` 移除。狐狸模型仅保留为 Storybook 播种资产，内置资产目录现在只声明并承载 `/builtin-assets/**` 下的资源。
 
 **验收**：catalog 内全部条目 `url` 均为 `/builtin-assets/` 前缀；Monet 环境资产面板所有条目可正常加载。
 

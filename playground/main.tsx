@@ -21,7 +21,7 @@ declare global {
 const container = document.getElementById("root");
 if (!container) throw new Error("playground: #root not found");
 
-function Playground() {
+export function Playground() {
     const persistenceRef = useRef<LocalStorageScenePersistence | null>(null);
     const handleReady = useCallback((stores: DirectorDeskStores): void => {
         persistenceRef.current?.dispose();

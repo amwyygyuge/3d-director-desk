@@ -26,10 +26,10 @@ export default defineConfig(({ mode }) => ({
             "@": fileURLToPath(new URL("./src", import.meta.url)),
         },
     },
-    build:
-        mode === PLAYGROUND_BUILD_MODE
-            ? undefined
-            : {
+    ...(mode === PLAYGROUND_BUILD_MODE
+        ? {}
+        : {
+              build: {
                   lib: {
                       entry: "src/index.ts",
                       formats: ["es"],
@@ -42,4 +42,5 @@ export default defineConfig(({ mode }) => ({
                   sourcemap: true,
                   minify: false,
               },
+          }),
 }));

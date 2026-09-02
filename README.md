@@ -92,6 +92,12 @@ const tools = bridge.listToolSchemas(); // { name, description, kind, permission
 - Relay a tool call with `dispatcher.dispatch({ type, payload }, stores, { permissions })`; omit `permissions` only for same-process UI paths. `bridge.fullPermissions` is the grant-everything set.
 - `capture.frame` / `capture.video` are fire-and-forget; pair them with `await bridge.awaitFrameCapture(requestId)` / `awaitVideoCapture(requestId)` to reconcile the async artifact by idempotency key (`null` on timeout).
 
+## Project document compatibility
+
+`desk.export-document` produces document version `6`; imports accept only that exact version and validate entity, reference, timeline, camera-motion, and Program links before atomically replacing the current project. There is no legacy migration path before the first release.
+
+Documents contain scene data and resource URLs, not model or action binaries. Every referenced URL must remain available to the importing desk. In particular, browser `blob:` URLs from locally selected files are session-local and cannot be restored after a refresh; the playground detects and clears those transient snapshots rather than presenting a broken project.
+
 ## Public API
 
 The root entry exports the UI and integration surface above, plus:
