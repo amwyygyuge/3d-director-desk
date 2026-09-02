@@ -19,7 +19,7 @@ interface ShortcutInteractionHintSegment {
 type InteractionHintSegment = KeyInteractionHintSegment | ShortcutInteractionHintSegment;
 
 interface ViewportInteractionHint {
-    readonly id: "shot-selected" | "shot-navigation" | "lens-navigation";
+    readonly id: "shot-selected" | "shot-navigation" | "lens-navigation" | "object-selected" | "gizmo-active";
     readonly segments: readonly InteractionHintSegment[];
 }
 
@@ -50,6 +50,22 @@ const VIEWPORT_INTERACTION_HINT = {
             { shortcutId: SHORTCUT_ID.LENS_EXIT, label: "退出" },
         ],
     },
+    OBJECT_SELECTED: {
+        id: "object-selected",
+        segments: [
+            { shortcutId: SHORTCUT_ID.GIZMO_TOGGLE, label: "变换" },
+            { shortcutId: SHORTCUT_ID.FRAME_SELECTED, label: "聚焦" },
+            { shortcutId: SHORTCUT_ID.TIMELINE_ADD_KEY, label: "打关键帧" },
+            { shortcutId: SHORTCUT_ID.REMOVE_SELECTION, label: "删除" },
+        ],
+    },
+    GIZMO_ACTIVE: {
+        id: "gizmo-active",
+        segments: [
+            { keys: "X/Y/Z", label: "轴约束" },
+            { shortcutId: SHORTCUT_ID.GIZMO_EXIT, label: "退出变换" },
+        ],
+    },
 } as const satisfies Record<string, ViewportInteractionHint>;
 
 function formatInteractionHintSegment(segment: InteractionHintSegment): string {
@@ -69,13 +85,19 @@ function hasLensClip(stores: DirectorDeskStores): boolean {
 }
 
 function resolveViewportInteractionHint(stores: DirectorDeskStores): ViewportInteractionHint | null {
+    // ⌘K 面板与提示条同居顶中:面板打开期间让位,不叠两层
+    if (stores.ui.paletteOpen) return null;
     // 无片段时的提示条与「在此创建 1 秒片段」由 ShotFrameOverlay 承担,此处不重复一套
     if (stores.motionAuthoring.lensViewActive)
         return hasLensClip(stores) ? VIEWPORT_INTERACTION_HINT.LENS_NAVIGATION : null;
     if (stores.camera.activeShotId !== null) return VIEWPORT_INTERACTION_HINT.SHOT_NAVIGATION;
     const primaryId = stores.selection.primaryId;
-    const isShotSelected = primaryId !== null && stores.camera.director.getShot(primaryId) !== undefined;
-    return isShotSelected ? VIEWPORT_INTERACTION_HINT.SHOT_SELECTED : null;
+    if (primaryId === null || stores.ui.posePickingObjectId !== null) return null;
+    const isShotSelected = stores.camera.director.getShot(primaryId) !== undefined;
+    if (isShotSelected) return VIEWPORT_INTERACTION_HINT.SHOT_SELECTED;
+    return stores.ui.isGizmoArmed(primaryId)
+        ? VIEWPORT_INTERACTION_HINT.GIZMO_ACTIVE
+        : VIEWPORT_INTERACTION_HINT.OBJECT_SELECTED;
 }
 
 /** 视口交互提示协调器:同一时刻只解析并显示最高优先级的一条提示。 */

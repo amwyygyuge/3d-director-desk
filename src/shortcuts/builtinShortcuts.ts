@@ -15,6 +15,8 @@ export const SHORTCUT_ID = {
     AXIS_X: "gizmo.axis.x",
     AXIS_Y: "gizmo.axis.y",
     AXIS_Z: "gizmo.axis.z",
+    GIZMO_TOGGLE: "gizmo.toggle",
+    GIZMO_EXIT: "gizmo.exit",
     REMOVE_SELECTION: "selection.remove",
     CLEAR_SELECTION: "selection.clear",
     SHOT_ENTER: "shot.enter",
@@ -33,6 +35,7 @@ export const SHORTCUT_ID = {
     LENS_EXIT: "lens.exit",
     MOTION_KEY_DELETE: "motion.key.delete",
     TRANSPORT_LOOP: "transport.loop",
+    PALETTE_OPEN: "palette.open",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
@@ -44,6 +47,9 @@ export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
  *
  * Space 不做播放/暂停:WASD+Space/Shift 的飞行导航已持续占用它(见 useFlyNavigation),
  * 双绑会让抬升相机的同时启停时间轴。播放启停走 P,与 DCC 的传输键位习惯一致。
+ *
+ * Escape 分层:presentation → lens → shot(退出掌镜) → gizmo(退出变换) → selected(取消选中),
+ * 由本表行序裁决;Delete 分层:motion-key → selected(删除选中)。
  */
 export const SHORTCUT_SPECS: readonly {
     id: ShortcutId;
@@ -62,14 +68,17 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
-    { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "gizmo", label: "删除选中" },
-    { id: SHORTCUT_ID.TIMELINE_ADD_KEY, chords: ["k"], scope: "gizmo", label: "在当前时间打关键帧" },
+    { id: SHORTCUT_ID.GIZMO_TOGGLE, chords: ["g"], scope: "selected", label: "进入/退出变换" },
+    { id: SHORTCUT_ID.REMOVE_SELECTION, chords: ["delete", "backspace"], scope: "selected", label: "删除选中" },
+    { id: SHORTCUT_ID.TIMELINE_ADD_KEY, chords: ["k"], scope: "selected", label: "在当前时间打关键帧" },
     { id: SHORTCUT_ID.TIMELINE_ADD_KEY, chords: ["k"], scope: "lens", label: "在当前时刻落镜头关键帧" },
     { id: SHORTCUT_ID.SHOT_ENTER, chords: ["enter"], scope: "shot-selected", label: "进入掌镜" },
     { id: SHORTCUT_ID.SHOT_EXIT, chords: ["escape"], scope: "shot", label: "退出掌镜" },
     { id: SHORTCUT_ID.SHOT_PHOTO, chords: ["enter"], scope: "shot", label: "拍照" },
-    { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "gizmo", label: "取消选中" },
-    { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "gizmo", label: "聚焦选中对象" },
+    { id: SHORTCUT_ID.GIZMO_EXIT, chords: ["escape"], scope: "gizmo", label: "退出变换" },
+    { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "selected", label: "取消选中" },
+    { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "selected", label: "聚焦选中对象" },
+    { id: SHORTCUT_ID.PALETTE_OPEN, chords: ["mod+k"], scope: "global", label: "视角与元素导航" },
     { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
     { id: SHORTCUT_ID.TRANSPORT_TOGGLE, chords: ["p"], scope: "global", label: "播放/暂停时间轴" },
     { id: SHORTCUT_ID.PRESENTATION_ENTER, chords: ["shift+p"], scope: "global", label: "全屏预览成片" },
@@ -97,6 +106,14 @@ function activateSelectedShot(stores: DirectorDeskStores): void {
     const shotId = stores.selection.primaryId;
     if (!shotId || stores.camera.director.getShot(shotId) === undefined) return;
     stores.dispatcher.dispatch({ type: "camera.activate", payload: { id: shotId } }, stores);
+}
+
+/** G 进出变换:机位不挂 gizmo(TransformGizmoController 的领域排除),此处同步拦下,不留空挂状态 */
+function toggleGizmoArm(stores: DirectorDeskStores): void {
+    const id = stores.selection.primaryId;
+    if (!id || stores.camera.director.getShot(id) !== undefined) return;
+    if (stores.ui.isGizmoArmed(id)) stores.ui.disarmGizmo();
+    else stores.ui.armGizmo(id);
 }
 
 /** K 的上下文分派收敛在 KeyframeAuthoringService:此处只负责把结构化 issue 落成提示。 */
@@ -134,6 +151,9 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.AXIS_X]: (s) => s.ui.toggleGizmoAxis("x"),
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
     [SHORTCUT_ID.AXIS_Z]: (s) => s.ui.toggleGizmoAxis("z"),
+    [SHORTCUT_ID.GIZMO_TOGGLE]: toggleGizmoArm,
+    [SHORTCUT_ID.GIZMO_EXIT]: (s) => s.ui.disarmGizmo(),
+    [SHORTCUT_ID.PALETTE_OPEN]: (s) => s.ui.setPaletteOpen(true),
     [SHORTCUT_ID.REMOVE_SELECTION]: removeSelection,
     [SHORTCUT_ID.TIMELINE_ADD_KEY]: keyCurrentContext,
     [SHORTCUT_ID.SHOT_ENTER]: activateSelectedShot,
@@ -179,8 +199,9 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
 /**
  * 当前激活作用域。
  * 全屏预览独占:壳层已隐、成片正在放,此时一切编辑键位都不该生效——只留退出键。
- * 其余情形 global 常驻;gizmo/shot-selected/shot/lens/motion-key 各自按精确条件激活,
- * Esc 的归属由 SHORTCUT_SPECS 的顺序决定(注册表先命中先执行)。
+ * 其余情形 global 常驻;selected/gizmo/shot-selected/shot/lens/motion-key 各自按精确条件激活
+ * (gizmo = 变换已激活,即 ui.gizmoArmedId 命中主选),Esc 的归属由 SHORTCUT_SPECS 的顺序决定
+ * (注册表先命中先执行)。
  */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
     if (stores.layout.presentationMode) return new Set<ShortcutScope>(["presentation"]);
@@ -193,7 +214,8 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         "global",
         ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
         ...(stores.motionAuthoring.selectedKeyId !== null ? ["motion-key" as const] : []),
-        ...(primaryId ? ["gizmo" as const] : []),
+        ...(primaryId ? ["selected" as const] : []),
+        ...(stores.ui.isGizmoArmed(primaryId) ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
         ...(stores.camera.activeShotId ? ["shot" as const] : []),
     ]);

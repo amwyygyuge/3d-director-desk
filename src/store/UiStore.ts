@@ -33,6 +33,10 @@ export class UiStore {
     lastGizmoInteractionAt = 0;
     /** 轴约束:全 true = 自由;仅一轴 true = 锁定该轴(DCC 惯例 X/Y/Z 切换) */
     gizmoAxes: Record<GizmoAxis, boolean> = ALL_AXES_FREE;
+    /** 变换 gizmo 的挂载授权:绑定对象身份;点击选中不再直接出坐标轴,G 进入/退出(瞬时 UI 态,不序列化) */
+    gizmoArmedId: string | null = null;
+    /** ⌘K 视角/元素导航面板开关(瞬时 UI 态,不序列化) */
+    paletteOpen = false;
     /** 最近一次截图预览;替换时回收旧 objectURL(内存纪律) */
     lastCaptureUrl: string | null = null;
     /** 快捷键速查浮层开关 */
@@ -66,6 +70,19 @@ export class UiStore {
     setGizmoMode(mode: GizmoMode): void {
         this.gizmoMode = mode;
     }
+    armGizmo(id: string): void {
+        this.gizmoArmedId = id;
+    }
+    disarmGizmo(): void {
+        this.gizmoArmedId = null;
+    }
+    /** armed 派生(arm 绑定对象身份):快捷键 scope 裁决/gizmo 挂载/提示条三处共用,禁各写一份 === */
+    isGizmoArmed(id: string | null): boolean {
+        return id !== null && this.gizmoArmedId === id;
+    }
+    setPaletteOpen(open: boolean): void {
+        this.paletteOpen = open;
+    }
     /** 锁到指定轴;再次按同一轴恢复三轴自由 */
     toggleGizmoAxis(axis: GizmoAxis): void {
         const onlyThisActive = this.gizmoAxes[axis] && Object.values(this.gizmoAxes).filter(Boolean).length === 1;
@@ -73,6 +90,8 @@ export class UiStore {
     }
 
     setPosePicking(objectId: string | null, boneKey: string | null): void {
+        // 进入姿态拾取即解除变换:两个编辑模式不叠态,退出姿态后坐标轴不应无预期地回来
+        if (objectId !== null) this.gizmoArmedId = null;
         this.posePickingObjectId = objectId;
         this.posePickingBoneKey = boneKey;
     }
@@ -125,6 +144,8 @@ export class UiStore {
         this.posePickingObjectId = null;
         this.posePickingBoneKey = null;
         this.inspectorTabs.clear();
+        this.gizmoArmedId = null;
+        this.paletteOpen = false;
     }
     toggleHelp(): void {
         this.helpOpen = !this.helpOpen;

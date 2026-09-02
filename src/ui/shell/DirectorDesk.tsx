@@ -13,6 +13,7 @@ import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
 import { PROTOCOL_VERSION } from "@/bridge/protocol";
 import { PostMessageAdapter } from "@/host/HostAdapter";
 import type { HostAdapter } from "@/host/HostAdapter";
+import { HOME_DIRECTOR_POSE } from "@/store/CameraStore";
 import { GIZMO_CLICK_GUARD_MS } from "@/store/UiStore";
 import { RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
 import { BonePicker } from "@/ui/viewport/scene/BonePicker";
@@ -30,6 +31,7 @@ import { TimelineConsole } from "@/ui/workspace/TimelineConsole";
 import { PresentationExitHint, TopPillBar } from "@/ui/workspace/TopPillBar";
 import { CapturePreview } from "@/ui/viewport/CapturePreview";
 import { HelpOverlay } from "@/ui/shell/HelpOverlay";
+import { CommandPalette } from "@/ui/shell/CommandPalette";
 import { Hotkeys } from "@/ui/shell/Hotkeys";
 import { FrameRateIndicator } from "@/ui/viewport/FrameRateIndicator";
 import { placementFor } from "@/ui/assets/importFiles";
@@ -52,8 +54,9 @@ interface MotionKeyMenuPosition {
     readonly top: number;
 }
 
-const STUDIO_CAMERA_FOV_DEGREES = 45;
-const STUDIO_CAMERA_POSITION: [number, number, number] = [6, 4, 8];
+/** Canvas 相机初值与「重置视角」命令共用 HOME_DIRECTOR_POSE(单一真相源);Vec3 只读元组展开为可变 */
+const STUDIO_CAMERA_FOV_DEGREES = HOME_DIRECTOR_POSE.fov;
+const STUDIO_CAMERA_POSITION: [number, number, number] = [...HOME_DIRECTOR_POSE.position];
 const STUDIO_GRID_SIZE_METERS = 12;
 const STUDIO_CAMERA_MIN_DISTANCE_METERS = 2;
 const STUDIO_CAMERA_MAX_DISTANCE_METERS = 18;
@@ -275,6 +278,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                         <ApplicationNotice />
                         <Hotkeys deskRef={deskRef} />
                         <HelpOverlay />
+                        <CommandPalette />
                         <Menu
                             open={motionKeyMenuPosition !== null}
                             onClose={closeMotionKeyMenu}

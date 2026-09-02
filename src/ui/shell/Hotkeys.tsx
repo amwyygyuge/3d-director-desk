@@ -28,7 +28,8 @@ export function Hotkeys({ deskRef }: HotkeysProps) {
         };
         const unregister = registerBuiltinShortcuts(stores.shortcuts);
         const onKeyDown = (event: KeyboardEvent) => {
-            if (stores.ui.helpOpen) return;
+            // 速查浮层与 ⌘K 面板打开期间全局快捷键让位(面板内按键由 input 焦点的 isEditingText 天然拦截,此处再兜焦点被夺的边)
+            if (stores.ui.helpOpen || stores.ui.paletteOpen) return;
             const inside = event.target instanceof Node && desk.contains(event.target);
             const noFocusFallback =
                 (document.activeElement === document.body || document.activeElement === document.documentElement) &&

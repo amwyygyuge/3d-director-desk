@@ -179,16 +179,15 @@ function createPreset(definition: PresetDefinition, document: GltfDocument, bina
         if (!nodeName || !sampler) continue;
         rotations.set(nodeName, sampleQuaternion(document, binary, sampler.output, sourceFrameRatio));
     }
-    const nodesByName = new Map(
-        document.nodes.flatMap((node) => (node.name ? [[node.name, node] as const] : [])),
-    );
+    const nodesByName = new Map(document.nodes.flatMap((node) => (node.name ? [[node.name, node] as const] : [])));
     // Materializing inherited rest rotations keeps every half-mask independently composable.
     const bones = MIXAMO_PART_BONES[definition.part].reduce<Record<string, QuaternionTuple>>((result, boneName) => {
         const quaternion = rotations.get(boneName) ?? nodeQuaternion(nodesByName.get(boneName));
         result[boneName] = quaternion;
         return result;
     }, {});
-    if (Object.keys(bones).length === 0) throw new Error(`clip ${definition.clipName} 未提供 ${definition.part} 骨骼旋转`);
+    if (Object.keys(bones).length === 0)
+        throw new Error(`clip ${definition.clipName} 未提供 ${definition.part} 骨骼旋转`);
     return {
         id: definition.id,
         labelZh: definition.labelZh,

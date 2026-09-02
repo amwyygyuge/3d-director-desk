@@ -45,6 +45,8 @@ export class EnterPresentationCommand extends DirectorCommand<EmptyPayload> {
     execute(ctx: DirectorContext): void {
         ctx.layout.setPresentationMode(true);
         ctx.selection.clear();
+        // ⌘K 面板若开着必须收掉:预览独占后 Hotkeys 的面板让位门会连 Esc 退出键一起吞掉
+        ctx.ui.setPaletteOpen(false);
         ctx.clock.seek(0);
         ctx.clock.play();
     }

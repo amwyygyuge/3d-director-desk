@@ -441,15 +441,15 @@ flowchart TD
 
 ### 8.2 快捷键增量
 
-现有 18 条快捷键（`builtinShortcuts.ts` 的 `SHORTCUT_SPECS`）保持不动，增量按既有 scope 机制挂载：
+既有快捷键（`builtinShortcuts.ts` 的 `SHORTCUT_SPECS`，单一真相源）保持不动，增量按既有 scope 机制挂载：
 
-| id                  | chord                  | scope            | 行为                                                                  |
-| ------------------- | ---------------------- | ---------------- | --------------------------------------------------------------------- |
-| `timeline.add-key`  | `k`                    | gizmo / **lens** | **按上下文分派**：选中场景对象 → transform key；镜头视角 → camera key |
-| `lens.toggle`       | `` ` ``                | global           | 导演视角 ↔ 镜头视角                                                   |
-| `lens.exit`         | `escape`               | lens             | 退出镜头视角（Esc 优先级插在 `presentation` 之后、`shot` 之前）       |
-| `motion.key.delete` | `delete` / `backspace` | lens             | 删除选中的 camera key                                                 |
-| `transport.loop`    | `l`                    | global           | 循环开关                                                              |
+| id                  | chord                  | scope               | 行为                                                                  |
+| ------------------- | ---------------------- | ------------------- | --------------------------------------------------------------------- |
+| `timeline.add-key`  | `k`                    | selected / **lens** | **按上下文分派**：选中场景对象 → transform key；镜头视角 → camera key |
+| `lens.toggle`       | `` ` ``                | global              | 导演视角 ↔ 镜头视角                                                   |
+| `lens.exit`         | `escape`               | lens                | 退出镜头视角（Esc 优先级插在 `presentation` 之后、`shot` 之前）       |
+| `motion.key.delete` | `delete` / `backspace` | motion-key          | 删除选中的 camera key                                                 |
+| `transport.loop`    | `l`                    | global              | 循环开关                                                              |
 
 `K` 的上下文分派收敛进 `KeyframeAuthoringService.resolve(ctx): SerializedCommand | CommandIssue`——**禁止**在 `SHORTCUT_ACTIONS` 里堆并列 `if`（AGENTS 规范），返回结构化 issue 时直接进 `ViewportToast`。
 

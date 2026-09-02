@@ -1,5 +1,6 @@
 import { TransformControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
+import { reaction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
@@ -7,7 +8,7 @@ import type { ComponentRef } from "react";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useOrbitSuspension } from "@/ui/viewport/scene/useOrbitSuspension";
 
-/** gizmo 控制器:只挂主选场景对象的运行时。
+/** gizmo 控制器:只挂主选场景对象的运行时(点击选中不再直接出坐标轴,G 进入变换才挂载)。
  *
  * 机位属于 CameraDirector 管理的独立领域实体:选择机位只用于 Enter 进入掌镜,
  * 不把 marker 交给 TransformControls,避免出现坐标轴与直接拖改机位数据。
@@ -30,19 +31,32 @@ export const TransformGizmoController = observer(function TransformGizmoControll
     const primaryId = selection.primaryId;
     const isShotSelected = primaryId !== null && camera.director.getShot(primaryId) !== undefined;
     const editingSelectedPose = primaryId !== null && ui.posePickingObjectId === primaryId;
+    const armed = ui.isGizmoArmed(primaryId);
     const target =
-        !isShotSelected && !editingSelectedPose && primaryId ? scene.manager.getRuntime(primaryId) : undefined;
+        armed && !isShotSelected && !editingSelectedPose && primaryId ? scene.manager.getRuntime(primaryId) : undefined;
+
+    // arm 绑定选中身份:主选变更(点选/取消/切对象)即解除,不残留到下一次选中
+    useEffect(
+        () =>
+            reaction(
+                () => selection.primaryId,
+                (id) => {
+                    if (id !== ui.gizmoArmedId) ui.disarmGizmo();
+                },
+            ),
+        [selection, ui],
+    );
 
     // gizmo 整体打 helper 标记:截图时摘除(07 帧内取样)
     useEffect(() => {
         if (controlsRef.current) controlsRef.current.userData.helper = true;
     }, [target]);
 
-    // 选中集变化 → 高亮/卸载 gizmo 需要在 demand 模式下补一帧
+    // 选中集/arm 变化 → 高亮与 gizmo 挂载/卸载需要在 demand 模式下补一帧
     const selectionKey = selection.selectedIds.join(",");
     useEffect(() => {
         invalidate();
-    }, [selectionKey, invalidate]);
+    }, [selectionKey, armed, invalidate]);
 
     if (!target || !primaryId) return null;
 

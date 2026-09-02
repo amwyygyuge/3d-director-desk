@@ -12,6 +12,16 @@ export interface DirectorPose {
     fov: number;
 }
 
+/**
+ * 初始工作室机位:Canvas 相机初值与「重置视角」命令共用同一真相源(禁两处各写一份)。
+ * 冻结防漂移:该常量会被 requestDirectorPose 直接持有引用。
+ */
+export const HOME_DIRECTOR_POSE: DirectorPose = Object.freeze({
+    position: Object.freeze([6, 4, 8] as const),
+    target: Object.freeze([0, 0, 0] as const),
+    fov: 45,
+});
+
 /** 机位 Store:CameraDirector 管理器为引擎,本类只暴露可观察的激活态与导演 pose */
 export class CameraStore {
     readonly director = new CameraDirector();

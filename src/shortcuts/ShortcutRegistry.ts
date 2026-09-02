@@ -1,13 +1,15 @@
 import type { ShortcutChord } from "@/shortcuts/ShortcutChord";
 
 /**
- * 作用域:global 常驻;gizmo 在有选中时激活;
+ * 作用域:global 常驻;selected 在有主选时激活(删除/聚焦/打点/G 进入变换);
+ * gizmo 在变换已激活(G 挂载坐标轴)时激活——X/Y/Z 轴约束与 Esc 退出变换只在该态生效;
  * shot-selected 只在选中未激活机位时激活;shot 在掌镜时激活;
  * lens 在镜头视角(视口跟随时间轴输出、手势写镜头关键帧)时激活;
- * motion-key 在选中一枚镜头关键帧时激活(它必须排在 gizmo 之前,否则 Delete 会去删机位);
+ * motion-key 在选中一枚镜头关键帧时激活(它必须排在 selected 之前,否则 Delete 会先命中删除选中);
  * presentation 在全屏预览时独占(壳层已隐,编辑类键位一律让位)。
  */
-export type ShortcutScope = "global" | "gizmo" | "shot-selected" | "shot" | "lens" | "motion-key" | "presentation";
+export type ShortcutScope =
+    "global" | "selected" | "gizmo" | "shot-selected" | "shot" | "lens" | "motion-key" | "presentation";
 
 /** 快捷键绑定:spec(数据)× action(行为)的合体,注册表持有 */
 export interface ShortcutBinding<TEnv> {

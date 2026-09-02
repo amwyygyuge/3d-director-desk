@@ -48,7 +48,8 @@ export function finiteTransform(value: unknown): value is Transform {
     return finiteVec3(value.position) && finiteVec3(value.rotation) && finiteVec3(value.scale);
 }
 
-const KIND_LABEL: Record<SceneObjectKind, string> = {
+/** 类型中文标签:派生显示名与⌘K 面板条目共用,禁两处各写一份 */
+export const KIND_LABEL: Record<SceneObjectKind, string> = {
     model: "模型",
     camera: "机位对象",
     light: "灯光",
