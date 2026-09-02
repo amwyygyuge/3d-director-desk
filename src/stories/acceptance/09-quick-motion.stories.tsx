@@ -1,0 +1,126 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+
+import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { DirectorDesk } from "@/ui/shell/DirectorDesk";
+import { TEST_ASSETS } from "@/stories/acceptance/seeds";
+
+const SUBJECT_ID = "quick-motion-subject";
+const ORBIT_SHOT_ID = `快建机位-${SUBJECT_ID}-orbit`;
+const ZOOM_SHOT_ID = `快建机位-${SUBJECT_ID}-dolly-zoom`;
+const ORBIT_KEY_COUNT_360 = 13;
+const DEFAULT_TIMELINE_DURATION = 10;
+
+function dispatch(stores: DirectorDeskStores, type: string, payload: unknown): void {
+    const result = stores.dispatcher.dispatch({ type, payload }, stores);
+    if (!result.ok) throw new Error(result.issues?.join(";") ?? result.error);
+}
+
+function assertAcceptance(condition: unknown, message: string): asserts condition {
+    if (!condition) throw new Error(`快速运镜验收: ${message}`);
+}
+
+function seedQuickMotionAcceptance(stores: DirectorDeskStores): void {
+    const capabilityTypes = stores.dispatcher.listCapabilities().map((capability) => capability.type);
+    assertAcceptance(capabilityTypes.includes("motion.quick-author"), "motion.quick-author capability 未注册");
+
+    dispatch(stores, "object.place", {
+        id: SUBJECT_ID,
+        kind: "model",
+        sourceUrl: TEST_ASSETS.helmet,
+        transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    });
+
+    // 围栏:环绕参数越界/非法枚举必须结构化拒绝
+    const badDegrees = stores.dispatcher.dispatch(
+        {
+            type: "motion.quick-author",
+            payload: { subjectId: SUBJECT_ID, shotSize: "medium", move: "orbit", durationSeconds: 2, degrees: 500 },
+        },
+        stores,
+    );
+    assertAcceptance(!badDegrees.ok && badDegrees.issues?.[0]?.includes("环绕转角"), "degrees 围栏未生效");
+    const badDirection = stores.dispatcher.dispatch(
+        {
+            type: "motion.quick-author",
+            payload: { subjectId: SUBJECT_ID, shotSize: "medium", move: "orbit", durationSeconds: 2, direction: "x" },
+        },
+        stores,
+    );
+    assertAcceptance(!badDirection.ok, "direction 围栏未生效");
+
+    // 360° 环绕:机位自动落大纲、片段追加 Program 末尾、跟拍绑定、键数按角度自适应
+    dispatch(stores, "motion.quick-author", {
+        subjectId: SUBJECT_ID,
+        shotSize: "medium",
+        move: "orbit",
+        durationSeconds: 2,
+        degrees: 360,
+        direction: "ccw",
+    });
+    const orbitShot = stores.camera.director.getShot(ORBIT_SHOT_ID);
+    assertAcceptance(orbitShot !== undefined, "快建机位未创建");
+    const orbitClip = stores.motion.clipsForCamera(ORBIT_SHOT_ID)[0];
+    assertAcceptance(orbitClip !== undefined, "环绕片段未创建");
+    assertAcceptance(orbitClip.startTimeSeconds === 0, "首段应从 Program 0 时刻开始");
+    assertAcceptance(orbitClip.keys.length === ORBIT_KEY_COUNT_360, `360° 环绕应自适应为 ${ORBIT_KEY_COUNT_360} 键`);
+    assertAcceptance(orbitClip.focus?.target?.kind === "scene-object", "被摄对象未自动绑跟拍");
+    assertAcceptance(stores.motion.program.clips.length === 1, "Program 输出未跟随");
+
+    // 第二段:滑动变焦(末帧 fov 反比放大,主体构图不变)+ 追加在 Program 末尾
+    dispatch(stores, "motion.quick-author", {
+        subjectId: SUBJECT_ID,
+        shotSize: "medium",
+        move: "dolly-zoom",
+        durationSeconds: 2,
+    });
+    const zoomClip = stores.motion.clipsForCamera(ZOOM_SHOT_ID)[0];
+    assertAcceptance(zoomClip !== undefined, "滑动变焦片段未创建");
+    assertAcceptance(zoomClip.startTimeSeconds === 2, "第二段未追加到 Program 末尾");
+    const lastKey = zoomClip.keys[zoomClip.keys.length - 1];
+    assertAcceptance(lastKey !== undefined && (lastKey.fov ?? 0) > (orbitShot?.fov ?? 45), "滑动变焦末帧 fov 未放大");
+
+    // 第三段:超出时间轴时长 → 一并扩轴;撤销一步整体回滚(片段/机位/时长)
+    dispatch(stores, "motion.quick-author", {
+        subjectId: SUBJECT_ID,
+        shotSize: "long",
+        move: "spiral",
+        durationSeconds: 8,
+        degrees: 180,
+    });
+    assertAcceptance(stores.timeline.document.duration > DEFAULT_TIMELINE_DURATION, "超轴片段未触发扩时长");
+
+    assertAcceptance(stores.history.undo(stores).ok, "spiral undo 失败");
+    assertAcceptance(stores.timeline.document.duration === DEFAULT_TIMELINE_DURATION, "undo 未恢复时间轴时长");
+    assertAcceptance(
+        stores.camera.director.getShot(`快建机位-${SUBJECT_ID}-spiral`) === undefined,
+        "undo 未移除快建机位",
+    );
+    assertAcceptance(stores.history.undo(stores).ok, "dolly-zoom undo 失败");
+    assertAcceptance(stores.motion.clipsForCamera(ZOOM_SHOT_ID).length === 0, "undo 未移除变焦片段");
+    assertAcceptance(stores.history.redo(stores).ok, "redo 失败");
+    assertAcceptance(stores.motion.clipsForCamera(ZOOM_SHOT_ID).length === 1, "redo 未重放变焦片段");
+
+    stores.selection.select(SUBJECT_ID);
+}
+
+const meta: Meta<typeof DirectorDesk> = {
+    title: "DirectorDesk/阶段二/快速运镜验收",
+    component: DirectorDesk,
+};
+
+export default meta;
+
+type Story = StoryObj<typeof DirectorDesk>;
+
+/**
+ * 验收:选中模型 → 检查器「运镜」tab → 景别/语汇/转角/时长 → 创建。
+ * 播种已断言:围栏拒绝非法参数、360° 环绕键数自适应、Program 追加、跟拍绑定、滑动变焦 fov、
+ * 超轴扩时长与单步撤销/重放。右侧检查器应显示「运镜」tab 可直接再走查一遍 UI 路径。
+ */
+export const 快速运镜与预设语汇: Story = {
+    render: () => (
+        <div style={{ width: "100vw", height: "100vh" }}>
+            <DirectorDesk onReady={seedQuickMotionAcceptance} />
+        </div>
+    ),
+};

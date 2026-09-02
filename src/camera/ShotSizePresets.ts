@@ -19,6 +19,15 @@ const SHOT_SIZE_PARAMS: Record<ShotSize, { distanceFactor: number; elevationDeg:
 
 /** 包围球半径下限:防零距离除零/贴脸 */
 const MIN_SUBJECT_RADIUS = 0.5;
+
+/** 从未轨道过时的默认方位角(45° 斜侧):机位面板与快速创建共用 */
+export const DEFAULT_SHOT_AZIMUTH_RADIANS = Math.PI / 4;
+
+/** 相机位置 → 绕中心的方位角(机位面板景别与快速创建共用同一公式,禁两处各写) */
+export function azimuthAroundCenter(eye: Vec3, center: Vec3): number {
+    return Math.atan2(eye[2] - center[2], eye[0] - center[0]);
+}
+
 const DEG_TO_RAD = Math.PI / 180;
 const DEFAULT_SHOT_FOV = 45;
 

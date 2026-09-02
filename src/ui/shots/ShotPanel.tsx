@@ -11,7 +11,7 @@ import { Box3, Vector3 } from "three";
 
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
-import { ShotSizePresets } from "@/camera/ShotSizePresets";
+import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
@@ -21,7 +21,6 @@ const SAVE_SHOT_STATUS_ID = "director-desk-save-shot-status";
 const PANEL_SECTION_GAP = 1;
 const STATUS_TEXT_MARGIN_TOP = 0.5;
 const BOX_SIZE_TO_RADIUS_DIVISOR = 2;
-const DEFAULT_SHOT_AZIMUTH_RADIANS = Math.PI / 4;
 
 const SaveCurrentViewControl = observer(function SaveCurrentViewControl() {
     const stores = useDirectorDeskStores();
@@ -91,7 +90,7 @@ const ShotSizeControl = observer(function ShotSizeControl() {
         const radius = sphere.length() / BOX_SIZE_TO_RADIUS_DIVISOR;
         const eye = camera.lastDirectorPose;
         const azimuth = eye
-            ? Math.atan2(eye.position[2] - center.z, eye.position[0] - center.x)
+            ? azimuthAroundCenter(eye.position, [center.x, center.y, center.z])
             : DEFAULT_SHOT_AZIMUTH_RADIANS;
         const shot = shotSizePresets.resolve(size, [center.x, center.y, center.z], radius, azimuth);
         const result = dispatcher.dispatch(

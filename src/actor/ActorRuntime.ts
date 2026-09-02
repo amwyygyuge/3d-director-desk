@@ -25,7 +25,12 @@ export class ActorRuntime {
 
     constructor(private readonly scene: SceneManager) {}
 
+    /** 同一 shell 重复 attach 只做同步:重复克隆材质会泄漏,重复取余量会把当前姿势当成 rest。 */
     attach(objectId: string, shell: Group): void {
+        if (this.shellsByObject.get(objectId) === shell) {
+            this.sync(objectId);
+            return;
+        }
         this.shellsByObject.set(objectId, shell);
         this.appearanceBinder.attach(objectId, shell);
         this.buildBinder.attach(objectId, shell);

@@ -5,7 +5,7 @@ import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
-import { MOTION_MOVE, MOTION_MOVE_LABEL } from "@/authoring/MotionPresetCompiler";
+import { DEFAULT_PRESET_DURATION_SECONDS, MOTION_MOVE, MOTION_MOVE_LABEL } from "@/authoring/MotionPresetCompiler";
 import type { MotionMove } from "@/authoring/MotionPresetCompiler";
 import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
@@ -19,7 +19,6 @@ import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 
 const FIELD_GAP = 0.75;
 const PRESET_GRID_COLUMNS = "repeat(2, minmax(0, 1fr))";
-const DEFAULT_MOTION_DURATION_SECONDS = 2;
 const MOTION_PRESET_STATUS_ID = "director-desk-motion-preset-status";
 const NO_SUBJECT = "none";
 const FOLLOW_SHOT_SIZE = "follow";
@@ -68,7 +67,7 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
     const stores = useDirectorDeskStores();
     const { dispatcher, motionAuthoring, playheadDisplay, scene, timeline } = stores;
     const playhead = Math.min(playheadDisplay.value, timeline.document.duration);
-    const durationSeconds = Math.min(DEFAULT_MOTION_DURATION_SECONDS, timeline.document.duration - playhead);
+    const durationSeconds = Math.min(DEFAULT_PRESET_DURATION_SECONDS, timeline.document.duration - playhead);
     const subjects = scene.manager.list().filter((entity) => entity.kind === "model");
     const subjectId = motionAuthoring.subjectId;
     const hasSubject = subjectId !== null && scene.manager.getEntity(subjectId) !== undefined;

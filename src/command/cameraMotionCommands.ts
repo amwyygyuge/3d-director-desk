@@ -9,9 +9,19 @@ import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
 import { CameraProgramClip } from "@/camera/CameraProgramTrack";
 import type { CameraProgramClipJSON } from "@/camera/CameraProgramTrack";
 import { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
-import { MotionPresetCompiler, MOTION_MOVE } from "@/authoring/MotionPresetCompiler";
-import type { MotionPresetRequest } from "@/authoring/MotionPresetCompiler";
+import {
+    isOrbitDirection,
+    MotionPresetCompiler,
+    MOTION_MOVE,
+    ORBIT_MAX_DEGREES,
+} from "@/authoring/MotionPresetCompiler";
+import type { MotionMove, MotionPresetRequest, OrbitDirection } from "@/authoring/MotionPresetCompiler";
+import { SHOT_SIZE } from "@/camera/CameraShot";
+import type { CameraShot, ShotSize } from "@/camera/CameraShot";
+import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
+import type { SubjectBounds } from "@/command/subjectBounds";
+import { SetTimelineDurationCommand } from "@/command/timelineCommands";
 import { VIEW_MODE } from "@/store/MotionAuthoringStore";
 import type { ViewMode } from "@/store/MotionAuthoringStore";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -54,6 +64,7 @@ export type ProgramFollow = (typeof PROGRAM_FOLLOW)[keyof typeof PROGRAM_FOLLOW]
 
 const programLinkage = new ProgramLinkage();
 const presetCompiler = new MotionPresetCompiler();
+const shotSizePresets = new ShotSizePresets();
 
 interface CreateMotionClipPayload {
     readonly clip: CameraMotionClipJSON;
@@ -134,6 +145,34 @@ function issue(code: string, path: string, message: string, options?: CommandIss
 
 function issueMessages(issues: readonly CommandIssue[]): string[] {
     return issues.map((current) => current.message);
+}
+
+/** author 与 quick-author 共用的语汇参数围栏(Rule of Two):语汇枚举 + 环绕参数 */
+function presetParamIssues(payload: {
+    readonly move: MotionMove;
+    readonly degrees?: number;
+    readonly direction?: OrbitDirection;
+}): CommandIssue[] {
+    if (!Object.values(MOTION_MOVE).includes(payload.move)) {
+        return [issue(ISSUE_CODE.MOVE, "move", "未知的运镜语汇")];
+    }
+    const issues: CommandIssue[] = [];
+    const { degrees, direction } = payload;
+    if (degrees !== undefined && (!Number.isFinite(degrees) || degrees <= 0 || degrees > ORBIT_MAX_DEGREES)) {
+        issues.push(issue(ISSUE_CODE.PAYLOAD, "degrees", `环绕转角须为 (0, ${ORBIT_MAX_DEGREES}] 度的有限数`));
+    }
+    if (direction !== undefined && !isOrbitDirection(direction)) {
+        issues.push(issue(ISSUE_CODE.PAYLOAD, "direction", "环绕方向须为 cw/ccw"));
+    }
+    return issues;
+}
+
+/** Program 跟随三件套只消费这个切片(拓宽签名:quick-author 的计划结构免构造整个 clip) */
+interface ProgramRangeLike {
+    readonly id: string;
+    readonly cameraId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
 }
 
 function motionClipFrom(clip: CameraMotionClipJSON): CameraMotionClip | null {
@@ -310,7 +349,7 @@ function takeIdFor(payload: CreateTakePayload): string {
     return `take-${payload.cameraId}-${payload.startTimeSeconds}-${payload.durationSeconds}`;
 }
 
-function programIssues(ctx: DirectorContext, clip: CameraMotionClip, mode: ProgramFollow): readonly CommandIssue[] {
+function programIssues(ctx: DirectorContext, clip: ProgramRangeLike, mode: ProgramFollow): readonly CommandIssue[] {
     if (mode !== PROGRAM_FOLLOW.FOLLOW) return [];
     const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
     if (slot.kind !== PROGRAM_SLOT_KIND.CONFLICT) return [];
@@ -322,7 +361,7 @@ function programIssues(ctx: DirectorContext, clip: CameraMotionClip, mode: Progr
     ];
 }
 
-function applyProgramFollow(ctx: DirectorContext, clip: CameraMotionClip, mode: ProgramFollow): void {
+function applyProgramFollow(ctx: DirectorContext, clip: ProgramRangeLike, mode: ProgramFollow): void {
     if (mode === PROGRAM_FOLLOW.NONE) return;
     const slot = programLinkage.slotFor(ctx.motion.program, clip.cameraId, clip.startTimeSeconds, clip.durationSeconds);
     const cleared = slot.clips.reduce((program, current) => program.withoutClip(current.id), ctx.motion.program);
@@ -338,7 +377,7 @@ function applyProgramFollow(ctx: DirectorContext, clip: CameraMotionClip, mode: 
 
 function invertProgramFollow(
     ctx: DirectorContext,
-    clip: CameraMotionClip,
+    clip: ProgramRangeLike,
     mode: ProgramFollow,
 ): readonly SerializedCommand[] {
     if (mode === PROGRAM_FOLLOW.NONE) return [];
@@ -744,6 +783,27 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
     }
 }
 
+/** author 与 quick-author 共用的 take 装配(Rule of Two):keys 编译 + 跟拍注入一处收口 */
+function takeCommandFor(
+    request: MotionPresetRequest,
+    shot: CameraShot,
+    subject: SubjectBounds | null,
+    takeId: string,
+): CreateMotionTakeCommand {
+    const keys = presetCompiler.compile(request, { shot, subject });
+    return new CreateMotionTakeCommand({
+        id: takeId,
+        cameraId: request.cameraId,
+        startTimeSeconds: request.startTimeSeconds,
+        durationSeconds: request.durationSeconds,
+        keys,
+        ...(request.easing ? { easing: request.easing } : {}),
+        focus: request.subjectId
+            ? { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId: request.subjectId, worldOffset: [0, 0, 0] }
+            : null,
+    });
+}
+
 /**
  * 语义层入口:导演语汇 → 标准关键帧序列 → 与 create-take 同一条落地路径。
  * UI 的预设按钮与 AI 工具调用共用它,产出可再编辑,不是黑盒。
@@ -761,8 +821,8 @@ export class AuthorMotionCommand extends DirectorCommand<MotionPresetRequest> {
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const isKnownMove = Object.values(MOTION_MOVE).includes(this.payload.move);
-        if (!isKnownMove) return [issue(ISSUE_CODE.MOVE, "move", "未知的运镜语汇")];
+        const paramIssues = presetParamIssues(this.payload);
+        if (paramIssues.length > 0) return paramIssues;
         const shot = ctx.camera.director.getShot(this.payload.cameraId);
         if (!shot) return [issue(ISSUE_CODE.CAMERA, "cameraId", "运镜引用的机位不存在")];
         const subjectId = this.payload.subjectId;
@@ -784,19 +844,151 @@ export class AuthorMotionCommand extends DirectorCommand<MotionPresetRequest> {
         const shot = ctx.camera.director.getShot(this.payload.cameraId);
         if (!shot) return null;
         const subject = this.payload.subjectId ? subjectBoundsFor(ctx, this.payload.subjectId) : null;
-        const keys = presetCompiler.compile(this.payload, { shot, subject });
-        return new CreateMotionTakeCommand({
-            id: `take-${this.payload.cameraId}-${this.payload.move}-${this.payload.startTimeSeconds}`,
-            cameraId: this.payload.cameraId,
-            startTimeSeconds: this.payload.startTimeSeconds,
-            durationSeconds: this.payload.durationSeconds,
-            keys,
-            ...(this.payload.easing ? { easing: this.payload.easing } : {}),
-            focus: this.payload.subjectId
-                ? { kind: FOCUS_TARGET_KIND.SCENE_OBJECT, objectId: this.payload.subjectId, worldOffset: [0, 0, 0] }
-                : null,
-        });
+        return takeCommandFor(
+            this.payload,
+            shot,
+            subject,
+            `take-${this.payload.cameraId}-${this.payload.move}-${this.payload.startTimeSeconds}`,
+        );
     }
+}
+
+interface QuickAuthorPayload {
+    /** 被摄对象(同时成为跟拍目标);机位由景别预设从它派生 */
+    readonly subjectId: string;
+    /** 起幅景别(ShotSizePresets 定距,方位角取当前相机朝向) */
+    readonly shotSize: ShotSize;
+    readonly move: MotionMove;
+    readonly durationSeconds: number;
+    /** 环绕类语汇的转角(度) */
+    readonly degrees?: number;
+    readonly direction?: OrbitDirection;
+    readonly easing?: CameraMotionEasing;
+}
+
+/** 快建机位 id:由被摄体与语汇派生——确定性(undo/redo 重放不漂移),同参数重复创建 = 复用同机位 */
+function quickShotIdFor(subjectId: string, move: MotionMove): string {
+    return `快建机位-${subjectId}-${move}`;
+}
+
+interface QuickAuthorPlan {
+    readonly shotId: string;
+    readonly shot: CameraShot;
+    readonly range: ProgramRangeLike;
+    readonly take: CreateMotionTakeCommand;
+    readonly extendDuration: SetTimelineDurationCommand | null;
+}
+
+/**
+ * 快速成片(聚合命令,地基优先红线 15):被摄对象 + 景别 + 语汇 → 建机位 + 运镜片段一次落地。
+ * 起始时刻 = Program 末尾(追加编排,不覆盖既有);超出时间轴时一并扩时长。
+ * 机位进大纲、可见可复用;撤销一步回滚全部副产物(片段/Program 跟随/机位/时长)。
+ */
+export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload> {
+    static readonly TYPE = "motion.quick-author";
+    readonly type = QuickAuthorMotionCommand.TYPE;
+
+    constructor(readonly payload: QuickAuthorPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const paramIssues = presetParamIssues(this.payload);
+        if (paramIssues.length > 0) return paramIssues;
+        if (!Object.values(SHOT_SIZE).includes(this.payload.shotSize)) {
+            return [issue(ISSUE_CODE.PAYLOAD, "shotSize", "未知的景别")];
+        }
+        if (!Number.isFinite(this.payload.durationSeconds) || this.payload.durationSeconds <= 0) {
+            return [issue(ISSUE_CODE.PAYLOAD, "durationSeconds", "时长须为正有限数")];
+        }
+        if (!ctx.scene.manager.getEntity(this.payload.subjectId)) {
+            return [issue(ISSUE_CODE.SUBJECT, "subjectId", "被摄对象不存在")];
+        }
+        const plan = this.plan(ctx);
+        if (!plan) return [issue(ISSUE_CODE.PAYLOAD, "keys", "预设编译失败")];
+        // 机位由本命令创建,跳过 clipIssues 的机位存在性检查;Program 冲突沿用 create-take 的结构化二选一
+        return programIssues(ctx, plan.range, PROGRAM_FOLLOW.FOLLOW);
+    }
+
+    execute(ctx: DirectorContext): void {
+        const plan = this.plan(ctx);
+        if (!plan) return;
+        ctx.camera.addShot(plan.shotId, plan.shot);
+        plan.extendDuration?.execute(ctx);
+        plan.take.execute(ctx);
+    }
+
+    /** pre-state 求逆(dispatcher 在 execute 前调用):全部 id 由 payload 决定,无需读取已创建数据 */
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const { shotId, range } = this.planIdentity(ctx);
+        const previousShot = ctx.camera.director.getShot(shotId);
+        const shotRestore: readonly SerializedCommand[] = previousShot
+            ? [{ type: "camera.set-shot", payload: { id: shotId, shot: previousShot.toJSON() } }]
+            : [{ type: "camera.remove-shot", payload: { id: shotId } }];
+        const end = range.startTimeSeconds + range.durationSeconds;
+        const durationRestore: readonly SerializedCommand[] =
+            end > ctx.timeline.document.duration
+                ? [{ type: SetTimelineDurationCommand.TYPE, payload: { duration: ctx.timeline.document.duration } }]
+                : [];
+        return [
+            { type: RemoveMotionClipCommand.TYPE, payload: { id: range.id } },
+            ...invertProgramFollow(ctx, range, PROGRAM_FOLLOW.FOLLOW),
+            ...shotRestore,
+            ...durationRestore,
+        ];
+    }
+
+    /** 计划的身份面(不编译 keys):invert 在 pre-state 调用,只依赖 payload 与 Program 末尾 */
+    private planIdentity(ctx: DirectorContext): { readonly shotId: string; readonly range: ProgramRangeLike } {
+        const shotId = quickShotIdFor(this.payload.subjectId, this.payload.move);
+        const startTimeSeconds = programEndSeconds(ctx);
+        return {
+            shotId,
+            range: {
+                id: `take-${shotId}-${this.payload.move}-${startTimeSeconds}`,
+                cameraId: shotId,
+                startTimeSeconds,
+                durationSeconds: this.payload.durationSeconds,
+            },
+        };
+    }
+
+    private plan(ctx: DirectorContext): QuickAuthorPlan | null {
+        const subject = subjectBoundsFor(ctx, this.payload.subjectId);
+        if (!subject) return null;
+        const eye = ctx.camera.lastDirectorPose;
+        const azimuth = eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS;
+        const shot = shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth);
+        const { shotId, range } = this.planIdentity(ctx);
+        const request: MotionPresetRequest = {
+            cameraId: shotId,
+            startTimeSeconds: range.startTimeSeconds,
+            durationSeconds: this.payload.durationSeconds,
+            move: this.payload.move,
+            subjectId: this.payload.subjectId,
+            ...(this.payload.easing ? { easing: this.payload.easing } : {}),
+            ...(this.payload.degrees !== undefined ? { degrees: this.payload.degrees } : {}),
+            ...(this.payload.direction !== undefined ? { direction: this.payload.direction } : {}),
+        };
+        const end = range.startTimeSeconds + range.durationSeconds;
+        return {
+            shotId,
+            shot,
+            range,
+            take: takeCommandFor(request, shot, subject, range.id),
+            extendDuration:
+                end > ctx.timeline.document.duration ? new SetTimelineDurationCommand({ duration: end }) : null,
+        };
+    }
+}
+
+/** Program 末尾时刻:快速创建在此追加编排;空 Program 从 0 开始 */
+function programEndSeconds(ctx: DirectorContext): number {
+    return ctx.motion.program.clips.reduce((end, clip) => Math.max(end, clip.endTimeSeconds), 0);
 }
 
 /** Updates the sole Program output track. A program segment may reference a static or moving camera. */
@@ -970,6 +1162,7 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
     const commands = [
         CreateMotionClipCommand,
         CreateMotionTakeCommand,
+        QuickAuthorMotionCommand,
         SetMotionClipRangeCommand,
         SetMotionKeyCommand,
         MoveMotionKeyCommand,

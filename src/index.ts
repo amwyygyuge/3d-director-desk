@@ -95,8 +95,21 @@ export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/Timelin
 export { SNAP_THRESHOLD_PX, SnapResolver } from "@/authoring/SnapResolver";
 export type { SnapCandidates, SnapRequest } from "@/authoring/SnapResolver";
 export { KeyframeAuthoringService, isCommandIssue } from "@/authoring/KeyframeAuthoringService";
-export { MOTION_MOVE, MOTION_MOVE_LABEL, MotionPresetCompiler } from "@/authoring/MotionPresetCompiler";
-export type { MotionMove, MotionPresetContext, MotionPresetRequest } from "@/authoring/MotionPresetCompiler";
+export {
+    DEFAULT_PRESET_DURATION_SECONDS,
+    isOrbitDirection,
+    MOTION_MOVE,
+    MOTION_MOVE_LABEL,
+    MotionPresetCompiler,
+    ORBIT_DIRECTION,
+    ORBIT_MAX_DEGREES,
+} from "@/authoring/MotionPresetCompiler";
+export type {
+    MotionMove,
+    MotionPresetContext,
+    MotionPresetRequest,
+    OrbitDirection,
+} from "@/authoring/MotionPresetCompiler";
 export { MotionAuthoringStore, VIEW_MODE } from "@/store/MotionAuthoringStore";
 export type { ViewMode } from "@/store/MotionAuthoringStore";
 export { CameraProgramClip, CameraProgramTrack } from "@/camera/CameraProgramTrack";
@@ -149,6 +162,7 @@ export {
     ExitMotionPreviewCommand,
     MoveMotionKeyCommand,
     PROGRAM_FOLLOW,
+    QuickAuthorMotionCommand,
     RemoveMotionClipCommand,
     RemoveMotionKeyCommand,
     RemoveProgramClipCommand,

@@ -11,6 +11,7 @@ import {
 import { CameraMotionSection } from "@/ui/inspector/MotionClipInspector";
 import { ActorImageSection, hasActorProfile } from "@/ui/actor/ActorImageSection";
 import { PoseComposerSection } from "@/ui/pose/PoseComposerSection";
+import { QuickMotionSection } from "@/ui/inspector/QuickMotionSection";
 import { TabSectionRegistry } from "@/ui/patterns/TabbedSections";
 import type { SceneObjectKind } from "@/core/SceneObject";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -39,6 +40,7 @@ export const inspectorTabs = new TabSectionRegistry<InspectorSelectionKind, Insp
 inspectorTabs.register("camera-shot", { id: "shot", label: "机位", content: ShotCameraSection });
 inspectorTabs.register("camera-shot", { id: "motion", label: "运镜", content: CameraMotionTabContent });
 inspectorTabs.register("model", { id: "transform", label: "变换", content: EntityTransformSection });
+inspectorTabs.register("model", { id: "quick-motion", label: "运镜", content: QuickMotionSection });
 inspectorTabs.register("model", {
     id: "image",
     label: "形象",

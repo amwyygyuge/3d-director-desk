@@ -116,6 +116,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
     const helperRef = useRef<Box3Helper | null>(null);
     const helperSnapshotRef = useRef<HelperSnapshot | null>(null);
 
+    // 依赖实体实例而非 id:文档导入用同 id 的新实体整体替换,只有回调标识变化才能让 React 重新绑定运行时
     const bindRuntime = useCallback(
         (object3d: Group | null) => {
             groupRef.current = object3d;
@@ -127,7 +128,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
                 scene.manager.unbindRuntime(entity.id);
             }
         },
-        [scene, entity.id, playback],
+        [scene, entity, playback],
     );
 
     const selected = selection.isSelected(entity.id);

@@ -387,12 +387,20 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
         skeletons.register(entity.id, shell);
         // 人偶画像落到 Three(材质克隆 + 骨骼缩放)与骨骼索引同一时机,卸载时一并摘除
         actorRuntime.attach(entity.id, shell);
-        playback.sampleObject(entity.id);
         return () => {
             actorRuntime.detach(entity.id);
             skeletons.unregister(entity.id);
         };
-    }, [actorRuntime, skeletons, playback, entity.id, shell]);
+    }, [actorRuntime, skeletons, entity.id, shell]);
+
+    // 文档导入用同 id 的新实体整体替换并清空骨骼索引:此处补登记并把新画像重新落到运行时。
+    // 依赖实体实例——同一次挂载内它不变,导入后才换新,不会造成重复工作。
+    useEffect(() => {
+        if (!shell) return;
+        if (!skeletons.discover(entity.id).ready) skeletons.register(entity.id, shell);
+        actorRuntime.sync(entity.id);
+        playback.sampleObject(entity.id);
+    }, [actorRuntime, skeletons, playback, entity, shell]);
     if (shell) return <primitive object={shell} />;
     return (
         <mesh>

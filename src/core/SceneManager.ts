@@ -49,9 +49,16 @@ export class SceneManager {
     list(): readonly SceneObject[] {
         return values(this.entities);
     }
-    /** 文档替换的提交边界：先摘除旧 Three 运行时，再整体替换已预校验的纯数据实体。 */
+    /**
+     * 文档替换的提交边界:退场实体的 Three 运行时立即摘除,留任实体只解绑不摘除——
+     * 它们的渲染体由 React 持有,新实体实例落到同一 id 上时渲染层会重新绑定;
+     * 若在此处一并 removeFromParent,留任模型会被摘出场景树且再也无人挂回。
+     */
     replaceEntities(entities: readonly SceneObject[]): void {
-        for (const runtime of this.runtimes.values()) runtime.removeFromParent();
+        const survivingIds = new Set(entities.map((entity) => entity.id));
+        for (const [id, runtime] of this.runtimes) {
+            if (!survivingIds.has(id)) runtime.removeFromParent();
+        }
         this.runtimes.clear();
         this.entities.replace(entities.map((entity) => [entity.id, entity]));
     }
