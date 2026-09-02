@@ -464,15 +464,25 @@ export class ClearPoseCommand extends DirectorCommand<ClearPosePayload> {
         return editing ? [editing.message] : target ? [target.message] : [];
     }
 
+    /** 清除姿势后必须重新贴地:坐/卧姿的贴地位移是命令写进 transform 的,不撤掉人偶会留在半空或地下。 */
     execute(ctx: DirectorContext): void {
         ctx.scene.setObjectPose(this.payload.objectId, null);
+        ctx.playback.sampleCurrent();
+        const grounded = ctx.poseGrounding.alignObjectToGround(this.payload.objectId);
+        if (grounded) ctx.scene.updateTransform(this.payload.objectId, grounded);
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         return entity
-            ? [{ type: ReplacePoseCommand.TYPE, payload: { objectId: entity.id, pose: entity.pose?.toJSON() ?? null } }]
+            ? [
+                  {
+                      type: ReplacePoseCommand.TYPE,
+                      payload: { objectId: entity.id, pose: entity.pose?.toJSON() ?? null },
+                  },
+                  { type: "object.move", payload: { id: entity.id, transform: entity.transform } },
+              ]
             : null;
     }
 }

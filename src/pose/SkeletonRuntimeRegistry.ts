@@ -148,7 +148,20 @@ export class SkeletonRuntimeRegistry {
         }
         return helpers;
     }
-    /** 工程替换时释放旧模型骨骼索引；新模型就绪后会重新注册。 */
+    /**
+     * 工程替换时只摘除退场模型的骨骼索引。
+     *
+     * 留任模型的 Three 骨架并未更换,索引里的 baseline 旋转是它真正的 bind 姿态;若在此处整表清空,
+     * 重新登记会把「当时正摆着的姿势」当成 rest,此后清除姿态再也回不到直立(已实测)。
+     */
+    retainOnly(objectIds: Iterable<string>): void {
+        const surviving = new Set(objectIds);
+        for (const objectId of [...this.runtimes.keys()]) {
+            if (!surviving.has(objectId)) this.unregister(objectId);
+        }
+    }
+
+    /** 工程替换时释放旧模型骨骼索引;新模型就绪后会重新注册。 */
     clear(): void {
         this.runtimes.clear();
         this.indexedRuntimes.length = 0;

@@ -35,26 +35,37 @@ class UnitBoxNormalization implements ShellNormalization {
 /**
  * 人偶按真实身高落尺:场景单位即米,「相距两米」「比他高半个头」这类空间语义才有可信读数。
  *
- * 高度不取包围盒——内置人形是 armature 缩放型 rig,`SkinnedMesh.computeBoundingBox` 的结果随壳层缩放
- * 线性膨胀,再乘 `matrixWorld` 就是二次量,重入一次身高就漂一个数量级(已实测)。骨骼世界坐标是线性的,
- * 因此按骨骼跨度定高,并以乘法修正当前缩放,任意次调用都收敛到同一身高。
+ * 高度不取包围盒——内置人形是 armature 缩放型 rig,`SkinnedMesh.computeBoundingBox` 随壳层缩放线性膨胀,
+ * 再乘 `matrixWorld` 就是二次量,重入一次身高就漂一个数量级(已实测)。
+ *
+ * `heightPerScale`(每单位壳缩放对应的真实身高)由调用方在 **rest 姿态**量一次后传入:骨骼跨度在坐姿、
+ * 卧姿下远小于身高,若每次落尺都现测,换个姿势身高就会被放大(实测坐姿下放大 2.35 倍)。
  *
  * 不做居中与贴地:Mixamo rig 的原点即脚底中心,姿势引起的位移由 PoseGroundingService 单独负责。
  */
 class ActorHeightNormalization implements ShellNormalization {
-    constructor(private readonly heightMeters: number) {}
+    constructor(
+        private readonly heightMeters: number,
+        private readonly heightPerScale: number,
+    ) {}
 
     normalize(shell: Group): void {
-        const span = boneSpanY(shell);
-        if (span <= 0) return;
-        shell.scale.multiplyScalar(this.heightMeters / span);
+        if (this.heightPerScale <= 0) return;
+        shell.scale.setScalar(this.heightMeters / this.heightPerScale);
         shell.position.set(0, 0, 0);
     }
 }
 
+/** rest 姿态下「身高 ÷ 壳缩放」:落尺的唯一标定量,只在挂载时量一次。 */
+export function measureHeightPerScale(shell: Group): number {
+    const scale = shell.scale.y;
+    return scale > 0 ? boneSpanY(shell) / scale : 0;
+}
+
 const UNIT_BOX_NORMALIZATION = new UnitBoxNormalization();
 
-export function normalizationFor(entity: SceneObject): ShellNormalization {
+/** 人偶落尺需要 rest 姿态标定量;缺标定(骨架未就绪)时退化为不改变壳层。 */
+export function normalizationFor(entity: SceneObject, heightPerScale = 0): ShellNormalization {
     const actor = entity.actor;
-    return actor ? new ActorHeightNormalization(actor.build.heightMeters) : UNIT_BOX_NORMALIZATION;
+    return actor ? new ActorHeightNormalization(actor.build.heightMeters, heightPerScale) : UNIT_BOX_NORMALIZATION;
 }

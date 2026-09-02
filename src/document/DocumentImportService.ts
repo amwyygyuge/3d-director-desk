@@ -268,7 +268,8 @@ export class DocumentImportService {
             ctx.binder.clear();
             ctx.animations.clear();
             ctx.selection.clear();
-            ctx.skeletons.clear();
+            // 留任模型的骨架未更换,索引与其 bind 基线必须保留;整表清空会把当前姿势烙成 rest
+            ctx.skeletons.retainOnly(plan.entities.map((entity) => entity.id));
             ctx.ui.setPosePicking(null, null);
             ctx.scene.replaceObjects(plan.entities);
             ctx.camera.replaceShots(plan.shots);
