@@ -13,7 +13,9 @@ const EXTERNALS = [
     /^mobx($|-)/,
 ];
 
-export default defineConfig({
+const PLAYGROUND_BUILD_MODE = "playground";
+
+export default defineConfig(({ mode }) => ({
     plugins: [react(), tailwindcss()],
     server: {
         port: 3000,
@@ -24,17 +26,20 @@ export default defineConfig({
             "@": fileURLToPath(new URL("./src", import.meta.url)),
         },
     },
-    build: {
-        lib: {
-            entry: "src/index.ts",
-            formats: ["es"],
-            fileName: () => "index.js",
-            cssFileName: "style",
-        },
-        rollupOptions: {
-            external: EXTERNALS,
-        },
-        sourcemap: true,
-        minify: false,
-    },
-});
+    build:
+        mode === PLAYGROUND_BUILD_MODE
+            ? undefined
+            : {
+                  lib: {
+                      entry: "src/index.ts",
+                      formats: ["es"],
+                      fileName: () => "index.js",
+                      cssFileName: "style",
+                  },
+                  rollupOptions: {
+                      external: EXTERNALS,
+                  },
+                  sourcemap: true,
+                  minify: false,
+              },
+}));
