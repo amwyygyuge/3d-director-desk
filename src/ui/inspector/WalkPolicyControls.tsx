@@ -18,7 +18,6 @@ import { INSPECTOR_FIELD_SX } from "@/ui/inspector/TransformFields";
 
 const STRIDE_STEP = 0.1;
 const STRIDE_MIN = 0.1;
-const STRIDE_INPUT_WIDTH_PX = 96;
 const ORIENTATION_LABEL: Record<OrientationMode, string> = {
     [ORIENTATION_MODE.PATH]: "沿路径",
     [ORIENTATION_MODE.KEYED]: "关键帧",
@@ -56,7 +55,7 @@ export const WalkPolicySection = observer(function WalkPolicySection({ primaryId
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">走位 / LOCOMOTION</Typography>
+            <Typography variant="overline">走位</Typography>
             <ToggleButtonGroup
                 exclusive
                 fullWidth
@@ -100,13 +99,13 @@ export const WalkPolicySection = observer(function WalkPolicySection({ primaryId
             />
             {policies.isLocomotionSynced && (
                 <TextField
+                    fullWidth
                     helperText="一个动作循环推进的距离"
-                    label="步幅 (m)"
+                    label="步幅（米）"
                     slotProps={{ htmlInput: { step: STRIDE_STEP, min: STRIDE_MIN } }}
                     onBlur={(event) => commitStride(event.target.value)}
                     onChange={(event) => setStrideDraft(event.target.value)}
                     size="small"
-                    sx={{ width: STRIDE_INPUT_WIDTH_PX }}
                     type="number"
                     value={strideDraft ?? String(policies.strideMeters)}
                 />

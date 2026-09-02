@@ -6,7 +6,8 @@ import type { ComponentType, ReactNode } from "react";
 
 const TAB_BAR_MIN_HEIGHT_PX = 36;
 const CONTENT_PADDING = 1.5;
-const CONTENT_GAP = 1;
+/** 分区卡片之间的留白:与分区内边距同档,卡片不再贴身堆叠 */
+const CONTENT_GAP = 1.5;
 
 /**
  * 上下文面板(右栏检查器等)的通用分 tab 模式。

@@ -32,14 +32,15 @@ import { WalkPolicySection } from "@/ui/inspector/WalkPolicyControls";
 const AXIS_X = 0;
 const AXIS_Y = 1;
 const AXIS_Z = 2;
-const FIELD_GROUP_GAP = 0.75;
+const FIELD_GROUP_GAP = 1;
 const FIELD_COLUMN_GAP = 0.5;
 
 const PRESET_GRID_TEMPLATE_COLUMNS = "repeat(2, minmax(0, 1fr))";
 const PRESET_BUTTON_MIN_HEIGHT_PX = 40;
 const FIELD_LABEL_WIDTH_PX = 32;
 const NUMBER_COMPANION_WIDTH_PX = 96;
-const CONTROL_GAP = 1;
+/** 与 INSPECTOR_FIELD_SX 的区内节奏同源:浮起标签上溢约 9px,小于 12px 会与上一控件相切 */
+const CONTROL_GAP = 1.5;
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;
 type ShotVectorKey = "position" | "target";
@@ -144,7 +145,7 @@ const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFo
             }}
         >
             <Typography variant="overline" color="text.secondary">
-                FOV
+                视角
             </Typography>
             <Slider
                 size="small"
@@ -152,7 +153,7 @@ const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFo
                 max={FOV_MAX}
                 step={SCRUB_STEP.angleDeg}
                 value={shownFov}
-                aria-label="FOV"
+                aria-label="视角"
                 onChange={(_, value) => {
                     if (Array.isArray(value)) return;
                     setDraftFov(value);
@@ -165,13 +166,13 @@ const ShotFovField = observer(function ShotFovField({ shotId, onCommit }: ShotFo
             />
             <ScrubNumberField
                 label="度"
-                ariaLabel="FOV"
+                ariaLabel="视角"
                 kind="angleDeg"
                 min={FOV_MIN}
                 max={FOV_MAX}
                 value={shownFov}
                 onCommit={onCommit}
-                onInvalid={invalidInputNotice(stores, "FOV", { min: FOV_MIN, max: FOV_MAX })}
+                onInvalid={invalidInputNotice(stores, "视角", { min: FOV_MIN, max: FOV_MAX })}
             />
         </Box>
     );
@@ -225,11 +226,11 @@ const ShotFields = observer(function ShotFields({ shotId, report }: ShotFieldsPr
     return (
         <Stack spacing={FIELD_GROUP_GAP}>
             <Box sx={INSPECTOR_FIELD_SX}>
-                <Typography variant="overline">变换 / TRANSFORM</Typography>
+                <Typography variant="overline">变换</Typography>
                 <ShotVectorFields shotId={shotId} onCommit={commitVectorAxis} />
             </Box>
             <Box sx={INSPECTOR_FIELD_SX}>
-                <Typography variant="overline">镜头 / LENS · FOV</Typography>
+                <Typography variant="overline">镜头</Typography>
                 <ShotFovField shotId={shotId} onCommit={commitFov} />
             </Box>
         </Stack>
@@ -408,7 +409,7 @@ const ActionPresetSection = observer(function ActionPresetSection({ objectId, re
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">动作 / MOTION ({actionPresets.length})</Typography>
+            <Typography variant="overline">动作（{actionPresets.length}）</Typography>
             {renderPresetGrid({ presets: actionPresets, onApply: mountAction })}
         </Box>
     );
@@ -427,7 +428,7 @@ const PlaybackControls = observer(function PlaybackControls({ objectId, report }
         <Box sx={INSPECTOR_FIELD_SX}>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
                 <Typography variant="overline" sx={{ flex: 1 }}>
-                    当前动作 / CURRENT MOTION
+                    当前动作
                 </Typography>
                 <IconButton
                     size="small"
@@ -480,8 +481,8 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">灯光 / LIGHT</Typography>
-            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+            <Typography variant="overline">灯光</Typography>
+            <Stack spacing={CONTROL_GAP}>
                 <TextField
                     select
                     size="small"
@@ -531,7 +532,7 @@ const TimelineKeyControls = observer(function TimelineKeyControls({ objectId, re
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">关键帧 / KEYFRAME</Typography>
+            <Typography variant="overline">关键帧</Typography>
             <Button size="small" variant="outlined" fullWidth onClick={addKey}>
                 在当前时间打关键帧 ({formatShortcutHint(SHORTCUT_ID.TIMELINE_ADD_KEY)})
             </Button>
@@ -547,7 +548,7 @@ export const EntityTransformSection = observer(function EntityTransformSection({
     return (
         <>
             <Box sx={INSPECTOR_FIELD_SX}>
-                <Typography variant="overline">变换 / TRANSFORM</Typography>
+                <Typography variant="overline">变换</Typography>
                 <TransformFields objectId={primaryId} />
             </Box>
             <TimelineKeyControls objectId={primaryId} report={report} />

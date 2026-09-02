@@ -41,7 +41,7 @@ const MOTION_BAR_COLOR = "primary.main";
 const TRACK_DATA_ATTRIBUTE = "[data-timeline-track]";
 const MOTION_DRAG_CURSOR = "ew-resize";
 const CLIP_TRANSFORM_ORIGIN = "left center";
-const LINK_LABEL = "解除 Program 跟随";
+const LINK_LABEL = "解除成片跟随";
 const LINK_ICON_SIZE = "small" as const;
 
 type TrackAccent = typeof PROGRAM_TRACK_ACCENT | typeof KEYFRAME_TRACK_ACCENT | typeof MOTION_TRACK_ACCENT;

@@ -214,7 +214,7 @@ export const TimelinePanel = observer(function TimelinePanel() {
                     borderColor: TRACK_BORDER_COLOR,
                 }}
             >
-                <Typography variant="overline">TIMELINE</Typography>
+                <Typography variant="overline">时间轴</Typography>
                 <ProgramCutInButton />
             </Box>
             <Box
@@ -260,7 +260,7 @@ export const TimelinePanel = observer(function TimelinePanel() {
                                         fontFamily: MONO_FONT_STACK,
                                     }}
                                 >
-                                    {timeSeconds.toFixed(rulerDecimalPlaces(rulerTickStep(viewport)))}s
+                                    {timeSeconds.toFixed(rulerDecimalPlaces(rulerTickStep(viewport)))} 秒
                                 </Typography>
                             ))}
                             <RulerPlayhead />

@@ -358,8 +358,8 @@ const KeyPoseFields = observer(function KeyPoseFields({ clipId, keyId }: { clipI
             ))}
             <ScrubNumberField
                 key={key.id}
-                label="FOV"
-                ariaLabel="视角 (FOV)"
+                label="视角"
+                ariaLabel="视角"
                 kind="angleDeg"
                 value={key.fov}
                 onCommit={(fov) => commitPose(key.withPose({ position: key.position, target: key.target, fov }))}

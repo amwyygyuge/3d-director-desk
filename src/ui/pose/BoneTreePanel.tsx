@@ -31,7 +31,6 @@ const GROUP_KEY_PREFIX = "fingers:";
 /** 骨骼树渲染视图模型:标签在构建期解析一次,渲染期零分词 */
 interface BoneNodeVM {
     readonly key: BoneKey;
-    readonly name: string;
     readonly label: BoneLabel;
     readonly plainChildren: readonly BoneNodeVM[];
     readonly fingerChildren: readonly BoneNodeVM[];
@@ -43,7 +42,6 @@ function buildBoneNodeVM(node: BoneTreeNodeDto): BoneNodeVM {
     // 分组只发生在链根(手腕→指根):链内各节是顺序层级,照常展开,不再各自成组
     return {
         key: node.key,
-        name: node.name,
         label,
         plainChildren: children.filter((child) => label.isFinger || !child.label.isFinger),
         fingerChildren: label.isFinger ? [] : children.filter((child) => child.label.isFinger),
@@ -52,10 +50,7 @@ function buildBoneNodeVM(node: BoneTreeNodeDto): BoneNodeVM {
 
 function subtreeMatches(vm: BoneNodeVM, normalizedQuery: string): boolean {
     if (normalizedQuery === "") return true;
-    const selfHit =
-        vm.label.zh.includes(normalizedQuery) ||
-        vm.label.latin.toLowerCase().includes(normalizedQuery) ||
-        vm.name.toLowerCase().includes(normalizedQuery);
+    const selfHit = vm.label.zh.includes(normalizedQuery);
     return (
         selfHit ||
         vm.plainChildren.some((child) => subtreeMatches(child, normalizedQuery)) ||
@@ -117,7 +112,6 @@ const BoneNodeRow = observer(function BoneNodeRow({
                 selected={isSelected}
                 disabled={!ctx.editing}
                 onClick={() => ui.setPosePicking(ctx.objectId, vm.key)}
-                title={`${vm.label.latin} · ${vm.name} (${vm.key})`}
                 sx={rowIndentSx(depth)}
             >
                 <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
@@ -192,7 +186,7 @@ export const BoneTreePanel = observer(function BoneTreePanel({
             <TextField
                 size="small"
                 fullWidth
-                placeholder="搜索骨骼(中文 / 英文 / 原始名)"
+                placeholder="搜索骨骼"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 slotProps={{ htmlInput: { "aria-label": "搜索骨骼" } }}
@@ -270,8 +264,8 @@ export const ModelPoseSection = observer(function ModelPoseSection({ primaryId, 
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">姿态精修 / POSE</Typography>
-            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+            <Typography variant="overline">姿态精修</Typography>
+            <Stack spacing={CONTROL_GAP}>
                 {stores.ui.posePickingObjectId === objectId && (
                     <Button size="small" disabled={!editing} onClick={() => stores.ui.setPosePicking(null, null)}>
                         退出骨骼编辑

@@ -37,11 +37,11 @@ interface InspectorSelectionLookup {
 }
 
 const INSPECTOR_SELECTION_LABEL: Record<InspectorSelectionKind, string> = {
-    model: "MODEL SELECTED",
-    light: "LIGHT SELECTED",
-    camera: "CAMERA SELECTED",
-    "camera-shot": "SHOT SELECTED",
-    "motion-clip": "MOTION SELECTED",
+    model: "已选模型",
+    light: "已选灯光",
+    camera: "已选相机",
+    "camera-shot": "已选机位",
+    "motion-clip": "已选运镜片段",
 };
 
 function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup): InspectorSelection | null {

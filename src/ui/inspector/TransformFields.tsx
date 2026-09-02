@@ -14,16 +14,21 @@ const AXIS_Y = 1;
 const AXIS_Z = 2;
 const FIELD_GROUP_GAP = 0.75;
 const INSPECTOR_FIELD_RADIUS = 1;
-const INSPECTOR_FIELD_PADDING = 1;
+const INSPECTOR_FIELD_PADDING = 1.5;
+/** 分区内统一纵向节奏(标题↔内容、内容↔内容);浮起标签上溢约 9px,12px 间距才不相切 */
+const INSPECTOR_FIELD_GAP = 1.5;
 const FIELD_COLUMN_GAP = 0.5;
 const FIELD_GRID_TEMPLATE = "32px repeat(3, 1fr)";
 
-/** 检查器所有字段组共享深色内嵌表面，避免各分区视觉漂移。 */
+/** 检查器所有字段组共享深色内嵌表面与纵向节奏;消费方不再给首内容手搓 mt。 */
 export const INSPECTOR_FIELD_SX = {
     bgcolor: "rgba(0,0,0,0.22)",
     border: "1px solid rgba(255,255,255,0.06)",
     borderRadius: INSPECTOR_FIELD_RADIUS,
     p: INSPECTOR_FIELD_PADDING,
+    display: "flex",
+    flexDirection: "column",
+    gap: INSPECTOR_FIELD_GAP,
 } as const;
 
 type AxisIndex = typeof AXIS_X | typeof AXIS_Y | typeof AXIS_Z;

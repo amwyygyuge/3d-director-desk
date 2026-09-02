@@ -105,7 +105,7 @@ const SavePosePresetControls = observer(function SavePosePresetControls({ object
     };
 
     return (
-        <Stack sx={{ gap: CHIP_GAP, mt: CONTROL_GAP }}>
+        <Stack sx={{ gap: CHIP_GAP }}>
             <TextField
                 size="small"
                 label="存为我的姿势"
@@ -155,8 +155,8 @@ const PoseCombinationPanel = observer(function PoseCombinationPanel({ objectId, 
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">姿势 / POSE</Typography>
-            <Box sx={{ display: "grid", gap: CONTROL_GAP, gridTemplateColumns: COLUMN_GRID, mt: CHIP_GAP }}>
+            <Typography variant="overline">姿势</Typography>
+            <Box sx={{ display: "grid", gap: CONTROL_GAP, gridTemplateColumns: COLUMN_GRID }}>
                 {POSE_COLUMNS.map((column) => (
                     <PosePresetColumn
                         key={column.part}
@@ -172,7 +172,6 @@ const PoseCombinationPanel = observer(function PoseCombinationPanel({ objectId, 
             <Button
                 size="small"
                 color="warning"
-                sx={{ mt: CHIP_GAP }}
                 disabled={!isEditing || !hasPose}
                 onClick={() =>
                     report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))

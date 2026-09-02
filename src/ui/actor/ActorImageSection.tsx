@@ -29,8 +29,8 @@ const SWATCH_HEIGHT_PX = 26;
 const SWATCH_RADIUS = 1;
 const SELECTED_SWATCH_BORDER = "2px solid #fff";
 const IDLE_SWATCH_BORDER = "2px solid rgba(255,255,255,0.14)";
-const CONTROL_GAP = 1;
-const CHIP_GAP = 0.5;
+const CONTROL_GAP = 1.5;
+const CHIP_GAP = 1;
 const HEIGHT_STEP_METERS = 0.01;
 const SCALE_STEP = 0.01;
 const HEIGHT_DECIMALS = 2;
@@ -214,7 +214,7 @@ const ActorBuildSliders = observer(function ActorBuildSliders({ objectId, report
         );
 
     return (
-        <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+        <Stack spacing={CONTROL_GAP}>
             <BuildSlider
                 key={`height-${build.heightMeters}`}
                 label="身高"
@@ -262,8 +262,8 @@ const ActorBuildControls = observer(function ActorBuildControls({ objectId, repo
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">体型 / BUILD</Typography>
-            <Stack direction="row" sx={{ flexWrap: "wrap", gap: CHIP_GAP, mt: CHIP_GAP }}>
+            <Typography variant="overline">体型</Typography>
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: CHIP_GAP }}>
                 {BUILD_PRESETS.map((preset) => (
                     <Chip
                         key={preset.id}
@@ -283,7 +283,7 @@ const ActorBuildControls = observer(function ActorBuildControls({ objectId, repo
                 ))}
                 {activePresetId === null && <Chip size="small" label="自定义" variant="filled" />}
             </Stack>
-            <Button size="small" sx={{ mt: CHIP_GAP }} onClick={() => setTuning((current) => !current)}>
+            <Button size="small" onClick={() => setTuning((current) => !current)}>
                 {isTuning ? "收起微调" : "微调"}
             </Button>
             {isTuning && <ActorBuildSliders objectId={objectId} report={report} />}
@@ -294,8 +294,8 @@ const ActorBuildControls = observer(function ActorBuildControls({ objectId, repo
 const ActorAppearanceControls = observer(function ActorAppearanceControls({ objectId, report }: ActorControlsProps) {
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">外观 / APPEARANCE</Typography>
-            <Stack spacing={CONTROL_GAP} sx={{ mt: CONTROL_GAP }}>
+            <Typography variant="overline">外观</Typography>
+            <Stack spacing={CONTROL_GAP}>
                 <ActorPaletteGrid objectId={objectId} report={report} />
                 <ActorColorPicker objectId={objectId} report={report} />
                 <ActorSurfaceToggle objectId={objectId} report={report} />
