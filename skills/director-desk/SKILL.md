@@ -231,11 +231,16 @@ dispatch({ type: "view.frame", payload: {} })        // 导演视角取景到场
 ### 文档导出/接管
 
 ```js
-// 导出整桌为一份 JSON(实体/机位/运镜/时间轴/动作引用)——存档或交给另一个控制台接管
+// 导出整桌为一份 JSON(实体/机位/运镜/时间轴/动作引用/灯光模式)——存档或交给另一个控制台接管
 const doc = query({ type: "desk.export-document", payload: {} }).value;
 // 导入(替换式,清空重建;动作 clip 按 URL 异步重取并恢复挂载;可撤销)
 dispatch({ type: "desk.import-document", payload: { document: doc } })
 ````
+
+- 文档版本门(v9):版本不符直接结构化拒绝(`document-version-unsupported`),旧档不迁移——重导前先重新导出。
+- v9 起 `actions[].mountedOn` 是实体 id 数组:同一动作挂 N 个实体,导入后全部恢复挂载且共享同一动作实例。
+- v9 起 `lighting.mode` 随文档往返:custom 模式导入后不回退 studio;灯本体是实体,参数在 `entities[].light`。
+- 动作恢复是异步流水线(重取资产 → 注册 → 等运行时就绪 → 挂载):import 返回 ok ≠ 已挂载,断言挂载要轮询 `scene.describe` 的 `mountedActionId`。
 
 ## 工作流配方(标准成片路径)
 
@@ -261,6 +266,25 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 | 定镜                 | `motion.author { move: "hold" }`                                                   |
 | 自定义节奏/构图      | `motion.move-key` 调关键帧时间分布定段间快慢;`motion.set-clip-easing` 只管整段起落 |
 | 尺度感(如 50 米机甲) | 用 scale 断言 + 低机位仰拍(target.y 高于 position.y)                               |
+
+## 实测陷阱(环境/契约/验收)
+
+### 页面环境
+
+- **非安全上下文(http 非 localhost)**:旧部署里 `crypto.randomUUID` 不存在,`desk.animations.register`、文档导入的动作恢复、检查器动作置备全部抛 `crypto.randomUUID is not a function`(导入侧表现为 toast「动作 "X" 恢复失败」)。先用 `crypto.getRandomValues` 注入 UUIDv4 polyfill 再操作。源码已修(统一 `createId` 兜底,getRandomValues 优先),重新部署后不再需要 polyfill。
+- **浏览器驱动**:页面 JS 必须在 `tab.evaluate` 里执行(工具运行域没有 `window`);等句柄用 `wait(() => tab.evaluate(...))` 轮询,`tab.waitForFunction` 不存在。Chrome 已有实例在跑时 spawn 会 CDP 超时,加 `--user-data-dir` 隔离配置重试。
+
+### 契约偏差(以实测为准)
+
+- `assets.place`:`id` 实际必填(能力元数据标的是可选),缺 id 报 `command-construction-failed`;同一 assetId 摆多个实例时各给各的 id。
+- `scene.describe` 的 `value` 是实体数组本体,不是 `{ entities: [...] }`——轮询 loadState 别取错层。
+- `actor.build.set` / `actor.build.apply-preset`:播放期拒改,issue `transport-playing` 自带 `pause-transport` 选项——先暂停→改→恢复播放。`actor.appearance.set`(上色)不受播放限制。
+- `light.adjust`:intensity 围栏 0~100,超了报 `lighting.invalid-payload` 并指名 `light.intensity`。物理衰减下嫌暗优先降 `decay`、拉近灯距,别硬堆强度。
+
+### 运镜与验收
+
+- `motion.author { move: "orbit" }` 只生成约 90° 弧段(4 枚 key),不是整圈。要无缝 360° 环绕:从首 key 反解圆心(target)、半径、起始角,`motion.replace-clip` 重写 5 枚 key(0/0.25/0.5/0.75/1,首尾同位),easing 必须 `linear`——`smooth` 会在循环接缝处减速,每圈卡顿一次。
+- `camera.get-pose` 的 `live ≈ motionSampled` 断言只在镜头视角(`view.set-mode { mode: "lens" }`)下成立;导演视角的 live 是自由相机,poseDist 大是预期、不是运镜没生效。
 
 ## 纪律
 
