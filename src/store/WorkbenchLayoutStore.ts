@@ -2,6 +2,8 @@ import { makeAutoObservable } from "mobx";
 
 import { WORKSPACE_SECTION } from "@/workspace/workspaceSections";
 import type { WorkspaceSection } from "@/workspace/workspaceSections";
+// 壳层几何 token 的单一真相源在 theme:store 复用它,避免高度上下限在两处各写一份
+import { CHROME, TIMELINE_HEIGHT } from "@/ui/shell/theme";
 
 /**
  * 渲染画质档:唯一影响 3D 输出质量的开关(截图与录制成片同样受它影响)。
@@ -59,6 +61,8 @@ export class WorkbenchLayoutStore {
      * 用「指针在谁身上」裁决归属是 DCC 的通行解法:同一时刻只有一方接管,不靠优先级碰运气。
      */
     isTimelinePointerOver = false;
+    /** 作者拖拽出的展开高度(px):纯壳层几何,不入文档与撤销栈 */
+    timelineExpandedHeightPx: number = TIMELINE_HEIGHT.DEFAULT_PX;
     /** 渲染画质档:高性能 */
     renderQuality: RenderQuality = RENDER_QUALITY.PERFORMANCE;
     /** 帧率读数按需展示:默认收起,不入文档与撤销栈 */
@@ -134,6 +138,17 @@ export class WorkbenchLayoutStore {
     /** 由时间线控制台的指针进出事件写入;纯瞬时视图态,不入文档与撤销栈。 */
     setTimelinePointerOver(isOver: boolean): void {
         this.isTimelinePointerOver = isOver;
+    }
+
+    /** 壳层实际占用的时间线高度:收起/review 恒为迷你条,展开才用作者拖出的高度。 */
+    get timelineChromeHeightPx(): number {
+        return this.timelineExpanded ? this.timelineExpandedHeightPx : CHROME.timelineMiniPx;
+    }
+
+    /** 拖拽落点的唯一写口;越界静默钳位——拖拽手势本身已被围栏限制,这里兜宿主/AI 路径。 */
+    setTimelineExpandedHeightPx(value: number): void {
+        if (!Number.isFinite(value)) return;
+        this.timelineExpandedHeightPx = Math.min(Math.max(value, TIMELINE_HEIGHT.MIN_PX), TIMELINE_HEIGHT.MAX_PX);
     }
 
     /** 仅供视图命令调用:壳层模式不允许组件直写。 */

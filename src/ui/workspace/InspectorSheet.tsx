@@ -18,7 +18,7 @@ import { inspectorTabs } from "@/ui/inspector/inspectorTabs";
 import { TabbedSections } from "@/ui/patterns/TabbedSections";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { CHROME, reviewInspectorBottomOffsetPx, sidePanelBottomOffsetPx } from "@/ui/shell/theme";
+import { CHROME, reviewInspectorBottomOffsetPx, sidePanelBottomOffset } from "@/ui/shell/theme";
 
 const HEADER_BACKGROUND = "rgba(0,0,0,0.22)";
 const HEADER_PADDING_X = 1.5;
@@ -183,7 +183,7 @@ export const InspectorSheet = observer(function InspectorSheet() {
                 right: CHROME.edgeGapPx,
                 top: CHROME.sidePanelTopPx,
                 // 下缘骑在时间线控制台上方,随其开合联动;几何与左侧导航共用同一真相源
-                bottom: sidePanelBottomOffsetPx(stores.layout.timelineExpanded),
+                bottom: sidePanelBottomOffset(),
                 width: CHROME.sidePanelWidthPx,
                 overflow: "hidden",
             }}

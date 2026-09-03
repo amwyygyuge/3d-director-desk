@@ -157,6 +157,7 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.TRANSPORT_TOGGLE, chords: ["p"], scope: "global", label: "播放/暂停时间轴" },
     { id: SHORTCUT_ID.PRESENTATION_ENTER, chords: ["shift+p"], scope: "global", label: "全屏预览成片" },
     { id: SHORTCUT_ID.SHELL_TOGGLE, chords: ["tab"], scope: "global", label: "隐藏/恢复悬浮壳层" },
+    { id: SHORTCUT_ID.EDIT_UNDO, chords: ["mod+z"], scope: "global", label: "撤销" },
     { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
     { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
     { id: SHORTCUT_ID.LENS_TOGGLE, chords: ["`"], scope: "global", label: "导演视角 ↔ 镜头视角" },
@@ -338,8 +339,23 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.TIMELINE_EXPAND_TOGGLE]: (s) => s.layout.toggleTimelineExpanded(),
 };
 
-/** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */
+/** 开发期自检:漏登记的 id 只会表现为「按键没反应」,不自检就得靠人肉发现 */
+function assertShortcutCoverage(): void {
+    if (!import.meta.env.DEV) return;
+    const registered = new Set(SHORTCUT_SPECS.map((spec) => spec.id));
+    const missing = Object.values(SHORTCUT_ID).filter((id) => !registered.has(id));
+    if (missing.length > 0) console.error(`[shortcuts] 以下动作没有任何按键登记: ${missing.join(", ")}`);
+}
+
+/**
+ * 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销。
+ *
+ * 覆盖率自检的由来:SHORTCUT_ID 与 SHORTCUT_ACTIONS 有 Record 全键约束,SPECS 却是数组——
+ * 曾经有人重排表格时整行删掉 ⌘Z,类型系统一声不吭,撤销就此静默失效。这里把「每个 id 至少有一行 spec」
+ * 补成开发期断言,让同类回归在打开页面的第一秒就暴露。
+ */
 export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDeskStores>): () => void {
+    assertShortcutCoverage();
     const unregisters = SHORTCUT_SPECS.flatMap((spec) =>
         spec.chords.map((chord) =>
             registry.register({

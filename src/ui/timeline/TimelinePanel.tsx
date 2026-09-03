@@ -153,15 +153,37 @@ const PlaybackRangeControls = observer(function PlaybackRangeControls() {
     const canSetOut = playhead > playbackRange.inSeconds;
     return (
         <Stack direction="row" spacing={0.5}>
-            <Button disabled={!canSetIn} onClick={() => dispatch(playhead, playbackRange.outSeconds)} size="small">
-                设入点
-            </Button>
-            <Button disabled={!canSetOut} onClick={() => dispatch(playbackRange.inSeconds, playhead)} size="small">
-                设出点
-            </Button>
-            <Button onClick={() => dispatch(TIME_START_SECONDS, duration)} size="small">
-                清除范围
-            </Button>
+            <Tooltip
+                title={`把播放头设为入点：播放、循环与导出都从这里开始（${formatShortcutHint(SHORTCUT_ID.RANGE_SET_IN)}）`}
+            >
+                <span>
+                    <Button
+                        disabled={!canSetIn}
+                        onClick={() => dispatch(playhead, playbackRange.outSeconds)}
+                        size="small"
+                    >
+                        设入点
+                    </Button>
+                </span>
+            </Tooltip>
+            <Tooltip
+                title={`把播放头设为出点：播放、循环与导出都到这里为止（${formatShortcutHint(SHORTCUT_ID.RANGE_SET_OUT)}）`}
+            >
+                <span>
+                    <Button
+                        disabled={!canSetOut}
+                        onClick={() => dispatch(playbackRange.inSeconds, playhead)}
+                        size="small"
+                    >
+                        设出点
+                    </Button>
+                </span>
+            </Tooltip>
+            <Tooltip title="恢复为整片：入出点回到 0 与工程时长，导出重新覆盖全片">
+                <Button onClick={() => dispatch(TIME_START_SECONDS, duration)} size="small">
+                    清除范围
+                </Button>
+            </Tooltip>
         </Stack>
     );
 });
@@ -287,9 +309,13 @@ const ProgramCutInButton = observer(function ProgramCutInButton() {
         reportFailure(stores, result);
     };
     return (
-        <Button startIcon={<VideocamIcon />} disabled={!canCutIn} onClick={cutIn}>
-            切入选中机位
-        </Button>
+        <Tooltip title="在播放头处把选中机位切进成片轨；机位未选中或该处已有片段时不可用">
+            <span>
+                <Button startIcon={<VideocamIcon />} disabled={!canCutIn} onClick={cutIn}>
+                    切入选中机位
+                </Button>
+            </span>
+        </Tooltip>
     );
 });
 
@@ -311,7 +337,7 @@ const TimelineZoomControls = observer(function TimelineZoomControls() {
     const range = selectionRange(stores);
     return (
         <>
-            <Tooltip title="缩放到全长">
+            <Tooltip title={`时间窗口铺满整条片子（${formatShortcutHint(SHORTCUT_ID.TIMELINE_ZOOM_FIT)}）`}>
                 <IconButton
                     aria-label="缩放到全长"
                     size="small"
@@ -320,7 +346,7 @@ const TimelineZoomControls = observer(function TimelineZoomControls() {
                     <FitScreenIcon fontSize="small" />
                 </IconButton>
             </Tooltip>
-            <Tooltip title="缩放到选中片段">
+            <Tooltip title="时间窗口贴合当前选中的片段，两侧留一点余量">
                 <span>
                     <IconButton
                         aria-label="缩放到选中片段"
@@ -341,6 +367,12 @@ const TimelineZoomControls = observer(function TimelineZoomControls() {
     );
 });
 
+/** 缓动的作用一句话说清:名字只说「是什么」,提示要说「看起来会怎样」 */
+const EASING_HINT: Record<EasingCurve, string> = {
+    [EASING.LINEAR]: "两枚关键帧之间匀速通过，节奏机械但可预期",
+    [EASING.SMOOTH]: "进出关键帧时加减速，动作更自然（常用于起幅落幅）",
+};
+
 /** 走位关键帧的缓动:与运镜检查器共用 EASING_LABEL,不再直出英文枚举值。 */
 const WalkKeyEasingControls = observer(function WalkKeyEasingControls() {
     const stores = useDirectorDeskStores();
@@ -360,15 +392,16 @@ const WalkKeyEasingControls = observer(function WalkKeyEasingControls() {
         <>
             <Typography variant="caption">关键帧缓动</Typography>
             {Object.values(EASING).map((easing) => (
-                <Button
-                    key={easing}
-                    size="small"
-                    sx={{ textTransform: "none" }}
-                    variant={keyframe.easing === easing ? "contained" : "outlined"}
-                    onClick={() => setEasing(easing)}
-                >
-                    {EASING_LABEL[easing]}
-                </Button>
+                <Tooltip key={easing} title={EASING_HINT[easing]}>
+                    <Button
+                        size="small"
+                        sx={{ textTransform: "none" }}
+                        variant={keyframe.easing === easing ? "contained" : "outlined"}
+                        onClick={() => setEasing(easing)}
+                    >
+                        {EASING_LABEL[easing]}
+                    </Button>
+                </Tooltip>
             ))}
         </>
     );
@@ -418,9 +451,13 @@ const TimelineSelectionBar = observer(function TimelineSelectionBar() {
             </Typography>
             {SELECTION_CONTROLS[selection.kind]()}
             {deleteCommand && (
-                <Button size="small" color="error" sx={{ textTransform: "none" }} onClick={remove}>
-                    删除
-                </Button>
+                <Tooltip
+                    title={`删除当前选中的${SELECTION_LABEL[selection.kind]}（${formatShortcutHint(SHORTCUT_ID.TIMELINE_SELECTION_DELETE)}）`}
+                >
+                    <Button size="small" color="error" sx={{ textTransform: "none" }} onClick={remove}>
+                        删除
+                    </Button>
+                </Tooltip>
             )}
             <Box sx={{ flex: 1 }} />
             <Tooltip title={`取消选中（${formatShortcutHint(SHORTCUT_ID.TIMELINE_SELECTION_CLEAR)}）`}>

@@ -13,7 +13,7 @@ import { OutlinerPanel } from "@/ui/outline/OutlinerPanel";
 import { ShotPanel } from "@/ui/shots/ShotPanel";
 import { SHELL_MODE } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { CHROME, sidePanelBottomOffsetPx } from "@/ui/shell/theme";
+import { CHROME, sidePanelBottomOffset } from "@/ui/shell/theme";
 
 const SECTION_PANELS: Record<WorkspaceSection, ComponentType> = {
     [WORKSPACE_SECTION.OUTLINE]: OutlinerPanel,
@@ -118,7 +118,7 @@ export const WorkspaceNavigator = observer(function WorkspaceNavigator() {
             sx={{
                 left: CHROME.edgeGapPx,
                 top: CHROME.sidePanelTopPx,
-                bottom: sidePanelBottomOffsetPx(layout.timelineExpanded),
+                bottom: sidePanelBottomOffset(),
                 width: review ? CHROME.navigatorIconRailWidthPx : CHROME.sidePanelWidthPx,
                 overflow: "hidden",
             }}

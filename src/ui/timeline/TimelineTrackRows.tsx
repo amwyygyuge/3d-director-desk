@@ -82,10 +82,12 @@ const MARKER_PIN_WIDTH_PX = 2;
 const MARKER_LABEL_OFFSET_PX = 4;
 const MARKER_TRACK_ACCENT = "warning.main";
 const PROGRAM_CONFLICT_BORDER = "error.main";
-const PROGRAM_CONFLICT_LABEL = "成片片段与另一片段重叠";
+const PROGRAM_CONFLICT_LABEL = "成片片段与另一片段重叠：同一时刻有两路输出，导出以排在后面的为准";
 const SNAP_LABEL = "启用吸附";
+const SNAP_HINT = "拖拽时自动贴到播放头、片段边缘、关键帧与标记；按住 Alt 临时关闭";
 const DRAG_READOUT_BACKGROUND = "rgba(0,0,0,0.72)";
 const LINK_LABEL = "解除成片跟随";
+const LINK_HINT = "解除后成片片段不再跟着运镜片段走，两者时段各自独立";
 const LINK_ICON_SIZE = "small" as const;
 
 type ProgramRangeCommandOptions = {
@@ -418,7 +420,7 @@ const TimelineTrackRow = observer(function TimelineTrackRow({ rowId, children }:
                     {row.label}
                 </Typography>
                 {row.kind === TIMELINE_ROW_KIND.MARKER && (
-                    <Tooltip title={SNAP_LABEL}>
+                    <Tooltip title={SNAP_HINT}>
                         <Switch
                             checked={stores.motionAuthoring.snapEnabled}
                             slotProps={{ input: { "aria-label": SNAP_LABEL } }}
@@ -707,7 +709,7 @@ const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineCli
                     />
                 )}
                 {bar.linked && (
-                    <Tooltip title={LINK_LABEL}>
+                    <Tooltip title={`${LINK_LABEL}：${LINK_HINT}`}>
                         <IconButton
                             aria-label={LINK_LABEL}
                             size={LINK_ICON_SIZE}

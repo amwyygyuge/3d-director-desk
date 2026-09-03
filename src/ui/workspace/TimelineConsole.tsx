@@ -19,7 +19,13 @@ import { Timecode } from "@/timeline/Timecode";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
-import { CHROME, MONO_FONT_STACK, SURFACE_PANEL_RADIUS_PX } from "@/ui/shell/theme";
+import {
+    CHROME,
+    MONO_FONT_STACK,
+    SURFACE_PANEL_RADIUS_PX,
+    TIMELINE_HEIGHT,
+    TIMELINE_HEIGHT_VAR,
+} from "@/ui/shell/theme";
 import { useScrubGesture } from "@/ui/timeline/useScrubGesture";
 import { TimelinePanel } from "@/ui/timeline/TimelinePanel";
 import { TimelineDurationField } from "@/ui/workspace/TimelineDurationField";
@@ -40,6 +46,15 @@ const MINI_CLIP_OPACITY = 0.85;
 const MINI_PERCENT_FULL = 100;
 const MINI_KEYFRAME_HALF_SIZE_PX = MINI_KEYFRAME_SIZE_PX / 2;
 const MINI_PILL_RADIUS_PX = 99;
+/** 高度把手:通栏上缘的抓握区与其视觉握把;握把常态半隐,hover/聚焦才实体化 */
+const RESIZE_HANDLE_HEIGHT_PX = 8;
+const RESIZE_GRIP_WIDTH_PX = 48;
+const RESIZE_GRIP_HEIGHT_PX = 3;
+const RESIZE_GRIP_IDLE_OPACITY = 0.35;
+/** 键盘调节步长(px):方向键逐档改高,不必精确到像素 */
+const RESIZE_KEYBOARD_STEP_PX = 16;
+const DESK_ROOT_SELECTOR = "[data-desk-root]";
+const RESIZE_HANDLE_HINT = "上下拖动调整时间线高度（聚焦后 ↑/↓ 也可调）";
 const MINI_DURATION_FALLBACK_SECONDS = 1;
 const EXPANDED_OPACITY_DELAY = "100ms";
 const COLLAPSED_OPACITY_DELAY = "0ms";
@@ -264,12 +279,106 @@ const MiniTimeline = observer(function MiniTimeline() {
     );
 });
 
+/**
+ * 时间线高度调节把手(通栏上缘)。
+ *
+ * 拖拽期只改导演台根节点上的 CSS 变量:侧栏、产物停靠层与本控制台都读同一个变量,
+ * 因此一次变量写入即可让整套壳层几何跟手,而**不触发任何 React 重渲**——
+ * 若走 store,时间轴的轨道/片段/关键帧会随每一帧指针移动重建,与画布渲染叠加。
+ * 指针抬起才把落点写回 store(唯一持久真相)。
+ */
+const TimelineResizeHandle = observer(function TimelineResizeHandle() {
+    const { layout } = useDirectorDeskStores();
+    const dragRef = useRef<{
+        readonly root: HTMLElement;
+        readonly startY: number;
+        readonly startHeight: number;
+    } | null>(null);
+    const heightAt = (clientY: number): number => {
+        const drag = dragRef.current;
+        if (!drag) return layout.timelineExpandedHeightPx;
+        const raw = drag.startHeight + (drag.startY - clientY);
+        return Math.min(Math.max(raw, TIMELINE_HEIGHT.MIN_PX), TIMELINE_HEIGHT.MAX_PX);
+    };
+    const commit = (heightPx: number): void => {
+        layout.setTimelineExpandedHeightPx(heightPx);
+        dragRef.current = null;
+    };
+    const stepBy = (deltaPx: number): void => {
+        layout.setTimelineExpandedHeightPx(layout.timelineExpandedHeightPx + deltaPx);
+    };
+    return (
+        <Tooltip title={RESIZE_HANDLE_HINT}>
+            <Box
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="拖动调整时间线高度"
+                aria-valuenow={layout.timelineExpandedHeightPx}
+                aria-valuemin={TIMELINE_HEIGHT.MIN_PX}
+                aria-valuemax={TIMELINE_HEIGHT.MAX_PX}
+                tabIndex={0}
+                onPointerDown={(event) => {
+                    const root = event.currentTarget.closest(DESK_ROOT_SELECTOR);
+                    if (!(root instanceof HTMLElement)) return;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    dragRef.current = { root, startY: event.clientY, startHeight: layout.timelineExpandedHeightPx };
+                }}
+                onPointerMove={(event) => {
+                    const drag = dragRef.current;
+                    if (!drag) return;
+                    drag.root.style.setProperty(TIMELINE_HEIGHT_VAR, `${heightAt(event.clientY)}px`);
+                }}
+                onPointerUp={(event) => {
+                    if (!dragRef.current) return;
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                    commit(heightAt(event.clientY));
+                }}
+                onPointerCancel={() => commit(layout.timelineExpandedHeightPx)}
+                onKeyDown={(event) => {
+                    const stepByKey: Record<string, number> = {
+                        ArrowUp: RESIZE_KEYBOARD_STEP_PX,
+                        ArrowDown: -RESIZE_KEYBOARD_STEP_PX,
+                    };
+                    const step = stepByKey[event.key];
+                    if (step === undefined) return;
+                    event.preventDefault();
+                    // 把手自己消费方向键:否则同一次按键还会被时间轴作用域当成挪播放头
+                    event.stopPropagation();
+                    stepBy(step);
+                }}
+                sx={{
+                    height: RESIZE_HANDLE_HEIGHT_PX,
+                    flexShrink: 0,
+                    cursor: "ns-resize",
+                    touchAction: "none",
+                    display: "grid",
+                    placeItems: "center",
+                    "&:hover .timeline-resize-grip, &:focus-visible .timeline-resize-grip": { opacity: 1 },
+                }}
+            >
+                <Box
+                    className="timeline-resize-grip"
+                    sx={{
+                        width: RESIZE_GRIP_WIDTH_PX,
+                        height: RESIZE_GRIP_HEIGHT_PX,
+                        borderRadius: MINI_PILL_RADIUS_PX,
+                        bgcolor: "text.secondary",
+                        opacity: RESIZE_GRIP_IDLE_OPACITY,
+                        transition: "opacity 120ms",
+                    }}
+                />
+            </Box>
+        </Tooltip>
+    );
+});
+
 /** 方案 D 底部编排中枢:通栏停靠底边,收起是一整条迷你播放条;开合只走点击把手,不响应 hover。 */
 export const TimelineConsole = observer(function TimelineConsole() {
     const stores = useDirectorDeskStores();
     const { clock, dispatcher, layout } = stores;
     const expanded = layout.timelineExpanded;
     const expandLabel = expanded ? "收起时间线" : "展开时间线";
+    const expandHint = expanded ? "只留底部迷你播放条，腾出画面" : "展开轨道区，编辑片段、关键帧与标记";
     const transportCommandType = clock.isPlaying ? "transport.pause" : "transport.play";
     const transportLabel = clock.isPlaying ? "暂停时间轴" : "播放时间轴";
 
@@ -290,7 +399,7 @@ export const TimelineConsole = observer(function TimelineConsole() {
                 onPointerEnter={() => layout.setTimelinePointerOver(true)}
                 onPointerLeave={() => layout.setTimelinePointerOver(false)}
                 sx={{
-                    height: expanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx,
+                    height: `var(${TIMELINE_HEIGHT_VAR}, ${CHROME.timelineMiniPx}px)`,
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
@@ -299,11 +408,12 @@ export const TimelineConsole = observer(function TimelineConsole() {
                     borderBottom: 0,
                 }}
             >
+                {expanded && <TimelineResizeHandle />}
                 <Box
                     className="shrink-0 flex items-center"
                     sx={{ height: CHROME.timelineMiniPx, gap: 1, px: 1.5, bgcolor: "rgba(0,0,0,0.2)" }}
                 >
-                    <Tooltip title="回到播放入点">
+                    <Tooltip title="播放头跳回播放入点（未设入点即整片起点）">
                         <IconButton aria-label="回到播放入点" onClick={() => dispatchTransport("transport.stop")}>
                             <SkipPreviousIcon />
                         </IconButton>
@@ -324,7 +434,9 @@ export const TimelineConsole = observer(function TimelineConsole() {
                         </IconButton>
                     </Tooltip>
                     <TimecodeReadout />
-                    <Tooltip title={`循环播放（${formatShortcutHint(SHORTCUT_ID.TRANSPORT_LOOP)}）`}>
+                    <Tooltip
+                        title={`循环播放：放到出点后自动回入点重放（${formatShortcutHint(SHORTCUT_ID.TRANSPORT_LOOP)}）`}
+                    >
                         <IconButton
                             aria-label="循环播放"
                             aria-pressed={clock.isLooping}
@@ -341,7 +453,9 @@ export const TimelineConsole = observer(function TimelineConsole() {
                         </IconButton>
                     </Tooltip>
                     <MiniTimeline />
-                    <Tooltip title={expandLabel}>
+                    <Tooltip
+                        title={`${expandLabel}：${expandHint}（${formatShortcutHint(SHORTCUT_ID.TIMELINE_EXPAND_TOGGLE)}）`}
+                    >
                         <IconButton
                             aria-label={expandLabel}
                             aria-expanded={expanded}
