@@ -5,10 +5,10 @@ const DEFAULT_TEXT = {
     PRODUCT_NAME: "3D 导演台",
     CAPTURE_IMAGE_TOOLTIP: "截图",
     CAPTURE_VIDEO_ARIA: "导出成片",
-    DISCARD_RECORDING: "放弃录制",
-    STOP_RECORDING: "停止并交付",
-    RECORDING_TOOLTIP_PREFIX: "导出 Program 输出轨(0~",
-    RECORDING_TOOLTIP_SUFFIX: "s)为 WebM",
+    DISCARD_RECORDING: "放弃导出",
+    STOP_RECORDING: "完成并交付",
+    RECORDING_TOOLTIP_PREFIX: "以固定 30fps 导出 Program 输出轨(0~",
+    RECORDING_TOOLTIP_SUFFIX: "s)为 MP4",
 } as const;
 
 /** 截图动作文案定制:label 提供时按钮升级为「图标+文案」,缺省保持纯图标 */

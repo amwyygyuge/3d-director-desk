@@ -18,7 +18,7 @@ export interface PlayheadSource {
 }
 
 /**
- * 视频导出任务的可观察生命周期；录制服务持有 MediaRecorder，本类只表达产品工作流状态。
+ * 视频导出任务的可观察生命周期；CaptureService 持有确定性编码器运行时句柄，本类只表达产品工作流状态。
  */
 export class VideoExportSession {
     private currentState: VideoExportState = VIDEO_EXPORT_STATE.IDLE;
@@ -60,7 +60,11 @@ export class VideoExportSession {
         return Math.max(0, this.plannedDurationSeconds - this.playhead.value);
     }
 
-    begin(options: { readonly source: VideoExportSource; readonly durationSeconds: number; readonly requestId: string }): void {
+    begin(options: {
+        readonly source: VideoExportSource;
+        readonly durationSeconds: number;
+        readonly requestId: string;
+    }): void {
         this.currentState = VIDEO_EXPORT_STATE.RECORDING;
         this.currentSource = options.source;
         this.currentRequestId = options.requestId;

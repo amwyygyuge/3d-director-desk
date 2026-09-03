@@ -1,6 +1,6 @@
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import { Grid, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
@@ -43,6 +43,7 @@ import { directorDeskTheme, SCROLLBAR_SX, VIEWPORT_BACKGROUND } from "@/ui/shell
 import { SceneRoot } from "@/ui/viewport/scene/SceneRoot";
 import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
 import { StudioRig } from "@/ui/viewport/scene/StudioRig";
+import { StudioFloorGrid } from "@/ui/viewport/scene/StudioFloorGrid";
 import { CameraMotionRig } from "@/ui/viewport/scene/CameraMotionRig";
 import { OrbitAuthorityRig } from "@/ui/viewport/scene/OrbitAuthorityRig";
 import { MotionPathPreview } from "@/ui/viewport/scene/MotionPathPreview";
@@ -258,14 +259,8 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 }}
                             >
                                 <color attach="background" args={[VIEWPORT_BACKGROUND]} />
+                                <StudioFloorGrid />
                                 <group ref={registerCaptureHelpers}>
-                                    {stores.layout.authoringVisible && (
-                                        <Grid
-                                            args={[stores.layout.gridSizeMeters, stores.layout.gridSizeMeters]}
-                                            cellColor="#333333"
-                                            sectionColor="#555555"
-                                        />
-                                    )}
                                     <BonePicker />
                                     <TransformGizmoController />
                                     <ShotMarkers />

@@ -77,10 +77,11 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "light.adjust": "调灯光参数(类型/颜色/强度);现状先查 lighting.list",
     "scene.set-lighting-mode": "切灯光模式:studio 兜底布光 / custom 自定义",
     // 采集
-    "capture.frame": "截图当前预演画面(辅助物不入镜);异步产物按 requestId 对账",
-    "capture.video": "录制 WebM 成片(缺省 Program 输出轨；source=viewport 显式录当前编辑视角);异步产物按 requestId 对账",
-    "capture.video-stop": "结束当前录制并交付已采集视频",
-    "capture.video-cancel": "放弃当前录制并丢弃已采集视频",
+    "capture.frame": "截图当前预演画面(保留地板网格，编辑辅助物不入镜);异步产物按 requestId 对账",
+    "capture.video":
+        "按固定 30fps 导出 MP4 参考视频(缺省 Program 输出轨；source=viewport 显式导出当前编辑视角);异步产物按 requestId 对账",
+    "capture.video-stop": "在当前帧边界结束 MP4 导出并交付产物",
+    "capture.video-cancel": "放弃正在导出的 MP4 参考视频",
     // 演示与文档
     "desk.enter-presentation": "进入演示模式(纯净画布)",
     "desk.exit-presentation": "退出演示模式",
