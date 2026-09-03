@@ -1,6 +1,6 @@
 import { assembleDeskDocument } from "@/document/DeskDocument";
 import { DirectorCommand } from "@/command/DirectorCommand";
-import type { DirectorContext } from "@/command/DirectorCommand";
+import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
@@ -60,7 +60,11 @@ export class ImportDocumentCommand extends DirectorCommand<ImportDocumentPayload
     }
 
     validate(ctx: DirectorContext): string[] {
-        return [...ctx.documentImports.validate(this.payload.document)];
+        return this.validateIssues(ctx).map((issue) => issue.message);
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        return ctx.documentImports.validate(this.payload.document);
     }
 
     execute(ctx: DirectorContext): void {

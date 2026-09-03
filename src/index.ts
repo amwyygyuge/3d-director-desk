@@ -193,7 +193,7 @@ export {
 } from "@/command/captureCommands";
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "@/command/documentCommands";
 export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
-export { DocumentImportService } from "@/document/DocumentImportService";
+export { DOCUMENT_IMPORT_ISSUE_CODE, DocumentImportService } from "@/document/DocumentImportService";
 export { AssetCatalog } from "@/assets/catalog/AssetCatalog";
 export { BuiltinAssetProvider } from "@/assets/catalog/AssetProvider";
 export type { AssetProvider } from "@/assets/catalog/AssetProvider";
@@ -245,7 +245,7 @@ export {
 export type { ProgramFollow } from "@/command/cameraMotionCommands";
 export { CommandHistory } from "@/command/CommandHistory";
 export type { HistoryEntry } from "@/command/CommandHistory";
-export { CommandDispatcher } from "@/command/CommandDispatcher";
+export { COMMAND_ERROR, CommandDispatcher } from "@/command/CommandDispatcher";
 export {
     MoveObjectCommand,
     PlaceObjectCommand,

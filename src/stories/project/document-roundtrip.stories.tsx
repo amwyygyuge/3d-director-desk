@@ -1,10 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { COMMAND_ERROR } from "@/command/CommandDispatcher";
+import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
+import { DOCUMENT_IMPORT_ISSUE_CODE } from "@/document/DocumentImportService";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { AcceptancePanel } from "@/stories/AcceptancePanel";
 import { assertAcceptance, dispatchOk } from "@/stories/harness";
-import { placeModel, seedShots, TEST_ASSETS } from "@/stories/seeds";
+import { TEST_ASSETS, placeModel, seedShots } from "../seeds";
 
 const meta: Meta<typeof DirectorDesk> = { title: "工程/文档导入导出", component: DirectorDesk };
 export default meta;
@@ -14,12 +17,14 @@ type Story = StoryObj<typeof DirectorDesk>;
 const FOX_ID = "doc-fox";
 const DURATION_SECONDS = 12;
 const SHOT_COUNT = 3;
+const MISSING_SHOT_ID = "missing-shot";
 
 const CHECKLIST = [
     "项目菜单「导出工程」下载 JSON;「导入工程…」选该文件 → 对象/机位/运镜/时长全还原",
     "同文档二次导入幂等,不产生重复对象",
     "手工把 JSON 的 version 改成未知值 → 导入被结构化拒绝(零兼容纪律:旧格式直接判不支持)",
     "播种已断言:导出 → 清空 → 导入后场景快照逐字节一致,机位/Program/时长还原",
+    "旧命令的校验失败也必须带稳定 issueDetails，供宿主与 AI 处理",
 ] as const;
 
 async function seedDocumentRoundtrip(stores: DirectorDeskStores): Promise<void> {
@@ -60,6 +65,23 @@ async function seedDocumentRoundtrip(stores: DirectorDeskStores): Promise<void> 
     assertAcceptance(stores.camera.director.listShots().length === SHOT_COUNT, "机位未随文档还原");
     assertAcceptance(stores.timeline.document.duration === DURATION_SECONDS, "时间轴时长未还原");
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 输出未还原");
+    const incompatibleVersion = stores.dispatcher.dispatch(
+        { type: "desk.import-document", payload: { document: { version: DESK_DOCUMENT_VERSION + 1 } } },
+        stores,
+    );
+    assertAcceptance(
+        !incompatibleVersion.ok &&
+            incompatibleVersion.issueDetails?.some(
+                (issue) => issue.code === DOCUMENT_IMPORT_ISSUE_CODE.UNSUPPORTED_VERSION,
+            ) === true,
+        "未知文档版本未被结构化拒绝",
+    );
+    const missingShot = stores.dispatcher.dispatch({ type: "camera.activate", payload: { id: MISSING_SHOT_ID } }, stores);
+    assertAcceptance(
+        !missingShot.ok &&
+            missingShot.issueDetails?.some((issue) => issue.code === COMMAND_ERROR.VALIDATION_FAILED) === true,
+        "旧命令校验失败未收敛为结构化错误",
+    );
 }
 
 /** 导出 → 清空 → 导入的逐字节还原断言;菜单路径留给人工走查 */

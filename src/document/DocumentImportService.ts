@@ -1,19 +1,19 @@
 import { runInAction } from "mobx";
 
-import { provisionAction, mountWhenReady } from "@/command/actionProvisioning";
-import type { DirectorContext } from "@/command/DirectorCommand";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
-import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import { CameraProgramTrack, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import { CameraShot } from "@/camera/CameraShot";
-import { finiteTransform, finiteVec3, SceneObject, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
-import { TimelineDoc } from "@/timeline/TimelineDoc";
-import type { TimelineTrack } from "@/timeline/TimelineTrack";
-import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
+import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
+import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
+import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/core/SceneObject";
 import type { DeskDocument, DeskDocumentAction } from "@/document/DeskDocument";
-import { isActorProfileInit } from "@/actor/ActorProfile";
+import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import { parsePosePreset } from "@/pose/PosePreset";
 import type { PosePreset } from "@/pose/PosePreset";
+import { TimelineDoc } from "@/timeline/TimelineDoc";
+import type { TimelineTrack } from "@/timeline/TimelineTrack";
+import { isActorProfileInit } from "@/actor/ActorProfile";
+import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 const SCENE_OBJECT_KIND_VALUES: readonly string[] = SCENE_OBJECT_KINDS;
 
 interface DocumentImportPlan {
@@ -39,6 +39,24 @@ interface ActionRestoreRequest {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export const DOCUMENT_IMPORT_ISSUE_CODE = {
+    INVALID: "document-invalid",
+    UNSUPPORTED_VERSION: "document-version-unsupported",
+} as const;
+const DOCUMENT_IMPORT_PATH = {
+    DOCUMENT: "document",
+    VERSION: "version",
+} as const;
+
+function validationIssuesFor(document: unknown, issues: readonly string[]): readonly CommandIssue[] {
+    const isUnsupportedVersion = isRecord(document) && document.version !== DESK_DOCUMENT_VERSION;
+    return issues.map((message) =>
+        isUnsupportedVersion
+            ? { code: DOCUMENT_IMPORT_ISSUE_CODE.UNSUPPORTED_VERSION, path: DOCUMENT_IMPORT_PATH.VERSION, message }
+            : { code: DOCUMENT_IMPORT_ISSUE_CODE.INVALID, path: DOCUMENT_IMPORT_PATH.DOCUMENT, message },
+    );
 }
 function isTimelineDocument(
     value: unknown,
@@ -247,8 +265,9 @@ export class DocumentImportService {
     private restoreController: AbortController | null = null;
     private disposed = false;
 
-    validate(document: unknown): readonly string[] {
-        return preparePlan(document).issues;
+    validate(document: unknown): readonly CommandIssue[] {
+        const preparation = preparePlan(document);
+        return validationIssuesFor(document, preparation.issues);
     }
 
     import(document: unknown, ctx: DirectorContext): void {

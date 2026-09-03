@@ -34,7 +34,7 @@ export interface DirectorQuery<P = unknown> {
 
 export type QueryResult = CommandResult & { readonly value?: unknown };
 
-const COMMAND_ERROR = {
+export const COMMAND_ERROR = {
     MALFORMED_ENVELOPE: "malformed-command",
     UNKNOWN: "unknown-command",
     CONSTRUCTION_FAILED: "command-construction-failed",
@@ -46,6 +46,7 @@ const COMMAND_ERROR = {
 
 const MALFORMED_ENVELOPE_ISSUE = "type must be a string and payload must be present";
 const MALFORMED_PAYLOAD_ISSUE = "payload does not satisfy the command contract";
+const VALIDATION_FAILURE_PATH = "payload";
 
 function readSerializedCommand(raw: unknown): SerializedCommand | null {
     try {
@@ -64,6 +65,17 @@ function readSerializedCommand(raw: unknown): SerializedCommand | null {
     } catch {
         return null;
     }
+}
+
+function validationFailure(issues: readonly string[], details: readonly CommandIssue[] | undefined): CommandResult {
+    const issueDetails =
+        details ??
+        issues.map((message) => ({
+            code: COMMAND_ERROR.VALIDATION_FAILED,
+            path: VALIDATION_FAILURE_PATH,
+            message,
+        }));
+    return { ok: false, error: COMMAND_ERROR.VALIDATION_FAILED, issues, issueDetails };
 }
 
 /**
@@ -158,16 +170,9 @@ export class CommandDispatcher {
             try {
                 const details = command.validateIssues?.(ctx);
                 const issues = details ? details.map((issue) => issue.message) : command.validate(ctx);
-                if (issues.length > 0) {
-                    return {
-                        ok: false,
-                        error: COMMAND_ERROR.VALIDATION_FAILED,
-                        issues,
-                        ...(details ? { issueDetails: details } : {}),
-                    };
-                }
+                if (issues.length > 0) return validationFailure(issues, details);
             } catch {
-                return { ok: false, error: COMMAND_ERROR.VALIDATION_FAILED, issues: [MALFORMED_PAYLOAD_ISSUE] };
+                return validationFailure([MALFORMED_PAYLOAD_ISSUE], undefined);
             }
             try {
                 const inverse = options?.record === false ? null : (command.invert?.(ctx) ?? null);
@@ -198,14 +203,7 @@ export class CommandDispatcher {
             const query = factory(serialized.payload as never);
             const details = query.validateIssues?.(ctx);
             const issues = details ? details.map((issue) => issue.message) : query.validate(ctx);
-            if (issues.length > 0) {
-                return {
-                    ok: false,
-                    error: COMMAND_ERROR.VALIDATION_FAILED,
-                    issues,
-                    ...(details ? { issueDetails: details } : {}),
-                };
-            }
+            if (issues.length > 0) return validationFailure(issues, details);
             return { ok: true, value: query.execute(ctx) };
         } catch {
             return { ok: false, error: COMMAND_ERROR.CONSTRUCTION_FAILED, issues: [MALFORMED_PAYLOAD_ISSUE] };
