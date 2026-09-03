@@ -103,8 +103,10 @@ export interface DeskShellPresentationInit {
     readonly captureFeedback?: CaptureFeedback;
     /** 动作区扩展位(截图/录制右侧) */
     readonly toolbarExtensions?: readonly ToolbarExtensionInit[];
-    /** 尾部扩展位(全屏预览右侧、项目菜单左侧;宿主窗口控制类动作) */
+    /** 尾部扩展位(全屏预览右侧、项目菜单左侧) */
     readonly trailingExtensions?: readonly ToolbarExtensionInit[];
+    /** 最右扩展位(所有内置控件之后);宿主窗口控制的最后一个按钮即工具栏最右元素。 */
+    readonly rightmostExtensions?: readonly ToolbarExtensionInit[];
 }
 
 /**
@@ -119,6 +121,7 @@ export class DeskShellPresentation {
     readonly captureFeedback: CaptureFeedback;
     readonly toolbarExtensions: readonly ToolbarExtension[];
     readonly trailingExtensions: readonly ToolbarExtension[];
+    readonly rightmostExtensions: readonly ToolbarExtension[];
     private readonly customVideoTooltip: string | null;
 
     constructor(init?: DeskShellPresentationInit) {
@@ -138,6 +141,7 @@ export class DeskShellPresentation {
             init?.captureFeedback === CAPTURE_FEEDBACK.HOST ? CAPTURE_FEEDBACK.HOST : CAPTURE_FEEDBACK.DEFAULT;
         this.toolbarExtensions = normalizeExtensions(init?.toolbarExtensions);
         this.trailingExtensions = normalizeExtensions(init?.trailingExtensions);
+        this.rightmostExtensions = normalizeExtensions(init?.rightmostExtensions);
     }
 
     /**

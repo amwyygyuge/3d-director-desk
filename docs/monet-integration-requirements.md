@@ -1,7 +1,7 @@
 # Monet 宿主接入需求 — 截图/录制产物出口定制
 
 > 需求方：Monet（dm-tapnow）画布，经 `input-3d-director` 节点嵌入导演台。
-> 状态：R1 / R2 / R3 / R4 / R5 / R6 均已交付且 Monet 已接线（2026-09-03）；R7 待组件方交付。
+> 状态：R1 / R2 / R3 / R4 / R5 / R6 已交付且 Monet 已接线（2026-09-03）；R7 组件方已交付，Monet 待切换接线。
 
 ## 背景
 
@@ -34,12 +34,13 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 ### R2 工具栏外部接入按钮位 —— ✅ 机制已交付，「从画布导入」用例作废
 
-**实际形态**（双槽位，均为 `presentation` 入参；项目菜单固定在二者右侧）：
+**实际形态**（三槽位，均为 `presentation` 入参；项目菜单固定在前两个槽位右侧，最右窗口控制进入 `rightmostExtensions`）：
 
-| 槽位                 | 位置                          | 形态   | 用途                  |
-| -------------------- | ----------------------------- | ------ | --------------------- |
-| `toolbarExtensions`  | 动作区扩展位（截图/录制右侧） | 纯图标 | 宿主业务动作          |
-| `trailingExtensions` | 全屏预览右侧、项目菜单左侧    | 纯图标 | 宿主窗口控制（见 R3） |
+| 槽位                  | 位置                           | 形态   | 用途                  |
+| --------------------- | ------------------------------ | ------ | --------------------- |
+| `toolbarExtensions`   | 动作区扩展位（截图/录制右侧）  | 纯图标 | 宿主业务动作          |
+| `trailingExtensions`  | 全屏预览右侧、项目菜单左侧     | 纯图标 | 宿主尾部动作          |
+| `rightmostExtensions` | 项目菜单右侧、所有内置控件之后 | 纯图标 | 宿主窗口控制（见 R7） |
 
 扩展项契约 `ToolbarExtensionInit`：`key` / `icon` / `label?` / `tooltip?` / `disabled`（支持函数形态响应式求值）/ `onClick`（宿主全接管，组件不附加默认行为）。`label` 仅提供可访问名与 tooltip 回落；空表不渲染、不占位。
 
@@ -49,7 +50,7 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 **形态**（不变）：desktop 导演台窗口为 headless（`frame: false`），尺寸固定 = Monet 主窗口 contentBounds 并跟随主窗口移动。
 
-**当前接入**：Monet 经 `presentation.trailingExtensions` 注入关闭按钮，按钮进入工具栏布局流，不再以 `fixed` 悬浮遮挡内置控件。该槽位实际位于全屏预览右侧、帮助和项目菜单左侧；严格最右端布局由 R7 解决。
+**R7 接线方式**：Monet 应经 `presentation.rightmostExtensions` 注入最小化与关闭按钮。按钮进入工具栏布局流，不再以 `fixed` 悬浮遮挡内置控件；关闭始终为该数组最后一项。
 
 **验收**：
 
@@ -93,15 +94,22 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 - 每次成功仅出现一条 Monet Toast；导演台内不出现产物弹窗、预览面板或重复 Toast。
 - 上传或落节点失败时仅出现一条 Monet 失败 Toast，导演台恢复可继续截图/录制状态。
 
-### R7 宿主窗口控制必须占据工具栏最右端 —— ⏳待组件方交付
+### R7 宿主窗口控制必须占据工具栏最右端 —— ✅ 组件方已交付
 
-**问题**：现有 `trailingExtensions` 的实际顺序是「全屏预览 → trailingExtensions → 帮助 → 项目菜单」。关闭/缩小等宿主窗口控制按钮并不在最右端，无法满足 Monet headless 窗口的操作优先级。
+**实际契约**：`presentation.rightmostExtensions` 复用 `ToolbarExtensionInit`，创建期固定、运行期不变；其按钮渲染在项目菜单之后。空数组不渲染、不占位，非空时仅在扩展组前绘制分隔线。
 
-**需求**：在 `presentation` 增加独立的 `rightmostExtensions` 槽位（名称可调整，但语义必须固定）：
+```mermaid
+flowchart LR
+    Builtin[内置工具栏] --> Trailing[trailingExtensions]
+    Trailing --> Help[帮助]
+    Help --> Menu[项目菜单]
+    Menu --> Rightmost[rightmostExtensions]
+    Rightmost --> Close[关闭：最后一项 / 最右元素]
+```
 
-- 槽位渲染在所有内置控件之后，视觉顺序为「… → 项目菜单 → rightmostExtensions」；`rightmostExtensions` 的最后一个按钮即工具栏最右元素。
-- 复用 `ToolbarExtensionInit` 契约，支持多个纯图标宿主动作；Monet 将在该槽位注入最小化与关闭，关闭始终排在最后。
-- `trailingExtensions` 保持现有位置和行为，保证已有宿主向后兼容；不得通过 CSS absolute/fixed 或 DOM 重排由宿主绕过布局。
+**边界与不变量**：`DeskShellPresentation` 是创建期的宿主呈现值对象，负责归一化三个扩展槽位；`TopPillBar` 仅编排其顺序。该变更不触及领域状态、命令分发、Three 运行时资源或序列化工程文档。`trailingExtensions` 保持原位置，不引入兼容别名、CSS absolute/fixed 或宿主 DOM 重排。
+
+**Monet 接线方式**：包装层将最小化、关闭按顺序传入 `rightmostExtensions`，关闭始终排在最后。
 
 **验收**：
 

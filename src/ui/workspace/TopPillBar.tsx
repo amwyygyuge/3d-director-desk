@@ -446,7 +446,7 @@ const ShortcutHelpControl = observer(function ShortcutHelpControl() {
     );
 });
 
-/** 右侧工具栏:所有操作统一为带 Tooltip 的图标按钮;快捷键和项目菜单同级并固定在最右端。 */
+/** 右侧工具栏:所有操作统一为带 Tooltip 的图标按钮;宿主最右扩展位固定在全部内置控件之后。 */
 const OutputPill = observer(function OutputPill() {
     return (
         <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
@@ -465,6 +465,7 @@ const OutputPill = observer(function OutputPill() {
             <Divider flexItem orientation="vertical" sx={PROJECT_MENU_DIVIDER_SX} />
             <ShortcutHelpControl />
             <ProjectMenuControl />
+            <RightmostExtensionButtons />
         </Paper>
     );
 });
@@ -571,7 +572,7 @@ const CaptureControls = observer(function CaptureControls() {
     );
 });
 
-/** 宿主扩展按钮的单一渲染实现(两槽位共用):空表不渲染、不占位;点击回调宿主全接管,组件不附加默认行为 */
+/** 宿主扩展按钮的单一渲染实现(三槽位共用):空表不渲染、不占位;点击回调宿主全接管,组件不附加默认行为 */
 function renderExtensionButtons(extensions: readonly ToolbarExtension[]): ReactNode {
     if (extensions.length === 0) return null;
     return (
@@ -597,10 +598,16 @@ const ToolbarExtensionButtons = observer(function ToolbarExtensionButtons() {
     return renderExtensionButtons(presentation.toolbarExtensions);
 });
 
-/** 尾部扩展位(全屏预览右侧、项目菜单左侧;宿主窗口控制类动作)。 */
+/** 尾部扩展位(全屏预览右侧、项目菜单左侧)。 */
 const TrailingExtensionButtons = observer(function TrailingExtensionButtons() {
     const { presentation } = useDirectorDeskStores();
     return renderExtensionButtons(presentation.trailingExtensions);
+});
+
+/** 最右扩展位:唯一位于全部内置控件之后,最后一项固定为工具栏最右元素。 */
+const RightmostExtensionButtons = observer(function RightmostExtensionButtons() {
+    const { presentation } = useDirectorDeskStores();
+    return renderExtensionButtons(presentation.rightmostExtensions);
 });
 
 function startVideoCapture({

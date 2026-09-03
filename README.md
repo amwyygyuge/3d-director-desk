@@ -46,6 +46,26 @@ export function DirectorNode(): JSX.Element {
 - `hostBridge?: HostBridgeConfiguration` configures a trusted `postMessage` bridge for an iframe integration.
 - With neither prop, the desk uses an inert adapter: it does not install a message listener or post to a wildcard origin.
 
+## Host toolbar extensions
+
+`presentation` is fixed when `DirectorDesk` is created. Use `rightmostExtensions` for host window controls: its actions render after every built-in control, including the project menu. The final extension is therefore the toolbar's rightmost action.
+
+```tsx
+import CloseIcon from "@mui/icons-material/Close";
+import RemoveIcon from "@mui/icons-material/Remove";
+
+<DirectorDesk
+    presentation={{
+        rightmostExtensions: [
+            { key: "minimize", icon: <RemoveIcon />, tooltip: "Minimize", onClick: minimizeWindow },
+            { key: "close", icon: <CloseIcon />, tooltip: "Close", onClick: closeWindow },
+        ],
+    }}
+/>;
+```
+
+`toolbarExtensions` remains beside capture actions. `trailingExtensions` remains between full-screen preview and the built-in help/project controls. Both remain available for host actions that do not require the rightmost position.
+
 ## Host bridge contract
 
 Use a specific host window, a concrete URL origin, and a per-desk session. `"*"` is rejected as a target origin.
