@@ -1,4 +1,4 @@
-import type { Object3D, Scene } from "three";
+import type { Object3D } from "three";
 
 /** Runtime-only observation of one capture helper hide/restore transaction. */
 export interface CaptureHelperLifecycle {
@@ -17,16 +17,16 @@ export class HelperVisibilityTransaction {
     private hiddenPoseHelperCount = 0;
     private helpersRestored = false;
 
-    hide(scene: Scene): void {
+    hide(helpers: Iterable<Object3D>): void {
         const hiddenHelpers: Object3D[] = [];
         this.hiddenPoseHelperCount = 0;
         this.helpersRestored = false;
-        scene.traverse((object) => {
-            if (object.userData.helper !== true || !object.visible) return;
-            object.visible = false;
-            hiddenHelpers.push(object);
-            if (object.userData.poseHelper === true) this.hiddenPoseHelperCount += 1;
-        });
+        for (const helper of helpers) {
+            if (!helper.visible) continue;
+            helper.visible = false;
+            hiddenHelpers.push(helper);
+            if (helper.userData.poseHelper === true) this.hiddenPoseHelperCount += 1;
+        }
         this.hiddenHelpers = hiddenHelpers;
     }
 

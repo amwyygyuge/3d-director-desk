@@ -1,31 +1,40 @@
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MutableRefObject } from "react";
+import type { MutableRefObject, ReactElement } from "react";
 import type { DirectionalLight, Mesh, Object3D, PointLight, Scene, SpotLight } from "three";
-import { ArrowHelper, DirectionalLightHelper, Group, PointLightHelper, SpotLightHelper, Vector3 } from "three";
+import {
+    ArrowHelper,
+    DirectionalLightHelper,
+    Group,
+    MathUtils,
+    PointLightHelper,
+    SpotLightHelper,
+    Vector3,
+} from "three";
 
 import type { LightParams, LightType } from "@/core/LightParams";
 import type { SceneObject } from "@/core/SceneObject";
 import type { ModelHandle } from "@/loaders/ModelImporter";
+import { LIGHTING_MODE } from "@/store/SceneStore";
 import { normalizationFor } from "@/actor/ModelNormalizationPolicy";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useCaptureHelperRegistration } from "@/ui/viewport/scene/useCaptureHelperRegistration";
 
 const LOADING_START_PROGRESS = 0;
 
 const TMP_HELPER_LIGHT_POSITION = new Vector3();
 const TMP_HELPER_TARGET_POSITION = new Vector3();
 const TMP_HELPER_DIRECTION = new Vector3();
+const TMP_LIGHT_MARKER_POSITION = new Vector3();
 
 const LIGHT_MARKER_RADIUS = 0.14;
 const LIGHT_MARKER_SEGMENTS = 16;
+const LIGHT_MARKER_SCREEN_FRACTION = 0.12;
 const DIRECTION_HELPER_LENGTH = 0.9;
 const DIRECTION_HELPER_HEAD_LENGTH = 0.22;
 const DIRECTION_HELPER_HEAD_WIDTH = 0.12;
 const DIRECTION_HELPER_COLOR = "#ffd54f";
-const SPOT_CONE_ANGLE_RAD = Math.PI / 6;
-const SPOT_RANGE = 10;
-const SPOT_PENUMBRA = 0.35;
 
 interface LightContentProps {
     readonly entity: SceneObject;
@@ -55,9 +64,19 @@ const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
     scene,
     createRuntime,
 }: SceneLightHelperRootProps) {
-    const { layout, selection } = useDirectorDeskStores();
+    const { capture, layout, selection } = useDirectorDeskStores();
+    const camera = useThree((state) => state.camera);
+    const registerCaptureHelper = useCaptureHelperRegistration<Group>(capture.helpers);
     const helperRuntimeRef = useRef<LightHelperRuntime | null>(null);
     const isHelperVisible = layout.authoringVisible && selection.isSelected(entityId);
+    const keepMarkerScreenSize = useCallback(() => {
+        const marker = markerRef.current;
+        if (!marker) return;
+        marker.scale.setScalar(
+            camera.position.distanceTo(marker.getWorldPosition(TMP_LIGHT_MARKER_POSITION)) *
+                LIGHT_MARKER_SCREEN_FRACTION,
+        );
+    }, [camera, markerRef]);
 
     useEffect(() => {
         if (!isHelperVisible || !rootRef.current) return;
@@ -73,9 +92,10 @@ const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
     // 灯光标记属编辑期辅助物:全屏预览时画面只留成片内容
     if (!layout.authoringVisible) return null;
     return createPortal(
-        <group userData={{ helper: true }}>
+        <group ref={registerCaptureHelper}>
             <mesh
                 ref={markerRef}
+                onBeforeRender={keepMarkerScreenSize}
                 onClick={(event) => {
                     event.stopPropagation();
                     selection.select(entityId, { additive: event.metaKey || event.ctrlKey });
@@ -126,7 +146,10 @@ class DirectionalLightHelperRuntime implements LightHelperRuntime {
 class PointLightHelperRuntime implements LightHelperRuntime {
     private readonly helper: PointLightHelper;
 
-    constructor(source: PointLight, private readonly root: Group) {
+    constructor(
+        source: PointLight,
+        private readonly root: Group,
+    ) {
         this.helper = new PointLightHelper(source, DIRECTION_HELPER_LENGTH);
         root.add(this.helper);
     }
@@ -145,7 +168,11 @@ class SpotLightHelperRuntime implements LightHelperRuntime {
     private readonly helper: SpotLightHelper;
     private readonly arrow: ArrowHelper;
 
-    constructor(private readonly source: SpotLight, private readonly target: Object3D, private readonly root: Group) {
+    constructor(
+        private readonly source: SpotLight,
+        private readonly target: Object3D,
+        private readonly root: Group,
+    ) {
         this.helper = new SpotLightHelper(source);
         this.arrow = new ArrowHelper(
             new Vector3(0, 0, -1),
@@ -233,12 +260,12 @@ function DirectionalLightContent({ entity, light }: LightContentProps) {
         </>
     );
 }
-
 function PointLightContent({ entity, light }: LightContentProps) {
     const scene = useThree((state) => state.scene);
     const lightRef = useRef<PointLight | null>(null);
     const helperRootRef = useRef<Group | null>(null);
     const markerRef = useRef<Mesh | null>(null);
+    const pointLight = light.type === "point" ? light : null;
     const createRuntime = useCallback((root: Group) => {
         const source = lightRef.current;
         return source ? new PointLightHelperRuntime(source, root) : null;
@@ -251,27 +278,34 @@ function PointLightContent({ entity, light }: LightContentProps) {
         updateMarkerPosition(source, marker);
     });
 
+    if (!pointLight) return null;
     return (
         <>
-            <pointLight ref={lightRef} color={light.color} intensity={light.intensity} />
+            <pointLight
+                ref={lightRef}
+                color={pointLight.color}
+                intensity={pointLight.intensity}
+                distance={pointLight.distance}
+                decay={pointLight.decay}
+            />
             <SceneLightHelperRoot
                 entityId={entity.id}
                 markerRef={markerRef}
                 rootRef={helperRootRef}
-                color={light.color}
+                color={pointLight.color}
                 scene={scene}
                 createRuntime={createRuntime}
             />
         </>
     );
 }
-
 function SpotLightContent({ entity, light }: LightContentProps) {
     const scene = useThree((state) => state.scene);
     const lightRef = useRef<SpotLight | null>(null);
     const targetRef = useRef<Group | null>(null);
     const helperRootRef = useRef<Group | null>(null);
     const markerRef = useRef<Mesh | null>(null);
+    const spotLight = light.type === "spot" ? light : null;
     const createRuntime = useCallback((root: Group) => {
         const source = lightRef.current;
         const target = targetRef.current;
@@ -291,22 +325,24 @@ function SpotLightContent({ entity, light }: LightContentProps) {
         updateMarkerPosition(source, marker);
     });
 
+    if (!spotLight) return null;
     return (
         <>
             <spotLight
                 ref={lightRef}
-                color={light.color}
-                intensity={light.intensity}
-                angle={SPOT_CONE_ANGLE_RAD}
-                distance={SPOT_RANGE}
-                penumbra={SPOT_PENUMBRA}
+                color={spotLight.color}
+                intensity={spotLight.intensity}
+                angle={MathUtils.degToRad(spotLight.angleDegrees)}
+                distance={spotLight.distance}
+                decay={spotLight.decay}
+                penumbra={spotLight.penumbra}
             />
             <group ref={targetRef} position={[0, 0, -1]} />
             <SceneLightHelperRoot
                 entityId={entity.id}
                 markerRef={markerRef}
                 rootRef={helperRootRef}
-                color={light.color}
+                color={spotLight.color}
                 scene={scene}
                 createRuntime={createRuntime}
             />
@@ -314,18 +350,22 @@ function SpotLightContent({ entity, light }: LightContentProps) {
     );
 }
 
-const LIGHT_CONTENT: Record<LightType, typeof DirectionalLightContent> = {
+type LightContentComponent = (props: LightContentProps) => ReactElement | null;
+
+const LIGHT_CONTENT: Record<LightType, LightContentComponent> = {
     directional: DirectionalLightContent,
     point: PointLightContent,
     spot: SpotLightContent,
 };
 
-/** 实光属于实体运行时 group；辅助根 portal 到 Scene 世界空间，截图摘除时不会影响照明。 */
+/** 实光属于实体运行时 group；仅 custom 模式创建自定义 Three 灯，避免和 StudioRig 叠加。 */
 const ObservedLightContent = observer(function ObservedLightContent({ entity }: { entity: SceneObject }) {
+    const { scene } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const light = entity.light;
-    useEffect(() => invalidate(), [invalidate, light]);
-    if (!light) return null;
+    const lightingMode = scene.lightingMode;
+    useEffect(() => invalidate(), [invalidate, light, lightingMode]);
+    if (!light || lightingMode !== LIGHTING_MODE.CUSTOM) return null;
     const Content = LIGHT_CONTENT[light.type];
     return <Content entity={entity} light={light} />;
 });

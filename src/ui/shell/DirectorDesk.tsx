@@ -52,6 +52,7 @@ import { ShotCameraRig } from "@/ui/viewport/scene/ShotCameraRig";
 import { ShotMarkers } from "@/ui/viewport/scene/ShotMarkers";
 import { ShotFrameOverlay } from "@/ui/viewport/ShotFrameOverlay";
 import { ViewportInteractionHints } from "@/ui/viewport/ViewportInteractionHints";
+import { useCaptureHelperRegistration } from "@/ui/viewport/scene/useCaptureHelperRegistration";
 
 interface MotionKeyMenuPosition {
     readonly left: number;
@@ -124,6 +125,7 @@ export const DirectorDesk = observer(function DirectorDesk({
         }),
     );
     const deskRef = useRef<HTMLDivElement>(null);
+    const registerCaptureHelpers = useCaptureHelperRegistration(stores.capture.helpers);
     const [motionKeyMenuPosition, setMotionKeyMenuPosition] = useState<MotionKeyMenuPosition | null>(null);
     const openMotionKeyMenu = useCallback((request: MotionKeyContextRequest): void => {
         setMotionKeyMenuPosition({ left: request.clientX, top: request.clientY });
@@ -146,7 +148,7 @@ export const DirectorDesk = observer(function DirectorDesk({
         stores.lifecycle.activate();
         return () => {
             stores.lifecycle.scheduleDispose(() => {
-                stores.capture.detach();
+                stores.capture.dispose();
                 stores.ui.dispose();
                 stores.assets.dispose();
                 stores.documentImports.dispose();
@@ -255,14 +257,21 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 }}
                             >
                                 <color attach="background" args={[VIEWPORT_BACKGROUND]} />
-                                {stores.layout.authoringVisible && (
-                                    <Grid
-                                        args={[stores.layout.gridSizeMeters, stores.layout.gridSizeMeters]}
-                                        cellColor="#333333"
-                                        sectionColor="#555555"
-                                        userData={{ helper: true }}
-                                    />
-                                )}
+                                <group ref={registerCaptureHelpers}>
+                                    {stores.layout.authoringVisible && (
+                                        <Grid
+                                            args={[stores.layout.gridSizeMeters, stores.layout.gridSizeMeters]}
+                                            cellColor="#333333"
+                                            sectionColor="#555555"
+                                        />
+                                    )}
+                                    <BonePicker />
+                                    <TransformGizmoController />
+                                    <ShotMarkers />
+                                    <MotionPathPreview onKeyContextMenu={openMotionKeyMenu} />
+                                    <ObjectMotionPathPreview />
+                                    <WalkDraftController />
+                                </group>
                                 {/* 轨道启停统一由 OrbitAuthorityRig 执行:此处不再声明 enabled/阻尼开关 */}
                                 <OrbitControls
                                     makeDefault
@@ -271,17 +280,11 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 />
                                 <StudioRig />
                                 <SceneRoot />
-                                <BonePicker />
-                                <TransformGizmoController />
-                                <ShotMarkers />
                                 <PlaybackDriver />
                                 <ShotCameraRig />
                                 <OrbitAuthorityRig />
                                 <CameraMotionRig />
-                                <MotionPathPreview onKeyContextMenu={openMotionKeyMenu} />
-                                <ObjectMotionPathPreview />
                                 <FlyDrive />
-                                <WalkDraftController />
                                 <ShotNavigation />
                                 <LensNavigation />
                             </Canvas>

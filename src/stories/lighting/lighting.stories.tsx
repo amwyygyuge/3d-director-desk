@@ -9,6 +9,15 @@ const SUBJECT_ID = "lighting-subject";
 const DIRECTIONAL_ID = "lighting-directional";
 const POINT_ID = "lighting-point";
 const SPOT_ID = "lighting-spot";
+const POINT_LIGHT_DISTANCE_METERS = 12;
+const POINT_LIGHT_DECAY = 2;
+const SPOT_LIGHT_DISTANCE_METERS = 9;
+const SPOT_LIGHT_DECAY = 2;
+const SPOT_LIGHT_ANGLE_DEGREES = 36;
+const SPOT_LIGHT_PENUMBRA = 0.4;
+const ADJUSTED_SPOT_DISTANCE_METERS = 7;
+const ADJUSTED_SPOT_ANGLE_DEGREES = 24;
+const ADJUSTED_SPOT_PENUMBRA = 0.6;
 
 function seedLightingAcceptance(stores: DirectorDeskStores): void {
     const capabilityTypes = stores.dispatcher.listCapabilities().map((capability) => capability.type);
@@ -34,16 +43,32 @@ function seedLightingAcceptance(stores: DirectorDeskStores): void {
         id: POINT_ID,
         kind: "light",
         name: "验收点光",
-        light: { type: "point", color: "#8ec5ff", intensity: 20 },
+        light: {
+            type: "point",
+            color: "#8ec5ff",
+            intensity: 20,
+            distance: POINT_LIGHT_DISTANCE_METERS,
+            decay: POINT_LIGHT_DECAY,
+        },
         transform: { position: [-3, 3, 2], rotation: [0, 0, 0], scale: [1, 1, 1] },
     });
     dispatch(stores, "object.place", {
         id: SPOT_ID,
         kind: "light",
         name: "验收聚光",
-        light: { type: "spot", color: "#ffd7a1", intensity: 25 },
+        light: {
+            type: "spot",
+            color: "#ffd7a1",
+            intensity: 25,
+            distance: SPOT_LIGHT_DISTANCE_METERS,
+            decay: SPOT_LIGHT_DECAY,
+            angleDegrees: SPOT_LIGHT_ANGLE_DEGREES,
+            penumbra: SPOT_LIGHT_PENUMBRA,
+        },
         transform: { position: [0, 4, 4], rotation: [-0.6, 0, 0], scale: [1, 1, 1] },
     });
+    dispatch(stores, "scene.set-lighting-mode", { mode: "custom" });
+    assertAcceptance(stores.scene.lightingMode === "custom", "自定义灯光模式未启用");
 
     dispatch(stores, "object.move", {
         id: POINT_ID,
@@ -51,11 +76,27 @@ function seedLightingAcceptance(stores: DirectorDeskStores): void {
     });
     dispatch(stores, "light.adjust", {
         id: SPOT_ID,
-        light: { type: "spot", color: "#f0a8ff", intensity: 35 },
+        light: {
+            type: "spot",
+            color: "#f0a8ff",
+            intensity: 35,
+            distance: ADJUSTED_SPOT_DISTANCE_METERS,
+            decay: SPOT_LIGHT_DECAY,
+            angleDegrees: ADJUSTED_SPOT_ANGLE_DEGREES,
+            penumbra: ADJUSTED_SPOT_PENUMBRA,
+        },
     });
-    assertAcceptance(stores.scene.manager.getEntity(SPOT_ID)?.light?.intensity === 35, "light.adjust 未应用");
+    const adjustedSpot = stores.scene.manager.getEntity(SPOT_ID)?.light;
+    assertAcceptance(
+        adjustedSpot?.type === "spot" && adjustedSpot.angleDegrees === ADJUSTED_SPOT_ANGLE_DEGREES,
+        "light.adjust 未应用灯型专属参数",
+    );
     assertAcceptance(stores.history.undo(stores).ok, "light.adjust undo 失败");
-    assertAcceptance(stores.scene.manager.getEntity(SPOT_ID)?.light?.intensity === 25, "undo 未恢复完整 LightParams");
+    const restoredSpot = stores.scene.manager.getEntity(SPOT_ID)?.light;
+    assertAcceptance(
+        restoredSpot?.type === "spot" && restoredSpot.angleDegrees === SPOT_LIGHT_ANGLE_DEGREES,
+        "undo 未恢复完整 LightParams",
+    );
     assertAcceptance(stores.history.redo(stores).ok, "light.adjust redo 失败");
 
     dispatch(stores, "object.remove", { id: SPOT_ID });

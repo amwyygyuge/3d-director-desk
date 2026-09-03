@@ -42,7 +42,8 @@ export interface ContractViolation {
 const CONTRACT_ROOT = "payload";
 const EMPTY_PROPERTIES: Record<string, PayloadFieldSchema> = {};
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/** 命令 payload 的唯一结构守卫；字段语义仍由各领域 validator 负责。 */
+export function isPayloadRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -73,7 +74,7 @@ function checkObjectFields(
     shape: { readonly properties?: Record<string, PayloadFieldSchema>; readonly required?: readonly string[] },
     value: unknown,
 ): readonly ContractViolation[] {
-    if (!isPlainObject(value)) return violation(path, `${path} 应为 object`);
+    if (!isPayloadRecord(value)) return violation(path, `${path} 应为 object`);
     const properties = shape.properties ?? EMPTY_PROPERTIES;
     const requiredIssues = (shape.required ?? []).flatMap((key) =>
         value[key] === undefined ? violation(`${path}.${key}`, `缺少必填字段 ${path}.${key}`) : [],

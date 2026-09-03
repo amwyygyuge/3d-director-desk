@@ -6,6 +6,9 @@ export const SCRUB_STEP = {
     timeSeconds: 0.1,
     angleDeg: 1,
     intensity: 0.1,
+    distanceMeters: 0.1,
+    decay: 0.1,
+    ratio: 0.05,
 } as const;
 export type ScrubKind = keyof typeof SCRUB_STEP;
 
