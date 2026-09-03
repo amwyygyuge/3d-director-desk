@@ -9,6 +9,7 @@ import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RedoIcon from "@mui/icons-material/Redo";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
+import RouteIcon from "@mui/icons-material/Route";
 import UndoIcon from "@mui/icons-material/Undo";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
@@ -45,6 +46,7 @@ const COMMAND_TYPE = {
     EXPORT_DOCUMENT: "desk.export-document",
     IMPORT_DOCUMENT: "desk.import-document",
     REMOVE_OBJECT: "object.remove",
+    SET_SWEEP_PATH: "view.set-sweep-path",
 } as const;
 
 const TEXT = {
@@ -58,6 +60,8 @@ const TEXT = {
     HELP: "快捷键速查",
     PATH_HELPERS: "编排轨迹",
     PATH_HELPERS_HINT: "运镜与走位轨迹的显隐",
+    FOLLOW_SWEEP_PATH: "跟拍扫掠路径",
+    FOLLOW_SWEEP_PATH_HINT: "显示相机在世界里实际走的线（排查用）；作者平时看的是主体身上的相对轨迹",
     WALK_DRAFT: "绘制走位",
     WALK_DRAFT_HINT: "选中对象后在地面拖出路线,松手成轨;Esc 退出",
     GRID_SIZE: "地板尺寸",
@@ -390,6 +394,33 @@ const PathHelperToggle = observer(function PathHelperToggle() {
     );
 });
 
+/** 跟拍世界扫掠只供排查:独立于总路径开关,默认不显示。 */
+const FollowSweepPathToggle = observer(function FollowSweepPathToggle() {
+    const stores = useDirectorDeskStores();
+    const active = stores.motionAuthoring.sweepPathVisible;
+    return (
+        <Tooltip title={TEXT.FOLLOW_SWEEP_PATH_HINT}>
+            <IconButton
+                aria-label={TEXT.FOLLOW_SWEEP_PATH}
+                aria-pressed={active}
+                onClick={() =>
+                    reportCommandFailure(
+                        stores,
+                        stores.dispatcher.dispatch(
+                            { type: COMMAND_TYPE.SET_SWEEP_PATH, payload: { visible: !active } },
+                            stores,
+                        ),
+                    )
+                }
+                size={COMPACT_SIZE}
+                sx={active ? ACTIVE_TOOL_SX : undefined}
+            >
+                <RouteIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
+
 /**
  * 走位草绘模式(钉住式)。
  * 不给弹簧快捷键:WASD+Space/Shift 归飞行导航持续占用,裸字母弹簧键会在飞行途中误触发。
@@ -421,6 +452,7 @@ const OutputPill = observer(function OutputPill() {
             <GizmoToggle />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <PathHelperToggle />
+            <FollowSweepPathToggle />
             <WalkDraftToggle />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <CaptureControls />

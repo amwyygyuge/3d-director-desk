@@ -36,8 +36,10 @@ export interface TimelineBar {
     readonly durationSeconds: number;
     readonly startRatio: number;
     readonly widthRatio: number;
-    /** Program 片段直接引用运镜 = 跟随态,重定时时一并移动 */
+    /** Program 片段直接引用运镜 = 时段联动态,重定时时一并移动 */
     readonly linked: boolean;
+    /** 运镜片段的跟拍主体;非运镜条恒为 null。 */
+    readonly followSubjectId: string | null;
 }
 
 export interface TimelineMark {
@@ -134,6 +136,7 @@ export class TimelineLayout {
             startRatio: viewport.ratioAt(clip.startTimeSeconds),
             widthRatio: clip.durationSeconds / viewport.visibleSeconds,
             linked: clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP,
+            followSubjectId: null,
         }));
         return { kind: TIMELINE_ROW_KIND.PROGRAM, id: PROGRAM_ROW_ID, label: PROGRAM_ROW_LABEL, bars, marks: [] };
     }
@@ -158,6 +161,7 @@ export class TimelineLayout {
                         programClip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP &&
                         programClip.source.motionClipId === clip.id,
                 ),
+                followSubjectId: clip.follow?.objectId ?? null,
             })),
             marks: clips.flatMap((clip) =>
                 clip.keys.map((key) => {
@@ -191,6 +195,7 @@ export class TimelineLayout {
                               startRatio: viewport.ratioAt(firstKeyframe.time),
                               widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
                               linked: false,
+                              followSubjectId: null,
                           },
                       ]
                     : [];

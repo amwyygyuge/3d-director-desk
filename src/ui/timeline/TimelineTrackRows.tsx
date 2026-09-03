@@ -1,4 +1,5 @@
 import LinkIcon from "@mui/icons-material/Link";
+import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import Switch from "@mui/material/Switch";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
@@ -86,15 +87,22 @@ const PROGRAM_CONFLICT_LABEL = "成片片段与另一片段重叠：同一时刻
 const SNAP_LABEL = "启用吸附";
 const SNAP_HINT = "拖拽时自动贴到播放头、片段边缘、关键帧与标记；按住 Alt 临时关闭";
 const DRAG_READOUT_BACKGROUND = "rgba(0,0,0,0.72)";
-const LINK_LABEL = "解除成片跟随";
-const LINK_HINT = "解除后成片片段不再跟着运镜片段走，两者时段各自独立";
+const LINK_LABEL = "解除时段联动";
+const LINK_HINT = "解除后成片片段与运镜片段的时段各自独立";
 const LINK_ICON_SIZE = "small" as const;
+const BAR_BADGE_MARGIN = 0.5;
+const FOLLOW_LABEL = "跟拍";
+const FOLLOW_UNBIND_HINT = "点击解除跟拍";
 
 type ProgramRangeCommandOptions = {
     readonly clipId: string;
     readonly source: ProgramSource;
     readonly range: TimelineClipRange;
 };
+function followBadgeTooltip(subjectName: string): string {
+    return `${FOLLOW_LABEL} ${subjectName} · ${FOLLOW_UNBIND_HINT}`;
+}
+
 const TIMELINE_DRAG_HANDLE_SIDE = {
     START: "start",
     END: "end",
@@ -576,15 +584,25 @@ const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineCli
     const drag = useTimelineClipDrag({ barId, onCommit: commitRange });
     const bar = projectedBar(stores, barId);
     if (!bar) return null;
-    const removeFollow = (): void => {
+    const removeLinkedProgram = (): void => {
         reportCommandFailure(
             stores,
             stores.dispatcher.dispatch({ type: "program.remove-clip", payload: { id: bar.id } }, stores),
         );
     };
+    const unbindFollow = (): void => {
+        if (bar.followSubjectId === null) return;
+        reportCommandFailure(
+            stores,
+            stores.dispatcher.dispatch({ type: "motion.unbind-follow", payload: { id: bar.id } }, stores),
+        );
+    };
     const currentRange = drag.range ?? { startTimeSeconds: bar.startSeconds, durationSeconds: bar.durationSeconds };
     const activate = BAR_ACTIVATION[bar.kind];
     const isMotion = bar.kind === TIMELINE_BAR_KIND.MOTION;
+    const followSubjectName = bar.followSubjectId
+        ? (stores.scene.manager.getEntity(bar.followSubjectId)?.name ?? bar.followSubjectId)
+        : null;
     const isTransform = bar.kind === TIMELINE_BAR_KIND.TRANSFORM;
     const isSelected = stores.timelineSelection.current.ownerId === bar.id;
     const isProgramConflict = overlapsProgramBar(stores, bar);
@@ -636,6 +654,7 @@ const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineCli
                     open(
                         event,
                         track ? trackTimeAtPointer(stores, track, event.clientX).timeSeconds : bar.startSeconds,
+                        isMotion ? bar.id : null,
                     );
                 }}
                 onKeyDown={keydown}
@@ -708,21 +727,41 @@ const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineCli
                         }}
                     />
                 )}
-                {bar.linked && (
-                    <Tooltip title={`${LINK_LABEL}：${LINK_HINT}`}>
-                        <IconButton
-                            aria-label={LINK_LABEL}
-                            size={LINK_ICON_SIZE}
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                removeFollow();
-                            }}
-                            sx={{ color: "inherit", p: 0, ml: 0.5 }}
-                        >
-                            <LinkIcon fontSize="inherit" />
-                        </IconButton>
-                    </Tooltip>
+                {(bar.linked || followSubjectName) && (
+                    <Box sx={{ display: "flex", alignItems: "center", ml: BAR_BADGE_MARGIN }}>
+                        {bar.linked && (
+                            <Tooltip title={`${LINK_LABEL}：${LINK_HINT}`}>
+                                <IconButton
+                                    aria-label={LINK_LABEL}
+                                    size={LINK_ICON_SIZE}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        removeLinkedProgram();
+                                    }}
+                                    sx={{ color: "inherit", p: 0 }}
+                                >
+                                    <LinkIcon fontSize="inherit" />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                        {followSubjectName && (
+                            <Tooltip title={followBadgeTooltip(followSubjectName)}>
+                                <IconButton
+                                    aria-label={`${FOLLOW_LABEL} ${followSubjectName}`}
+                                    size={LINK_ICON_SIZE}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        unbindFollow();
+                                    }}
+                                    sx={{ color: "inherit", p: 0 }}
+                                >
+                                    <DirectionsWalkIcon fontSize="inherit" />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                    </Box>
                 )}
             </Box>
         </Tooltip>
