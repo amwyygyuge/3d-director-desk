@@ -10,8 +10,8 @@ export interface HostAdapter {
     readonly onImportModel: (handler: (payload: { url: string; name: string }) => void) => () => void;
     /** 宿主侧注册资源条目进目录(外部注入通道;条目逐条过校验围栏) */
     readonly onRegisterAssets: (handler: (payload: { assets: readonly unknown[] }) => void) => () => void;
-    /** 已完成采集产物回传宿主(成为节点 outputs)。 */
-    readonly reportCapture: (product: CaptureProduct) => void;
+    /** 已完成采集产物回传宿主(成为节点 outputs);异步宿主在上传和落节点完成后 resolve。 */
+    readonly reportCapture: (product: CaptureProduct) => void | Promise<void>;
     /** ready 握手(带协议版本;直嵌形态是空操作) */
     readonly reportReady: (protocolVersion: number) => void;
     /** 实例卸载回收(可选;iframe 形态释放 message 监听) */

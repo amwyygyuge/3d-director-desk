@@ -1,9 +1,7 @@
 import { observer } from "mobx-react-lite";
 
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { ViewportToast } from "@/ui/workspace/ViewportToast";
-
-const NOTICE_DURATION_MS = 3000;
+import { VIEWPORT_TOAST_SLOT, VIEWPORT_TOAST_TONE, ViewportToast } from "@/ui/workspace/ViewportToast";
 
 /**
  * 应用级命令失败提示。
@@ -15,9 +13,9 @@ export const ApplicationNotice = observer(function ApplicationNotice() {
 
     return (
         <ViewportToast
-            assertive
+            tone={VIEWPORT_TOAST_TONE.ERROR}
+            slot={VIEWPORT_TOAST_SLOT.APPLICATION}
             open={ui.applicationNotice !== null}
-            autoHideMs={NOTICE_DURATION_MS}
             onClose={() => ui.clearApplicationNotice()}
         >
             {ui.applicationNotice}
