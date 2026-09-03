@@ -1,6 +1,7 @@
 import { CameraKey } from "@/camera/CameraKey";
 import { createCameraMotionSample } from "@/camera/CameraMotionClip";
 import type { CameraMotionClip, CameraMotionSample } from "@/camera/CameraMotionClip";
+import { FOLLOW_SPACE, followSpaceCodecFor } from "@/camera/FollowSpaceCodec";
 import { transformKeyCommandFor } from "@/command/timelineCommands";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
@@ -10,6 +11,7 @@ const ISSUE_CODE = {
     NO_TARGET: "authoring-no-key-target",
     NO_POSE: "authoring-viewport-pose-unavailable",
     NO_CLIP: "authoring-no-clip-at-time",
+    NO_FOLLOW_FRAME: "authoring-follow-frame-unavailable",
 } as const;
 
 /** 同一时刻重复打点视为覆盖同一枚关键帧,避免 progress 冲突把作者卡住。 */
@@ -32,6 +34,24 @@ function poseVector(x: number, y: number, z: number): Vec3 {
     return [x, y, z];
 }
 
+/** 跟拍态下视口读数属于世界系;一枚打点的 position/target 必须一起落回片段自身的跟随系。 */
+function followLocalPose(
+    ctx: DirectorContext,
+    clip: CameraMotionClip,
+    timeSeconds: number,
+): { readonly position: Vec3; readonly target: Vec3; readonly fov: number } | null {
+    const follow = clip.follow;
+    const position = poseVector(VIEWPORT_POSE.positionX, VIEWPORT_POSE.positionY, VIEWPORT_POSE.positionZ);
+    const target = poseVector(VIEWPORT_POSE.targetX, VIEWPORT_POSE.targetY, VIEWPORT_POSE.targetZ);
+    if (!follow) return { position, target, fov: VIEWPORT_POSE.fov };
+    const codec = followSpaceCodecFor(ctx);
+    const localPosition = codec.convertPoint(follow, timeSeconds, FOLLOW_SPACE.LOCAL, position);
+    const localTarget = codec.convertPoint(follow, timeSeconds, FOLLOW_SPACE.LOCAL, target);
+    return localPosition && localTarget
+        ? { position: localPosition, target: localTarget, fov: VIEWPORT_POSE.fov }
+        : null;
+}
+
 /** 镜头视角下 playhead 命中的可编辑片段:与采样器共用同一裁决,禁止两处推断。 */
 function lensClipAt(ctx: DirectorContext, timeSeconds: number): CameraMotionClip | null {
     return ctx.motion.resolveOutputClipAt(timeSeconds, ctx.motionAuthoring.previewClipId);
@@ -49,13 +69,17 @@ function cameraKeyCommand(ctx: DirectorContext): KeyframeAuthoringResult {
         return issue(ISSUE_CODE.NO_POSE, "viewport", "视口相机尚未接管,无法读取当前画面");
     }
     const progress = clip.trajectoryProgressAt(timeSeconds);
+    const pose = followLocalPose(ctx, clip, timeSeconds);
+    if (!pose) {
+        return issue(ISSUE_CODE.NO_FOLLOW_FRAME, "follow", "跟拍主体当前无法定位,无法记录镜头关键帧");
+    }
     const existing = clip.keys.find((key) => Math.abs(key.progress - progress) < KEY_MERGE_PROGRESS);
     const key = new CameraKey({
         id: existing?.id ?? crypto.randomUUID(),
         progress,
-        position: poseVector(VIEWPORT_POSE.positionX, VIEWPORT_POSE.positionY, VIEWPORT_POSE.positionZ),
-        target: poseVector(VIEWPORT_POSE.targetX, VIEWPORT_POSE.targetY, VIEWPORT_POSE.targetZ),
-        fov: VIEWPORT_POSE.fov,
+        position: pose.position,
+        target: pose.target,
+        fov: pose.fov,
         // 覆盖既有关键帧时保留作者已接管的切线:打点只改画面,不撤销手工调校
         ...(existing ? { inHandle: existing.inHandle, outHandle: existing.outHandle } : {}),
         handleMode: existing?.handleMode ?? MOTION_HANDLE_MODE.AUTO,

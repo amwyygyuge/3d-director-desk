@@ -2,14 +2,18 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
 
 import {
+    FOLLOW_MOVE_LABEL,
+    isOrientationMove,
+    MOTION_MOVE,
     DEFAULT_PRESET_DURATION_SECONDS,
     MOTION_DURATION_OPTIONS_SECONDS,
-    MOTION_MOVE,
     MOTION_MOVE_LABEL,
     MOTION_PROGRAM_RANGE_DECIMALS,
     motionProgramRangeFor,
@@ -18,6 +22,8 @@ import {
 import type { MotionMove, OrbitDirection } from "@/authoring/MotionPresetCompiler";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
+import { FOLLOW_APPROACH } from "@/camera/CameraFollowTrack";
+import type { FollowApproach } from "@/camera/CameraFollowTrack";
 import { EASING } from "@/motion/EasingCurve";
 import { QuickAuthorMotionCommand } from "@/command/cameraMotionCommands";
 import type { InspectorSectionProps } from "@/ui/inspector/Inspector";
@@ -31,6 +37,18 @@ const SHOT_SIZES = Object.values(SHOT_SIZE) as readonly ShotSize[];
 const ORBIT_DEGREES_OPTIONS = [90, 180, 360] as const;
 const PROGRAM_START_SECONDS = 0;
 const PRESET_GRID_COLUMNS = "repeat(2, minmax(0, 1fr))";
+const NO_FOLLOW = "none";
+/** 站位档位:跟拍时相机站在主体的哪一侧;不发裸角度 */
+const FOLLOW_APPROACH_LABELS: Record<FollowApproach, string> = {
+    [FOLLOW_APPROACH.BACK]: "身后",
+    [FOLLOW_APPROACH.FRONT]: "正前",
+    [FOLLOW_APPROACH.LEFT]: "左侧",
+    [FOLLOW_APPROACH.RIGHT]: "右侧",
+};
+const FOLLOW_APPROACHES = Object.values(FOLLOW_APPROACH) as readonly FollowApproach[];
+/** 跟拍的缺省语汇:保持相对站位 = 第三人称固定跟随,这是跟拍最常见的用法 */
+const DEFAULT_FOLLOW_MOVE = MOTION_MOVE.HOLD;
+const DEFAULT_FREE_MOVE = MOTION_MOVE.ORBIT;
 
 const ORBIT_DIRECTION_LABELS: Record<OrbitDirection, string> = {
     [ORBIT_DIRECTION.CW]: "顺时针",
@@ -51,7 +69,8 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
     const stores = useDirectorDeskStores();
     const entity = stores.scene.manager.getEntity(primaryId);
     const [shotSize, setShotSize] = useState<ShotSize>(SHOT_SIZE.MEDIUM);
-    const [move, setMove] = useState<MotionMove>(MOTION_MOVE.ORBIT);
+    const [approach, setApproach] = useState<FollowApproach | null>(FOLLOW_APPROACH.BACK);
+    const [move, setMove] = useState<MotionMove>(DEFAULT_FOLLOW_MOVE);
     const [degrees, setDegrees] = useState<number>(ORBIT_DEGREES_OPTIONS[2]);
     const [direction, setDirection] = useState<OrbitDirection>(ORBIT_DIRECTION.CW);
     const [durationSeconds, setDurationSeconds] = useState<number>(DEFAULT_PRESET_DURATION_SECONDS);
@@ -66,6 +85,12 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
         durationSeconds,
     });
 
+    /** 切换跟拍即切换缺省语汇:跟拍下最常用的是保持相对站位,自由运镜下是环绕 */
+    const switchFollow = (next: FollowApproach | null): void => {
+        setApproach(next);
+        setMove(next ? DEFAULT_FOLLOW_MOVE : DEFAULT_FREE_MOVE);
+    };
+
     const create = (): void => {
         const result = stores.dispatcher.dispatch(
             {
@@ -76,6 +101,7 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
                     move,
                     durationSeconds,
                     ...(orbitLike ? { degrees, direction } : {}),
+                    ...(approach ? { follow: { approach } } : {}),
                     easing: EASING.SMOOTH,
                 },
             },
@@ -88,8 +114,30 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
         <Box className="grid gap-3">
             <Typography variant="subtitle2">快速运镜</Typography>
             <Typography variant="caption" color="text.secondary">
-                按当前相机方位为「{entity.name}
-                」生成运镜片段并追加到成片（Program）末尾；不新建机位，起幅机位只是构图快照。
+                为「{entity.name}」生成运镜片段并追加到成片(Program)末尾;不新建机位,起幅机位只是构图快照。
+            </Typography>
+            <ToggleButtonGroup
+                exclusive
+                fullWidth
+                size="small"
+                value={approach ?? NO_FOLLOW}
+                onChange={(_, next: string | null) =>
+                    switchFollow(next === null || next === NO_FOLLOW ? null : (next as FollowApproach))
+                }
+                aria-label="跟拍站位"
+            >
+                <ToggleButton value={NO_FOLLOW}>不跟</ToggleButton>
+                {FOLLOW_APPROACHES.map((candidate) => (
+                    <ToggleButton key={candidate} value={candidate}>
+                        {FOLLOW_APPROACH_LABELS[candidate]}
+                    </ToggleButton>
+                ))}
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary">
+                {approach
+                    ? "镜头站在主体的这一侧跟着走;下面的语汇作用于相对主体的运动。"
+                    : "机位固定在世界里,按当前相机方位取景。"}
+                摇镜/俯仰只改注视方向,而本面板的注视始终锁在被摄对象上,故不可选。
             </Typography>
             <Select
                 size="small"
@@ -109,9 +157,10 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
                         key={candidate}
                         size="small"
                         variant={candidate === move ? "contained" : "outlined"}
+                        disabled={isOrientationMove(candidate)}
                         onClick={() => setMove(candidate)}
                     >
-                        {MOTION_MOVE_LABEL[candidate]}
+                        {approach ? FOLLOW_MOVE_LABEL[candidate] : MOTION_MOVE_LABEL[candidate]}
                     </Button>
                 ))}
             </Box>
