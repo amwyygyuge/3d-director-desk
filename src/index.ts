@@ -194,6 +194,9 @@ export {
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "@/command/documentCommands";
 export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 export { DOCUMENT_IMPORT_ISSUE_CODE, DocumentImportService } from "@/document/DocumentImportService";
+export { ProgramReviewQuery, registerReviewCommands } from "@/command/reviewCommands";
+export { PROGRAM_REVIEW_ISSUE_KIND, ProgramReviewService } from "@/review/ProgramReviewService";
+export type { ProgramReviewIssue, ProgramReviewIssueKind, ProgramReviewReport, ProgramReviewShot } from "@/review/ProgramReviewService";
 export { AssetCatalog } from "@/assets/catalog/AssetCatalog";
 export { BuiltinAssetProvider } from "@/assets/catalog/AssetProvider";
 export type { AssetProvider } from "@/assets/catalog/AssetProvider";

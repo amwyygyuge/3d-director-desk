@@ -124,4 +124,5 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "actor.get": "人偶画像:外观与体型参数",
     "actor.presets.list": "体型预设目录",
     "desk.export-document": "导出整桌 JSON 文档(存档/接管/全量感知兜底)",
+    "program.review": "成片巡检与镜头单:返回播放范围内的 Program 空档、缺失机位/运镜来源及可定位镜头列表",
 };

@@ -15,6 +15,7 @@ import { AssetLibraryPanel } from "@/ui/assets/AssetLibraryPanel";
 import { LightSection } from "@/ui/lighting/LightSection";
 import { OutlinerPanel } from "@/ui/outline/OutlinerPanel";
 import { ShotPanel } from "@/ui/shots/ShotPanel";
+import { ProgramReviewPanel } from "@/ui/review/ProgramReviewPanel";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { SHELL_MODE } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -25,6 +26,7 @@ const SECTION_PANELS: Record<WorkspaceSection, ComponentType> = {
     [WORKSPACE_SECTION.ASSETS]: AssetLibraryPanel,
     [WORKSPACE_SECTION.CAMERA]: ShotPanel,
     [WORKSPACE_SECTION.LIGHT]: LightSection,
+    [WORKSPACE_SECTION.REVIEW]: ProgramReviewPanel,
 };
 
 const navigatorTabId = (section: WorkspaceSection): string => `navigator-tab-${section}`;
@@ -83,9 +85,14 @@ const NavigatorTabBar = observer(function NavigatorTabBar() {
                         id={navigatorTabId(section)}
                         aria-controls={navigatorPanelId(section)}
                         aria-label={definition.label}
-                        icon={<SectionIcon fontSize="small" />}
-                        iconPosition="start"
-                        label={definition.shortLabel}
+                        icon={
+                            <Tooltip enterDelay={0} title={definition.label}>
+                                <span>
+                                    <SectionIcon fontSize="small" />
+                                </span>
+                            </Tooltip>
+                        }
+                        sx={{ minWidth: 0, px: 0.5 }}
                     />
                 );
             })}

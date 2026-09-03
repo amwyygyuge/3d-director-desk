@@ -1,4 +1,5 @@
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
@@ -16,14 +17,13 @@ export const WORKSPACE_SECTION = {
     ASSETS: "assets",
     CAMERA: "camera",
     LIGHT: "light",
+    REVIEW: "review",
 } as const;
 export type WorkspaceSection = (typeof WORKSPACE_SECTION)[keyof typeof WORKSPACE_SECTION];
 
 export interface WorkspaceSectionDef {
     /** 全称:无障碍名与需要完整语义的场合 */
     readonly label: string;
-    /** 短称:tab 条等窄空间的显示文案 */
-    readonly shortLabel: string;
     readonly icon: SvgIconComponent;
 }
 
@@ -32,11 +32,13 @@ export const WORKSPACE_SECTION_ORDER: readonly WorkspaceSection[] = [
     WORKSPACE_SECTION.ASSETS,
     WORKSPACE_SECTION.CAMERA,
     WORKSPACE_SECTION.LIGHT,
+    WORKSPACE_SECTION.REVIEW,
 ];
 
 export const WORKSPACE_SECTION_DEFS: Record<WorkspaceSection, WorkspaceSectionDef> = {
-    [WORKSPACE_SECTION.OUTLINE]: { label: "资源大纲", shortLabel: "大纲", icon: AccountTreeIcon },
-    [WORKSPACE_SECTION.ASSETS]: { label: "模型资产", shortLabel: "资产", icon: ViewInArIcon },
-    [WORKSPACE_SECTION.CAMERA]: { label: "机位与运镜", shortLabel: "机位", icon: VideocamIcon },
-    [WORKSPACE_SECTION.LIGHT]: { label: "灯光环境", shortLabel: "灯光", icon: LightbulbIcon },
+    [WORKSPACE_SECTION.OUTLINE]: { label: "资源大纲", icon: AccountTreeIcon },
+    [WORKSPACE_SECTION.ASSETS]: { label: "模型资产", icon: ViewInArIcon },
+    [WORKSPACE_SECTION.CAMERA]: { label: "机位与运镜", icon: VideocamIcon },
+    [WORKSPACE_SECTION.LIGHT]: { label: "灯光环境", icon: LightbulbIcon },
+    [WORKSPACE_SECTION.REVIEW]: { label: "成片巡检", icon: FactCheckIcon },
 };

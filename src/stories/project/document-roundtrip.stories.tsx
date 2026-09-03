@@ -1,8 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { COMMAND_ERROR } from "@/command/CommandDispatcher";
+import { ProgramReviewQuery } from "@/command/reviewCommands";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import { DOCUMENT_IMPORT_ISSUE_CODE } from "@/document/DocumentImportService";
+import { PROGRAM_REVIEW_ISSUE_KIND } from "@/review/ProgramReviewService";
+import type { ProgramReviewReport } from "@/review/ProgramReviewService";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { AcceptancePanel } from "@/stories/AcceptancePanel";
@@ -81,6 +84,14 @@ async function seedDocumentRoundtrip(stores: DirectorDeskStores): Promise<void> 
         !missingShot.ok &&
             missingShot.issueDetails?.some((issue) => issue.code === COMMAND_ERROR.VALIDATION_FAILED) === true,
         "旧命令校验失败未收敛为结构化错误",
+    );
+    const review = stores.dispatcher.query({ type: ProgramReviewQuery.TYPE, payload: {} }, stores);
+    assertAcceptance(review.ok, "成片巡检查询失败");
+    const report = review.value as ProgramReviewReport;
+    assertAcceptance(report.shots.length === 1, "镜头单缺少 Program 片段");
+    assertAcceptance(
+        report.issues.some((issue) => issue.kind === PROGRAM_REVIEW_ISSUE_KIND.GAP),
+        "成片巡检未报告 Program 空档",
     );
 }
 
