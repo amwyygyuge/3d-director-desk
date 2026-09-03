@@ -9,7 +9,8 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { observer } from "mobx-react-lite";
 
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
+import { EASING, EASING_LABEL } from "@/motion/EasingCurve";
+import type { EasingCurve } from "@/motion/EasingCurve";
 import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -17,6 +18,7 @@ import type { Vec3 } from "@/core/SceneObject";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import { RemoveMotionKeyCommand } from "@/command/cameraMotionCommands";
 import { subjectBoundsFor } from "@/command/subjectBounds";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { MotionPresetControls } from "@/ui/inspector/MotionPresetControls";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
@@ -214,7 +216,7 @@ const ClipActionControls = observer(function ClipActionControls({ clipId }: { cl
 
 const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: string }) {
     const stores = useDirectorDeskStores();
-    const { dispatcher, motion, motionAuthoring } = stores;
+    const { dispatcher, motion, timelineSelection } = stores;
     const clip = motion.clip(clipId);
 
     if (!clip) return null;
@@ -223,7 +225,7 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
         <Box sx={{ display: "grid", gap: FIELD_GAP, p: FIELD_GAP }}>
             <Typography variant="subtitle2">关键帧 ({clip.keys.length})</Typography>
             {clip.keys.map((key) => {
-                const selected = motionAuthoring.selectedKeyId === key.id;
+                const selected = timelineSelection.current.motionKeyId === key.id;
                 const timeSeconds = clip.timeAtProgress(key.progress);
                 return (
                     <Box
@@ -234,7 +236,7 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
                             size="small"
                             variant={selected ? "contained" : "text"}
                             sx={{ justifyContent: "flex-start" }}
-                            onClick={() => motionAuthoring.selectKey(clip.id, key.id)}
+                            onClick={() => timelineSelection.select(TimelineSelection.motionKey(clip.id, key.id))}
                         >
                             {timeSeconds.toFixed(2)}s
                         </Button>
@@ -251,7 +253,9 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
                             >
                                 定位
                             </Button>
-                            <Tooltip title={`删除关键帧 (${formatShortcutHint(SHORTCUT_ID.MOTION_KEY_DELETE)})`}>
+                            <Tooltip
+                                title={`删除关键帧 (${formatShortcutHint(SHORTCUT_ID.TIMELINE_SELECTION_DELETE)})`}
+                            >
                                 <IconButton
                                     size="small"
                                     aria-label={`删除 ${timeSeconds.toFixed(2)} 秒的关键帧`}
@@ -280,9 +284,9 @@ const MotionKeyList = observer(function MotionKeyList({ clipId }: { clipId: stri
 
 const SelectedMotionKeyInspector = observer(function SelectedMotionKeyInspector({ clipId }: { clipId: string }) {
     const stores = useDirectorDeskStores();
-    const { motion, motionAuthoring } = stores;
+    const { motion, timelineSelection } = stores;
     const clip = motion.clip(clipId);
-    const keyId = motionAuthoring.selectedKeyId;
+    const keyId = timelineSelection.current.motionKeyId;
     const key = clip && keyId ? clip.key(keyId) : undefined;
 
     if (!clip || !key) return null;
@@ -377,7 +381,7 @@ const ClipEasingControl = observer(function ClipEasingControl({ clipId }: { clip
 
     if (!clip) return null;
 
-    const setEasing = (easing: (typeof CAMERA_MOTION_EASING)[keyof typeof CAMERA_MOTION_EASING]) => {
+    const setEasing = (easing: EasingCurve) => {
         const result = dispatcher.dispatch(
             { type: "motion.set-clip-easing", payload: { id: clip.id, easing } },
             stores,
@@ -391,20 +395,16 @@ const ClipEasingControl = observer(function ClipEasingControl({ clipId }: { clip
                 整段时间曲线
             </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: FIELD_GAP }}>
-                <Button
-                    size="small"
-                    variant={clip.easing === CAMERA_MOTION_EASING.LINEAR ? "contained" : "outlined"}
-                    onClick={() => setEasing(CAMERA_MOTION_EASING.LINEAR)}
-                >
-                    匀速
-                </Button>
-                <Button
-                    size="small"
-                    variant={clip.easing === CAMERA_MOTION_EASING.SMOOTH ? "contained" : "outlined"}
-                    onClick={() => setEasing(CAMERA_MOTION_EASING.SMOOTH)}
-                >
-                    起落加减速
-                </Button>
+                {Object.values(EASING).map((easing) => (
+                    <Button
+                        key={easing}
+                        size="small"
+                        variant={clip.easing === easing ? "contained" : "outlined"}
+                        onClick={() => setEasing(easing)}
+                    >
+                        {EASING_LABEL[easing]}
+                    </Button>
+                ))}
             </Box>
         </Box>
     );

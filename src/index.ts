@@ -79,8 +79,8 @@ export { MotionTrajectory, createPositionSample } from "@/motion/MotionTrajector
 export type { MotionPositionSample } from "@/motion/MotionTrajectory";
 export { CameraKey, cameraKeyFrom } from "@/camera/CameraKey";
 export type { CameraKeyInit, CameraKeyJSON, CameraKeyPose } from "@/camera/CameraKey";
-export { CAMERA_MOTION_EASING, easedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
-export type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
+export { EASING, EASING_LABEL, easedProgress, inverseEasedProgress, isEasingCurve } from "@/motion/EasingCurve";
+export type { EasingCurve } from "@/motion/EasingCurve";
 export { CameraMotionClip, createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
 export type { CameraMotionClipInit, CameraMotionClipJSON, CameraMotionSample } from "@/camera/CameraMotionClip";
 export { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
@@ -92,6 +92,8 @@ export { TimelineViewport } from "@/authoring/TimelineViewport";
 export type { TimelineViewportInit } from "@/authoring/TimelineViewport";
 export { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND, TIMELINE_ROW_KIND, TimelineLayout } from "@/authoring/TimelineLayout";
 export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/TimelineLayout";
+export { TIMELINE_SELECTION_KIND, TimelineSelection } from "@/authoring/TimelineSelection";
+export type { TimelineSelectionKind } from "@/authoring/TimelineSelection";
 export { TIMELINE_DRAG_KIND, TimelineClipDragResolver } from "@/authoring/TimelineClipDrag";
 export type {
     TimelineClipDragResolveOptions,
@@ -308,6 +310,7 @@ export { SelectionStore } from "@/store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "@/store/UiStore";
 export type { CaptureMeta, VideoMeta } from "@/store/UiStore";
 export { TimelineStore } from "@/store/TimelineStore";
+export { TimelineSelectionStore } from "@/store/TimelineSelectionStore";
 export {
     GRID_SIZE,
     isGridSizeValid,
@@ -339,8 +342,8 @@ export { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 export { registerKeyframeCodec, keyframeCodecFor } from "@/timeline/keyframeCodecs";
 export type { KeyframeCodec } from "@/timeline/keyframeCodecs";
 export type { TimelineTrackInit, TimelineTrackKind } from "@/timeline/TimelineTrack";
-export { TransformKeyframe, TIMELINE_EASING } from "@/timeline/TransformKeyframe";
-export type { TimelineEasing, TransformKeyframeInit } from "@/timeline/TransformKeyframe";
+export { TransformKeyframe } from "@/timeline/TransformKeyframe";
+export type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 export { buildTransformTrajectory } from "@/timeline/transformTrajectory";
 export {
     TrackPolicies,

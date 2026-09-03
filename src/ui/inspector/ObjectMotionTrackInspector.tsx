@@ -31,7 +31,6 @@ export const ObjectMotionTrackSection = observer(function ObjectMotionTrackSecti
             stores,
         );
         report(result);
-        if (result.ok) stores.motionAuthoring.forgetWalkTrack(track.id);
     };
 
     return (

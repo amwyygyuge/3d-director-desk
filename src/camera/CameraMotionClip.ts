@@ -3,13 +3,8 @@ import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFoc
 import { cameraKeyFrom } from "@/camera/CameraKey";
 import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyInit, CameraKeyJSON } from "@/camera/CameraKey";
-import {
-    CAMERA_MOTION_EASING,
-    easedProgress,
-    inverseEasedProgress,
-    isCameraMotionEasing,
-} from "@/camera/CameraMotionEasing";
-import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
+import { EASING, easedProgress, inverseEasedProgress, isEasingCurve } from "@/motion/EasingCurve";
+import type { EasingCurve } from "@/motion/EasingCurve";
 import { MotionTrajectory } from "@/motion/MotionTrajectory";
 import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 
@@ -21,7 +16,7 @@ export interface CameraMotionClipInit {
     /** 跟拍覆盖层:缺省 null = 注视来自关键帧插值 */
     readonly focus?: CameraFocusTrack | CameraFocusTrackJSON | null;
     /** 整段时间曲线:smooth = 起落加减速,linear = 全程匀速;缺省 smooth */
-    readonly easing?: CameraMotionEasing;
+    readonly easing?: EasingCurve;
 }
 
 export interface CameraMotionClipJSON {
@@ -30,7 +25,7 @@ export interface CameraMotionClipJSON {
     readonly durationSeconds: number;
     readonly keys: readonly CameraKeyJSON[];
     readonly focus: CameraFocusTrackJSON | null;
-    readonly easing: CameraMotionEasing;
+    readonly easing: EasingCurve;
 }
 
 /** Reusable scalar output; Three runtime ownership remains with the scene layer. */
@@ -76,14 +71,14 @@ export class CameraMotionClip {
     /** 跟拍目标覆盖层:非空时接管全部关键帧的注视点 */
     readonly focus: CameraFocusTrack | null;
     /** 整段起落的时间曲线 */
-    readonly easing: CameraMotionEasing;
+    readonly easing: EasingCurve;
 
     constructor(init: CameraMotionClipInit) {
         const focus = focusFrom(init.focus);
         const trajectory = trajectoryFrom(init);
-        const easing = init.easing ?? CAMERA_MOTION_EASING.SMOOTH;
+        const easing = init.easing ?? EASING.SMOOTH;
         if (
-            !isCameraMotionEasing(easing) ||
+            !isEasingCurve(easing) ||
             init.id.length === 0 ||
             !Number.isFinite(init.startTimeSeconds) ||
             init.startTimeSeconds < 0 ||
@@ -159,7 +154,7 @@ export class CameraMotionClip {
         return this.replicate({ focus });
     }
 
-    withEasing(easing: CameraMotionEasing): CameraMotionClip {
+    withEasing(easing: EasingCurve): CameraMotionClip {
         return this.replicate({ easing });
     }
 

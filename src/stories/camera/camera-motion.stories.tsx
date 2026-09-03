@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { CameraKeyJSON } from "@/camera/CameraKey";
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
+import { EASING } from "@/motion/EasingCurve";
 import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import type { CameraMotionSink } from "@/camera/CameraMotionSampler";
@@ -161,7 +161,8 @@ function verifyPreviewPriority(stores: DirectorDeskStores): void {
     dispatch(stores, "motion.preview.enter", { clipId: SIDE_MOTION_ID });
     assertAcceptance(stores.clock.time === side.startTimeSeconds, "进入预览未定位到片段起点");
     assertAcceptance(
-        stores.motion.resolveOutputClipAt(stores.clock.time, stores.motionAuthoring.previewClipId)?.id === SIDE_MOTION_ID,
+        stores.motion.resolveOutputClipAt(stores.clock.time, stores.motionAuthoring.previewClipId)?.id ===
+            SIDE_MOTION_ID,
         "进入预览后未优先输出预览片段",
     );
     dispatch(stores, "motion.preview.exit", {});
@@ -170,7 +171,7 @@ function verifyPreviewPriority(stores: DirectorDeskStores): void {
 function verifyTimeProgressRoundTrip(stores: DirectorDeskStores): void {
     const clip = required(stores.motion.clip(PRIMARY_MOTION_ID), "主运镜片段缺失");
     const timeSeconds = clip.startTimeSeconds + clip.durationSeconds * ROUND_TRIP_PROGRESS;
-    for (const candidate of [clip, clip.withEasing(CAMERA_MOTION_EASING.LINEAR)]) {
+    for (const candidate of [clip, clip.withEasing(EASING.LINEAR)]) {
         const restoredTime = candidate.timeAtProgress(candidate.trajectoryProgressAt(timeSeconds));
         assertAcceptance(
             Math.abs(restoredTime - timeSeconds) <= ROUND_TRIP_EPSILON,
@@ -192,7 +193,11 @@ function verifyKeyframeClosureAndWriteTarget(stores: DirectorDeskStores): void {
             isMotionSetKeyPayload(lensResult.payload),
         "镜头视角未产出 motion.set-key",
     );
-    if (isCommandIssue(lensResult) || lensResult.type !== MOTION_SET_KEY_TYPE || !isMotionSetKeyPayload(lensResult.payload)) {
+    if (
+        isCommandIssue(lensResult) ||
+        lensResult.type !== MOTION_SET_KEY_TYPE ||
+        !isMotionSetKeyPayload(lensResult.payload)
+    ) {
         return;
     }
     assertAcceptance(lensResult.payload.clipId === SIDE_MOTION_ID, "镜头关键帧未写入当前预览片段");

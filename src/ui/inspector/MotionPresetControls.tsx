@@ -13,7 +13,7 @@ import {
     motionProgramRangeFor,
 } from "@/authoring/MotionPresetCompiler";
 import type { MotionMove } from "@/authoring/MotionPresetCompiler";
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
+import { EASING } from "@/motion/EasingCurve";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
@@ -73,10 +73,7 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
     const stores = useDirectorDeskStores();
     const { dispatcher, motionAuthoring, playheadDisplay, scene, timeline } = stores;
     const playhead = Math.min(playheadDisplay.value, timeline.document.duration);
-    const durationSeconds = Math.min(
-        motionAuthoring.presetDurationSeconds,
-        timeline.document.duration - playhead,
-    );
+    const durationSeconds = Math.min(motionAuthoring.presetDurationSeconds, timeline.document.duration - playhead);
     const programRange = motionProgramRangeFor({ startTimeSeconds: playhead, durationSeconds });
     const subjects = scene.manager.list().filter((entity) => entity.kind === "model");
     const subjectId = motionAuthoring.subjectId;
@@ -98,7 +95,7 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                     move,
                     ...(hasSubject ? { subjectId } : {}),
                     ...(landing ? { shotSize: landingShotSize } : {}),
-                    easing: CAMERA_MOTION_EASING.SMOOTH,
+                    easing: EASING.SMOOTH,
                 },
             },
             stores,
@@ -179,10 +176,9 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                 ))}
             </Select>
             <Typography variant="caption" color="text.secondary">
-                创建后自动切入 Program 成片输出轨，将占用成片 {programRange.startTimeSeconds.toFixed(
-                    MOTION_PROGRAM_RANGE_DECIMALS,
-                )}
-                s – {programRange.endTimeSeconds.toFixed(MOTION_PROGRAM_RANGE_DECIMALS)}s。
+                创建后自动切入 Program 成片输出轨，将占用成片{" "}
+                {programRange.startTimeSeconds.toFixed(MOTION_PROGRAM_RANGE_DECIMALS)}s –{" "}
+                {programRange.endTimeSeconds.toFixed(MOTION_PROGRAM_RANGE_DECIMALS)}s。
             </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: PRESET_GRID_COLUMNS, gap: FIELD_GAP }}>
                 {MOTION_MOVES.map((move) => (

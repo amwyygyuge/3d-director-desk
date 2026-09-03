@@ -7,6 +7,7 @@ import type { Group } from "three";
 
 import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraKey } from "@/camera/CameraKey";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { AutoHandleSolver, createHandlePair } from "@/motion/AutoHandleSolver";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import type { Vec3 } from "@/core/SceneObject";
@@ -35,7 +36,7 @@ const NDC_SPAN = 2;
 /** 选中一枚关键帧即把右栏收敛到独立运镜资产,不再选择创建来源机位。 */
 function selectMotionKey(stores: DirectorDeskStores, clipId: string, keyId: string): void {
     stores.selection.clear();
-    stores.motionAuthoring.selectKey(clipId, keyId);
+    stores.timelineSelection.select(TimelineSelection.motionKey(clipId, keyId));
 }
 
 interface PreviewGeometry {
@@ -140,7 +141,9 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
     const canvas = useThree((state) => state.gl.domElement);
     const clip = stores.motion.clip(clipId);
     const key = clip?.key(keyId);
-    const selected = stores.motionAuthoring.selectedClipId === clipId && stores.motionAuthoring.selectedKeyId === keyId;
+    const selected =
+        stores.timelineSelection.current.motionKeyId === keyId &&
+        stores.timelineSelection.current.motionClipId === clipId;
     const rootRef = useRef<Group | null>(null);
     const inHandleRef = useRef<Group | null>(null);
     const outHandleRef = useRef<Group | null>(null);

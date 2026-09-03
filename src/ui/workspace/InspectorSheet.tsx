@@ -55,9 +55,9 @@ function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup):
 /** 仅在存在选中对象时出现的情境检查器，关闭操作复用全局清选中语义。 */
 export const InspectorSheet = observer(function InspectorSheet() {
     const stores = useDirectorDeskStores();
-    const { layout, selection, ui } = stores;
-    const motionClipId = selection.primaryId === null ? stores.motionAuthoring.selectedClipId : null;
-    const walkTrackId = selection.primaryId === null ? stores.motionAuthoring.selectedWalkTrackId : null;
+    const { layout, selection, timelineSelection, ui } = stores;
+    const motionClipId = selection.primaryId === null ? timelineSelection.current.motionClipId : null;
+    const walkTrackId = selection.primaryId === null ? timelineSelection.current.walkTrackId : null;
     const primaryId = motionClipId ?? walkTrackId ?? selection.primaryId;
 
     // 选中对象切换时退出骨骼点选:姿态选择是瞬时 UI 身份,不跨对象残留
@@ -82,17 +82,14 @@ export const InspectorSheet = observer(function InspectorSheet() {
         ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
     };
     const context: InspectorSectionContext = { primaryId, report, stores };
+    // 时间轴选中与场景选中是两条独立通道;关掉右栏时清哪一条由当前展示的种类决定
     const clearInspector = (): void => {
-        switch (selected.kind) {
-            case "motion-clip":
-                stores.motionAuthoring.selectClip(null);
-                return;
-            case "motion-track":
-                stores.motionAuthoring.selectWalkTrack(null);
-                return;
-            default:
-                selection.clear();
+        const isTimelineSelection = selected.kind === "motion-clip" || selected.kind === "motion-track";
+        if (isTimelineSelection) {
+            timelineSelection.clear();
+            return;
         }
+        selection.clear();
     };
 
     return (

@@ -23,6 +23,7 @@ import { FlyDrive } from "@/ui/viewport/scene/FlyDrive";
 import { ShotNavigation } from "@/ui/viewport/scene/ShotNavigation";
 import { LensNavigation } from "@/ui/viewport/scene/LensNavigation";
 import type { AssetProvider } from "@/assets/catalog/AssetProvider";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { createDirectorDeskStores, DirectorDeskProvider } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { WorkspaceNavigator } from "@/ui/workspace/WorkspaceNavigator";
@@ -131,8 +132,8 @@ export const DirectorDesk = observer(function DirectorDesk({
     const closeMotionKeyMenu = useCallback((): void => {
         setMotionKeyMenuPosition(null);
     }, []);
-    const selectedClipId = stores.motionAuthoring.selectedClipId;
-    const selectedKeyId = stores.motionAuthoring.selectedKeyId;
+    const selectedClipId = stores.timelineSelection.current.motionClipId;
+    const selectedKeyId = stores.timelineSelection.current.motionKeyId;
     const selectedClip = selectedClipId ? stores.motion.clip(selectedClipId) : undefined;
     const selectedKey = selectedClip && selectedKeyId ? selectedClip.key(selectedKeyId) : undefined;
 
@@ -327,7 +328,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     );
                                     if (!result.ok)
                                         stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
-                                    else stores.motionAuthoring.selectKey(selectedClipId, null);
+                                    else stores.timelineSelection.select(TimelineSelection.motionClip(selectedClipId));
                                     closeMotionKeyMenu();
                                 }}
                             >

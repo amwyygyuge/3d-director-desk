@@ -40,6 +40,7 @@ import { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 import { PlayheadDisplay } from "@/ui/timeline/PlayheadDisplay";
 import { UiStore } from "@/store/UiStore";
 import { TimelineStore } from "@/store/TimelineStore";
+import { TimelineSelectionStore } from "@/store/TimelineSelectionStore";
 import { PlaybackCoordinator } from "@/timeline/PlaybackCoordinator";
 import { TimeTransport } from "@/time/TimeTransport";
 
@@ -91,8 +92,10 @@ export interface DirectorDeskStores {
     timeline: TimelineStore;
     /** 单条导演运镜路径的每实例可序列化状态容器 */
     motion: CameraMotionStore;
-    /** 运镜编排态(视口模式、预览片段、选中关键帧、轨迹显隐、时间轴窗口) */
+    /** 运镜编排态(视口模式、预览片段、轨迹显隐、时间轴窗口) */
     motionAuthoring: MotionAuthoringStore;
+    /** 时间轴选中态(片段/关键帧/走位轨):底栏、3D 把手与 Delete 的唯一真相 */
+    timelineSelection: TimelineSelectionStore;
     /** 视口相机所有权裁决:导航路径与轨道控制器的启停唯一判据 */
     viewportCamera: ViewportCameraAuthority;
     /** 轨道控制器唯一写方：托管 Three controls 的启停与阻尼刷新，不进入 observable。 */
@@ -228,6 +231,7 @@ export function createDirectorDeskStores(options?: {
         ui: new UiStore(),
         layout,
         motionAuthoring,
+        timelineSelection: new TimelineSelectionStore(),
         viewportCamera,
         viewportOrbit,
         timelineLayout: new TimelineLayout(motion, timeline),

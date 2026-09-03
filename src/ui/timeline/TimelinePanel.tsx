@@ -1,16 +1,25 @@
+import CloseIcon from "@mui/icons-material/Close";
+import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
+import FitScreenIcon from "@mui/icons-material/FitScreen";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
-import { type WheelEvent, useRef, useState } from "react";
+import { reaction } from "mobx";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import { TIMELINE_ROW_KIND } from "@/authoring/TimelineLayout";
+import { TIMELINE_SELECTION_KIND } from "@/authoring/TimelineSelection";
+import type { TimelineSelection, TimelineSelectionKind } from "@/authoring/TimelineSelection";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
-import type { TimelineViewport } from "@/authoring/TimelineViewport";
-import type { TimelineEasing } from "@/timeline/TransformKeyframe";
-import { TIMELINE_EASING } from "@/timeline/TransformKeyframe";
+import { TimelineViewport } from "@/authoring/TimelineViewport";
+import { EASING, EASING_LABEL } from "@/motion/EasingCurve";
+import type { EasingCurve } from "@/motion/EasingCurve";
+import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { MONO_FONT_STACK } from "@/ui/shell/theme";
@@ -39,8 +48,8 @@ const TRACK_GRID_BACKGROUND =
     "repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px)";
 const TRACK_BORDER_COLOR = "divider";
 
-type TransformKeySelection = { readonly trackId: string; readonly keyframeId: string };
-type WheelMode = "pan" | "zoom";
+/** 滚轮语义按 NLE 惯例分派:裸滚轮留给轨道列表纵向滚动,修饰键才改时间窗口 */
+type WheelMode = "scroll" | "pan" | "zoom";
 
 function clampTime(timeSeconds: number, durationSeconds: number): number {
     return Math.min(Math.max(timeSeconds, TIME_START_SECONDS), durationSeconds);
@@ -74,9 +83,15 @@ function rulerTicks(viewport: TimelineViewport): readonly number[] {
     return Array.from({ length: Math.max(count, TIME_END_RATIO) }, (_, index) => first + index * step);
 }
 
-function wheelMode(event: WheelEvent<HTMLDivElement>): WheelMode {
-    return event.shiftKey ? "pan" : "zoom";
+/**
+ * 裸滚轮不再吞掉纵向滚动:轨道一多就得能滚,而它此前被无条件当成缩放。
+ * ⌘/Ctrl+滚轮缩放(触控板捏合同样报 ctrlKey),Shift+滚轮平移时间——与 NLE 惯例一致。
+ */
+function wheelMode(event: WheelEvent): WheelMode {
+    if (event.ctrlKey || event.metaKey) return "zoom";
+    return event.shiftKey ? "pan" : "scroll";
 }
+
 /** 首末刻度贴边:居中位移会把恰好落在窗口两端的刻度推出去半个字宽 */
 function tickLabelTransform(viewport: TimelineViewport, timeSeconds: number): string {
     const ratio = viewport.ratioAt(timeSeconds);
@@ -156,20 +171,151 @@ const ProgramCutInButton = observer(function ProgramCutInButton() {
     );
 });
 
+/** 选中项在时间轴上的时段:缩放到选中据此取范围,取不到就退回全长。 */
+function selectionRange(stores: DirectorDeskStores): { readonly start: number; readonly end: number } | null {
+    const ownerId = stores.timelineSelection.current.ownerId;
+    if (ownerId === null) return null;
+    const bar = stores.timelineLayout
+        .project(viewportFor(stores))
+        .flatMap((row) => row.bars)
+        .find((candidate) => candidate.id === ownerId);
+    return bar ? { start: bar.startSeconds, end: bar.startSeconds + bar.durationSeconds } : null;
+}
+
+/** 缩放进去就出不来是此前的死角:全长与选中两个确定性出口,不依赖滚轮手感。 */
+const TimelineZoomControls = observer(function TimelineZoomControls() {
+    const stores = useDirectorDeskStores();
+    const duration = stores.timeline.document.duration;
+    const range = selectionRange(stores);
+    return (
+        <>
+            <Tooltip title="缩放到全长">
+                <IconButton
+                    aria-label="缩放到全长"
+                    size="small"
+                    onClick={() => stores.motionAuthoring.setTimelineViewport(TimelineViewport.full(duration))}
+                >
+                    <FitScreenIcon fontSize="small" />
+                </IconButton>
+            </Tooltip>
+            <Tooltip title="缩放到选中片段">
+                <span>
+                    <IconButton
+                        aria-label="缩放到选中片段"
+                        size="small"
+                        disabled={range === null}
+                        onClick={() => {
+                            if (!range) return;
+                            stores.motionAuthoring.setTimelineViewport(
+                                viewportFor(stores).zoomedToRange(range.start, range.end, duration),
+                            );
+                        }}
+                    >
+                        <CenterFocusStrongIcon fontSize="small" />
+                    </IconButton>
+                </span>
+            </Tooltip>
+        </>
+    );
+});
+
+/** 走位关键帧的缓动:与运镜检查器共用 EASING_LABEL,不再直出英文枚举值。 */
+const WalkKeyEasingControls = observer(function WalkKeyEasingControls() {
+    const stores = useDirectorDeskStores();
+    const selection = stores.timelineSelection.current;
+    const trackId = selection.walkTrackId;
+    const keyframeId = selection.walkKeyframeId;
+    const keyframe = trackId && keyframeId ? stores.timeline.document.track(trackId)?.keyframe(keyframeId) : undefined;
+    if (!trackId || !keyframeId || !keyframe) return null;
+    const setEasing = (easing: EasingCurve): void => {
+        const result = stores.dispatcher.dispatch(
+            { type: "timeline.set-key-easing", payload: { trackId, keyframeId, easing } },
+            stores,
+        );
+        reportFailure(stores, result);
+    };
+    return (
+        <>
+            <Typography variant="caption">关键帧缓动</Typography>
+            {Object.values(EASING).map((easing) => (
+                <Button
+                    key={easing}
+                    size="small"
+                    sx={{ textTransform: "none" }}
+                    variant={keyframe.easing === easing ? "contained" : "outlined"}
+                    onClick={() => setEasing(easing)}
+                >
+                    {EASING_LABEL[easing]}
+                </Button>
+            ))}
+        </>
+    );
+});
+
+const SELECTION_LABEL: Record<TimelineSelectionKind, string> = {
+    [TIMELINE_SELECTION_KIND.NONE]: "",
+    [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: "成片片段",
+    [TIMELINE_SELECTION_KIND.MOTION_CLIP]: "运镜片段",
+    [TIMELINE_SELECTION_KIND.MOTION_KEY]: "镜头关键帧",
+    [TIMELINE_SELECTION_KIND.WALK_TRACK]: "走位轨迹",
+    [TIMELINE_SELECTION_KIND.WALK_KEY]: "走位关键帧",
+};
+
+/** 选中项各自的附加控件:目前只有走位关键帧带缓动,表驱动以便后续逐类补齐。 */
+const SELECTION_CONTROLS: Record<TimelineSelectionKind, () => ReactNode> = {
+    [TIMELINE_SELECTION_KIND.NONE]: () => null,
+    [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: () => null,
+    [TIMELINE_SELECTION_KIND.MOTION_CLIP]: () => null,
+    [TIMELINE_SELECTION_KIND.MOTION_KEY]: () => null,
+    [TIMELINE_SELECTION_KIND.WALK_TRACK]: () => null,
+    [TIMELINE_SELECTION_KIND.WALK_KEY]: () => <WalkKeyEasingControls />,
+};
+
+/**
+ * 时间轴选中项的操作条。
+ *
+ * 它此前是面板的局部 state,没有任何清除路径——一旦选中过一枚帧,这条就永久挂在底部。
+ * 现在它自取 TimelineSelectionStore:关闭按钮与 Esc 走同一个 clear(),删除按钮与 Delete
+ * 走同一个 deleteCommand(),不存在「按钮删的和快捷键删的不是同一枚」的可能。
+ */
+const TimelineSelectionBar = observer(function TimelineSelectionBar() {
+    const stores = useDirectorDeskStores();
+    const selection: TimelineSelection = stores.timelineSelection.current;
+    if (selection.isEmpty) return null;
+    const deleteCommand = selection.deleteCommand();
+    const remove = (): void => {
+        if (!deleteCommand) return;
+        reportFailure(stores, stores.dispatcher.dispatch(deleteCommand, stores));
+    };
+    return (
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+                {SELECTION_LABEL[selection.kind]}
+            </Typography>
+            {SELECTION_CONTROLS[selection.kind]()}
+            {deleteCommand && (
+                <Button size="small" color="error" sx={{ textTransform: "none" }} onClick={remove}>
+                    删除
+                </Button>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <Tooltip title={`取消选中（${formatShortcutHint(SHORTCUT_ID.TIMELINE_SELECTION_CLEAR)}）`}>
+                <IconButton aria-label="取消时间轴选中" size="small" onClick={() => stores.timelineSelection.clear()}>
+                    <CloseIcon fontSize="small" />
+                </IconButton>
+            </Tooltip>
+        </Stack>
+    );
+});
+
 /** 运镜、Program 与 transform 轨共享 TimelineLayout 投影与可缩放可平移窗口。 */
 export const TimelinePanel = observer(function TimelinePanel() {
     const stores = useDirectorDeskStores();
-    const [selectedTransformKey, setSelectedTransformKey] = useState<TransformKeySelection | null>(null);
-    const [selectedProgramClipId, setSelectedProgramClipId] = useState<string | null>(null);
     const rulerRef = useRef<HTMLDivElement>(null);
+    const scrollerRef = useRef<HTMLDivElement>(null);
     const duration = stores.timeline.document.duration;
     const viewport = viewportFor(stores);
     const rows = stores.timelineLayout.project(viewport);
-    const selectedTrack = selectedTransformKey
-        ? stores.timeline.document.track(selectedTransformKey.trackId)
-        : undefined;
-    const selectedFrame = selectedTransformKey ? selectedTrack?.keyframe(selectedTransformKey.keyframeId) : undefined;
-    const selectedProgramClip = selectedProgramClipId ? stores.motion.program.clip(selectedProgramClipId) : undefined;
     const dispatchCommand = (command: { readonly type: string; readonly payload: unknown }): void => {
         const result = stores.dispatcher.dispatch(command, stores);
         reportFailure(stores, result);
@@ -178,47 +324,72 @@ export const TimelinePanel = observer(function TimelinePanel() {
         trackRef: rulerRef,
         onScrub: (ratio) => dispatchCommand({ type: "transport.seek", payload: { time: viewport.timeAt(ratio) } }),
     });
-    const setEasing = (easing: TimelineEasing): void => {
-        if (!selectedTransformKey) return;
-        dispatchCommand({ type: "timeline.set-key-easing", payload: { ...selectedTransformKey, easing } });
-    };
-    const applyWheel = (event: WheelEvent<HTMLDivElement>): void => {
-        const ruler = rulerRef.current;
-        if (!ruler) return;
-        // 浏览器默认行为由 DirectorDesk 根节点的非 passive 守卫拦截;React onWheel 是 passive,这里 preventDefault 无效
-        const bounds = ruler.getBoundingClientRect();
-        const anchorRatio =
-            bounds.width > TIME_START_SECONDS
-                ? Math.min(Math.max((event.clientX - bounds.left) / bounds.width, TIME_START_SECONDS), TIME_END_RATIO)
-                : TIME_START_SECONDS;
-        const mode = wheelMode(event);
-        const nextViewport: Record<WheelMode, TimelineViewport> = {
-            pan: viewport.pannedBy(event.deltaY * viewport.secondsPerPixel(bounds.width), duration),
-            zoom: viewport.zoomedAt(
-                event.deltaY > TIME_START_SECONDS ? ZOOM_OUT_FACTOR : ZOOM_IN_FACTOR,
-                anchorRatio,
-                duration,
+    // 播放头跟随:窗口缩放后播放必然跑出视野。经 reaction 消费低频显示值,
+    // 越界那一帧才翻页——渲染期直读会让整条轨道跟着 playhead 重建。
+    useEffect(
+        () =>
+            reaction(
+                () => stores.playheadDisplay.value,
+                (timeSeconds) => {
+                    const current = viewportFor(stores);
+                    const next = current.followingPlayhead(timeSeconds, stores.timeline.document.duration);
+                    if (next !== current) stores.motionAuthoring.setTimelineViewport(next);
+                },
             ),
+        [stores],
+    );
+    // 缩放/平移必须吃掉默认滚动:React 的 onWheel 是 passive,preventDefault 在里面是空调用,
+    // 于是「⌘+滚轮缩放」会同时把轨道列表滚一段。原生非 passive 监听才拦得住。
+    useEffect(() => {
+        const scroller = scrollerRef.current;
+        if (!scroller) return;
+        const onWheel = (event: WheelEvent): void => {
+            const ruler = rulerRef.current;
+            const mode = wheelMode(event);
+            if (!ruler || mode === "scroll") return;
+            event.preventDefault();
+            const bounds = ruler.getBoundingClientRect();
+            const current = viewportFor(stores);
+            const durationSeconds = stores.timeline.document.duration;
+            const anchorRatio =
+                bounds.width > TIME_START_SECONDS
+                    ? Math.min(
+                          Math.max((event.clientX - bounds.left) / bounds.width, TIME_START_SECONDS),
+                          TIME_END_RATIO,
+                      )
+                    : TIME_START_SECONDS;
+            const nextViewport: Record<Exclude<WheelMode, "scroll">, TimelineViewport> = {
+                pan: current.pannedBy(event.deltaY * current.secondsPerPixel(bounds.width), durationSeconds),
+                zoom: current.zoomedAt(
+                    event.deltaY > TIME_START_SECONDS ? ZOOM_OUT_FACTOR : ZOOM_IN_FACTOR,
+                    anchorRatio,
+                    durationSeconds,
+                ),
+            };
+            stores.motionAuthoring.setTimelineViewport(nextViewport[mode]);
         };
-        stores.motionAuthoring.setTimelineViewport(nextViewport[mode]);
-    };
+        scroller.addEventListener("wheel", onWheel, { passive: false });
+        return () => scroller.removeEventListener("wheel", onWheel);
+    }, [stores]);
     return (
         <Box aria-label="时间轴" sx={{ height: "100%", display: "flex", flexDirection: "column", p: 1 }}>
             <Box
                 sx={{
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
+                    gap: 1,
                     pb: 0.5,
                     borderBottom: 1,
                     borderColor: TRACK_BORDER_COLOR,
                 }}
             >
                 <Typography variant="overline">时间轴</Typography>
+                <TimelineZoomControls />
+                <Box sx={{ flex: 1 }} />
                 <ProgramCutInButton />
             </Box>
             <Box
-                onWheel={applyWheel}
+                ref={scrollerRef}
                 sx={{ flex: 1, minHeight: TIME_START_SECONDS, overflowY: "auto", overflowX: "auto" }}
             >
                 <Box sx={{ minWidth: "100%" }}>
@@ -267,57 +438,11 @@ export const TimelinePanel = observer(function TimelinePanel() {
                         </Box>
                     </Box>
                     {rows.map((row) => (
-                        <TimelineProjectedRow
-                            key={row.id}
-                            rowId={row.id}
-                            onSelectTransformKey={setSelectedTransformKey}
-                            onSelectProgramClip={setSelectedProgramClipId}
-                        />
+                        <TimelineProjectedRow key={row.id} rowId={row.id} />
                     ))}
                 </Box>
             </Box>
-            {(selectedFrame || selectedProgramClip) && (
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
-                    {selectedFrame && selectedTransformKey && (
-                        <>
-                            <Typography variant="caption">关键帧缓动</Typography>
-                            {[TIMELINE_EASING.LINEAR, TIMELINE_EASING.SMOOTH].map((easing) => (
-                                <Button
-                                    key={easing}
-                                    variant={selectedFrame.easing === easing ? "contained" : "outlined"}
-                                    onClick={() => setEasing(easing)}
-                                >
-                                    {easing}
-                                </Button>
-                            ))}
-                            <Button
-                                size="small"
-                                color="error"
-                                onClick={() =>
-                                    dispatchCommand({ type: "timeline.remove-key", payload: selectedTransformKey })
-                                }
-                            >
-                                删除关键帧
-                            </Button>
-                        </>
-                    )}
-                    {selectedProgramClip && (
-                        <Button
-                            size="small"
-                            color="error"
-                            onClick={() => {
-                                dispatchCommand({
-                                    type: "program.remove-clip",
-                                    payload: { id: selectedProgramClip.id },
-                                });
-                                setSelectedProgramClipId(null);
-                            }}
-                        >
-                            删除 Program 片段
-                        </Button>
-                    )}
-                </Stack>
-            )}
+            <TimelineSelectionBar />
         </Box>
     );
 });

@@ -20,8 +20,7 @@ const SHORTCUT_SCOPE_LABELS: Record<ShortcutScope, string> = {
     "shot-selected": "选中机位后",
     shot: "掌镜中",
     lens: "镜头视角",
-    "motion-key": "选中镜头关键帧时",
-    "walk-key": "选中走位关键帧时",
+    "timeline-selection": "时间轴选中时",
     draft: "绘制走位中",
     presentation: "全屏预览中",
 };

@@ -1,5 +1,5 @@
 import type { CameraKeyJSON } from "@/camera/CameraKey";
-import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
+import type { EasingCurve } from "@/motion/EasingCurve";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { ShotSizePresets } from "@/camera/ShotSizePresets";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
@@ -81,7 +81,7 @@ export interface MotionPresetRequest {
     readonly subjectId?: string;
     /** 落幅景别(复用 ShotSizePresets) */
     readonly shotSize?: ShotSize;
-    readonly easing?: CameraMotionEasing;
+    readonly easing?: EasingCurve;
     /** 环绕类语汇(orbit/spiral)的转角(度);缺省 90,上限 360 */
     readonly degrees?: number;
     /** 环绕类语汇的方向;缺省 cw(俯视顺时针) */

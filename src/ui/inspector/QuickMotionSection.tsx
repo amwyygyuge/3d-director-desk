@@ -18,7 +18,7 @@ import {
 import type { MotionMove, OrbitDirection } from "@/authoring/MotionPresetCompiler";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
+import { EASING } from "@/motion/EasingCurve";
 import { QuickAuthorMotionCommand } from "@/command/cameraMotionCommands";
 import type { InspectorSectionProps } from "@/ui/inspector/Inspector";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
@@ -76,7 +76,7 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
                     move,
                     durationSeconds,
                     ...(orbitLike ? { degrees, direction } : {}),
-                    easing: CAMERA_MOTION_EASING.SMOOTH,
+                    easing: EASING.SMOOTH,
                 },
             },
             stores,
@@ -88,7 +88,8 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
         <Box className="grid gap-3">
             <Typography variant="subtitle2">快速运镜</Typography>
             <Typography variant="caption" color="text.secondary">
-                按当前相机方位为「{entity.name}」生成运镜片段并追加到成片（Program）末尾；不新建机位，起幅机位只是构图快照。
+                按当前相机方位为「{entity.name}
+                」生成运镜片段并追加到成片（Program）末尾；不新建机位，起幅机位只是构图快照。
             </Typography>
             <Select
                 size="small"
