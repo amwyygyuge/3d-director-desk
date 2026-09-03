@@ -88,7 +88,7 @@ export interface WalkKeyHelperProps {
  */
 export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframeId }: WalkKeyHelperProps) {
     const stores = useDirectorDeskStores();
-    const { timelineSelection, timeline } = stores;
+    const { timelineSelection, timeline, ui } = stores;
     const invalidate = useThree((state) => state.invalidate);
     const canvas = useThree((state) => state.gl.domElement);
     const camera = useThree((state) => state.camera);
@@ -210,11 +210,17 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
     if (!keyframe) return null;
     const isManual = keyframe.handleMode === MOTION_HANDLE_MODE.MANUAL;
     const handleColor = isManual ? MANUAL_HANDLE_COLOR : AUTO_HANDLE_COLOR;
+    // 变换模式下指针归 gizmo:把手与坐标轴在空间上重叠,抢走这次按下会当场解除变换、
+    // 而 gizmo 的 onMouseUp 再也不会到达,轨道让位就永久泄漏(视口卡死)
+    const pointerDownFor = (kind: DragKind, readTarget: () => Object3D | null) => (event: ThreeEvent<PointerEvent>) => {
+        if (ui.isGizmoEngaged) return;
+        startDrag(kind, readTarget(), event);
+    };
     return (
         <group ref={rootRef} position={keyframe.value.position as unknown as [number, number, number]}>
             <mesh
                 onContextMenu={resetHandles}
-                onPointerDown={(event) => startDrag("key", rootRef.current, event)}
+                onPointerDown={pointerDownFor("key", () => rootRef.current)}
                 userData={{ helper: true }}
             >
                 <sphereGeometry args={[KEY_RADIUS_METERS, SPHERE_SEGMENTS, SPHERE_SEGMENTS]} />
@@ -231,7 +237,7 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
                         <lineBasicMaterial color={handleColor} toneMapped={false} />
                     </line>
                     <mesh
-                        onPointerDown={(event) => startDrag("in", inRef.current, event)}
+                        onPointerDown={pointerDownFor("in", () => inRef.current)}
                         position={[handleOffsets.inX, handleOffsets.inY, handleOffsets.inZ]}
                         ref={inRef}
                         userData={{ helper: true }}
@@ -240,7 +246,7 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
                         <meshBasicMaterial color={handleColor} toneMapped={false} wireframe={!isManual} />
                     </mesh>
                     <mesh
-                        onPointerDown={(event) => startDrag("out", outRef.current, event)}
+                        onPointerDown={pointerDownFor("out", () => outRef.current)}
                         position={[handleOffsets.outX, handleOffsets.outY, handleOffsets.outZ]}
                         ref={outRef}
                         userData={{ helper: true }}

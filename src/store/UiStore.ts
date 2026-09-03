@@ -88,6 +88,14 @@ export class UiStore {
     isGizmoArmed(id: string | null): boolean {
         return id !== null && this.gizmoArmedId === id;
     }
+    /**
+     * 变换手柄已挂载:此刻视口指针归 gizmo。
+     * drei 的 TransformControls 直接监听 canvas 原生 pointerdown,不走 R3F 事件派发——
+     * 两侧无法互相 stopPropagation,重叠的编辑辅助物只能按本判据主动让出指针。
+     */
+    get isGizmoEngaged(): boolean {
+        return this.gizmoArmedId !== null;
+    }
     setPaletteOpen(open: boolean): void {
         this.paletteOpen = open;
     }

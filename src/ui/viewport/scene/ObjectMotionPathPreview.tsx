@@ -1,4 +1,5 @@
 import { useThree } from "@react-three/fiber";
+import type { ThreeEvent } from "@react-three/fiber";
 import { reaction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useMemo, useRef } from "react";
@@ -102,7 +103,7 @@ interface ObjectTrackPathProps {
  * Three ref,播放期零 DOM 变更、零调和。
  */
 const ObjectTrackPath = observer(function ObjectTrackPath({ trackId }: ObjectTrackPathProps) {
-    const { timeline, clock, timelineSelection, selection } = useDirectorDeskStores();
+    const { timeline, clock, timelineSelection, selection, ui } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const markerRef = useRef<Mesh>(null);
     const track = timeline.document.track(trackId);
@@ -139,15 +140,15 @@ const ObjectTrackPath = observer(function ObjectTrackPath({ trackId }: ObjectTra
     }, [clock, track, geometry, invalidate]);
 
     if (!track || !geometry) return null;
+    // 变换模式下指针归 gizmo:走位辅助物与手柄在空间上重叠,抢走这次按下会当场解除变换
+    const selectTrack = (event: ThreeEvent<PointerEvent>) => {
+        if (ui.isGizmoEngaged) return;
+        event.stopPropagation();
+        selection.clear();
+        timelineSelection.select(TimelineSelection.walkTrack(track.id));
+    };
     return (
-        <group
-            onPointerDown={(event) => {
-                event.stopPropagation();
-                selection.clear();
-                timelineSelection.select(TimelineSelection.walkTrack(track.id));
-            }}
-            userData={{ helper: true, timelineTrackId: track.id }}
-        >
+        <group onPointerDown={selectTrack} userData={{ helper: true, timelineTrackId: track.id }}>
             <line>
                 <primitive object={geometry.path} attach="geometry" />
                 <lineBasicMaterial vertexColors toneMapped={false} />
