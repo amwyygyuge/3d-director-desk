@@ -1,5 +1,6 @@
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import { createId } from "@/core/createId";
 import { observer } from "mobx-react-lite";
 import { createContext, type MouseEvent, type ReactNode, useContext, useState } from "react";
 
@@ -27,7 +28,7 @@ function markerCommandAt(timeSeconds: number, template: MarkerTemplate): { reado
     return {
         type: "timeline.add-marker",
         payload: {
-            id: crypto.randomUUID(),
+            id: createId(),
             timeSeconds,
             label: template.label,
             colorToken: template.colorToken,

@@ -2,9 +2,9 @@ import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { CommandResult } from "@/command/DirectorCommand";
 import { waitMs } from "@/core/waitMs";
 
-/** 模型运行时就绪的轮询上限:40 × 250ms = 10s(本地测试资产正常亚秒级) */
-const RUNTIME_WAIT_LIMIT = 40;
-const RUNTIME_WAIT_INTERVAL_MS = 250;
+/** 异步落账的轮询上限:40 × 250ms = 10s(本地测试资产正常亚秒级) */
+const WAIT_ATTEMPT_LIMIT = 40;
+const WAIT_INTERVAL_MS = 250;
 
 /** 验收播种的统一入口:命令失败即抛错(story 挂掉 = 验收不过) */
 export function dispatchOk(stores: DirectorDeskStores, type: string, payload: unknown): void {
@@ -33,11 +33,21 @@ export function required<T>(value: T | undefined, message: string): T {
     if (value === undefined) throw new Error(`验收断言失败: ${message}`);
     return value;
 }
-/** 等模型 Three 运行时就绪(加载是异步的);超时即抛错(story 挂掉 = 验收不过) */
-export async function waitRuntime(stores: DirectorDeskStores, objectId: string): Promise<void> {
-    for (let attempt = 0; attempt < RUNTIME_WAIT_LIMIT; attempt++) {
-        if (stores.scene.manager.getRuntime(objectId)) return;
-        await waitMs(RUNTIME_WAIT_INTERVAL_MS);
+/** 轮询等领域状态落账;超时即抛错(story 挂掉 = 验收不过) */
+async function waitFor(check: () => boolean, message: string): Promise<void> {
+    for (let attempt = 0; attempt < WAIT_ATTEMPT_LIMIT; attempt++) {
+        if (check()) return;
+        await waitMs(WAIT_INTERVAL_MS);
     }
-    throw new Error(`验收断言失败: 模型运行时超时未就绪 ${objectId}`);
+    throw new Error(`验收断言失败: ${message}`);
+}
+
+/** 等模型 Three 运行时就绪(加载是异步的) */
+export function waitRuntime(stores: DirectorDeskStores, objectId: string): Promise<void> {
+    return waitFor(() => Boolean(stores.scene.manager.getRuntime(objectId)), `模型运行时超时未就绪 ${objectId}`);
+}
+
+/** 等动作挂载登记到实体(文档导入的动作恢复是异步的:重取资产 → 注册 → 运行时挂载) */
+export function waitActionMounted(stores: DirectorDeskStores, objectId: string): Promise<void> {
+    return waitFor(() => stores.scene.manager.getEntity(objectId)?.actionId != null, `动作挂载超时未落账 ${objectId}`);
 }

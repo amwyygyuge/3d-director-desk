@@ -3,6 +3,7 @@ import type { EasingCurve } from "@/motion/EasingCurve";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { ShotSizePresets } from "@/camera/ShotSizePresets";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
+import { createId } from "@/core/createId";
 import type { Vec3 } from "@/core/SceneObject";
 
 /** 导演语汇:每一项都是「规则运动」,手绘画不准、参数一句话说清。 */
@@ -289,7 +290,7 @@ export class MotionPresetCompiler {
         const resolved: readonly MovePose[] = landing ? [...poses.slice(0, -1), landing] : poses;
         const divisor = Math.max(resolved.length - 1, 1);
         return resolved.map((pose, index) => ({
-            id: crypto.randomUUID(),
+            id: createId(),
             progress: index / divisor,
             position: pose.position,
             inHandle: [0, 0, 0],

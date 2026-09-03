@@ -9,6 +9,7 @@ import { useState } from "react";
 import { createDefaultLightParams } from "@/core/LightParams";
 import { LIGHT_TYPES } from "@/core/LightParams";
 import type { LightType } from "@/core/LightParams";
+import { createId } from "@/core/createId";
 import { placementFor } from "@/ui/assets/importFiles";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { LightModeToggle } from "@/ui/workspace/LightModeToggle";
@@ -36,7 +37,7 @@ export const LightSection = observer(function LightSection() {
 
     const placeLight = (type: LightType) => {
         const [x, , z] = placementFor(scene.objectCount);
-        const id = `${LIGHT_ID_PREFIX}${crypto.randomUUID()}`;
+        const id = `${LIGHT_ID_PREFIX}${createId()}`;
         const label = LIGHT_TYPE_LABELS[type];
         const result = dispatcher.dispatch(
             {

@@ -1,4 +1,5 @@
 import { PathSimplifier } from "@/authoring/PathSimplifier";
+import { createId } from "@/core/createId";
 import type { Transform, Vec3 } from "@/core/SceneObject";
 import { EASING } from "@/motion/EasingCurve";
 import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
@@ -48,7 +49,7 @@ function keyframeAt({
     readonly speed: number;
 }): TransformKeyframeInit {
     return {
-        id: crypto.randomUUID(),
+        id: createId(),
         time: startSeconds + elapsedMeters / speed,
         value: { position: point, rotation: base.rotation, scale: base.scale },
         easing: EASING.LINEAR,

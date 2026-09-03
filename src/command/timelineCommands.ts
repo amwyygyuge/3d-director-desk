@@ -4,6 +4,7 @@ import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
 import { CameraProgramTrack } from "@/camera/CameraProgramTrack";
 import type { CameraProgramTrackJSON } from "@/camera/CameraProgramTrack";
+import { createId } from "@/core/createId";
 import { finiteTransform, finiteVec3 } from "@/core/SceneObject";
 import { EASING, isEasingCurve } from "@/motion/EasingCurve";
 import type { EasingCurve } from "@/motion/EasingCurve";
@@ -1352,7 +1353,7 @@ export function transformKeyCommandFor(ctx: DirectorContext, objectId: string): 
             trackId: `${TRANSFORM_TRACK_PREFIX}${entity.id}`,
             targetId: entity.id,
             keyframe: {
-                id: `${TRANSFORM_KEY_PREFIX}${crypto.randomUUID()}`,
+                id: `${TRANSFORM_KEY_PREFIX}${createId()}`,
                 time: quantizeSeconds(ctx, ctx.clock.time),
                 easing: EASING.LINEAR,
             },

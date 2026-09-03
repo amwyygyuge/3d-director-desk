@@ -1,5 +1,6 @@
 import { formatFromFileName } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
+import { createId } from "@/core/createId";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** 文件 → 受支持的模型/动作来源:格式守卫 + objectURL(禁 base64) */
@@ -44,7 +45,7 @@ export function importModelFile(stores: DirectorDeskStores, file: File, notify: 
         {
             type: "object.place",
             payload: {
-                id: `model-${crypto.randomUUID()}`,
+                id: `model-${createId()}`,
                 kind: "model",
                 sourceUrl: asset.url,
                 format: asset.format,

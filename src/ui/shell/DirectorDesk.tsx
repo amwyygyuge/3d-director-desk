@@ -1,5 +1,6 @@
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import { createId } from "@/core/createId";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import ScopedCssBaseline from "@mui/material/ScopedCssBaseline";
@@ -195,7 +196,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                 {
                     type: "object.place",
                     payload: {
-                        id: `model-${crypto.randomUUID()}`,
+                        id: `model-${createId()}`,
                         kind: "model",
                         sourceUrl: url,
                         format: formatFromUrl(url) ?? undefined,

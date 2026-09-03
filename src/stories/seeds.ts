@@ -1,4 +1,5 @@
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { createId } from "@/core/createId";
 import { placementFor } from "@/ui/assets/importFiles";
 
 /** 测试资产(public/test-assets,已入库,来源见该目录 README)的统一入口 */
@@ -19,7 +20,7 @@ export function placeModel(
         {
             type: "object.place",
             payload: {
-                id: init?.id ?? `model-${crypto.randomUUID()}`,
+                id: init?.id ?? `model-${createId()}`,
                 kind: "model",
                 sourceUrl: url,
                 transform: {

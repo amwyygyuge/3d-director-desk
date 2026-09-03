@@ -1,5 +1,6 @@
 import { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
 import type { CaptureProduct } from "@/capture/CaptureProduct";
+import { createId } from "@/core/createId";
 import { VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import type { VideoExportSource } from "@/capture/VideoExportSession";
@@ -145,7 +146,7 @@ export class CaptureFrameCommand extends DirectorCommand<CaptureFramePayload> {
     }
 
     execute(ctx: DirectorContext): void {
-        const requestId = this.payload.requestId ?? crypto.randomUUID();
+        const requestId = this.payload.requestId ?? createId();
         void ctx.capture.capture({ hideHelpers: this.payload.hideHelpers ?? true }).then(async (blob) => {
             if (!blob) return;
             await deliverCaptureProduct(ctx, {
@@ -247,7 +248,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
 
     execute(ctx: DirectorContext): void {
         const source = this.payload.source ?? VIDEO_EXPORT_SOURCE.PROGRAM;
-        const requestId = this.payload.requestId ?? crypto.randomUUID();
+        const requestId = this.payload.requestId ?? createId();
         const range = videoRangeFor(ctx, this.payload);
         void this.exportAndDeliver(ctx, { source, requestId, ...range });
     }

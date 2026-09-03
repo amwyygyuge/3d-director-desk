@@ -6,7 +6,7 @@ import { CameraShot } from "@/camera/CameraShot";
 import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
 import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/core/SceneObject";
-import type { DeskDocument, DeskDocumentAction } from "@/document/DeskDocument";
+import type { DeskDocument, DeskDocumentAction, DeskDocumentLighting } from "@/document/DeskDocument";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import { parsePosePreset } from "@/pose/PosePreset";
 import type { PosePreset } from "@/pose/PosePreset";
@@ -14,6 +14,7 @@ import { TimelineDoc } from "@/timeline/TimelineDoc";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import { isActorProfileInit } from "@/actor/ActorProfile";
 import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
+import { isLightingMode } from "@/store/SceneStore";
 const SCENE_OBJECT_KIND_VALUES: readonly string[] = SCENE_OBJECT_KINDS;
 
 interface DocumentImportPlan {
@@ -24,6 +25,7 @@ interface DocumentImportPlan {
     readonly program: CameraProgramTrack;
     readonly actions: readonly DeskDocumentAction[];
     readonly posePresets: readonly PosePreset[];
+    readonly lighting: DeskDocumentLighting;
 }
 
 interface DocumentImportPreparation {
@@ -113,10 +115,14 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
         return ["动作资产参数无效"];
     }
     if (typeof value.clipName !== "string") return [`动作 "${value.name}" 的 clipName 无效`];
-    if (value.mountedOn !== null && (typeof value.mountedOn !== "string" || !entityIds.has(value.mountedOn))) {
-        return [`动作 "${value.name}" 的挂载对象不存在`];
-    }
+    if (!Array.isArray(value.mountedOn)) return [`动作 "${value.name}" 的挂载列表无效`];
+    const missing = value.mountedOn.filter((id: unknown) => typeof id !== "string" || !entityIds.has(id));
+    if (missing.length > 0) return [`动作 "${value.name}" 的挂载对象不存在`];
     return value.url.length > 0 ? [] : [`动作 "${value.name}" 的 url 无效`];
+}
+
+function lightingIssues(value: unknown): readonly string[] {
+    return isRecord(value) && isLightingMode(value.mode) ? [] : ["灯光模式无效"];
 }
 
 function posePresetIssues(value: unknown): readonly string[] {
@@ -237,6 +243,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
         ...duplicateFieldIssues(document.actions, "name", "动作名称"),
         ...document.posePresets.flatMap(posePresetIssues),
         ...duplicateFieldIssues(document.posePresets, "id", "姿势预设 id"),
+        ...lightingIssues(document.lighting),
     ];
     if (basicIssues.length > 0) return { issues: basicIssues, plan: null };
     try {
@@ -252,6 +259,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
                 const preset = parsePosePreset(value);
                 return preset?.custom ? [preset] : [];
             }),
+            lighting: typed.lighting,
         };
         const relationalIssues = [...timelineIssues(plan.timeline, entityIdSet), ...motionIssues(plan)];
         return relationalIssues.length > 0 ? { issues: relationalIssues, plan: null } : { issues: [], plan };
@@ -298,6 +306,7 @@ export class DocumentImportService {
             // 留任模型的骨架未更换,索引与其 bind 基线必须保留;整表清空会把当前姿势烙成 rest
             ctx.skeletons.retainOnly(plan.entities.map((entity) => entity.id));
             ctx.ui.setPosePicking(null, null);
+            ctx.scene.setLightingMode(plan.lighting.mode);
             ctx.scene.replaceObjects(plan.entities);
             ctx.camera.replaceShots(plan.shots);
             ctx.timeline.replaceDocument(plan.timeline);
@@ -312,15 +321,31 @@ export class DocumentImportService {
             try {
                 const registered = await provisionAction(ctx, action, { signal });
                 if (signal.aborted) return;
-                const isMounted =
-                    action.mountedOn === null ||
-                    (await mountWhenReady(ctx, action.mountedOn, registered.id, { signal }));
-                if (!isMounted && !signal.aborted)
-                    ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${action.mountedOn}`);
+                await this.mountOnEntities({ ctx, action, actionId: registered.id, signal });
             } catch {
                 if (!signal.aborted) ctx.ui.setApplicationNotice(`动作 "${action.name}" 恢复失败:${action.url}`);
             }
         }
         if (!signal.aborted) ctx.playback.sampleCurrent();
+    }
+
+    /** 同一动作依次挂回全部实体;单个超时只通知,不阻断后续实体与动作 */
+    private async mountOnEntities({
+        ctx,
+        action,
+        actionId,
+        signal,
+    }: {
+        readonly ctx: DirectorContext;
+        readonly action: DeskDocumentAction;
+        readonly actionId: string;
+        readonly signal: AbortSignal;
+    }): Promise<void> {
+        for (const objectId of action.mountedOn) {
+            if (signal.aborted) return;
+            const isMounted = await mountWhenReady(ctx, objectId, actionId, { signal });
+            if (!isMounted && !signal.aborted)
+                ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${objectId}`);
+        }
     }
 }

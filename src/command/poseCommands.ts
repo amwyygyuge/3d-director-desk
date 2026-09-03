@@ -1,5 +1,6 @@
 import { BODY_PART, isBodyPart } from "@/actor/mixamoSkeleton";
 import type { BodyPart } from "@/actor/mixamoSkeleton";
+import { createId } from "@/core/createId";
 import { BoneKeyIndex } from "@/pose/BoneKeyIndex";
 import { PoseComposer } from "@/pose/PoseComposer";
 import { PosePreset, parsePosePreset } from "@/pose/PosePreset";
@@ -415,7 +416,7 @@ export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPaylo
 export class SavePosePresetCommand extends DirectorCommand<SavePosePresetPayload> {
     static readonly TYPE = "pose.preset.save";
     readonly type = SavePosePresetCommand.TYPE;
-    private readonly presetId = `custom-${crypto.randomUUID()}`;
+    private readonly presetId = `custom-${createId()}`;
 
     constructor(readonly payload: SavePosePresetPayload) {
         super();

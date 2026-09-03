@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx";
 import type { AnimationClip } from "three";
 
 import { ActionAsset } from "@/assets/ActionAsset";
+import { createId } from "@/core/createId";
 
 /**
  * 动作库(仓储):已导入动作的注册表。
@@ -21,7 +22,7 @@ export class AnimationLibrary {
         if (existing) return { action: existing, duplicate: true };
 
         const action = new ActionAsset({
-            id: `action-${crypto.randomUUID()}`,
+            id: `action-${createId()}`,
             name: init.name,
             url: init.url,
             duration: init.clip.duration,

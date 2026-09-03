@@ -5,6 +5,7 @@ import { FOLLOW_SPACE, followSpaceCodecFor } from "@/camera/FollowSpaceCodec";
 import { transformKeyCommandFor } from "@/command/timelineCommands";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
+import { createId } from "@/core/createId";
 import type { Vec3 } from "@/core/SceneObject";
 
 const ISSUE_CODE = {
@@ -75,7 +76,7 @@ function cameraKeyCommand(ctx: DirectorContext): KeyframeAuthoringResult {
     }
     const existing = clip.keys.find((key) => Math.abs(key.progress - progress) < KEY_MERGE_PROGRESS);
     const key = new CameraKey({
-        id: existing?.id ?? crypto.randomUUID(),
+        id: existing?.id ?? createId(),
         progress,
         position: pose.position,
         target: pose.target,

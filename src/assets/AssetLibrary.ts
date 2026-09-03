@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import { ModelAsset } from "@/assets/ModelAsset";
+import { createId } from "@/core/createId";
 import type { ModelFormat } from "@/assets/ModelAsset";
 
 /**
@@ -24,7 +25,7 @@ export class AssetLibrary {
         );
         if (existing) return { asset: existing, duplicate: true };
 
-        const asset = new ModelAsset({ id: `asset-${crypto.randomUUID()}`, ...init });
+        const asset = new ModelAsset({ id: `asset-${createId()}`, ...init });
         this.assets.push(asset);
         return { asset, duplicate: false };
     }

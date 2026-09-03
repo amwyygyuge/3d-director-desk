@@ -1,5 +1,6 @@
 import Button from "@mui/material/Button";
 import { observer } from "mobx-react-lite";
+import { createId } from "@/core/createId";
 
 import type { CameraKeyJSON } from "@/camera/CameraKey";
 import type { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -79,10 +80,10 @@ const LensNoClipToast = observer(function LensNoClipToast() {
             {
                 type: "motion.create-take",
                 payload: {
-                    id: crypto.randomUUID(),
+                    id: createId(),
                     startTimeSeconds: stores.clock.time,
                     durationSeconds: TAKE_DURATION_SECONDS,
-                    keys: [keyAtPose(crypto.randomUUID(), 0, pose), keyAtPose(crypto.randomUUID(), 1, pose)],
+                    keys: [keyAtPose(createId(), 0, pose), keyAtPose(createId(), 1, pose)],
                 },
             },
             stores,

@@ -5,19 +5,27 @@ import type { SceneObjectInit } from "@/core/SceneObject";
 import type { TimelineDocInit } from "@/timeline/TimelineDoc";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import type { PosePresetJSON } from "@/pose/PosePreset";
+import type { LightingMode } from "@/store/SceneStore";
 
 /**
  * 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。
- * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层。
+ * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
+ * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档。
  */
-export const DESK_DOCUMENT_VERSION = 8;
+export const DESK_DOCUMENT_VERSION = 9;
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
 export interface DeskDocumentAction {
     readonly name: string;
     readonly url: string;
     readonly clipName: string;
-    readonly mountedOn: string | null;
+    /** 挂载该动作的全部实体 id;空数组 = 已注册未挂载 */
+    readonly mountedOn: readonly string[];
+}
+
+/** 灯光模式(studio 兜底 / custom 自定义);灯本体是实体,走 entities 通道 */
+export interface DeskDocumentLighting {
+    readonly mode: LightingMode;
 }
 
 export interface DeskDocumentMotion {
@@ -37,6 +45,7 @@ export interface DeskDocument {
     readonly timeline: TimelineDocInit;
     readonly actions: readonly DeskDocumentAction[];
     readonly posePresets: readonly PosePresetJSON[];
+    readonly lighting: DeskDocumentLighting;
 }
 
 /** 装配当前状态为文档(单一事实源:各域 toJSON) */
@@ -55,8 +64,9 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
             name: action.name,
             url: action.url,
             clipName: ctx.animations.getClip(action.id)?.name ?? "",
-            mountedOn: entities.find((entity) => entity.actionId === action.id)?.id ?? null,
+            mountedOn: entities.filter((entity) => entity.actionId === action.id).map((entity) => entity.id),
         })),
+        lighting: { mode: ctx.scene.lightingMode },
         posePresets: ctx.posePresets.customPresets().map((preset) => preset.toJSON()),
     };
 }

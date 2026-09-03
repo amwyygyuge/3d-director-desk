@@ -1,5 +1,6 @@
 import CloseIcon from "@mui/icons-material/Close";
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
+import { createId } from "@/core/createId";
 import FitScreenIcon from "@mui/icons-material/FitScreen";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import Box from "@mui/material/Box";
@@ -297,7 +298,7 @@ const ProgramCutInButton = observer(function ProgramCutInButton() {
                 type: "program.set-clip",
                 payload: {
                     clip: {
-                        id: crypto.randomUUID(),
+                        id: createId(),
                         source: { kind: PROGRAM_SOURCE_KIND.STATIC_SHOT, shotId: cameraId },
                         startTimeSeconds: playhead,
                         durationSeconds: clipDuration,

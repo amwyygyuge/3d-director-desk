@@ -1,6 +1,7 @@
 import { ASSET_CATEGORY, ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
 import type { AssetEntry } from "@/assets/catalog/AssetEntry";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
+import { createId } from "@/core/createId";
 import { finiteTransform } from "@/core/SceneObject";
 import type { Transform } from "@/core/SceneObject";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -89,7 +90,7 @@ interface ResolvedAssetsPlacePayload extends AssetsPlacePayload {
 }
 
 function createAssetEntityId(assetId: string): string {
-    return `${ASSET_ENTITY_ID_PREFIX}${assetId}-${crypto.randomUUID()}`;
+    return `${ASSET_ENTITY_ID_PREFIX}${assetId}-${createId()}`;
 }
 
 /** 目录条目 → 人偶画像:仅声明了 actor 且有骨架家族的条目成为人偶,普通模型保持无画像。 */
