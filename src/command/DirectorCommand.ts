@@ -26,6 +26,11 @@ import type { DocumentImportService } from "@/document/DocumentImportService";
 /**
  * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。
  */
+/** 命令异步工作与桌面实例同寿；信号中止后不得再写入领域状态或 UI。 */
+export interface CommandExecutionLifecycle {
+    readonly signal: AbortSignal;
+}
+
 export interface DirectorContext {
     readonly scene: SceneStore;
     readonly camera: CameraStore;
@@ -67,6 +72,8 @@ export interface DirectorContext {
     readonly selection: SelectionStore;
     /** 工程快照替换应用服务：候选聚合校验、提交与异步动作恢复同属一个生命周期。 */
     readonly documentImports: DocumentImportService;
+    /** 异步命令的取消域；具体实现仍由组合根按每桌实例持有。 */
+    readonly lifecycle: CommandExecutionLifecycle;
 }
 
 export interface CommandIssueOption {

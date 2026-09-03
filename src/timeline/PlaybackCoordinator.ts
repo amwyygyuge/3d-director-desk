@@ -10,6 +10,7 @@ import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import type { SceneManager } from "@/core/SceneManager";
+import type { SceneObject } from "@/core/SceneObject";
 import type { CameraStore } from "@/store/CameraStore";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
@@ -30,6 +31,21 @@ export class PlaybackCoordinator {
     private poseSource: ViewportPoseSource | null = null;
     private readonly stopTransportReaction: () => void;
     private readonly stopStoppedReaction: () => void;
+    private sampleTimeSeconds = 0;
+    private readonly sampleTransformForEntity = (entity: SceneObject): void => {
+        const runtime = this.scene.getRuntime(entity.id);
+        if (!runtime) return;
+        const transformTrack = this.timeline.document.trackForTarget(entity.id, TIMELINE_TRACK_KIND.TRANSFORM);
+        if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.sampleTimeSeconds, runtime)) {
+            this.restoreObject(entity.id, false);
+            return;
+        }
+        this.syncLocomotion(entity.id, transformTrack);
+    };
+    private readonly applyPoseForEntity = (entity: SceneObject): void => {
+        if (entity.kind !== "model") return;
+        this.poseLayer.apply(entity.id, entity.pose);
+    };
 
     constructor(
         private readonly timeline: TimelineStore,
@@ -116,9 +132,7 @@ export class PlaybackCoordinator {
     restoreAll(): void {
         this.restorePoseBaselines();
         this.binder.setTime(this.currentTime());
-        for (const entity of this.scene.list()) {
-            this.poseLayer.apply(entity.id, entity.pose);
-        }
+        this.scene.forEachEntity(this.applyPoseForEntity);
         this.motionSampler.restore();
         this.invalidate();
     }
@@ -150,24 +164,10 @@ export class PlaybackCoordinator {
     private sample(timeSeconds: number): void {
         this.restorePoseBaselines();
         this.binder.setTime(timeSeconds);
-        const entities = this.scene.list();
-        for (let index = 0; index < entities.length; index += 1) {
-            const entity = entities[index];
-            if (!entity) continue;
-            const runtime = this.scene.getRuntime(entity.id);
-            if (!runtime) continue;
-            const transformTrack = this.timeline.document.trackForTarget(entity.id, TIMELINE_TRACK_KIND.TRANSFORM);
-            if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, timeSeconds, runtime)) {
-                this.restoreObject(entity.id, false);
-                continue;
-            }
-            this.syncLocomotion(entity.id, transformTrack);
-        }
+        this.sampleTimeSeconds = timeSeconds;
+        this.scene.forEachEntity(this.sampleTransformForEntity);
         this.motionSampler.sampleCurrent(timeSeconds);
-        for (let index = 0; index < entities.length; index += 1) {
-            const entity = entities[index];
-            if (entity) this.applyPose(entity.id);
-        }
+        this.scene.forEachEntity(this.applyPoseForEntity);
         this.invalidate();
     }
 

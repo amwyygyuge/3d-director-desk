@@ -14,6 +14,7 @@ import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import { buildTransformTrajectory } from "@/timeline/transformTrajectory";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
+import { ActorProfile } from "@/actor/ActorProfile";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import type { PoseSnapshotInit } from "@/pose/PoseSnapshot";
 import { isLightParams, normalizeLightParams } from "@/core/LightParams";
@@ -100,6 +101,15 @@ const PLACE_OBJECT_CONTRACT: PayloadContract = {
 function resolveModelFormat(payload: PlaceObjectPayload): ModelFormat | null {
     return payload.format ?? (payload.sourceUrl ? formatFromUrl(payload.sourceUrl) : null);
 }
+function actorProfileIssue(actor: ActorProfileInit | null | undefined): string | null {
+    if (actor === null || actor === undefined) return null;
+    try {
+        new ActorProfile(actor);
+        return null;
+    } catch {
+        return "人偶画像参数无效";
+    }
+}
 
 export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
     static readonly TYPE = "object.place";
@@ -130,6 +140,12 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
             if (!payload.sourceUrl) issues.push("模型缺少 sourceUrl");
             else if (!resolveModelFormat(payload)) issues.push("无法识别模型格式(支持 glb/gltf/fbx/obj)");
         }
+        const hasActor = payload.actor !== undefined && payload.actor !== null;
+        const actorIssue = actorProfileIssue(payload.actor);
+        issues.push(
+            ...(actorIssue ? [actorIssue] : []),
+            ...(hasActor && payload.kind !== "model" ? ["只有模型实体可以持有人偶画像"] : []),
+        );
         const hasLight = payload.light !== undefined && payload.light !== null;
         if ((payload.kind === "light") !== hasLight) {
             issues.push('kind="light" 必须且只能携带 light 参数');

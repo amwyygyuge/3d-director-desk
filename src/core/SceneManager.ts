@@ -62,6 +62,10 @@ export class SceneManager {
     list(): readonly SceneObject[] {
         return values(this.entities);
     }
+    /** 回放热路径直接迭代 observable Map，避免 list() 创建实体快照数组。 */
+    forEachEntity(visitor: (entity: SceneObject) => void): void {
+        this.entities.forEach(visitor);
+    }
     /**
      * 文档替换的提交边界:退场实体的 Three 运行时立即摘除,留任实体只解绑不摘除——
      * 它们的渲染体由 React 持有,新实体实例落到同一 id 上时渲染层会重新绑定;

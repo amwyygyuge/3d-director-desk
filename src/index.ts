@@ -267,6 +267,7 @@ export {
     TransportGetStateQuery,
 } from "@/command/actionCommands";
 export type {
+    CommandExecutionLifecycle,
     CommandIssue,
     CommandIssueOption,
     CommandResult,

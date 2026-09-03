@@ -168,18 +168,26 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
     execute(ctx: DirectorContext): void {
         const entry = ctx.catalog.get(this.payload.assetId);
         if (!entry) return;
+        const signal = ctx.lifecycle.signal;
         void (async () => {
             try {
-                const action = await provisionAction(ctx, {
-                    name: entry.name,
-                    url: entry.url,
-                    clipName: entry.clipName,
-                });
-                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id);
-                if (!mounted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${this.payload.objectId}`);
-                ctx.playback.sampleCurrent();
+                const action = await provisionAction(
+                    ctx,
+                    {
+                        name: entry.name,
+                        url: entry.url,
+                        clipName: entry.clipName,
+                    },
+                    { signal },
+                );
+                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id, { signal });
+                if (!signal.aborted) {
+                    const timeoutNotice = mounted ? null : `动作挂载等待运行时超时:${this.payload.objectId}`;
+                    if (timeoutNotice) ctx.ui.setApplicationNotice(timeoutNotice);
+                    ctx.playback.sampleCurrent();
+                }
             } catch {
-                ctx.ui.setApplicationNotice(`动作资产加载失败:${entry.name}`);
+                if (!signal.aborted) ctx.ui.setApplicationNotice(`动作资产加载失败:${entry.name}`);
             }
         })();
     }

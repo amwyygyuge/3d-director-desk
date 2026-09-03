@@ -267,11 +267,14 @@ export class CaptureService {
         }
 
         const handover = this.beginEditingVisualHandover({ shouldHide: options?.hideHelpers !== false });
-        gl.render(scene, camera);
-        const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
-        this.restoreEditingVisuals(handover);
-        // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
-        return Promise.resolve(dataUrlToBlob(dataUrl));
+        try {
+            gl.render(scene, camera);
+            const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
+            // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
+            return dataUrlToBlob(dataUrl);
+        } finally {
+            this.restoreEditingVisuals(handover);
+        }
     }
 }
 

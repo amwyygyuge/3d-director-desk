@@ -13,6 +13,7 @@ export interface HistoryEntry {
 const HISTORY_ERROR = {
     EMPTY: "history-empty",
     DISPATCHER_UNAVAILABLE: "history-dispatcher-unavailable",
+    COMPENSATION_FAILED: "history-compensation-failed",
 } as const;
 
 /**
@@ -86,7 +87,15 @@ export class CommandHistory {
         for (const command of commandsFor(entry)) {
             const result = dispatcher.dispatch(command, ctx, { record: false });
             if (!result.ok) {
-                this.compensate(compensationFor(entry), ctx, dispatcher);
+                const compensationFailure = this.compensate(compensationFor(entry), ctx, dispatcher);
+                if (compensationFailure?.ok === false) {
+                    this.clearHistory();
+                    return {
+                        ok: false,
+                        error: HISTORY_ERROR.COMPENSATION_FAILED,
+                        issues: [result.error, compensationFailure.error],
+                    };
+                }
                 return result;
             }
         }
@@ -99,7 +108,16 @@ export class CommandHistory {
         commands: readonly SerializedCommand[],
         ctx: DirectorContext,
         dispatcher: CommandDispatcher,
-    ): void {
-        for (const command of commands) dispatcher.dispatch(command, ctx, { record: false });
+    ): CommandResult | null {
+        for (const command of commands) {
+            const result = dispatcher.dispatch(command, ctx, { record: false });
+            if (!result.ok) return result;
+        }
+        return null;
+    }
+
+    private clearHistory(): void {
+        this.undoStack.length = 0;
+        this.redoStack.length = 0;
     }
 }

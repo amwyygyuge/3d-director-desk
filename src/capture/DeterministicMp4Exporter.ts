@@ -45,25 +45,38 @@ export class DeterministicMp4Exporter {
         const target = new BufferTarget();
         const output = new Output({ format: new Mp4OutputFormat(), target });
         try {
-            const source = new CanvasSource(this.options.canvas, {
-                alpha: VIDEO_ALPHA_MODE,
-                codec: VIDEO_CODEC,
-                fullCodecString: VIDEO_CODEC_PROFILE,
-                latencyMode: VIDEO_ENCODER_LATENCY_MODE,
-                quality: new Quality(REFERENCE_VIDEO_QUALITY),
-                transform: {
-                    fit: VIDEO_RESIZE_FIT,
-                    height: h264AlignedDimension(this.options.canvas.height),
-                    width: h264AlignedDimension(this.options.canvas.width),
-                },
-            });
-            output.addVideoTrack(source, { frameRate: this.options.frameRate });
-            await output.start();
-            return await this.writeFrames({ frameCount, frameDurationSeconds, output, source, target });
+            return await this.writeOutput({ frameCount, frameDurationSeconds, output, target });
         } catch (error) {
             if (import.meta.env.DEV) console.error("[capture] MP4 export failed", error);
             await safelyCancel(output);
             throw new ReferenceVideoExportError();
+        }
+    }
+
+    private async writeOutput(options: {
+        readonly frameCount: number;
+        readonly frameDurationSeconds: number;
+        readonly output: Output<Mp4OutputFormat, BufferTarget>;
+        readonly target: BufferTarget;
+    }): Promise<DeterministicMp4ExportResult | null> {
+        const source = new CanvasSource(this.options.canvas, {
+            alpha: VIDEO_ALPHA_MODE,
+            codec: VIDEO_CODEC,
+            fullCodecString: VIDEO_CODEC_PROFILE,
+            latencyMode: VIDEO_ENCODER_LATENCY_MODE,
+            quality: new Quality(REFERENCE_VIDEO_QUALITY),
+            transform: {
+                fit: VIDEO_RESIZE_FIT,
+                height: h264AlignedDimension(this.options.canvas.height),
+                width: h264AlignedDimension(this.options.canvas.width),
+            },
+        });
+        try {
+            options.output.addVideoTrack(source, { frameRate: this.options.frameRate });
+            await options.output.start();
+            return await this.writeFrames({ ...options, source });
+        } finally {
+            if (options.output.state !== "pending") source.close();
         }
     }
 
