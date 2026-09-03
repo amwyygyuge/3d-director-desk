@@ -376,17 +376,19 @@ export const MotionClipPathPreview = observer(function MotionClipPathPreview({
         [followGeometry],
     );
 
-    useEffect(() => {
-        if (!clip || !follow || !followGeometry) return;
-        updateRelativePath(followGeometry, clip, resolver, clip.startTimeSeconds);
-        invalidate();
-    }, [clip, follow, followGeometry, invalidate, resolver, subjectTrack]);
-
+    /**
+     * 相对路径与绑带都锚当前播放头:跟拍的视觉证据就是「拖时间轴时轨迹跟着人走」,
+     * 钉在片段起点会让作者以为跟拍没生效。
+     *
+     * 拖关键帧球的反解必须用同一个时刻(见 finishDrag),否则松手瞬间球会跳。
+     * 播放期本就不该编辑,所以「边播边拖球」不是需要迁就的场景。
+     */
     useEffect(() => {
         if (!clip || !follow || !followGeometry) return undefined;
         return reaction(
             () => clock.time,
             (timeSeconds) => {
+                updateRelativePath(followGeometry, clip, resolver, timeSeconds);
                 updateFollowStrap(followGeometry, clip, resolver, timeSeconds);
                 invalidate();
             },
@@ -431,7 +433,7 @@ interface MotionKeyHelperProps {
 /** 一枚镜头 key 的球体与（选中后）手柄杆;拖拽平面始终面向当前编辑相机。 */
 const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onContextMenu }: MotionKeyHelperProps) {
     const stores = useDirectorDeskStores();
-    const { scene, timeline } = stores;
+    const { clock, scene, timeline } = stores;
     const camera = useThree((state) => state.camera);
     const invalidate = useThree((state) => state.invalidate);
     const canvas = useThree((state) => state.gl.domElement);
@@ -475,35 +477,41 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
         [inGeometry, outGeometry],
     );
 
-    // 球和手柄与相对路径同属片段静态形状，固定片段起点可避免选中或 seek 时跳动。
-
+    // 球与相对路径必须同参考系(当前播放头),否则球不落在线上。
     useEffect(() => {
-        if (!clip || !follow || !key) return;
-        const root = rootRef.current;
-        if (!root) return;
-        root.visible = updateFollowKeyHelper(
-            followResolver,
-            follow,
-            clip,
-            key,
-            root,
-            clip.startTimeSeconds,
-            followFrame,
-            followSample,
-            handleOffsets.inX,
-            handleOffsets.inY,
-            handleOffsets.inZ,
-            inHandleRef.current,
-            inGeometry,
-            handleOffsets.outX,
-            handleOffsets.outY,
-            handleOffsets.outZ,
-            outHandleRef.current,
-            outGeometry,
+        if (!clip || !follow || !key) return undefined;
+        return reaction(
+            () => clock.time,
+            (timeSeconds) => {
+                const root = rootRef.current;
+                if (!root) return;
+                root.visible = updateFollowKeyHelper(
+                    followResolver,
+                    follow,
+                    clip,
+                    key,
+                    root,
+                    timeSeconds,
+                    followFrame,
+                    followSample,
+                    handleOffsets.inX,
+                    handleOffsets.inY,
+                    handleOffsets.inZ,
+                    inHandleRef.current,
+                    inGeometry,
+                    handleOffsets.outX,
+                    handleOffsets.outY,
+                    handleOffsets.outZ,
+                    outHandleRef.current,
+                    outGeometry,
+                );
+                invalidate();
+            },
+            { fireImmediately: true },
         );
-        invalidate();
     }, [
         clip,
+        clock,
         follow,
         followFrame,
         followResolver,
@@ -612,12 +620,12 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
                 geometry,
                 codec: clip.follow ? followSpaceCodecFor(stores) : null,
                 follow: clip.follow,
-                // 渲染与反解必须同参考系，否则松手即跳。
-                timeSeconds: clip.startTimeSeconds,
+                // 渲染与反解必须同参考系,否则松手即跳;球画在当前播放头的跟随系里,故此处也取它。
+                timeSeconds: clock.time,
             };
             setDragging(true);
         },
-        [camera, clip, clipId, key, keyId, stores],
+        [camera, clip, clipId, clock, key, keyId, stores],
     );
 
     if (!key) return null;
