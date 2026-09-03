@@ -1,7 +1,7 @@
 # Monet 宿主接入需求 — 截图/录制产物出口定制
 
 > 需求方：Monet（dm-tapnow）画布，经 `input-3d-director` 节点嵌入导演台。
-> 状态：R1 / R2 / R3 / R4 / R5 / R6 均已交付且 Monet 已接线（2026-09-03）。
+> 状态：R1 / R2 / R3 / R4 / R5 / R6 均已交付且 Monet 已接线（2026-09-03）；R7 待组件方交付。
 
 ## 背景
 
@@ -45,15 +45,11 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 **需求变更（2026-09-02）**：Monet 场景资产**使用导演台内置模型库**，不需要「从画布导入 Monet 模型」——原 `import-from-canvas` 用例作废，`host.onImportModel` 宿主接线需求同步取消（保持空操作）。`toolbarExtensions` 当前无消费方，机制保留备用。
 
-### R3 桌面端窗口形态 —— ✅ 已交付（窗口控制实现方式修订）
+### R3 桌面端窗口形态 —— ✅ 已交付（窗口控制接入完成）
 
 **形态**（不变）：desktop 导演台窗口为 headless（`frame: false`），尺寸固定 = Monet 主窗口 contentBounds 并跟随主窗口移动。
 
-**窗口控制实现修订（2026-09-03）**：Monet 最初在 `/director` 页面以 `fixed` 悬浮注入缩小/关闭按钮，实测与工具栏右侧「全屏预览」按钮**重叠遮挡**。现修订为：
-
-- Monet 经 `presentation.trailingExtensions` 注入缩小/关闭（纯图标），按钮进入工具栏布局流，排在「全屏预览」右侧、项目菜单左侧——**从结构上杜绝遮挡**，无需组件方预留空间
-- 项目菜单固定为工具栏最右按钮；页面侧不再 fixed 注入任何窗口控制浮层
-- 组件方零改动（`trailingExtensions` 槽位即为此场景预留）
+**当前接入**：Monet 经 `presentation.trailingExtensions` 注入关闭按钮，按钮进入工具栏布局流，不再以 `fixed` 悬浮遮挡内置控件。该槽位实际位于全屏预览右侧、帮助和项目菜单左侧；严格最右端布局由 R7 解决。
 
 **验收**：
 
@@ -96,6 +92,21 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 - 截图与视频各完成一次，Monet 画布各新增一个对应的独立输入节点，均无连接边。
 - 每次成功仅出现一条 Monet Toast；导演台内不出现产物弹窗、预览面板或重复 Toast。
 - 上传或落节点失败时仅出现一条 Monet 失败 Toast，导演台恢复可继续截图/录制状态。
+
+### R7 宿主窗口控制必须占据工具栏最右端 —— ⏳待组件方交付
+
+**问题**：现有 `trailingExtensions` 的实际顺序是「全屏预览 → trailingExtensions → 帮助 → 项目菜单」。关闭/缩小等宿主窗口控制按钮并不在最右端，无法满足 Monet headless 窗口的操作优先级。
+
+**需求**：在 `presentation` 增加独立的 `rightmostExtensions` 槽位（名称可调整，但语义必须固定）：
+
+- 槽位渲染在所有内置控件之后，视觉顺序为「… → 项目菜单 → rightmostExtensions」；`rightmostExtensions` 的最后一个按钮即工具栏最右元素。
+- 复用 `ToolbarExtensionInit` 契约，支持多个纯图标宿主动作；Monet 将在该槽位注入最小化与关闭，关闭始终排在最后。
+- `trailingExtensions` 保持现有位置和行为，保证已有宿主向后兼容；不得通过 CSS absolute/fixed 或 DOM 重排由宿主绕过布局。
+
+**验收**：
+
+- Monet 导演台中最小化、关闭依次位于项目菜单右侧，关闭按钮是整个工具栏最右元素。
+- 全屏预览、帮助、项目菜单保留现有顺序与功能；窗口控制不遮挡、不随窗口宽度变化漂移。
 
 ### CAPTURE_PRODUCED 产物协议（破坏性变更）
 
