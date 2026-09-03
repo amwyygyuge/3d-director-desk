@@ -1,5 +1,3 @@
-import { when } from "mobx";
-
 import { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
 import type { CaptureProduct } from "@/capture/CaptureProduct";
 import { VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
@@ -15,7 +13,7 @@ import type { PayloadContract } from "@/command/PayloadContract";
 interface CaptureFramePayload {
     /** AI 连发/重试时按 requestId 对账产物归属。 */
     readonly requestId?: string;
-    /** 默认 true:网格/gizmo/高亮框不入镜 */
+    /** 默认 true:编辑辅助物不入镜；地板网格属于演播室环境，始终保留。 */
     readonly hideHelpers?: boolean;
 }
 
@@ -63,6 +61,7 @@ const CAPTURE_ISSUE_CODE = {
     EMPTY_PROGRAM: "capture-empty-program",
     NOT_RECORDING: "capture-not-recording",
 } as const;
+const MP4_EXPORT_FAILURE_MESSAGE = "MP4 参考视频导出失败：当前浏览器不支持稳定帧率导出";
 const CAPTURE_FRAME_CONTRACT: PayloadContract = {
     properties: { hideHelpers: { type: "boolean" }, requestId: { type: "string" } },
 };
@@ -168,8 +167,8 @@ function videoRangeFor(
 }
 
 /**
- * 导出 WebM：Program 走预览态接管相机，viewport 是显式保留辅助物的备选。
- * 异步产物只在录制任务完成且工作台状态已复原后交付。
+ * 导出固定帧率 MP4：默认使用当前播放范围，Program 走预览态接管相机，viewport 是显式保留编辑辅助物的备选。
+ * 异步产物只在导出任务完成且工作台状态已复原后交付。
  */
 export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     static readonly TYPE = "capture.video";
@@ -263,23 +262,16 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
             policy.prepare(ctx);
             ctx.clock.pause();
             ctx.clock.seek(options.startSeconds);
-            ctx.clock.play();
             ctx.videoExport.begin(options);
-            const recording = ctx.capture.recordVideo({
+            return await ctx.capture.exportVideo({
                 durationSeconds: options.durationSeconds,
+                frameRate: ctx.timeline.document.frameRate.fps,
                 hideHelpers: options.source === VIDEO_EXPORT_SOURCE.PROGRAM,
+                renderFrame: (timeSeconds) => ctx.clock.seek(options.startSeconds + timeSeconds),
             });
-            const naturalStop = when(() => !ctx.clock.isPlaying);
-            void naturalStop.then(() => {
-                void ctx.capture.stopRecording();
-            });
-            try {
-                const blob = await recording;
-                if (!blob) return null;
-                return { blob, durationSeconds: ctx.clock.time - options.startSeconds };
-            } finally {
-                naturalStop.cancel();
-            }
+        } catch {
+            ctx.ui.setApplicationNotice(MP4_EXPORT_FAILURE_MESSAGE);
+            return null;
         } finally {
             ctx.videoExport.finish();
             ctx.clock.pause();
@@ -288,7 +280,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     }
 }
 
-/** 提前结束录制并交付已采集 chunks；无进行中录制时返回结构化拒绝。 */
+/** 在当前已完成帧之后停止导出并交付 MP4；无进行中导出时返回结构化拒绝。 */
 export class CaptureStopVideoCommand extends DirectorCommand<Record<string, never>> {
     static readonly TYPE = "capture.video-stop";
     readonly type = CaptureStopVideoCommand.TYPE;
@@ -307,11 +299,11 @@ export class CaptureStopVideoCommand extends DirectorCommand<Record<string, neve
     }
 
     execute(ctx: DirectorContext): void {
-        void ctx.capture.stopRecording();
+        void ctx.capture.stopVideoExport();
     }
 }
 
-/** 提前终止录制并丢弃已采集 chunks。 */
+/** 取消导出并丢弃 MP4 产物。 */
 export class CancelVideoCaptureCommand extends DirectorCommand<Record<string, never>> {
     static readonly TYPE = "capture.video-cancel";
     readonly type = CancelVideoCaptureCommand.TYPE;
@@ -330,7 +322,7 @@ export class CancelVideoCaptureCommand extends DirectorCommand<Record<string, ne
     }
 
     execute(ctx: DirectorContext): void {
-        void ctx.capture.cancelRecording();
+        void ctx.capture.cancelVideoExport();
     }
 }
 

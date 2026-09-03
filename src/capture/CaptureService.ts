@@ -2,9 +2,10 @@ import { PerspectiveCamera, Vector3 } from "three";
 import type { Box3, Camera, Scene, WebGLRenderer } from "three";
 
 import { CaptureHelperRegistry } from "@/capture/CaptureHelperRegistry";
+import { DeterministicMp4Exporter } from "@/capture/DeterministicMp4Exporter";
+import type { DeterministicMp4ExportResult } from "@/capture/DeterministicMp4Exporter";
 import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 import type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
-import { waitMs } from "@/core/waitMs";
 import type { Vec3 } from "@/core/SceneObject";
 
 const PNG_MIME_TYPE = "image/png";
@@ -12,12 +13,8 @@ const TMP_DIRECTION = new Vector3();
 const TMP_CORNER = new Vector3();
 const NDC_EDGE = 1;
 const TMP_SHOT_CAMERA = new PerspectiveCamera();
-const VIDEO_FPS = 30;
 /** 录制时长上限(秒):参考片段场景,防失控长录 */
 export const VIDEO_MAX_DURATION_SECONDS = 120;
-const VIDEO_MIME_CANDIDATES = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"] as const;
-/** 自然停止漏掉时的兜底尾部；正常结束由命令层观察播放停止后显式收口。 */
-const VIDEO_TAIL_GRACE_MS = 1_000;
 
 /** agent 可读的生效相机位姿(纯数据,可序列化) */
 export interface LiveCameraPose {
@@ -49,23 +46,19 @@ export interface ShotFramingPose {
 }
 
 /**
- * 预演画面输出服务(应用服务):截图与(后置)录屏。
+ * 预演画面输出服务(应用服务):截图与确定性 MP4 参考视频。
  *
- * 帧内取样纪律(性能铁律):不需要常驻 preserveDrawingBuffer——
- * capture 在单个 JS 任务内 强制渲一帧 → toBlob 取样 → 恢复辅助物 → 再渲回可视帧,
- * 屏幕永不露出"去辅助物"的中间帧,demand 模式也能出图。
- *
- * 辅助物约定:编辑期根节点登记到 CaptureHelperRegistry；采集只迭代这些根，不遍历场景树。
- * 命令层经 DirectorContext.capture 触达——AI「截图」指令的落地路径。
+ * 截图在单个 JS 任务内强制渲一帧再取样；视频按项目帧率逐帧 seek、渲染与编码，
+ * 因而设备性能只影响导出耗时，不改变模型收到的帧序列。
+ * 编辑期 helper 根登记到 CaptureHelperRegistry；采集只迭代这些根，不遍历场景树。
  */
 export class CaptureService {
     private handles: RenderHandles | null = null;
     private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
     /** 编辑期辅助物根的运行时注册表；Three 引用不进 MobX，采集可直接迭代。 */
     readonly helpers = new CaptureHelperRegistry();
-    private recorder: MediaRecorder | null = null;
-    private recordingEndSignal: ((discard: boolean) => void) | null = null;
-    private activeRecording: Promise<Blob | null> | null = null;
+    private exporter: DeterministicMp4Exporter | null = null;
+    private activeVideoExport: Promise<DeterministicMp4ExportResult | null> | null = null;
     private recordedMimeType: string | null = null;
 
     attach(handles: RenderHandles): void {
@@ -76,6 +69,7 @@ export class CaptureService {
         this.handles = null;
     }
     dispose(): void {
+        this.exporter?.requestCancel();
         this.helpers.clear();
         this.detach();
     }
@@ -105,10 +99,10 @@ export class CaptureService {
         };
     }
     get isRecording(): boolean {
-        return this.recorder !== null;
+        return this.exporter !== null;
     }
 
-    /** 最近一次成功启动的 MediaRecorder 实际编码；产品协议禁止猜测 MIME。 */
+    /** 最近一次成功导出的实际 MIME；产品协议禁止猜测编码。 */
     get lastVideoMimeType(): string | null {
         return this.recordedMimeType;
     }
@@ -162,79 +156,58 @@ export class CaptureService {
     }
 
     /**
-     * 录制画布为 WebM 视频:canvas.captureStream 帧流 + MediaRecorder。
-     * 正常收口由命令层在播放停下时 stopRecording；墙钟只防止外部驱动失联后无限录制。
+     * 固定帧率导出 H.264/MP4 参考视频；每一帧先由命令层采样时间轴，再立即渲染并编码。
+     * Stop 在当前帧边界完成并交付，Cancel 丢弃产物；两条路径均复原 helper 可见性。
      */
-    recordVideo(options: { readonly durationSeconds: number; readonly hideHelpers?: boolean }): Promise<Blob | null> {
+    exportVideo(options: {
+        readonly durationSeconds: number;
+        readonly frameRate: number;
+        readonly hideHelpers?: boolean;
+        readonly renderFrame: (timeSeconds: number) => void;
+    }): Promise<DeterministicMp4ExportResult | null> {
         const handles = this.handles;
-        if (!handles || this.recorder) return Promise.resolve(null);
-        const stream = handles.gl.domElement.captureStream(VIDEO_FPS);
-        const preferredMimeType =
-            VIDEO_MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "video/webm";
-        const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
+        if (!handles || this.exporter) return Promise.resolve(null);
         const helperVisibility = new HelperVisibilityTransaction();
         if (options.hideHelpers) helperVisibility.hide(this.helpers);
-        const { promise: endRequested, resolve: requestEnd } = Promise.withResolvers<boolean>();
-        const { promise: stopped, resolve: markStopped } = Promise.withResolvers<void>();
-        const chunks: Blob[] = [];
-        recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) chunks.push(event.data);
-        };
-        recorder.onstop = () => markStopped();
-        this.recorder = recorder;
-        this.recordingEndSignal = requestEnd;
-        this.recordedMimeType = recorder.mimeType;
-        recorder.start();
-        const recording = this.collectVideo({
-            recorder,
-            stream,
-            endRequested,
-            stopped,
-            chunks,
-            helperVisibility,
+        const exporter = new DeterministicMp4Exporter({
+            canvas: handles.gl.domElement,
             durationSeconds: options.durationSeconds,
+            frameRate: options.frameRate,
+            renderFrame: (timeSeconds) => {
+                options.renderFrame(timeSeconds);
+                handles.gl.render(handles.scene, handles.camera);
+            },
         });
-        this.activeRecording = recording;
-        return recording;
+        this.exporter = exporter;
+        const videoExport = this.collectVideoExport({ exporter, helperVisibility });
+        this.activeVideoExport = videoExport;
+        return videoExport;
     }
 
-    /** 明确结束采集并保留 chunks；返回同一个产物 Promise 供非命令调用方等待。 */
-    stopRecording(): Promise<Blob | null> {
-        this.recordingEndSignal?.(false);
-        return this.activeRecording ?? Promise.resolve(null);
+    /** 在当前已完成帧之后收口并交付 MP4。 */
+    stopVideoExport(): Promise<DeterministicMp4ExportResult | null> {
+        this.exporter?.requestStop();
+        return this.activeVideoExport ?? Promise.resolve(null);
     }
 
-    /** 明确放弃本次采集；录制任务仍负责释放 MediaRecorder 与可见性事务。 */
-    cancelRecording(): Promise<Blob | null> {
-        this.recordingEndSignal?.(true);
-        return this.activeRecording ?? Promise.resolve(null);
+    /** 放弃当前导出，编码器与 helper 可见性事务仍由会话负责释放。 */
+    cancelVideoExport(): Promise<DeterministicMp4ExportResult | null> {
+        this.exporter?.requestCancel();
+        return this.activeVideoExport ?? Promise.resolve(null);
     }
 
-    private async collectVideo(options: {
-        readonly recorder: MediaRecorder;
-        readonly stream: MediaStream;
-        readonly endRequested: Promise<boolean>;
-        readonly stopped: Promise<void>;
-        readonly chunks: Blob[];
+    private async collectVideoExport(options: {
+        readonly exporter: DeterministicMp4Exporter;
         readonly helperVisibility: HelperVisibilityTransaction;
-        readonly durationSeconds: number;
-    }): Promise<Blob | null> {
+    }): Promise<DeterministicMp4ExportResult | null> {
         try {
-            const discard = await Promise.race([
-                options.endRequested,
-                waitMs(options.durationSeconds * 1_000 + VIDEO_TAIL_GRACE_MS).then(() => false),
-            ]);
-            options.recorder.stop();
-            await options.stopped;
-            const mimeType = options.recorder.mimeType;
-            this.recordedMimeType = mimeType;
-            return discard ? null : new Blob(options.chunks, { type: mimeType });
+            const result = await options.exporter.export();
+            this.recordedMimeType = result?.blob.type ?? null;
+            return result;
         } finally {
-            for (const track of options.stream.getTracks()) track.stop();
             this.restoreHelpers(options.helperVisibility);
-            this.recorder = null;
-            this.recordingEndSignal = null;
-            this.activeRecording = null;
+            this.exporter = null;
+            this.activeVideoExport = null;
         }
     }
 
@@ -245,7 +218,7 @@ export class CaptureService {
         handles.gl.render(handles.scene, handles.camera);
     }
 
-    /** 截取当前场景为 PNG blob;hideHelpers 默认开(网格/gizmo/高亮框不入镜) */
+    /** 截取当前场景为 PNG blob;hideHelpers 默认开(gizmo/高亮框等编辑辅助物不入镜) */
     async capture(options?: { hideHelpers?: boolean }): Promise<Blob | null> {
         const handles = this.handles;
         if (!handles) return null;

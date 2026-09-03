@@ -39,7 +39,7 @@ export interface DirectorContext {
     /** 回放只写 Three 运行时；命令层用于编辑后立即重采样与停止恢复。 */
     readonly playback: PlaybackCoordinator;
     readonly capture: CaptureService;
-    /** 视频导出生命周期的唯一权威；MediaRecorder 运行时句柄仍由 capture 持有。 */
+    /** 视频导出生命周期的唯一权威；确定性编码器运行时句柄仍由 capture 持有。 */
     readonly videoExport: VideoExportSession;
     /** 模型加载/缓存(文档导入时重取动作 clip) */
     readonly models: ModelImporter;

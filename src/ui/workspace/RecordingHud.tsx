@@ -28,11 +28,11 @@ const PROGRESS_WIDTH_PX = 160;
 const REMAINING_DECIMALS = 1;
 const SECONDS_SUFFIX = "秒";
 const TEXT = {
-    PROGRESS: "录制进度",
+    PROGRESS: "导出进度",
     REMAINING: "剩余 ",
 } as const;
 
-/** 录制期唯一控制面；进度叶子独立订阅低频播放头，外壳不被 12Hz 数字更新牵动。 */
+/** 导出期唯一控制面；进度叶子独立订阅低频播放头，外壳不被 12Hz 数字更新牵动。 */
 export const RecordingHud = observer(function RecordingHud() {
     const stores = useDirectorDeskStores();
     const { presentation, videoExport } = stores;
@@ -55,17 +55,25 @@ export const RecordingHud = observer(function RecordingHud() {
                 <RecordingProgress />
             </Box>
             <RecordingRemaining />
-            <Button color="inherit" onClick={() => dispatchRecordingCommand({ stores, type: COMMAND_TYPE.STOP })} size="small">
+            <Button
+                color="inherit"
+                onClick={() => dispatchRecordingCommand({ stores, type: COMMAND_TYPE.STOP })}
+                size="small"
+            >
                 {presentation.captureVideo.stopLabel}
             </Button>
-            <Button color="error" onClick={() => dispatchRecordingCommand({ stores, type: COMMAND_TYPE.CANCEL })} size="small">
+            <Button
+                color="error"
+                onClick={() => dispatchRecordingCommand({ stores, type: COMMAND_TYPE.CANCEL })}
+                size="small"
+            >
                 {presentation.captureVideo.discardLabel}
             </Button>
         </Paper>
     );
 });
 
-/** LinearProgress 只追踪 PlayheadDisplay 派生的录制进度，壳层与按钮保持静态。 */
+/** LinearProgress 只追踪 PlayheadDisplay 派生的导出进度，壳层与按钮保持静态。 */
 const RecordingProgress = observer(function RecordingProgress() {
     const { videoExport } = useDirectorDeskStores();
     return <LinearProgress aria-label={TEXT.PROGRESS} value={videoExport.progressRatio * 100} variant="determinate" />;
@@ -76,7 +84,9 @@ const RecordingRemaining = observer(function RecordingRemaining() {
     const { videoExport } = useDirectorDeskStores();
     return (
         <Typography sx={{ fontFamily: MONO_FONT_STACK, minWidth: "4.5em" }} variant="caption">
-            {TEXT.REMAINING}{videoExport.remainingSeconds.toFixed(REMAINING_DECIMALS)}{SECONDS_SUFFIX}
+            {TEXT.REMAINING}
+            {videoExport.remainingSeconds.toFixed(REMAINING_DECIMALS)}
+            {SECONDS_SUFFIX}
         </Typography>
     );
 });

@@ -109,7 +109,7 @@ export interface DirectorDeskStores {
     /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
-    /** 视频导出可观察生命周期；录制服务的 MediaRecorder 运行时句柄不进入 Store。 */
+    /** 视频导出可观察生命周期；确定性编码器运行时句柄不进入 Store。 */
     videoExport: VideoExportSession;
     /** 命令层唯一入口:UI/宿主/AI 的一切写操作经此分发 */
     dispatcher: CommandDispatcher;

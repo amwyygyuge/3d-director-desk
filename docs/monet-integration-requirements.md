@@ -35,10 +35,10 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 **实际形态**（双槽位，均为 `presentation` 入参）：
 
-|槽位|位置|形态|用途|
-|---|---|---|---|
-|`toolbarExtensions`|动作区扩展位（截图/录制右侧）|图标+文字 / 纯图标|宿主业务动作|
-|`trailingExtensions`|最右扩展位（全屏预览右侧）|纯图标|宿主窗口控制（见 R3）|
+| 槽位                 | 位置                          | 形态               | 用途                  |
+| -------------------- | ----------------------------- | ------------------ | --------------------- |
+| `toolbarExtensions`  | 动作区扩展位（截图/录制右侧） | 图标+文字 / 纯图标 | 宿主业务动作          |
+| `trailingExtensions` | 最右扩展位（全屏预览右侧）    | 纯图标             | 宿主窗口控制（见 R3） |
 
 扩展项契约 `ToolbarExtensionInit`：`key` / `icon` / `label?` / `tooltip?` / `disabled`（支持函数形态响应式求值）/ `onClick`（宿主全接管，组件不附加默认行为）；空表不渲染、不占位。
 
@@ -59,13 +59,13 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 - 缩小/关闭按钮位于工具栏最右，与内置按钮同区同风格，不遮挡「全屏预览」
 - 窗口无边框，尺寸与主窗口一致，主窗口移动/缩放时实时跟随；主窗口关闭时导演台跟随销毁
 
-### R5 停止录制必须交付视频 —— ✅ 已交付
+### R5 停止导出必须交付视频 —— ✅ 已交付
 
-**落地方式**：工具栏 Stop 调用 `capture.video-stop`，它结束 `MediaRecorder`、保留已采集 chunks 并经 `host.reportCapture` 交付产品；`capture.video-cancel` 是单独的放弃动作，只丢弃 chunks，绝不创建产物。两条路径都会在任务 finally 中复原预览态与循环设置。
+**落地方式**：工具栏 Stop 调用 `capture.video-stop`，它在当前已完成帧后收口按工程帧率采样的确定性 MP4 导出，并经 `host.reportCapture` 交付产品；`capture.video-cancel` 放弃导出，绝不创建产物。两条路径都会在任务 finally 中复原预览态与循环设置。
 
 **验收**：
 
-- 录制中点击 Stop 后，`host.reportCapture` 恰好收到一次 `kind: "video"` 的产物
+- 导出中点击 Stop 后，`host.reportCapture` 恰好收到一次 `kind: "video"` 的 MP4 产物
 - Monet 上传后创建 `input-video` 节点，并与导演台建立溯源边
 - 点击明确的 Cancel 才丢弃视频且不创建节点
 
@@ -73,11 +73,11 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 `director-desk:capture-produced` 的 payload 已改为带类型的 `CaptureProduct`。旧的 `{ blobUrl, width, height, requestId }` 形状不再受支持；Monet 必须读取下列字段：
 
-|字段|说明|
-|---|---|
-|`kind`|`"image"` 或 `"video"`；据此分别创建 `input-image` / `input-video` 节点|
-|`mimeType`|浏览器实际编码的 MIME，例如 `image/png` 或 `video/webm;codecs=vp9`|
-|`durationSeconds`|视频实际录制秒数；截图为 `null`|
+| 字段              | 说明                                                                    |
+| ----------------- | ----------------------------------------------------------------------- |
+| `kind`            | `"image"` 或 `"video"`；据此分别创建 `input-image` / `input-video` 节点 |
+| `mimeType`        | 浏览器实际编码的 MIME，例如 `image/png` 或 `video/mp4`                  |
+| `durationSeconds` | 视频实际导出秒数；截图为 `null`                                         |
 
 其余 `blobUrl`、`width`、`height`、`requestId` 字段保持为产品值对象的一部分。
 
@@ -91,14 +91,14 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 组件方以下两处**源站根路径硬编码**构成宿主供给契约，Monet 已按约挂载；组件方若调整路径（或改为可配置 baseUrl）需同步通知 Monet：
 
-|路径|内容|Monet 挂载方式|
-|---|---|---|
-|`/builtin-assets/**`|内置资产目录（catalog.json + 条目文件）|前端 `public/builtin-assets` 软链 → 组件方 `public/builtin-assets`；dev 经 vite 直出，prod 由 vite build 解引用拷入 dist 随前端发布|
-|`/3d-director-desk/style.css`|组件方样式产物|前端 `public/3d-director-desk/style.css` 软链 → 组件方 `dist/style.css`（既有机制，经 `vendorAssets.resolve` 运行时注入）|
+| 路径                          | 内容                                    | Monet 挂载方式                                                                                                                      |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `/builtin-assets/**`          | 内置资产目录（catalog.json + 条目文件） | 前端 `public/builtin-assets` 软链 → 组件方 `public/builtin-assets`；dev 经 vite 直出，prod 由 vite build 解引用拷入 dist 随前端发布 |
+| `/3d-director-desk/style.css` | 组件方样式产物                          | 前端 `public/3d-director-desk/style.css` 软链 → 组件方 `dist/style.css`（既有机制，经 `vendorAssets.resolve` 运行时注入）           |
 
 > 「没有模型」问题根因即首行契约未挂载：`BuiltinAssetProvider` 固定 fetch 源站根 `/builtin-assets/catalog.json`，宿主未供给时静默失败（catch → 空目录）。Monet 挂载后已实测 4 条内置资产全部可达（catalog `application/json` 200，glb/gltf 字节级 200）。
 
 ## 边界说明
 
 - 本清单只涉及 UI 出口层；产物数据通道（reportCapture）与命令层均已具备，不在范围内
-- 截图/录制的**能力触发**本身（capture / recordVideo）由组件方提供，Monet 只定制文案与扩展位落位
+- 截图/视频导出的**能力触发**本身（capture / exportVideo）由组件方提供，Monet 只定制文案与扩展位落位
