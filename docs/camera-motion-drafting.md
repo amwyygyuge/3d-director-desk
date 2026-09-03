@@ -105,11 +105,11 @@ class PathSimplifier {
 
 导演平面图上其实有两条线：机位移动线 + 视线箭头。对应设计：
 
-| 情形                        | 注视来源                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| 绘制前**选中了场景对象**    | 自动绑定为跟拍目标（`CameraFocusTrack` 覆盖层），整段看向它 —— 覆盖绝大多数意图 |
-| 未选中，且未画第二条线      | 所有 key 的 `target` = 轨迹前进方向前方 `LOOK_AHEAD_METERS`，即「向前开」       |
-| 按住 `D` + `Shift` 再拖一条 | 画**注视线**：与位置线按 `progress` 一一对应，逐 key 写 `target`                |
+| 情形                        | 注视来源                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| 绘制前**选中了场景对象**    | 自动绑定为注视目标（`CameraFocusTrack` 注视覆盖层），整段看向它 —— 覆盖绝大多数意图 |
+| 未选中，且未画第二条线      | 所有 key 的 `target` = 轨迹前进方向前方 `LOOK_AHEAD_METERS`，即「向前开」           |
+| 按住 `D` + `Shift` 再拖一条 | 画**注视线**：与位置线按 `progress` 一一对应，逐 key 写 `target`                    |
 
 注视线是可选的高级动作，默认路径上用户永远不需要知道它存在。
 
@@ -279,7 +279,7 @@ sequenceDiagram
     participant MS as CameraMotionSampler
     participant MON as 监视器
 
-    U->>VP: 选中角色（自动成为跟拍目标）
+    U->>VP: 选中角色（自动成为注视目标）
     U->>VP: 按住 D，左键拖出走位曲线
     loop 绘制中
         VP->>DC: 射线与绘制平面求交 → 追加原始点
@@ -292,7 +292,7 @@ sequenceDiagram
     PS-->>DC: 4 个 CameraKey（handleMode = auto）
     DC->>D: motion.create-take {cameraId, start=playhead, duration=2, keys, program}
     D->>D: validate + invert（两条逆命令）→ 撤销栈
-    D-->>U: 时间轴出现片段 + Program 自动跟随
+    D-->>U: 时间轴出现片段 + Program 自动时段联动
     U->>U: 按 L 独奏循环，边看边拖 key 微调
 ```
 

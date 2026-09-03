@@ -1,6 +1,6 @@
 # AI 语言控制导演台 — 方案设计(未来铺垫)
 
-> 状态:命令层 66 命令 + 16 查询全部落地并携带 payload 契约(`PayloadContract`,债 D1 已清);语义编译三落地——运镜 `MotionPresetCompiler`、摆位 `PlacementCompiler`、布景 `StagePresetCompiler`(`scene.stage`,间距按包围球半径和自适应);装载闸门拒绝未就绪实体的间距语义命令(`wait-for-model` 结构化重试);`camera.frame-subject` 多被摄体联合取景 + `camera.check-framing` 视锥断言使布景全程零截图;`listCapabilities()` 即 AI tool schema 真相源。
+> 状态:命令层 70 命令 + 16 查询全部落地并携带 payload 契约(`PayloadContract`,债 D1 已清);语义编译三落地——运镜 `MotionPresetCompiler`、摆位 `PlacementCompiler`、布景 `StagePresetCompiler`(`scene.stage`,间距按包围球半径和自适应);装载闸门拒绝未就绪实体的间距语义命令(`wait-for-model` 结构化重试);`camera.frame-subject` 多被摄体联合取景 + `camera.check-framing` 视锥断言使布景全程零截图;`listCapabilities()` 即 AI tool schema 真相源。
 
 ## 场景分级
 
@@ -63,6 +63,15 @@ classDiagram
 - `validate()` 先于 `execute()`:非法输入产出结构化 issues 供 AI 重试,不静默失败。
 - payload 纯数据可序列化 → 兑现可序列化纪律,天然支持操作日志回放/撤销。
 - 幻觉围栏在 validate:坐标有限性、fov 范围、id 存在性(`finiteVec3` 等)。
+
+### 跟拍命令清单
+
+| 命令                       | payload                                                                                   | 语义                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `motion.replace-clip`      | `{ clip }`                                                                                | 整片段覆盖写入（片段须已存在）                   |
+| `motion.bind-follow`       | `{ id, objectId, anchorOffset, frame: "world"\|"heading", lagSeconds, smoothingSeconds }` | 绑定跟拍，关键帧改为相对主体坐标；绑定时画面不跳 |
+| `motion.unbind-follow`     | `{ id }`                                                                                  | 解除跟拍，烘回世界坐标；解绑时画面不跳           |
+| `motion.set-follow-params` | `{ id, objectId, anchorOffset, frame: "world"\|"heading", lagSeconds, smoothingSeconds }` | 只改参数，不重算关键帧                           |
 
 ## 语义编译（运镜已落地）
 

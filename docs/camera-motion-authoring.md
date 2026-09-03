@@ -11,17 +11,18 @@
 
 ### 1.1 已经成立的地基
 
-| 层         | 承载类                                             | 事实                                                                                                                                                                                                                            |
-| ---------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 机位领域   | `CameraShot` / `CameraDirector`                    | 不可变值对象 `{position, target, fov}`，作为静态 Program 来源或运镜创建期起幅快照；`camera.set-shot` 是唯一写入口                                                                                                            |
-| 时序领域   | `CameraMotionClip`                                 | 独立资产 `{id, startTimeSeconds, durationSeconds, keys, focus}`；每枚 key 自带完整 `position/target/fov`，播放不回读机位                                                                                                  |
-| 空间轨迹   | `MotionTrajectory<CameraKey>` / `AutoHandleSolver` | key 按 `progress` 排序，构造期预解算控制点；采样零分配，默认 Catmull-Rom 自动手柄                                                                                                                                               |
-| 注视       | `CameraFocusTrack` / `FocusTargetResolver`         | 可选跟拍覆盖层；`null` 时由 key 的 `target` 插值，非空时覆盖注视目标                                                                                                                                                            |
-| 输出       | `CameraProgramTrack`                               | `ProgramSource = static-shot | motion-clip`，同一时刻唯一输出；Program 直接引用静态机位或独立运镜，不经机位间接查找                                                                                                      |
-| 运行时     | `CameraMotionSampler` + `CameraMotionSink`         | `bindSink/sampleCurrent/restore`，只写调用方标量，不写 MobX                                                                                                                                                                     |
-| 定序       | `PlaybackCoordinator`                              | 单条 `reaction(transport.time)`：`binder → transform → motionSampler → pose → invalidate`                                                                                                                                       |
-| 命令       | `motion.*` / `program.*`                           | `create-take / create-clip / set-clip-range / set-key / move-key / remove-key / set-key-handle / reset-key-handles / set-clip-easing / set-focus / remove-clip / author / preview.enter / preview.exit`，全部持久写入命令可撤销 |
-| 引用完整性 | `RemoveObjectCommand.validateIssues`               | 删除被跟拍对象返回 `focus-target-in-use` + `options: freeze-world-point / remove-dependent-focus`                                                                                                                               |
+| 层         | 承载类                                             | 事实                                                                                                                                                                                                                                                                                             |
+| ---------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 机位领域   | `CameraShot` / `CameraDirector`                    | 不可变值对象 `{position, target, fov}`，作为静态 Program 来源或运镜创建期起幅快照；`camera.set-shot` 是唯一写入口                                                                                                                                                                                |
+| 时序领域   | `CameraMotionClip`                                 | 独立资产 `{id, startTimeSeconds, durationSeconds, keys, focus, follow}`；每枚 key 自带完整 `position/target/fov`，播放不回读机位                                                                                                                                                                 |
+| 空间轨迹   | `MotionTrajectory<CameraKey>` / `AutoHandleSolver` | key 按 `progress` 排序，构造期预解算控制点；采样零分配，默认 Catmull-Rom 自动手柄                                                                                                                                                                                                                |
+| 注视       | `CameraFocusTrack` / `FocusTargetResolver`         | 可选注视覆盖层；`null` 时由 key 的 `target` 插值，非空时覆盖注视目标                                                                                                                                                                                                                             |
+| 跟拍       | `CameraFollowTrack` / `CameraFrameSolver`          | 可选 `follow`；非空时所有 key 的坐标属于主体跟随系：主体在原点、正面 −Z、+Z 在身后、+X 在右手侧；采样期只由 `CameraFrameSolver` 解算                                                                                                                                                             |
+| 输出       | `CameraProgramTrack`                               | `ProgramSource = static-shot                                                                                                                                                                                                                                                                     | motion-clip`，同一时刻唯一输出；Program 直接引用静态机位或独立运镜，不经机位间接查找 |
+| 运行时     | `CameraMotionSampler` + `CameraMotionSink`         | `bindSink/sampleCurrent/restore`，只写调用方标量，不写 MobX                                                                                                                                                                                                                                      |
+| 定序       | `PlaybackCoordinator`                              | 单条 `reaction(transport.time)`：`binder → transform → motionSampler → pose → invalidate`                                                                                                                                                                                                        |
+| 命令       | `motion.*` / `program.*`                           | `create-take / create-clip / replace-clip / bind-follow / unbind-follow / set-follow-params / set-clip-range / set-key / move-key / remove-key / set-key-handle / reset-key-handles / set-clip-easing / set-focus / remove-clip / author / preview.enter / preview.exit`，全部持久写入命令可撤销 |
+| 引用完整性 | `RemoveObjectCommand.validateIssues`               | 删除被注视锁定或跟拍引用的对象返回 `clip-reference-in-use` + `options: freeze-world-point / remove-dependent-focus / unbind-dependent-follow`（解除关联跟拍后删除）                                                                                                                              |
 
 **P0–P2 的领域、命令和交互面已形成闭环。**
 
@@ -32,7 +33,7 @@
 3. 在镜头视角 scrub 时间轴，视口显示该时刻的运镜画面；
 4. 摆位松手以 `motion.set-key` 提交完整 pose，时间轴显示 key 菱形；
 5. 拖 key 重定时用 `motion.move-key`，拖片段移动/拉伸用 `motion.set-clip-range`，拖手柄用 `motion.set-key-handle`；
-6. 需要跟拍时用 `motion.set-focus` 绑定对象；解除覆盖传 `target: null`；
+6. 需要注视锁定时用 `motion.set-focus` 绑定注视目标；解除注视覆盖传 `target: null`。需要跟拍时用 `motion.bind-follow` 绑定主体；
 7. 从任意时刻播放、scrub 或预览片段；`TimeTransport` 将 playhead clamp 到时间轴时长，并支持循环。
 
 ### 1.3 历史断裂（P0–P2 已解决）
@@ -59,7 +60,7 @@
 
 1. **编辑对象从「贝塞尔路径」上移为「镜头关键帧（CameraKey）」**。路径、手柄、fov 曲线、注视插值全部由 key 序列派生；手柄退化为可选的高级 override。用户的唯一动词是「打点」，与 transform 轨的 `K` 完全同构（Rule of Two）。
 2. **视口获得第二种模式：镜头视角**。`导演视角`（自由，现状）↔ `镜头视角`（跟随时间轴 Program 输出）。这不是恢复被砍掉的「Render Cam / Free Cam」药丸——那时「镜头视角」= 掌镜静态机位，与 `Enter` 重复；现在它是**跟随时间轴的动态输出**，`Enter` 进不去，语义真实存在。
-3. **时间轴成为运镜的主编辑面**。clip 可拖可拉伸可吸附，key 在 clip 内显示为菱形并可拖动，Program 轨默认自动跟随运镜片段。
+3. **时间轴成为运镜的主编辑面**。clip 可拖可拉伸可吸附，key 在 clip 内显示为菱形并可拖动，Program 轨默认与运镜片段自动时段联动。
 
 ---
 
@@ -206,7 +207,7 @@ classDiagram
 现状创建锚点时已按「相邻弦长的三分之一」建手柄，这本就是 Catmull-Rom 的特例。把它提升为**声明式的 `handleMode: "auto"`**：key 移动时手柄自动重算（曲线始终平滑），用户拖动手柄才切 `"manual"` 冻结。这样「打三个点就得到一条顺滑运镜」是默认结果，而不是需要手工调 6 个数值框的成果。
 
 **决策 5：`CameraFocusTrack` 从「必需目标」降为「覆盖层」。**
-默认注视来自 key 的 `target` 插值（用户摆画面时自然产生）。只有显式绑定跟拍对象时，`FocusTargetResolver` 的解析结果**覆盖** key 的 target，UI 上把 target 字段置灰并标注「由跟拍目标接管」。这既保留了跟拍能力，又免除了「必须先设 focus 才能做运镜」的前置心智。
+默认注视来自 key 的 `target` 插值（用户摆画面时自然产生）。只有显式绑定注视目标时，`FocusTargetResolver` 的解析结果**覆盖** key 的 target，UI 上把 target 字段置灰并标注「由注视目标接管」。这既保留了注视锁定能力，又免除了「必须先设 focus 才能做运镜」的前置心智。
 
 ### 4.3 清洁切换
 
@@ -403,7 +404,7 @@ flowchart TD
 - 拖拽期不发命令、松手提交一条——离散手势有明确终点，无需 `ShotNavigation` 的 400ms 防抖；只有滚轮类连续输入才用防抖。
 - 重叠被 `motion-overlapping-clip` / `program-overlapping-clip` 拒绝时**回弹并提示**，不静默截断。
 
-### 7.4 Program 自动跟随（消灭 D4）
+### 7.4 Program 自动时段联动（消灭 D4）
 
 新增复合命令 `motion.create-take`：一次 dispatch 同时产出运镜片段与其 Program 输出片段。`invert` 返回两条逆命令，撤销栈天然支持（`CommandHistory.HistoryEntry.undo` 本就是 `SerializedCommand[]`）。
 
@@ -413,7 +414,7 @@ flowchart TD
 | 目标时段已被**同一机位**占用 | 扩展现有 Program 片段的范围                                                                                                      |
 | 目标时段已被**其它机位**占用 | 不静默覆盖：返回 `program-overlapping-clip` + `options: ["replace-program", "keep-current"]`，UI 弹二选一，AI 也读同一份 options |
 
-移动 / 拉伸运镜片段时，若其 Program 片段与它同范围（判定为「跟随态」），一并重定时；用户手工改过 Program 边界（判定为「独立态」）则不联动。这条规则必须在 UI 上可见：跟随态的 Program 片段带链接图标，点击可解除。
+移动 / 拉伸运镜片段时，若其 Program 片段与它同范围（判定为「时段联动态」），一并重定时；用户手工改过 Program 边界（判定为「独立态」）则不联动。这条规则必须在 UI 上可见：时段联动态的 Program 片段带链接图标，点击可解除。
 
 ### 7.5 `TimeTransport` 封顶（消灭 D5）
 
@@ -475,12 +476,12 @@ flowchart TD
 
 `ShotPanel` 现在混装了机位存盘、景别、创建运镜、追加锚点、6 个手柄数值框、注视绑定、路径开关七类东西，而机位列表已经收敛到 `OutlinerPanel`。重新划界：
 
-| 面板                                     | 职责                                                                                                             |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `OutlinerPanel`                          | 静态机位与实体的唯一索引                                                                                         |
-| `ShotPanel`（左栏 CAMERA）               | 静态机位存盘、景别预设、以该机位 pose 创建独立运镜                                                              |
-| `InspectorSheet`（右栏，选中运镜片段时） | 片段属性：起止时间、时长、跟拍目标绑定、key 列表（选中 key 显示其完整 pose、出段缓动与手柄数值，支持拖拽微调） |
-| `TimelinePanel`                          | Program 来源选择、独立运镜片段与 key 的时间编排                                                                |
+| 面板                                     | 职责                                                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `OutlinerPanel`                          | 静态机位与实体的唯一索引                                                                                                 |
+| `ShotPanel`（左栏 CAMERA）               | 静态机位存盘、景别预设、以该机位 pose 创建独立运镜                                                                       |
+| `InspectorSheet`（右栏，选中运镜片段时） | 片段属性：起止时间、时长、注视目标绑定、跟拍绑定、key 列表（选中 key 显示其完整 pose、出段缓动与手柄数值，支持拖拽微调） |
+| `TimelinePanel`                          | Program 来源选择、独立运镜片段与 key 的时间编排                                                                          |
 
 手柄的 6 个数值框从常驻表单降级为「选中 key 且 `handleMode === "manual"` 时才出现」的高级项——默认路径自动平滑，绝大多数用户永远不需要打开它。
 
@@ -495,7 +496,7 @@ interface MotionPresetRequest {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly move: "dolly-in" | "dolly-out" | "pan" | "tilt" | "truck" | "crane" | "orbit" | "hold";
-    readonly subjectId?: string; // 有 subject 则自动绑跟拍
+    readonly subjectId?: string; // 有 subject 则自动绑定注视目标
     readonly shotSize?: ShotSize; // 落幅景别，复用 ShotSizePresets
     readonly easing?: CameraMotionEasing;
 }
@@ -513,19 +514,27 @@ interface MotionPresetRequest {
 
 新增命令的能力契约（`appliesWhen: "director-desk.camera-motion-v3"`，权限沿用 `motion:edit` / `motion:read`）：
 
-| 命令                                                 | payload                                                                  | 可撤销           | 校验要点                                             |
-| ---------------------------------------------------- | ------------------------------------------------------------------------ | ---------------- | ---------------------------------------------------- |
-| `motion.create-take`                                 | `{startTimeSeconds, durationSeconds, keys, program}`                     | ✅（两条逆命令） | 时长内；每 key 含完整 pose/fov                        |
-| `motion.set-clip-range`                              | `{id, startTimeSeconds, durationSeconds}`                                | ✅               | 时长内；跟随态 Program 一并重定时                    |
-| `motion.set-key`                                     | `{clipId, key}`                                                          | ✅               | `progress ∈ [0,1]`、完整 pose 有限、fov 在围栏内      |
-| `motion.move-key`                                    | `{clipId, keyId, progress}`                                              | ✅               | progress 唯一且有序                                  |
-| `motion.remove-key`                                  | `{clipId, keyId}`                                                        | ✅               | 剩余 key ≥ 2                                         |
-| `motion.set-key-handle` / `motion.reset-key-handles` | `{clipId, keyId, ...}`                                                   | ✅               | 有限向量；拖手柄切到 manual，重置回 auto             |
-| `motion.set-clip-easing`                             | `{id, easing}`                                                           | ✅               | easing 为 `linear` 或 `smooth`（整段时间曲线）        |
-| `motion.set-focus` / `motion.remove-clip`            | `{id, target}` / `{id}`                                                  | ✅               | focus 可传 `null` 解除覆盖                           |
-| `motion.author`                                      | `{cameraId, ...MotionPresetRequest}`                                    | ✅               | 创建机位存在；产物与机位无持久化依赖                  |
-| `motion.preview.enter` / `motion.preview.exit`       | `{clipId}` / `{}`                                                        | ❌ 瞬态          | clip 存在                                            |
-| `view.set-mode`                                      | `{mode: "director" \| "lens"}`                                      | ❌ 瞬态          | ——                                                   |
+| 命令                                                 | payload                                                                                   | 可撤销           | 校验要点                                         |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------ |
+| `motion.create-take`                                 | `{startTimeSeconds, durationSeconds, keys, program}`                                      | ✅（两条逆命令） | 时长内；每 key 含完整 pose/fov                   |
+| `motion.replace-clip`                                | `{ clip }`                                                                                | ✅               | 整片段覆盖写入；片段须已存在                     |
+| `motion.bind-follow`                                 | `{ id, objectId, anchorOffset, frame: "world"\|"heading", lagSeconds, smoothingSeconds }` | ✅               | 绑定跟拍，关键帧改为相对主体坐标；绑定时画面不跳 |
+| `motion.unbind-follow`                               | `{ id }`                                                                                  | ✅               | 解除跟拍，烘回世界坐标；解绑时画面不跳           |
+| `motion.set-follow-params`                           | `{ id, objectId, anchorOffset, frame: "world"\|"heading", lagSeconds, smoothingSeconds }` | ✅               | 只改参数，不重算关键帧                           |
+| `motion.set-clip-range`                              | `{id, startTimeSeconds, durationSeconds}`                                                 | ✅               | 时段联动态 Program 一并重定时                    |
+| `motion.set-key`                                     | `{clipId, key}`                                                                           | ✅               | `progress ∈ [0,1]`、完整 pose 有限、fov 在围栏内 |
+| `motion.move-key`                                    | `{clipId, keyId, progress}`                                                               | ✅               | progress 唯一且有序                              |
+| `motion.remove-key`                                  | `{clipId, keyId}`                                                                         | ✅               | 剩余 key ≥ 2                                     |
+| `motion.set-key-handle` / `motion.reset-key-handles` | `{clipId, keyId, ...}`                                                                    | ✅               | 有限向量；拖手柄切到 manual，重置回 auto         |
+| `motion.set-clip-easing`                             | `{id, easing}`                                                                            | ✅               | easing 为 `linear` 或 `smooth`（整段时间曲线）   |
+| `motion.set-focus` / `motion.remove-clip`            | `{id, target}` / `{id}`                                                                   | ✅               | focus 可传 `null` 解除覆盖                       |
+| `motion.author`                                      | `{cameraId, ...MotionPresetRequest}`                                                      | ✅               | 创建机位存在；产物与机位无持久化依赖             |
+| `motion.preview.enter` / `motion.preview.exit`       | `{clipId}` / `{}`                                                                         | ❌ 瞬态          | clip 存在                                        |
+| `view.set-mode`                                      | `{mode: "director" \| "lens"}`                                                            | ❌ 瞬态          | ——                                               |
+
+### 9.1 序列化
+
+`DESK_DOCUMENT_VERSION = 8`：`CameraMotionClipJSON` 新增 `follow` 字段，用于持久化跟拍绑定。
 
 ---
 
@@ -555,7 +564,7 @@ gantt
     section P0 闭环
     编辑期镜头视角（消灭 D1）      :p0a, 0, 1
     时间轴片段可拖可拉（消灭 D2）  :p0b, 0, 1
-    Program 自动跟随（消灭 D4）    :p0c, 0, 1
+    Program 自动时段联动（消灭 D4）  :p0c, 0, 1
     transport 封顶与循环（D5）     :p0d, 0, 1
     section P1 手感
     CameraKey 模型演进            :p1a, 1, 1

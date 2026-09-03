@@ -15,13 +15,13 @@
 
 由此得到的性质:
 
-| 性质 | 来源 |
-|---|---|
-| 复用全部曲线能力(Bézier 手柄、整段缓动、弧长、打点、拖拽) | 轨迹类不变,只换解释空间 |
+| 性质                                                                   | 来源                                          |
+| ---------------------------------------------------------------------- | --------------------------------------------- |
+| 复用全部曲线能力(Bézier 手柄、整段缓动、弧长、打点、拖拽)              | 轨迹类不变,只换解释空间                       |
 | **任何现有运镜(orbit / dolly-in / hold / spiral …)都自动获得跟随版本** | resolver 只需把 `subject.center` 传 `[0,0,0]` |
-| 主体走位改了、片段重定时了,跟拍自动跟上 | 采样期求值,不烘焙 |
-| 可 JSON 往返、可撤销、可被 AI 调用 | 覆盖层是纯数据,写入走命令 |
-| 拖动播放头/倒放/确定性导出结果一致 | 跟随是 **t 的纯函数**(见决策 D4) |
+| 主体走位改了、片段重定时了,跟拍自动跟上                                | 采样期求值,不烘焙                             |
+| 可 JSON 往返、可撤销、可被 AI 调用                                     | 覆盖层是纯数据,写入走命令                     |
+| 拖动播放头/倒放/确定性导出结果一致                                     | 跟随是 **t 的纯函数**(见决策 D4)              |
 
 被否方案见 §3 每条决策的「否决项」。
 
@@ -31,15 +31,15 @@
 
 ### 2.1 已经具备(直接复用,不重写)
 
-| 能力 | 位置 | 说明 |
-|---|---|---|
-| 主体在任意时刻的位姿(纯数据) | `evaluateTimelineTransform(doc, targetId, t, fallback, out)` `src/timeline/TimelineSampler.ts:174` | 零分配、无 Three 依赖、脱离渲染循环可用 |
-| 主体朝向(yaw) | `TransformSample.rotation[1]`;PATH 策略下由切线求得 `TimelineSampler.ts:131`(`atan2(-tx,-tz)`,**模型正面 = −Z**) | 跟随系的旋转来源 |
-| 采样顺序保证 | `PlaybackCoordinator.sample` `src/timeline/PlaybackCoordinator.ts:150`:主体变换 → 相机采样 | 相机永远读到本帧的新位置 |
-| 覆盖层范式 | `CameraFocusTrack` / `FocusTargetResolver` | 新覆盖层照抄其结构与命令形态 |
-| 零分配采样纪律 | `CameraMotionSample` / `MotionPositionSample` / `FocusTargetSample` | 新增 `SubjectFrameSample` 同款 |
-| 主体包围球 | `subjectBoundsFor(ctx, id)` `src/command/subjectBounds.ts:60` | **仅命令期**可用(`measureModelBox` 需遍历+骨骼更新) |
-| 变更后重采样 | 所有 timeline 命令末尾 `ctx.playback.sampleCurrent()`(如 `timelineCommands.ts:469`) | 改走位后跟拍画面自动刷新,无需新机制 |
+| 能力                         | 位置                                                                                                             | 说明                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 主体在任意时刻的位姿(纯数据) | `evaluateTimelineTransform(doc, targetId, t, fallback, out)` `src/timeline/TimelineSampler.ts:174`               | 零分配、无 Three 依赖、脱离渲染循环可用             |
+| 主体朝向(yaw)                | `TransformSample.rotation[1]`;PATH 策略下由切线求得 `TimelineSampler.ts:131`(`atan2(-tx,-tz)`,**模型正面 = −Z**) | 跟随系的旋转来源                                    |
+| 采样顺序保证                 | `PlaybackCoordinator.sample` `src/timeline/PlaybackCoordinator.ts:150`:主体变换 → 相机采样                       | 相机永远读到本帧的新位置                            |
+| 覆盖层范式                   | `CameraFocusTrack` / `FocusTargetResolver`                                                                       | 新覆盖层照抄其结构与命令形态                        |
+| 零分配采样纪律               | `CameraMotionSample` / `MotionPositionSample` / `FocusTargetSample`                                              | 新增 `SubjectFrameSample` 同款                      |
+| 主体包围球                   | `subjectBoundsFor(ctx, id)` `src/command/subjectBounds.ts:60`                                                    | **仅命令期**可用(`measureModelBox` 需遍历+骨骼更新) |
+| 变更后重采样                 | 所有 timeline 命令末尾 `ctx.playback.sampleCurrent()`(如 `timelineCommands.ts:469`)                              | 改走位后跟拍画面自动刷新,无需新机制                 |
 
 ### 2.2 缺口(本方案要补的地基)
 
@@ -70,6 +70,7 @@ CameraMotionClip {
 否决理由:轨迹作废——无法表达「从背后绕到侧面」「跟随中推近」;等于在相机领域里再造一条平行的运动表达,与 `MotionTrajectory` 重复。
 
 **采纳方案 B(参考系式)**:关键帧位置 = 主体系局部偏移。
+
 - 保持相对站位 = 两枚相同的局部关键帧(即现有 `hold` move + 跟随绑定);
 - 环绕跟拍 = 局部关键帧扫方位角(即现有 `orbit` move + 跟随绑定);
 - 跟随中推近 = `dolly-in` + 跟随绑定。
@@ -85,10 +86,10 @@ CameraMotionClip {
 依据:摄影不变式——地平线必须水平。主体翻滚/俯仰(倒地、坐下、上坡)绝不能让画面歪斜。
 参考系模式(枚举 + 查表,禁并列 if):
 
-| `FOLLOW_FRAME` | yaw 来源 | 用途 |
-|---|---|---|
-| `world` 平移跟随 | 恒 0 | 相机随主体平移但不随其转身;侧向平行推轨、俯瞰跟随 |
-| `heading` 朝向跟随 | `TransformSample.rotation[1]` | 背后跟随、前导倒退、越肩 |
+| `FOLLOW_FRAME`     | yaw 来源                      | 用途                                              |
+| ------------------ | ----------------------------- | ------------------------------------------------- |
+| `world` 平移跟随   | 恒 0                          | 相机随主体平移但不随其转身;侧向平行推轨、俯瞰跟随 |
+| `heading` 朝向跟随 | `TransformSample.rotation[1]` | 背后跟随、前导倒退、越肩                          |
 
 ```ts
 const FOLLOW_FRAME_YAW: Record<FollowFrame, (sample: TransformSample) => number> = {
@@ -241,21 +242,21 @@ classDiagram
 
 ### 4.2 新增/改动文件
 
-| 文件 | 动作 | 内容 |
-|---|---|---|
-| `src/motion/SubjectFrameSample.ts` | 新增 | 跟随系值载体 + `toWorld` / `toLocal`(零分配) |
-| `src/motion/SubjectFrameResolver.ts` | 新增 | 主体位姿唯一解析口;时间夹取、滞后、平滑、yaw 查表 |
-| `src/camera/CameraFollowTrack.ts` | 新增 | 覆盖层值对象 + 常量围栏 + JSON |
-| `src/camera/CameraMotionClip.ts` | 改 | 增 `follow` 字段;`sampleCameraMotionClip` 增 `frame` 形参 |
-| `src/camera/CameraMotionSampler.ts` | 改 | 注入 `TimelineStore`;解析跟随系并传入 |
-| `src/camera/FocusTargetResolver.ts` | 改 | 收口到 `SubjectFrameResolver`,删除 `matrixWorld` 读取 |
-| `src/command/cameraMotionCommands.ts` | 改 | 4 条新命令 + 契约 + 注册 |
-| `src/store/CameraMotionStore.ts` | 改 | `clipsForFocusObject` → `clipsReferencingObject`(注视 ∪ 跟随) |
-| `src/document/DeskDocument.ts` | 改 | 版本 7 → **8** |
-| `src/ui/inspector/MotionClipInspector.tsx` | 改 | 新增「跟随」区 |
-| `src/ui/viewport/scene/MotionClipPathPreview.tsx` | 改 | 跟随态下按世界扫掠路径重建几何 |
-| `src/authoring/KeyframeAuthoringService.ts` | 改 | 打点时视口世界位姿 → 局部 |
-| `src/stories/camera/follow-shot.stories.tsx` | 新增 | 验收断言(替代单测) |
+| 文件                                              | 动作 | 内容                                                          |
+| ------------------------------------------------- | ---- | ------------------------------------------------------------- |
+| `src/motion/SubjectFrameSample.ts`                | 新增 | 跟随系值载体 + `toWorld` / `toLocal`(零分配)                  |
+| `src/motion/SubjectFrameResolver.ts`              | 新增 | 主体位姿唯一解析口;时间夹取、滞后、平滑、yaw 查表             |
+| `src/camera/CameraFollowTrack.ts`                 | 新增 | 覆盖层值对象 + 常量围栏 + JSON                                |
+| `src/camera/CameraMotionClip.ts`                  | 改   | 增 `follow` 字段;`sampleCameraMotionClip` 增 `frame` 形参     |
+| `src/camera/CameraMotionSampler.ts`               | 改   | 注入 `TimelineStore`;解析跟随系并传入                         |
+| `src/camera/FocusTargetResolver.ts`               | 改   | 收口到 `SubjectFrameResolver`,删除 `matrixWorld` 读取         |
+| `src/command/cameraMotionCommands.ts`             | 改   | 4 条新命令 + 契约 + 注册                                      |
+| `src/store/CameraMotionStore.ts`                  | 改   | `clipsForFocusObject` → `clipsReferencingObject`(注视 ∪ 跟随) |
+| `src/document/DeskDocument.ts`                    | 改   | 版本 7 → **8**                                                |
+| `src/ui/inspector/MotionClipInspector.tsx`        | 改   | 新增「跟随」区                                                |
+| `src/ui/viewport/scene/MotionClipPathPreview.tsx` | 改   | 跟随态下按世界扫掠路径重建几何                                |
+| `src/authoring/KeyframeAuthoringService.ts`       | 改   | 打点时视口世界位姿 → 局部                                     |
+| `src/stories/camera/follow-shot.stories.tsx`      | 新增 | 验收断言(替代单测)                                            |
 
 ---
 
@@ -298,14 +299,14 @@ sequenceDiagram
 
 ### 5.1 预算(红线 3)
 
-| 项 | 成本 |
-|---|---|
-| 主体求值 | 1 或 5 次 `evaluateTimelineTransform`,各 `O(log k)` 二分 + 一次三次 Bézier |
-| yaw 平均 | 5×(sin+cos) + 1 atan2,仅 `smoothing > 0` 时 |
-| 参考系变换 | 位置 + 注视各 4 乘 2 加 |
-| 分配 | **0**:`SubjectFrameResolver` 自持 `TransformSample` 与累加标量;`SubjectFrameSample` 为采样器实例字段 |
-| 场景遍历 | **0**:不 `traverse`、不 `measureModelBox`、不读 `matrixWorld` |
-| 重绘 | 沿用 `frameloop="demand"`;跟随不新增 `invalidate` 源 |
+| 项         | 成本                                                                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| 主体求值   | 1 或 5 次 `evaluateTimelineTransform`,各 `O(log k)` 二分 + 一次三次 Bézier                           |
+| yaw 平均   | 5×(sin+cos) + 1 atan2,仅 `smoothing > 0` 时                                                          |
+| 参考系变换 | 位置 + 注视各 4 乘 2 加                                                                              |
+| 分配       | **0**:`SubjectFrameResolver` 自持 `TransformSample` 与累加标量;`SubjectFrameSample` 为采样器实例字段 |
+| 场景遍历   | **0**:不 `traverse`、不 `measureModelBox`、不读 `matrixWorld`                                        |
+| 重绘       | 沿用 `frameloop="demand"`;跟随不新增 `invalidate` 源                                                 |
 
 **重入约束**:`TimelineSampler` 的模块级中转缓冲(`TimelineSampler.ts:13-14`)不可重入。`SubjectFrameResolver` 的抽头调用是严格串行的,且自身不在 `evaluateTransformTrack` 内部回调——不得把解析口塞进任何采样回调里。
 
@@ -335,12 +336,12 @@ flowchart LR
 
 ## 7. 命令层与 AI 契约
 
-| 命令 | 语义 | 聚合内容 | invert |
-|---|---|---|---|
-| `motion.replace-clip` | 整片段写入(地基) | 帧对齐 + Program 对齐校验 | 自反:同命令携前态 JSON |
-| `motion.bind-follow` | 绑定跟随 | 设 `follow` + **全键 rebase** + 按 `focus` 策略绑注视 | `motion.replace-clip`(前态) |
-| `motion.unbind-follow` | 解除跟随 | 全键烘回世界 + 清 `follow` | `motion.replace-clip`(前态) |
-| `motion.set-follow-params` | 调参 | 仅改 frame/lag/smoothing/anchor | 同命令携前值 |
+| 命令                       | 语义             | 聚合内容                                              | invert                      |
+| -------------------------- | ---------------- | ----------------------------------------------------- | --------------------------- |
+| `motion.replace-clip`      | 整片段写入(地基) | 帧对齐 + Program 对齐校验                             | 自反:同命令携前态 JSON      |
+| `motion.bind-follow`       | 绑定跟随         | 设 `follow` + **全键 rebase** + 按 `focus` 策略绑注视 | `motion.replace-clip`(前态) |
+| `motion.unbind-follow`     | 解除跟随         | 全键烘回世界 + 清 `follow`                            | `motion.replace-clip`(前态) |
+| `motion.set-follow-params` | 调参             | 仅改 frame/lag/smoothing/anchor                       | 同命令携前值                |
 
 > 红线 15:绑定是**一条**聚合命令。禁止在 UI 里串 `set-follow` + N 次 `set-key`——那会撕碎撤销、对 AI 不可见、失败留孤儿键。
 
@@ -359,7 +360,7 @@ const BIND_FOLLOW_CONTRACT: PayloadContract = {
         frame: { type: "enum", values: ["world", "heading"] },
         lagSeconds: { type: "number" },
         smoothingSeconds: { type: "number" },
-        focus: { type: "enum", values: ["subject", "keep"] },   // 布尔旗标禁令 → 枚举
+        focus: { type: "enum", values: ["subject", "keep"] }, // 布尔旗标禁令 → 枚举
     },
     required: ["id", "subject", "frame"],
 };
@@ -367,23 +368,23 @@ const BIND_FOLLOW_CONTRACT: PayloadContract = {
 
 ### 7.2 数值围栏(空间幻觉围栏,红线 9;拒绝而非钳制)
 
-| 常量 | 值 | 理由 |
-|---|---|---|
-| `FOLLOW_LAG_MIN / MAX` | `−0.5 / 2` 秒 | 超出即画面与主体脱节 |
-| `FOLLOW_SMOOTHING_MIN / MAX` | `0 / 2` 秒 | 窗口超过 2s 等同静止 |
-| `FOLLOW_SMOOTHING_TAPS` | `5` | 定点抽头数,预算封顶 |
-| `FOLLOW_ANCHOR_LIMIT_METERS` | `10` | 锚点是身体上的点,不是另一个位置 |
-| `FOLLOW_OFFSET_LIMIT_METERS` | `200` | 局部关键帧到主体的上限 |
+| 常量                         | 值            | 理由                            |
+| ---------------------------- | ------------- | ------------------------------- |
+| `FOLLOW_LAG_MIN / MAX`       | `−0.5 / 2` 秒 | 超出即画面与主体脱节            |
+| `FOLLOW_SMOOTHING_MIN / MAX` | `0 / 2` 秒    | 窗口超过 2s 等同静止            |
+| `FOLLOW_SMOOTHING_TAPS`      | `5`           | 定点抽头数,预算封顶             |
+| `FOLLOW_ANCHOR_LIMIT_METERS` | `10`          | 锚点是身体上的点,不是另一个位置 |
+| `FOLLOW_OFFSET_LIMIT_METERS` | `200`         | 局部关键帧到主体的上限          |
 
 结构化失败(`CommandIssue{code, path, message, options?}`):
 
-| code | 触发 | options |
-|---|---|---|
-| `clip-missing` | 片段不存在 | — |
-| `follow-subject-missing` | 主体实体不存在 | — |
-| `follow-frame-invalid` | 枚举外(`Object.hasOwn` 守卫) | — |
-| `follow-range` | 滞后/平滑/锚点越界 | — |
-| `follow-target-in-use` | 删除被跟随对象 | `freeze-follow`(烘回世界)/ `unbind-follow` |
+| code                     | 触发                         | options                                    |
+| ------------------------ | ---------------------------- | ------------------------------------------ |
+| `clip-missing`           | 片段不存在                   | —                                          |
+| `follow-subject-missing` | 主体实体不存在               | —                                          |
+| `follow-frame-invalid`   | 枚举外(`Object.hasOwn` 守卫) | —                                          |
+| `follow-range`           | 滞后/平滑/锚点越界           | —                                          |
+| `follow-target-in-use`   | 删除被跟随对象               | `freeze-follow`(烘回世界)/ `unbind-follow` |
 
 引用完整性:`CameraMotionStore.clipsForFocusObject` 收口为 `clipsReferencingObject(objectId)`(注视 ∪ 跟随),`RemoveObjectCommand` 复用同一查询(Rule of Two)。
 
@@ -402,14 +403,14 @@ const BIND_FOLLOW_CONTRACT: PayloadContract = {
  *    即 a=0 指向 +X、a=π/2 指向 +Z(ShotSizePresets.ts:47-50)。
  */
 const FOLLOW_APPROACH_AZIMUTH: Record<FollowApproach, number> = {
-    back: Math.PI / 2,        // 主体身后 +Z:尾随跟拍
-    front: -Math.PI / 2,      // 主体正前方 −Z:前导倒退跟拍
-    right: 0,                 // 主体右手侧 +X
-    left: Math.PI,            // 主体左手侧 −X
+    back: Math.PI / 2, // 主体身后 +Z:尾随跟拍
+    front: -Math.PI / 2, // 主体正前方 −Z:前导倒退跟拍
+    right: 0, // 主体右手侧 +X
+    left: Math.PI, // 主体左手侧 −X
 };
 ```
 
-一句「跟在他后面走个中景」= `quick-author{ move: "hold", follow: { subjectId, approach: "back" }, shotSize: "medium" }`,距离由 `ShotSizePresets` 在命令期解出。**不新增任何运镜词**:`orbit` + 跟随 = 环绕跟拍,`dolly-in` + 跟随 = 跟随推进。
+一句「跟在他后面走个中景」= `quick-author{ subjectId, shotSize: "medium", move: "hold", durationSeconds: 4, follow: { approach: "back" } }`,距离由 `ShotSizePresets` 在命令期于跟随系内解出。**不新增任何运镜词**:`orbit` + 跟拍 = 环绕跟拍,`dolly-in` + 跟拍 = 跟随推进。
 
 ---
 
@@ -417,8 +418,10 @@ const FOLLOW_APPROACH_AZIMUTH: Record<FollowApproach, number> = {
 
 ```ts
 interface CameraFollowTrackJSON {
-    readonly subject: { readonly objectId: string; readonly anchorOffset: Vec3 };
-    readonly frame: FollowFrame;
+    readonly objectId: string;
+    /** 跟随系内的锚点偏移(随主体转身) */
+    readonly anchorOffset: Vec3;
+    readonly frame: FollowFrame; // "world" | "heading"
     readonly lagSeconds: number;
     readonly smoothingSeconds: number;
 }
@@ -429,7 +432,7 @@ interface CameraMotionClipJSON {
 ```
 
 - `DESK_DOCUMENT_VERSION` **7 → 8**;`DocumentImportService` 版本门直接判旧档不支持(`DocumentImportService.ts:189-191`)。**零兼容纪律:不写迁移、不写字段兜底、不写 `follow ?? null` 之外的分支。**
-- 导入校验补一条关系检查:`follow.subject.objectId` 必须存在于 `entities`(与既有 focus 检查并列)。
+- 导入校验补一条关系检查:`follow.objectId` 必须存在于 `entities`(与既有 focus 检查并列)。
 - 跟随系为派生量,**不序列化**;每帧求值。
 
 ---
@@ -440,11 +443,11 @@ interface CameraMotionClipJSON {
 
 仓内已有两处占用了「跟」字,新功能再叫「跟随」会三重撞车:
 
-| 现状 UI 文案 | 实际含义 | 裁决后文案 |
-|---|---|---|
-| 「锁定跟拍目标」`MotionClipInspector.tsx:164` | focus 覆盖层,只管注视 | **注视锁定** |
-| 「解除成片跟随」`TimelineTrackRows.tsx:89` | Program 片段与运镜片段的时段联动 | **解除时段联动** |
-| (本功能) | 相机位置跟着模型走 | **跟拍** |
+| 现状 UI 文案                                  | 实际含义                         | 裁决后文案       |
+| --------------------------------------------- | -------------------------------- | ---------------- |
+| 「锁定跟拍目标」`MotionClipInspector.tsx:164` | focus 覆盖层,只管注视            | **注视锁定**     |
+| 「解除成片跟随」`TimelineTrackRows.tsx:89`    | Program 片段与运镜片段的时段联动 | **解除时段联动** |
+| (本功能)                                      | 相机位置跟着模型走               | **跟拍**         |
 
 **「跟随 / follow」保留为代码域名**(`CameraFollowTrack`、`motion.bind-follow`),**UI 一律称「跟拍」**。三处文案改动与本功能同批交付,否则面板上会出现两个含义不同的「跟拍」。
 
@@ -491,14 +494,14 @@ flowchart TB
   └────────────────────────────────────────┘
 ```
 
-| 控件 | 类型 | 复用来源 | 文案 / 参数 |
-|---|---|---|---|
-| 跟拍主体 | `Select size="small"` | `ClipFocusControls`(`MotionClipInspector.tsx:160-172`) | `不跟拍(机位固定于世界)` / `跟拍 {name}`;aria-label `跟拍主体` |
-| 参考系 | `ToggleButtonGroup exclusive fullWidth size="small"` | 朝向策略(`WalkPolicyControls.tsx:66-75`) | `平移` / `朝向`;caption `平移=只跟位移,朝向=随主体转身环绕` |
-| 锚点高度 | `ScrubNumberField kind="distanceMeters"` | `TransformFields` | `min 0`,`max 10`;绑定时默认取 `subjectBoundsFor().focusOffset[1]` |
-| 滞后 | `ScrubNumberField kind="timeSeconds"` | `ClipRangeEditor` | `min -0.5`,`max 2`;caption `正数=镜头慢半拍,负数=预判先行` |
-| 平滑 | `ScrubNumberField kind="timeSeconds"` | 同上 | `min 0`,`max 2` |
-| 解除跟拍 | `Button size="small" variant="outlined"` | 片段删除按钮的形制,但**不用 `color="error"`** | 解除是可逆的坐标烘焙,不是破坏性操作 |
+| 控件     | 类型                                                 | 复用来源                                               | 文案 / 参数                                                       |
+| -------- | ---------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
+| 跟拍主体 | `Select size="small"`                                | `ClipFocusControls`(`MotionClipInspector.tsx:160-172`) | `不跟拍(机位固定于世界)` / `跟拍 {name}`;aria-label `跟拍主体`    |
+| 参考系   | `ToggleButtonGroup exclusive fullWidth size="small"` | 朝向策略(`WalkPolicyControls.tsx:66-75`)               | `平移` / `朝向`;caption `平移=只跟位移,朝向=随主体转身环绕`       |
+| 锚点高度 | `ScrubNumberField kind="distanceMeters"`             | `TransformFields`                                      | `min 0`,`max 10`;绑定时默认取 `subjectBoundsFor().focusOffset[1]` |
+| 滞后     | `ScrubNumberField kind="timeSeconds"`                | `ClipRangeEditor`                                      | `min -0.5`,`max 2`;caption `正数=镜头慢半拍,负数=预判先行`        |
+| 平滑     | `ScrubNumberField kind="timeSeconds"`                | 同上                                                   | `min 0`,`max 2`                                                   |
+| 解除跟拍 | `Button size="small" variant="outlined"`             | 片段删除按钮的形制,但**不用 `color="error"`**          | 解除是可逆的坐标烘焙,不是破坏性操作                               |
 
 `ScrubNumberField` 自带刮擦手势(标签上左右拖动,`Shift` 细调 ×0.1、`Alt` 粗调 ×10,`Enter`/失焦提交,`ScrubNumberField.tsx:83-85,231-260`),滞后/平滑这类需要试出手感的参数正好吃这套。
 
@@ -541,14 +544,15 @@ flowchart TB
 
 沿用既有色系分工(相机=靛蓝、走位=翠绿、播放头=红),**不新增色系**:
 
-| 层 | 视觉 | 含义 | 可拖 |
-|---|---|---|---|
-| 世界扫掠路径 | 靛蓝实线 `#6366f1` | 相机在世界里实际走的曲线 | 否(派生量) |
-| 相对路径 | 靛蓝虚线,绘于主体锚点周围 | 跟随系里的关键帧形状 | **是**(关键帧球在这条上) |
-| 跟拍绑带 | 每 0.5s 一根细线,靛蓝→翠绿 | 相机与主体的时刻对应;疏密即速度 | 否 |
+| 层           | 挂载条件与视觉                                                  | 含义                                   | 可拖                     |
+| ------------ | --------------------------------------------------------------- | -------------------------------------- | ------------------------ |
+| 世界扫掠路径 | **跟拍态默认关闭**;顶栏按需开启,靛蓝实线 `#6366f1`,跟拍态半透明 | 相机在世界里实际走出的结果曲线(排查用) | 否(派生量)               |
+| 相对路径     | **仅选中片段时**挂载;靛蓝虚线,绘于主体锚点周围                  | 作者直接编辑的跟随系关键帧形状         | **是**(关键帧球在这条上) |
+| 跟拍绑带     | **仅选中片段时**挂载;只画当前播放头一条细线,靛蓝→翠绿           | 当前时刻相机与主体锚点的对应关系       | 否                       |
 
-绑带的 0.5s 间隔与走位轨的刻度节奏(`ObjectMotionPathPreview` 的 tick)一致,两者并排可读。
-重建时机:`reaction` 观察(片段引用、主体轨引用、跟拍参数)三者的不可变引用变化,**不进每帧**;世界扫掠路径是整段曲线,与播放头无关。
+跟拍的意义是只关心相对主体的构图;环绕类运镜的世界轨迹会成为螺旋自交曲线,对作者只是视觉噪声,因此世界扫掠路径默认关闭,仅在顶栏按需开启排查。
+全程绑带在「环绕 + 跟拍」下会织成网,故退化为单条当下关系;历史/未来的对应关系可在开启世界扫掠路径后查看。
+世界扫掠路径只在开关开启时构建,并在片段、主体轨与跟拍参数的不可变引用变化时整段重建,但不随播放头更新。播放期只原地改写相对路径和单条绑带的既有顶点缓冲,播放头落在片段区间外时隐藏绑带。
 
 ### 9.7 时间轴徽标
 
@@ -557,12 +561,12 @@ flowchart TB
 
 ### 9.8 退化与冲突的界面呈现
 
-| 情形 | 界面 |
-|---|---|
-| 主体没有走位轨 | 分区内 `role="status"` caption:「小明还没有走位轨迹,跟拍暂等同于固定偏移机位」+ `[绘制走位]` 按钮,直接切到该模型并打开走位绘制模式,形成引导闭环 |
-| 朝向系 + 原地转身 | 参考系下方 caption:「朝向系会随主体转身环绕;原地转身抖动时可调大平滑或改用平移系」。不做自动检测 |
-| 删除被跟拍的模型 | 命令层返回 `follow-target-in-use` + 两个 option;**沿用现有 toast 通道**:「模型「小明」被 2 个运镜片段跟拍;先解除跟拍或把机位烘回世界坐标」 |
-| 数值越界 | `invalidInputNotice` 现成文案:「滞后需在 -0.5 ~ 2 之间」 |
+| 情形              | 界面                                                                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 主体没有走位轨    | 分区内 `role="status"` caption:「小明还没有走位轨迹,跟拍暂等同于固定偏移机位」+ `[绘制走位]` 按钮,直接切到该模型并打开走位绘制模式,形成引导闭环 |
+| 朝向系 + 原地转身 | 参考系下方 caption:「朝向系会随主体转身环绕;原地转身抖动时可调大平滑或改用平移系」。不做自动检测                                                |
+| 删除被跟拍的模型  | 命令层返回 `follow-target-in-use` + 两个 option;**沿用现有 toast 通道**:「模型「小明」被 2 个运镜片段跟拍;先解除跟拍或把机位烘回世界坐标」      |
+| 数值越界          | `invalidInputNotice` 现成文案:「滞后需在 -0.5 ~ 2 之间」                                                                                        |
 
 > **已知债(不在本功能内偿还)**:`commandFailureMessage`(`commandFeedback.ts:17-25`)把结构化 issue 的 `options[].label` 拼成文字塞进 toast——AI 能拿到可执行选项,人只能读到一句话。跟拍不新造对话框,但在检查器分区里提供「解除跟拍」按钮作为人的可执行出口。
 
@@ -588,41 +592,40 @@ stateDiagram-v2
     跟拍态 --> 世界态: 主体被删除后选择「烘回世界」
 ```
 
-
 ---
 
 ## 10. 退化与边界
 
-| 情形 | 行为 |
-|---|---|
-| 主体没有走位轨 | `evaluateTimelineTransform` 返回 `false` + 实体变换兜底 → 跟随退化为固定偏移机位(合法,不报错) |
-| 主体轨少于 2 键 / 零时长 | 轨迹为 `null`,求值走线性兜底;`arcLengthMeters = 0` |
-| `t'` 落在主体轨区间外 | 先夹取到 `[firstKey.time, lastKey.time]`(见 D4),不读兜底变换 |
-| 主体原地转身(位置不变、yaw 突变) | `heading` 系下相机绕转;以 `smoothingSeconds` 抑制,或改用 `world` 系。UI 需给出提示 |
-| 主体被删除 | 命令期结构化拦截 `follow-target-in-use`,提供「烘回世界 / 解除跟随」两个选项 |
-| 片段范围外 | 沿用既有语义:`sampleCameraMotionClip` 返回 `false`,采样器保持上一帧,不复位 |
-| `covers` 边界 | `CameraMotionClip.covers` 闭区间、`CameraProgramClip.covers` 左闭右开——跟随不引入第三种时间判定 |
+| 情形                             | 行为                                                                                            |
+| -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 主体没有走位轨                   | `evaluateTimelineTransform` 返回 `false` + 实体变换兜底 → 跟随退化为固定偏移机位(合法,不报错)   |
+| 主体轨少于 2 键 / 零时长         | 轨迹为 `null`,求值走线性兜底;`arcLengthMeters = 0`                                              |
+| `t'` 落在主体轨区间外            | 先夹取到 `[firstKey.time, lastKey.time]`(见 D4),不读兜底变换                                    |
+| 主体原地转身(位置不变、yaw 突变) | `heading` 系下相机绕转;以 `smoothingSeconds` 抑制,或改用 `world` 系。UI 需给出提示              |
+| 主体被删除                       | 命令期结构化拦截 `follow-target-in-use`,提供「烘回世界 / 解除跟随」两个选项                     |
+| 片段范围外                       | 沿用既有语义:`sampleCameraMotionClip` 返回 `false`,采样器保持上一帧,不复位                      |
+| `covers` 边界                    | `CameraMotionClip.covers` 闭区间、`CameraProgramClip.covers` 左闭右开——跟随不引入第三种时间判定 |
 
 ---
 
 ## 11. 红线自查
 
-| 红线 | 自查 |
-|---|---|
-| 1 禁单测 | 验收走 Storybook 运行期断言 + playground |
-| 2 类驱动/DDD | 覆盖层值对象 + 领域服务 + 值载体;无函数式平铺 |
-| 3 性能 | 零分配、无遍历、无 `matrixWorld`、`demand` 渲染不变;预算见 §5.1 |
-| 4/5 单实例 | 解析口随 `createDirectorDeskStores` 每台一份,无全局单例 |
-| 6 可序列化 | 覆盖层纯数据;跟随系为派生量不入档 |
-| 7 UI | MUI + Tailwind 布局,复用 `ScrubNumberField` |
-| 8 命令收口 | 4 条命令,UI/AI 同路径,禁直写 store |
-| 9 数值围栏 | §7.2 常量表,拒绝而非钳制;枚举 `Object.hasOwn` 守卫 |
-| 10 许可 | 全自研,无外部代码引入 |
-| 11 零兼容 | 直接改结构 + 版本 7→8,无迁移/兜底/别名 |
-| 12 MobX 单轨 | 无新 observable(主体选择复用 `MotionAuthoringStore.subjectId`);无版本号/自建订阅 |
-| 13 props 边界 | 组件只收 `clipId`,值型状态自取 |
-| 14 画布之上渲染 | 不新增面板层;跟随区随 Inspector 收起卸载;播放期 DOM 增删 0 |
-| 15 地基优先 | P0 先补 `SubjectFrameResolver` / `motion.replace-clip` / 解析口收口,再做功能 |
+| 红线            | 自查                                                                             |
+| --------------- | -------------------------------------------------------------------------------- |
+| 1 禁单测        | 验收走 Storybook 运行期断言 + playground                                         |
+| 2 类驱动/DDD    | 覆盖层值对象 + 领域服务 + 值载体;无函数式平铺                                    |
+| 3 性能          | 零分配、无遍历、无 `matrixWorld`、`demand` 渲染不变;预算见 §5.1                  |
+| 4/5 单实例      | 解析口随 `createDirectorDeskStores` 每台一份,无全局单例                          |
+| 6 可序列化      | 覆盖层纯数据;跟随系为派生量不入档                                                |
+| 7 UI            | MUI + Tailwind 布局,复用 `ScrubNumberField`                                      |
+| 8 命令收口      | 4 条命令,UI/AI 同路径,禁直写 store                                               |
+| 9 数值围栏      | §7.2 常量表,拒绝而非钳制;枚举 `Object.hasOwn` 守卫                               |
+| 10 许可         | 全自研,无外部代码引入                                                            |
+| 11 零兼容       | 直接改结构 + 版本 7→8,无迁移/兜底/别名                                           |
+| 12 MobX 单轨    | 无新 observable(主体选择复用 `MotionAuthoringStore.subjectId`);无版本号/自建订阅 |
+| 13 props 边界   | 组件只收 `clipId`,值型状态自取                                                   |
+| 14 画布之上渲染 | 不新增面板层;跟随区随 Inspector 收起卸载;播放期 DOM 增删 0                       |
+| 15 地基优先     | P0 先补 `SubjectFrameResolver` / `motion.replace-clip` / 解析口收口,再做功能     |
 
 **编码规范**:`FOLLOW_FRAME_YAW` / `FOLLOW_APPROACH_AZIMUTH` 查表替代并列 `if`;全 `const`,抽头累加走命名函数返回而非 `let`;`focus: "subject" | "keep"` 枚举替代布尔旗标;所有阈值具名常量。
 
@@ -630,12 +633,12 @@ stateDiagram-v2
 
 ## 12. 交付阶段与验收
 
-| 阶段 | 内容 | 完成判据 |
-|---|---|---|
-| **P0 地基** | `SubjectFrameSample` / `SubjectFrameResolver` / `CameraFollowTrack` / `clip.follow` / 采样器接线 / `motion.replace-clip` / `FocusTargetResolver` 收口 / 文档版本 8 | 手工构造带 `follow` 的片段,播放期相机随主体位移;既有注视行为逐帧无差异 |
-| **P1 作者面** | `bind` / `unbind` / `set-follow-params` 聚合命令、Inspector 跟随区、打点与拖拽的空间换算、删除对象引用拦截 | 绑定/解绑往返后关键帧世界坐标逐键一致;撤销一步回到前态 |
-| **P2 可见性** | 扫掠路径预览、跟随绑带、时间轴片段跟随徽标(经 `TimelineLayout` 注册,不 fork UI) | 拖主体走位轨,预览路径随之重建;播放期不重建 |
-| **P3 语义与 AI** | `quick-author` 的 `follow` + `approach`、`toolDescriptions`、`SKILL.md` 与 `docs/` 同批同步 | AI 一句话产出可播放跟拍片段;工具 schema 无漂移 |
+| 阶段             | 内容                                                                                                                                                               | 完成判据                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| **P0 地基**      | `SubjectFrameSample` / `SubjectFrameResolver` / `CameraFollowTrack` / `clip.follow` / 采样器接线 / `motion.replace-clip` / `FocusTargetResolver` 收口 / 文档版本 8 | 手工构造带 `follow` 的片段,播放期相机随主体位移;既有注视行为逐帧无差异 |
+| **P1 作者面**    | `bind` / `unbind` / `set-follow-params` 聚合命令、Inspector 跟随区、打点与拖拽的空间换算、删除对象引用拦截                                                         | 绑定/解绑往返后关键帧世界坐标逐键一致;撤销一步回到前态                 |
+| **P2 可见性**    | 扫掠路径预览、跟随绑带、时间轴片段跟随徽标(经 `TimelineLayout` 注册,不 fork UI)                                                                                    | 拖主体走位轨,预览路径随之重建;播放期不重建                             |
+| **P3 语义与 AI** | `quick-author` 的 `follow` + `approach`、`toolDescriptions`、`SKILL.md` 与 `docs/` 同批同步                                                                        | AI 一句话产出可播放跟拍片段;工具 schema 无漂移                         |
 
 ### 验收断言(`src/stories/camera/follow-shot.stories.tsx`,运行期)
 

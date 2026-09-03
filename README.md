@@ -94,7 +94,7 @@ const tools = bridge.listToolSchemas(); // { name, description, kind, permission
 
 ## Project document compatibility
 
-`desk.export-document` produces document version `6`; imports accept only that exact version and validate entity, reference, timeline, camera-motion, and Program links before atomically replacing the current project. There is no legacy migration path before the first release.
+`desk.export-document` produces document version `8`; imports accept only that exact version and validate entity, reference, timeline, camera-motion, and Program links before atomically replacing the current project. There is no legacy migration path before the first release.
 
 Documents contain scene data and resource URLs, not model or action binaries. Every referenced URL must remain available to the importing desk. In particular, browser `blob:` URLs from locally selected files are session-local and cannot be restored after a refresh; the playground detects and clears those transient snapshots rather than presenting a broken project.
 
