@@ -13,7 +13,6 @@ import UndoIcon from "@mui/icons-material/Undo";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
@@ -49,7 +48,6 @@ const COMMAND_TYPE = {
 } as const;
 
 const TEXT = {
-    CAPTURE_PROGRAM: "导出成片",
     CAPTURE_VIEWPORT: "录制当前视角（含网格与辅助物）",
     CAPTURE_VIEWPORT_MENU: "选择录制来源",
     CLEAR_SCENE: "清空场景",
@@ -69,7 +67,6 @@ const TEXT = {
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
     METER_UNIT: "m",
-    PLAYING: "播放中",
     PRESENTING: "预览中 · Esc 退出",
     REDO: "重做",
     UNDO: "撤销",
@@ -78,8 +75,6 @@ const DOCUMENT_MIME_TYPE = "application/json";
 const FILE_ACCEPT = { DOCUMENT: `${DOCUMENT_MIME_TYPE},.json`, MODEL: ".glb,.gltf,.fbx,.obj" } as const;
 const DOWNLOAD = { DOCUMENT: "director-desk-scene.json" } as const;
 const MENU_ID = "project-pill-menu";
-const BUTTON_VARIANT = { CONTAINED: "contained", TEXT: "text" } as const;
-const ICON_BUTTON_COLOR = { DEFAULT: "default", ERROR: "error" } as const;
 const COMPACT_SIZE = "small" as const;
 const GRID_SLIDER_MIN_WIDTH_PX = 180;
 const FIRST_ITEM_INDEX = 0;
@@ -89,17 +84,7 @@ const PILL_HEIGHT_PX = CHROME.pillHeightPx;
 const PILL_PADDING_X = 0.75;
 const PILL_GAP = 0.5;
 const DIVIDER_MARGIN_X = 0.25;
-const PLAY_INDICATOR_COLOR = "success.main";
 const MENU_SHORTCUT_MARGIN = "auto";
-const PLAY_INDICATOR_SIZE_PX = 8;
-const PREVIEW_BUTTON_BACKGROUND = "#fff";
-const PREVIEW_BUTTON_COLOR = "#000";
-const PREVIEW_BUTTON_HOVER_BACKGROUND = "#e5e5e5";
-const PREVIEW_BUTTON_SHADOW = "0 2px 8px rgba(255,255,255,0.2)";
-/** 药丸内文字按钮:防折行,高度跟随药丸 */
-const TEXT_ACTION_SX = { whiteSpace: "nowrap" } as const;
-/** Button 无 "default" 色档;文字按钮缺省色 = inherit(IconButton 的 default 等价物) */
-const TEXT_BUTTON_COLOR_INHERIT = "inherit" as const;
 const PILL_SX = {
     alignItems: "center",
     display: "flex",
@@ -113,15 +98,7 @@ const ACTIVE_TOOL_SX = {
     bgcolor: "rgba(99,102,241,0.16)",
     "&:hover": { bgcolor: "rgba(99,102,241,0.24)", color: "primary.light" },
 } as const;
-const PREVIEW_BUTTON_SX = {
-    bgcolor: PREVIEW_BUTTON_BACKGROUND,
-    borderRadius: PILL_HEIGHT_PX,
-    boxShadow: PREVIEW_BUTTON_SHADOW,
-    color: PREVIEW_BUTTON_COLOR,
-    // 窄桌面(小尺寸 Monet 节点)下内容超宽时裁切,绝不竖排折行
-    whiteSpace: "nowrap",
-    "&:hover": { bgcolor: PREVIEW_BUTTON_HOVER_BACKGROUND },
-} as const;
+const PROJECT_MENU_DIVIDER_SX = { mx: DIVIDER_MARGIN_X } as const;
 
 /** 顶部壳层只编排命令入口与瞬时菜单状态,不持有领域状态或运行时资源。 */
 export const TopPillBar = observer(function TopPillBar() {
@@ -130,23 +107,21 @@ export const TopPillBar = observer(function TopPillBar() {
 
     return (
         <Box
-            className="pointer-events-none absolute z-20 flex items-center justify-between"
+            className="pointer-events-none absolute z-20 flex items-center justify-end"
             sx={{ left: CHROME.edgeGapPx, right: CHROME.edgeGapPx, top: CHROME.edgeGapPx }}
         >
-            <ProjectPill />
             <OutputPill />
         </Box>
     );
 });
 
-const ProjectPill = observer(function ProjectPill() {
+const ProjectMenuControl = observer(function ProjectMenuControl() {
     const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
     const modelInputRef = useRef<HTMLInputElement>(null);
     const documentInputRef = useRef<HTMLInputElement>(null);
-    const { presentation } = useDirectorDeskStores();
 
     return (
-        <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
+        <>
             <Tooltip title={TEXT.MENU}>
                 <IconButton
                     aria-controls={menuAnchor ? MENU_ID : undefined}
@@ -158,10 +133,6 @@ const ProjectPill = observer(function ProjectPill() {
                     <MenuIcon fontSize={COMPACT_SIZE} />
                 </IconButton>
             </Tooltip>
-            <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
-            <Typography className="whitespace-nowrap" sx={{ fontWeight: 700 }} variant="body2">
-                {presentation.productName}
-            </Typography>
             <ProjectMenu
                 documentInputRef={documentInputRef}
                 menuAnchor={menuAnchor}
@@ -169,7 +140,7 @@ const ProjectPill = observer(function ProjectPill() {
                 onClose={() => setMenuAnchor(null)}
             />
             <HiddenImportInputs documentInputRef={documentInputRef} modelInputRef={modelInputRef} />
-        </Paper>
+        </>
     );
 });
 
@@ -441,7 +412,7 @@ const WalkDraftToggle = observer(function WalkDraftToggle() {
     );
 });
 
-/** 输出药丸:历史 → 变换工具 → 采集 → 动作扩展位 → 主行动 → 尾部扩展位,变换工具居中,顶部不再需要独立的视口药丸。 */
+/** 右侧工具栏:所有操作统一为带 Tooltip 的图标按钮；项目菜单固定在最右端。 */
 const OutputPill = observer(function OutputPill() {
     return (
         <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
@@ -456,6 +427,8 @@ const OutputPill = observer(function OutputPill() {
             <ToolbarExtensionButtons />
             <PresentationControl />
             <TrailingExtensionButtons />
+            <Divider flexItem orientation="vertical" sx={PROJECT_MENU_DIVIDER_SX} />
+            <ProjectMenuControl />
         </Paper>
     );
 });
@@ -492,46 +465,27 @@ const HistoryControls = observer(function HistoryControls() {
     );
 });
 
-/**
- * 药丸动作按钮的单一渲染规范(内置采集按钮与宿主扩展位共用):
- * 有文案 = 图标+文字 Button,无文案 = 纯图标 IconButton;禁用态包 span 供 Tooltip 挂事件。
- */
+/** 右侧工具栏的统一图标按钮：可访问名与悬浮提示始终存在，禁用态包 span 供 Tooltip 挂事件。 */
 const PillActionButton = observer(function PillActionButton({
     ariaLabel,
     color,
     disabled = false,
     icon,
-    label,
     onClick,
     tooltip,
 }: PillActionButtonProps) {
     return (
         <Tooltip title={tooltip}>
             <span>
-                {label === null ? (
-                    <IconButton
-                        aria-label={ariaLabel}
-                        color={color}
-                        disabled={disabled}
-                        onClick={onClick}
-                        size={COMPACT_SIZE}
-                    >
-                        {icon}
-                    </IconButton>
-                ) : (
-                    <Button
-                        aria-label={ariaLabel}
-                        color={color === ICON_BUTTON_COLOR.ERROR ? color : TEXT_BUTTON_COLOR_INHERIT}
-                        disabled={disabled}
-                        onClick={onClick}
-                        size={COMPACT_SIZE}
-                        startIcon={icon}
-                        sx={TEXT_ACTION_SX}
-                        variant={BUTTON_VARIANT.TEXT}
-                    >
-                        {label}
-                    </Button>
-                )}
+                <IconButton
+                    aria-label={ariaLabel}
+                    color={color}
+                    disabled={disabled}
+                    onClick={onClick}
+                    size={COMPACT_SIZE}
+                >
+                    {icon}
+                </IconButton>
             </span>
         </Tooltip>
     );
@@ -539,11 +493,9 @@ const PillActionButton = observer(function PillActionButton({
 
 interface PillActionButtonProps {
     readonly ariaLabel: string;
-    readonly color?: (typeof ICON_BUTTON_COLOR)[keyof typeof ICON_BUTTON_COLOR];
+    readonly color?: "default" | "error";
     readonly disabled?: boolean;
     readonly icon: ReactNode;
-    /** 可见文案;null = 纯图标(内置默认形态) */
-    readonly label: string | null;
     readonly onClick: () => void;
     readonly tooltip: string;
 }
@@ -564,7 +516,6 @@ const CaptureControls = observer(function CaptureControls() {
                 ariaLabel={image.ariaLabel}
                 disabled={isRecording}
                 icon={<PhotoCameraIcon fontSize={COMPACT_SIZE} />}
-                label={image.label}
                 onClick={() => requestFrameCapture({ context: stores, dispatcher: stores.dispatcher })}
                 tooltip={image.tooltip}
             />
@@ -572,7 +523,6 @@ const CaptureControls = observer(function CaptureControls() {
                 ariaLabel={video.ariaLabel}
                 disabled={isRecording}
                 icon={<VideocamIcon fontSize={COMPACT_SIZE} />}
-                label={video.label ?? TEXT.CAPTURE_PROGRAM}
                 onClick={() => startVideoCapture({ source: VIDEO_EXPORT_SOURCE.PROGRAM, stores })}
                 tooltip={videoTooltip}
             />
@@ -615,7 +565,6 @@ function renderExtensionButtons(extensions: readonly ToolbarExtension[]): ReactN
                     disabled={extension.isDisabled()}
                     icon={extension.icon}
                     key={extension.key}
-                    label={extension.label}
                     onClick={extension.onClick}
                     tooltip={extension.tooltip ?? ""}
                 />
@@ -630,7 +579,7 @@ const ToolbarExtensionButtons = observer(function ToolbarExtensionButtons() {
     return renderExtensionButtons(presentation.toolbarExtensions);
 });
 
-/** 最右扩展位(全屏预览右侧;宿主窗口控制类动作落位,典型为纯图标形态) */
+/** 尾部扩展位(全屏预览右侧、项目菜单左侧;宿主窗口控制类动作)。 */
 const TrailingExtensionButtons = observer(function TrailingExtensionButtons() {
     const { presentation } = useDirectorDeskStores();
     return renderExtensionButtons(presentation.trailingExtensions);
@@ -652,39 +601,15 @@ function startVideoCapture({
 const PresentationControl = observer(function PresentationControl() {
     const stores = useDirectorDeskStores();
     return (
-        <Box className="flex items-center" sx={{ gap: PILL_GAP }}>
-            {stores.clock.isPlaying ? <PlayingIndicator /> : null}
-            <Tooltip
-                title={shortcutTitle({ label: TEXT.FULLSCREEN_PREVIEW, shortcutId: SHORTCUT_ID.PRESENTATION_ENTER })}
+        <Tooltip title={shortcutTitle({ label: TEXT.FULLSCREEN_PREVIEW, shortcutId: SHORTCUT_ID.PRESENTATION_ENTER })}>
+            <IconButton
+                aria-label={TEXT.FULLSCREEN_PREVIEW}
+                onClick={() => enterPresentation(stores)}
+                size={COMPACT_SIZE}
             >
-                <Button
-                    onClick={() => enterPresentation(stores)}
-                    startIcon={<PlayArrowIcon />}
-                    sx={PREVIEW_BUTTON_SX}
-                    variant={BUTTON_VARIANT.CONTAINED}
-                >
-                    {TEXT.FULLSCREEN_PREVIEW}
-                </Button>
-            </Tooltip>
-        </Box>
-    );
-});
-
-const PlayingIndicator = observer(function PlayingIndicator() {
-    return (
-        <Box className="flex items-center" sx={{ gap: PILL_GAP }}>
-            <Box
-                sx={{
-                    bgcolor: PLAY_INDICATOR_COLOR,
-                    borderRadius: PILL_HEIGHT_PX,
-                    height: PLAY_INDICATOR_SIZE_PX,
-                    width: PLAY_INDICATOR_SIZE_PX,
-                }}
-            />
-            <Typography color={PLAY_INDICATOR_COLOR} variant="caption">
-                {TEXT.PLAYING}
-            </Typography>
-        </Box>
+                <PlayArrowIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
     );
 });
 

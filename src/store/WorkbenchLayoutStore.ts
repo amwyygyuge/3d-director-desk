@@ -46,6 +46,8 @@ export const RENDER_QUALITY_PROFILES: Record<
 export class WorkbenchLayoutStore {
     /** 左栏当前分区:tab 互斥单选;纯 UI 态,不入文档与撤销栈 */
     activeSection: WorkspaceSection = WORKSPACE_SECTION.OUTLINE;
+    /** 左栏作者意图:review 强制仅留图标轨，退出后恢复此处选择。 */
+    private navigatorCollapsedRequested = false;
     /** 底部时间线作者意图:review 时只派生迷你条,退出后才恢复这份开合选择。 */
     private timelineExpandedRequested = false;
     /** 壳层作者意图;实际 review 由运镜预览派生,避免预览命令跨域改壳层。 */
@@ -112,6 +114,10 @@ export class WorkbenchLayoutStore {
     get timelineExpanded(): boolean {
         return this.shellMode === SHELL_MODE.REVIEW ? false : this.timelineExpandedRequested;
     }
+    /** 左栏在 review 强制收起为图标轨，其他模式遵循作者显式选择。 */
+    get navigatorCollapsed(): boolean {
+        return this.shellMode === SHELL_MODE.REVIEW || this.navigatorCollapsedRequested;
+    }
 
     /** 切换左栏分区:tab 单级直达,无中间态 */
     activateWorkspaceSection(section: WorkspaceSection): void {
@@ -133,6 +139,9 @@ export class WorkbenchLayoutStore {
 
     toggleTimelineExpanded(): void {
         this.timelineExpandedRequested = !this.timelineExpandedRequested;
+    }
+    toggleNavigatorCollapsed(): void {
+        this.navigatorCollapsedRequested = !this.navigatorCollapsedRequested;
     }
 
     /** 由时间线控制台的指针进出事件写入;纯瞬时视图态,不入文档与撤销栈。 */

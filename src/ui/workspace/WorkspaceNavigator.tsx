@@ -1,7 +1,11 @@
+import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
+import Tooltip from "@mui/material/Tooltip";
 import { observer } from "mobx-react-lite";
 import type { ComponentType } from "react";
 
@@ -11,6 +15,7 @@ import { AssetLibraryPanel } from "@/ui/assets/AssetLibraryPanel";
 import { LightSection } from "@/ui/lighting/LightSection";
 import { OutlinerPanel } from "@/ui/outline/OutlinerPanel";
 import { ShotPanel } from "@/ui/shots/ShotPanel";
+import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { SHELL_MODE } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { CHROME, sidePanelBottomOffset } from "@/ui/shell/theme";
@@ -24,6 +29,38 @@ const SECTION_PANELS: Record<WorkspaceSection, ComponentType> = {
 
 const navigatorTabId = (section: WorkspaceSection): string => `navigator-tab-${section}`;
 const navigatorPanelId = (section: WorkspaceSection): string => `navigator-panel-${section}`;
+const NAVIGATOR_TOGGLE_HEIGHT_PX = 64;
+const NAVIGATOR_TOGGLE_WIDTH_PX = 40;
+
+/** 左栏开合由 WorkbenchLayoutStore 承载；展开态停在右侧中部，收起态落在图标轨水平中心。 */
+const NavigatorCollapseToggle = observer(function NavigatorCollapseToggle() {
+    const { layout } = useDirectorDeskStores();
+    const collapsed = layout.navigatorCollapsed;
+    const label = collapsed ? "展开左侧面板" : "收起左侧面板";
+    return (
+        <Tooltip title={`${label}（${formatShortcutHint(SHORTCUT_ID.NAVIGATOR_TOGGLE)}）`}>
+            <IconButton
+                aria-label={label}
+                className="pointer-events-auto absolute z-10"
+                disableRipple
+                onClick={() => layout.toggleNavigatorCollapsed()}
+                sx={{
+                    bgcolor: "transparent",
+                    height: NAVIGATOR_TOGGLE_HEIGHT_PX,
+                    left: collapsed ? "50%" : "auto",
+                    right: collapsed ? "auto" : 0,
+                    position: "absolute",
+                    top: "50%",
+                    transform: collapsed ? "translate(-50%, -50%)" : "translateY(-50%)",
+                    width: NAVIGATOR_TOGGLE_WIDTH_PX,
+                    "&:hover, &.Mui-focusVisible": { bgcolor: "transparent", color: "primary.main" },
+                }}
+            >
+                {collapsed ? <KeyboardArrowRightIcon fontSize="large" /> : <KeyboardArrowLeftIcon fontSize="large" />}
+            </IconButton>
+        </Tooltip>
+    );
+});
 
 /** 分区 tab 条:单级平铺导航,互斥单选;选中态与切换都自取,重渲限在条内。 */
 const NavigatorTabBar = observer(function NavigatorTabBar() {
@@ -56,7 +93,7 @@ const NavigatorTabBar = observer(function NavigatorTabBar() {
     );
 });
 
-/** review 只保留分区直达:内容面板卸载，避免运镜播放期后台跟随 observable 重渲。 */
+/** 收起态复用 review 图标轨；展开把手由容器中右侧统一承载，避免覆盖分区入口。 */
 const NavigatorIconRail = observer(function NavigatorIconRail() {
     const { layout } = useDirectorDeskStores();
     return (
@@ -103,28 +140,32 @@ const ActiveSectionPanel = observer(function ActiveSectionPanel() {
 
 /**
  * 左侧工作台导航:大纲/资产/机位/灯光四分区的常驻通高容器。
- * 几何与右侧检查器镜像(同宽、同上缘、同骑时间线联动);分区经顶部 tab 单级直达,
- * 切换瞬时完成——indicator 的尺寸过渡已在主题禁用(left/width 过渡无法合成器化)。
+ * 顶部项目菜单已移至右侧工具栏，左栏可直达安全边距；完整面板与图标轨的切换由 layout 聚合根裁决。
  */
 export const WorkspaceNavigator = observer(function WorkspaceNavigator() {
     const { layout } = useDirectorDeskStores();
     if (!layout.chromeVisible) return null;
-    const review = layout.shellMode === SHELL_MODE.REVIEW;
+    const collapsed = layout.navigatorCollapsed;
 
     return (
-        <Paper
-            variant="panel"
-            className="pointer-events-auto absolute z-20 flex flex-col"
+        <Box
+            className="pointer-events-none absolute z-20"
             sx={{
-                left: CHROME.edgeGapPx,
-                top: CHROME.sidePanelTopPx,
                 bottom: sidePanelBottomOffset(),
-                width: review ? CHROME.navigatorIconRailWidthPx : CHROME.sidePanelWidthPx,
-                overflow: "hidden",
+                left: CHROME.edgeGapPx,
+                top: CHROME.edgeGapPx,
+                width: collapsed ? CHROME.navigatorIconRailWidthPx : CHROME.sidePanelWidthPx,
             }}
         >
-            {review ? <NavigatorIconRail /> : <NavigatorTabBar />}
-            {review ? null : <ActiveSectionPanel />}
-        </Paper>
+            <Paper
+                variant="panel"
+                className="pointer-events-auto absolute inset-0 flex flex-col"
+                sx={{ overflow: "hidden" }}
+            >
+                {collapsed ? <NavigatorIconRail /> : <NavigatorTabBar />}
+                {collapsed ? null : <ActiveSectionPanel />}
+            </Paper>
+            {layout.shellMode !== SHELL_MODE.REVIEW ? <NavigatorCollapseToggle /> : null}
+        </Box>
     );
 });

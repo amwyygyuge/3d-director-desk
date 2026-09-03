@@ -76,6 +76,7 @@ export const SHORTCUT_ID = {
     TIMELINE_ZOOM_OUT: "timeline.zoom-out",
     SNAP_TOGGLE: "timeline.snap-toggle",
     TIMELINE_EXPAND_TOGGLE: "timeline.expand-toggle",
+    NAVIGATOR_TOGGLE: "navigator.toggle",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
@@ -153,6 +154,7 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.PLAYHEAD_START, chords: ["home"], scope: "global", label: "播放头回到起点" },
     { id: SHORTCUT_ID.PLAYHEAD_END, chords: ["end"], scope: "global", label: "播放头到终点" },
     { id: SHORTCUT_ID.TIMELINE_EXPAND_TOGGLE, chords: ["t"], scope: "global", label: "展开/收起时间线" },
+    { id: SHORTCUT_ID.NAVIGATOR_TOGGLE, chords: ["b"], scope: "global", label: "展开/收起左侧面板" },
     { id: SHORTCUT_ID.FRAME_ALL, chords: ["shift+f"], scope: "global", label: "取景全部对象" },
     { id: SHORTCUT_ID.TRANSPORT_TOGGLE, chords: ["p"], scope: "global", label: "播放/暂停时间轴" },
     { id: SHORTCUT_ID.PRESENTATION_ENTER, chords: ["shift+p"], scope: "global", label: "全屏预览成片" },
@@ -337,6 +339,7 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.TIMELINE_ZOOM_OUT]: (s) => zoomTimeline(s, TIMELINE_ZOOM_OUT_FACTOR),
     [SHORTCUT_ID.SNAP_TOGGLE]: (s) => s.motionAuthoring.setSnapEnabled(!s.motionAuthoring.snapEnabled),
     [SHORTCUT_ID.TIMELINE_EXPAND_TOGGLE]: (s) => s.layout.toggleTimelineExpanded(),
+    [SHORTCUT_ID.NAVIGATOR_TOGGLE]: (s) => s.layout.toggleNavigatorCollapsed(),
 };
 
 /** 开发期自检:漏登记的 id 只会表现为「按键没反应」,不自检就得靠人肉发现 */
