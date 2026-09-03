@@ -203,7 +203,7 @@ function createFollowGeometry(
     };
 }
 
-/** 播放头只改变相对路径的刚体参考系;顶点缓冲原地重写,不创建新几何。 */
+/** 相对轨迹是片段属性而非当前时刻的属性，固定在片段起点参考系以保持形状稳定。 */
 function updateRelativePath(
     geometry: FollowPreviewGeometry,
     clip: CameraMotionClip,
@@ -218,7 +218,7 @@ function updateRelativePath(
         collapsePathAtFrame(positions, sampleCount, geometry.frame);
         return;
     }
-    // 播放期索引式重写既有 BufferAttribute,禁止迭代器/临时数组分配。
+    // 索引式原地重写既有 BufferAttribute,禁止迭代器/临时数组分配。
     for (let step = 0; step <= sampleCount; step += 1) {
         clip.trajectory.samplePosition(step / sampleCount, geometry.sample);
         geometry.frame.toWorld(geometry.sample.x, geometry.sample.y, geometry.sample.z, geometry.sample);
@@ -377,17 +377,22 @@ export const MotionClipPathPreview = observer(function MotionClipPathPreview({
     );
 
     useEffect(() => {
-        if (!clip?.follow || !followGeometry) return undefined;
+        if (!clip || !follow || !followGeometry) return;
+        updateRelativePath(followGeometry, clip, resolver, clip.startTimeSeconds);
+        invalidate();
+    }, [clip, follow, followGeometry, invalidate, resolver, subjectTrack]);
+
+    useEffect(() => {
+        if (!clip || !follow || !followGeometry) return undefined;
         return reaction(
             () => clock.time,
             (timeSeconds) => {
-                updateRelativePath(followGeometry, clip, resolver, timeSeconds);
                 updateFollowStrap(followGeometry, clip, resolver, timeSeconds);
                 invalidate();
             },
             { fireImmediately: true },
         );
-    }, [clip, clock, followGeometry, invalidate, resolver, subjectTrack]);
+    }, [clip, clock, follow, followGeometry, invalidate, resolver, subjectTrack]);
 
     if (!clip) return null;
     return (
@@ -426,7 +431,7 @@ interface MotionKeyHelperProps {
 /** 一枚镜头 key 的球体与（选中后）手柄杆;拖拽平面始终面向当前编辑相机。 */
 const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onContextMenu }: MotionKeyHelperProps) {
     const stores = useDirectorDeskStores();
-    const { clock, scene, timeline } = stores;
+    const { scene, timeline } = stores;
     const camera = useThree((state) => state.camera);
     const invalidate = useThree((state) => state.invalidate);
     const canvas = useThree((state) => state.gl.domElement);
@@ -470,40 +475,35 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
         [inGeometry, outGeometry],
     );
 
+    // 球和手柄与相对路径同属片段静态形状，固定片段起点可避免选中或 seek 时跳动。
+
     useEffect(() => {
-        if (!clip || !follow || !key) return undefined;
-        return reaction(
-            () => clock.time,
-            (timeSeconds) => {
-                const root = rootRef.current;
-                if (!root) return;
-                root.visible = updateFollowKeyHelper(
-                    followResolver,
-                    follow,
-                    clip,
-                    key,
-                    root,
-                    timeSeconds,
-                    followFrame,
-                    followSample,
-                    handleOffsets.inX,
-                    handleOffsets.inY,
-                    handleOffsets.inZ,
-                    inHandleRef.current,
-                    inGeometry,
-                    handleOffsets.outX,
-                    handleOffsets.outY,
-                    handleOffsets.outZ,
-                    outHandleRef.current,
-                    outGeometry,
-                );
-                invalidate();
-            },
-            { fireImmediately: true },
+        if (!clip || !follow || !key) return;
+        const root = rootRef.current;
+        if (!root) return;
+        root.visible = updateFollowKeyHelper(
+            followResolver,
+            follow,
+            clip,
+            key,
+            root,
+            clip.startTimeSeconds,
+            followFrame,
+            followSample,
+            handleOffsets.inX,
+            handleOffsets.inY,
+            handleOffsets.inZ,
+            inHandleRef.current,
+            inGeometry,
+            handleOffsets.outX,
+            handleOffsets.outY,
+            handleOffsets.outZ,
+            outHandleRef.current,
+            outGeometry,
         );
+        invalidate();
     }, [
         clip,
-        clock,
         follow,
         followFrame,
         followResolver,
@@ -513,6 +513,7 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
         invalidate,
         key,
         outGeometry,
+        selected,
         subjectTrack,
     ]);
 
@@ -611,7 +612,8 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
                 geometry,
                 codec: clip.follow ? followSpaceCodecFor(stores) : null,
                 follow: clip.follow,
-                timeSeconds: clip.timeAtProgress(key.progress),
+                // 渲染与反解必须同参考系，否则松手即跳。
+                timeSeconds: clip.startTimeSeconds,
             };
             setDragging(true);
         },
