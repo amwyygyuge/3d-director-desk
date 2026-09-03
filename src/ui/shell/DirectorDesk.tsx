@@ -39,7 +39,7 @@ import { Hotkeys } from "@/ui/shell/Hotkeys";
 import { FrameRateIndicator } from "@/ui/viewport/FrameRateIndicator";
 import { placementFor } from "@/ui/assets/importFiles";
 import { LoadingChip } from "@/ui/viewport/LoadingChip";
-import { directorDeskTheme, VIEWPORT_BACKGROUND } from "@/ui/shell/theme";
+import { directorDeskTheme, SCROLLBAR_SX, VIEWPORT_BACKGROUND } from "@/ui/shell/theme";
 import { SceneRoot } from "@/ui/viewport/scene/SceneRoot";
 import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
 import { StudioRig } from "@/ui/viewport/scene/StudioRig";
@@ -215,7 +215,7 @@ export const DirectorDesk = observer(function DirectorDesk({
 
     return (
         <ThemeProvider theme={theme ?? directorDeskTheme}>
-            <ScopedCssBaseline className="h-full">
+            <ScopedCssBaseline className="h-full" sx={SCROLLBAR_SX}>
                 <DirectorDeskProvider value={stores}>
                     <div
                         ref={deskRef}
