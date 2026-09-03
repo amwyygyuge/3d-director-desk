@@ -18,7 +18,7 @@ const PLAYGROUND_BUILD_MODE = "playground";
 export default defineConfig(({ mode }) => ({
     plugins: [react(), tailwindcss()],
     server: {
-        port: 3000,
+        port: 4000,
         strictPort: true,
     },
     resolve: {

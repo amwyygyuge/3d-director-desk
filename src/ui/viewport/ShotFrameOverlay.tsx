@@ -9,7 +9,7 @@ import { MONO_FONT_STACK } from "@/ui/shell/theme";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { ViewportToast } from "@/ui/workspace/ViewportToast";
+import { VIEWPORT_TOAST_SLOT, ViewportToast } from "@/ui/workspace/ViewportToast";
 
 const FRAME_INSET_CLASS = "absolute inset-3";
 const GRID_LINE_CLASS = "border-white/25";
@@ -91,7 +91,7 @@ const LensNoClipToast = observer(function LensNoClipToast() {
     };
 
     return (
-        <ViewportToast open={clip === null}>
+        <ViewportToast slot={VIEWPORT_TOAST_SLOT.CONTEXT} open={clip === null}>
             <span>{NO_CLIP_MESSAGE}</span>
             <Button
                 size="small"

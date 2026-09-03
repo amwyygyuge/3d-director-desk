@@ -1,10 +1,15 @@
 import { observer } from "mobx-react-lite";
 
-import { ViewportToast } from "@/ui/workspace/ViewportToast";
+import { VIEWPORT_TOAST_SLOT, ViewportToast } from "@/ui/workspace/ViewportToast";
 import { SHORTCUT_ID, formatShortcutHint } from "@/shortcuts/builtinShortcuts";
 import type { ShortcutId } from "@/shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+
+const SHORTCUT_POSITION = {
+    AFTER_LABEL: "after-label",
+} as const;
+type ShortcutPosition = (typeof SHORTCUT_POSITION)[keyof typeof SHORTCUT_POSITION];
 
 interface KeyInteractionHintSegment {
     readonly keys: string;
@@ -14,6 +19,7 @@ interface KeyInteractionHintSegment {
 interface ShortcutInteractionHintSegment {
     readonly shortcutId: ShortcutId;
     readonly label: string;
+    readonly position?: ShortcutPosition;
 }
 
 type InteractionHintSegment = KeyInteractionHintSegment | ShortcutInteractionHintSegment;
@@ -27,7 +33,13 @@ interface ViewportInteractionHint {
 const VIEWPORT_INTERACTION_HINT = {
     SHOT_SELECTED: {
         id: "shot-selected",
-        segments: [{ shortcutId: SHORTCUT_ID.SHOT_ENTER, label: "进入掌镜" }],
+        segments: [
+            {
+                shortcutId: SHORTCUT_ID.SHOT_ENTER,
+                label: "进入掌镜",
+                position: SHORTCUT_POSITION.AFTER_LABEL,
+            },
+        ],
     },
     SHOT_NAVIGATION: {
         id: "shot-navigation",
@@ -70,7 +82,8 @@ const VIEWPORT_INTERACTION_HINT = {
 
 function formatInteractionHintSegment(segment: InteractionHintSegment): string {
     const keys = "shortcutId" in segment ? formatShortcutHint(segment.shortcutId) : segment.keys;
-    return `${keys} ${segment.label}`;
+    const isShortcutSuffix = "shortcutId" in segment && segment.position === SHORTCUT_POSITION.AFTER_LABEL;
+    return isShortcutSuffix ? `${segment.label} ${keys}` : `${keys} ${segment.label}`;
 }
 
 function formatInteractionHint(hint: ViewportInteractionHint): string {
@@ -104,5 +117,9 @@ function resolveViewportInteractionHint(stores: DirectorDeskStores): ViewportInt
 export const ViewportInteractionHints = observer(function ViewportInteractionHints() {
     const stores = useDirectorDeskStores();
     const hint = resolveViewportInteractionHint(stores);
-    return <ViewportToast open={hint !== null}>{hint ? formatInteractionHint(hint) : null}</ViewportToast>;
+    return (
+        <ViewportToast slot={VIEWPORT_TOAST_SLOT.CONTEXT} open={hint !== null}>
+            {hint ? formatInteractionHint(hint) : null}
+        </ViewportToast>
+    );
 });
