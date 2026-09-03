@@ -9,6 +9,11 @@ const DEFAULT_TEXT = {
     RECORDING_TOOLTIP_PREFIX: "按工程帧率导出 Program 输出轨(",
     RECORDING_TOOLTIP_SUFFIX: ")为 MP4",
 } as const;
+export const CAPTURE_FEEDBACK = {
+    DEFAULT: "default",
+    HOST: "host",
+} as const;
+export type CaptureFeedback = (typeof CAPTURE_FEEDBACK)[keyof typeof CAPTURE_FEEDBACK];
 
 /** 采集动作语义定制：右侧工具栏始终显示图标，label 仅供可访问名与 tooltip 回落。 */
 export interface CaptureActionPresentationInit {
@@ -94,6 +99,8 @@ interface CaptureVideoPresentation {
 export interface DeskShellPresentationInit {
     readonly captureImage?: CaptureActionPresentationInit;
     readonly captureVideo?: CaptureVideoPresentationInit;
+    /** 产物出口反馈 owner;host 时仅由宿主报告成功或失败，桌内不保留产物预览。 */
+    readonly captureFeedback?: CaptureFeedback;
     /** 动作区扩展位(截图/录制右侧) */
     readonly toolbarExtensions?: readonly ToolbarExtensionInit[];
     /** 尾部扩展位(全屏预览右侧、项目菜单左侧;宿主窗口控制类动作) */
@@ -109,6 +116,7 @@ export interface DeskShellPresentationInit {
 export class DeskShellPresentation {
     readonly captureImage: CaptureActionPresentation;
     readonly captureVideo: CaptureVideoPresentation;
+    readonly captureFeedback: CaptureFeedback;
     readonly toolbarExtensions: readonly ToolbarExtension[];
     readonly trailingExtensions: readonly ToolbarExtension[];
     private readonly customVideoTooltip: string | null;
@@ -126,6 +134,8 @@ export class DeskShellPresentation {
             stopLabel: normalizeOptionalText(init?.captureVideo?.stopLabel) ?? DEFAULT_TEXT.STOP_RECORDING,
         };
         this.customVideoTooltip = normalizeOptionalText(init?.captureVideo?.tooltip);
+        this.captureFeedback =
+            init?.captureFeedback === CAPTURE_FEEDBACK.HOST ? CAPTURE_FEEDBACK.HOST : CAPTURE_FEEDBACK.DEFAULT;
         this.toolbarExtensions = normalizeExtensions(init?.toolbarExtensions);
         this.trailingExtensions = normalizeExtensions(init?.trailingExtensions);
     }
@@ -139,6 +149,11 @@ export class DeskShellPresentation {
             this.customVideoTooltip ??
             `${DEFAULT_TEXT.RECORDING_TOOLTIP_PREFIX}${range.inSeconds}~${range.outSeconds}${DEFAULT_TEXT.RECORDING_TOOLTIP_SUFFIX}`
         );
+    }
+
+    /** 宿主出口反馈是唯一 UI owner，桌内产物停靠层必须完全卸载。 */
+    get showsInternalCaptureProducts(): boolean {
+        return this.captureFeedback === CAPTURE_FEEDBACK.DEFAULT;
     }
 }
 

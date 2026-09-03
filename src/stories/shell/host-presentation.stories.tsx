@@ -25,8 +25,9 @@ const STAGE_STYLE = {
 } as const;
 
 /**
- * 宿主壳层呈现定制走查(Monet 接入验收 R1/R3):
+ * 宿主壳层呈现定制走查(Monet 接入验收 R1/R3/R6):
  * - 截图/录制保持图标按钮，tooltip 使用宿主语义;
+ * - captureFeedback=host 后，产品交付只走宿主出口，桌内不挂载预览停靠层;
  * - 最右扩展位排在项目菜单左侧，项目菜单始终贴右;
  * - width/height 固定尺寸(模拟 Monet 节点嵌入);
  * - initialGridSizeMeters 把参考地板初始化为 24m(对照「场景/场景画布」的默认 12m;运行期由项目菜单滑杆接管)。
@@ -42,6 +43,7 @@ export const HostPresentation: Story = {
                 presentation={{
                     captureImage: { label: "截图到画布", tooltip: "截图并添加到画布" },
                     captureVideo: { label: "录制到画布", tooltip: "录制并添加到画布" },
+                    captureFeedback: "host",
                     trailingExtensions: [
                         {
                             key: "minimize-node",

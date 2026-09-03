@@ -22,6 +22,7 @@ import type { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 import type { PlaybackCoordinator } from "@/timeline/PlaybackCoordinator";
 import type { TimelineStore } from "@/store/TimelineStore";
 import type { DocumentImportService } from "@/document/DocumentImportService";
+import type { DeskShellPresentation } from "@/ui/shell/DeskShellPresentation";
 
 /**
  * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。
@@ -64,6 +65,8 @@ export interface DirectorContext {
     readonly catalog: AssetCatalog;
     /** 宿主适配器(截图回传/模型导入;iframe 与直嵌两形态一契约) */
     readonly host: HostAdapter;
+    /** 宿主呈现配置;产物出口由它裁决桌内预览或宿主独占反馈。 */
+    readonly presentation: DeskShellPresentation;
     /** 截图预览等界面态 */
     readonly ui: UiStore;
     /** 悬浮壳层编排态;预览模式命令的落点(纯 UI 态,不入文档与撤销栈) */

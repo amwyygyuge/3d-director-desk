@@ -33,11 +33,6 @@ interface CaptureFrameRequest {
     readonly context: DirectorContext;
 }
 
-interface VideoCaptureOutcome {
-    readonly blob: Blob;
-    readonly durationSeconds: number;
-}
-
 type CaptureDelivery =
     | {
           readonly kind: typeof CAPTURE_PRODUCT_KIND.IMAGE;
@@ -85,8 +80,17 @@ function captureCapability(type: string, payload: PayloadContract): CommandCapab
     };
 }
 
+/** 宿主回传失败由宿主反馈；组件隔离拒绝，避免 host 模式产生第二条桌内错误提示。 */
+async function reportCaptureToHost(ctx: DirectorContext, product: CaptureProduct): Promise<void> {
+    try {
+        await ctx.host.reportCapture(product);
+    } catch {
+        // 宿主已显示反馈；组件不得制造重复错误提示。
+    }
+}
+
 /** 截图与视频共用产品出口，保证宿主协议与桌内预览的产物身份一致。 */
-function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDelivery): void {
+async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDelivery): Promise<void> {
     const size = ctx.capture.size ?? { width: 0, height: 0 };
     const blobUrl = URL.createObjectURL(delivery.blob);
     const product: CaptureProduct = {
@@ -98,7 +102,16 @@ function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDelivery):
         requestId: delivery.requestId,
         durationSeconds: delivery.durationSeconds,
     };
-    ctx.host.reportCapture(product);
+    if (ctx.presentation.showsInternalCaptureProducts) {
+        void reportCaptureToHost(ctx, product);
+    } else {
+        try {
+            await reportCaptureToHost(ctx, product);
+        } finally {
+            URL.revokeObjectURL(blobUrl);
+        }
+        return;
+    }
     switch (delivery.kind) {
         case CAPTURE_PRODUCT_KIND.IMAGE:
             ctx.ui.setLastCapture(blobUrl, {
@@ -133,9 +146,9 @@ export class CaptureFrameCommand extends DirectorCommand<CaptureFramePayload> {
 
     execute(ctx: DirectorContext): void {
         const requestId = this.payload.requestId ?? crypto.randomUUID();
-        void ctx.capture.capture({ hideHelpers: this.payload.hideHelpers ?? true }).then((blob) => {
+        void ctx.capture.capture({ hideHelpers: this.payload.hideHelpers ?? true }).then(async (blob) => {
             if (!blob) return;
-            deliverCaptureProduct(ctx, {
+            await deliverCaptureProduct(ctx, {
                 kind: CAPTURE_PRODUCT_KIND.IMAGE,
                 blob,
                 requestId,
@@ -236,19 +249,10 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
         const source = this.payload.source ?? VIDEO_EXPORT_SOURCE.PROGRAM;
         const requestId = this.payload.requestId ?? crypto.randomUUID();
         const range = videoRangeFor(ctx, this.payload);
-        void this.export(ctx, { source, requestId, ...range }).then((outcome) => {
-            if (!outcome) return;
-            deliverCaptureProduct(ctx, {
-                kind: CAPTURE_PRODUCT_KIND.VIDEO,
-                blob: outcome.blob,
-                requestId,
-                durationSeconds: outcome.durationSeconds,
-                source,
-            });
-        });
+        void this.exportAndDeliver(ctx, { source, requestId, ...range });
     }
 
-    private async export(
+    private async exportAndDeliver(
         ctx: DirectorContext,
         options: {
             readonly source: VideoExportSource;
@@ -256,22 +260,29 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
             readonly startSeconds: number;
             readonly durationSeconds: number;
         },
-    ): Promise<VideoCaptureOutcome | null> {
+    ): Promise<void> {
         const policy = videoExportPolicyFor(options.source);
         try {
             policy.prepare(ctx);
             ctx.clock.pause();
             ctx.clock.seek(options.startSeconds);
             ctx.videoExport.begin(options);
-            return await ctx.capture.exportVideo({
+            const outcome = await ctx.capture.exportVideo({
                 durationSeconds: options.durationSeconds,
                 frameRate: ctx.timeline.document.frameRate.fps,
                 hideHelpers: options.source === VIDEO_EXPORT_SOURCE.PROGRAM,
                 renderFrame: (timeSeconds) => ctx.clock.seek(options.startSeconds + timeSeconds),
             });
+            if (!outcome) return;
+            await deliverCaptureProduct(ctx, {
+                kind: CAPTURE_PRODUCT_KIND.VIDEO,
+                blob: outcome.blob,
+                requestId: options.requestId,
+                durationSeconds: outcome.durationSeconds,
+                source: options.source,
+            });
         } catch {
             ctx.ui.setApplicationNotice(MP4_EXPORT_FAILURE_MESSAGE);
-            return null;
         } finally {
             ctx.videoExport.finish();
             ctx.clock.pause();

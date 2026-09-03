@@ -297,7 +297,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <LensNavigation />
                             </Canvas>
                             <ShotFrameOverlay />
-                            <CaptureProductDock />
+                            {stores.presentation.showsInternalCaptureProducts ? <CaptureProductDock /> : null}
                             <LoadingChip />
                             <FrameRateIndicator />
                             <ViewportInteractionHints />

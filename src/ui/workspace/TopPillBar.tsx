@@ -1,6 +1,6 @@
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
+import KeyboardIcon from "@mui/icons-material/Keyboard";
 import MenuIcon from "@mui/icons-material/Menu";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
 import PolylineIcon from "@mui/icons-material/Polyline";
@@ -11,6 +11,7 @@ import RedoIcon from "@mui/icons-material/Redo";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
 import UndoIcon from "@mui/icons-material/Undo";
 import VideocamIcon from "@mui/icons-material/Videocam";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
@@ -49,7 +50,6 @@ const COMMAND_TYPE = {
 
 const TEXT = {
     CAPTURE_VIEWPORT: "录制当前视角（含网格与辅助物）",
-    CAPTURE_VIEWPORT_MENU: "选择录制来源",
     CLEAR_SCENE: "清空场景",
     DOCUMENT_FILE_INVALID: "工程文件不是合法 JSON",
     EXPORT_DOCUMENT: "导出工程",
@@ -228,13 +228,6 @@ const ProjectMenu = observer(function ProjectMenu({
                     sx={{ ml: MENU_SHORTCUT_MARGIN }}
                 />
             </MenuItem>
-            <Divider />
-            <MenuItem onClick={() => closeMenuThen({ action: () => stores.ui.toggleHelp(), onClose })}>
-                {TEXT.HELP}
-                <Typography sx={{ ml: MENU_SHORTCUT_MARGIN }} variant="caption">
-                    {formatShortcutHint(SHORTCUT_ID.HELP_TOGGLE)}
-                </Typography>
-            </MenuItem>
         </Menu>
     );
 });
@@ -411,8 +404,18 @@ const WalkDraftToggle = observer(function WalkDraftToggle() {
         </Tooltip>
     );
 });
+const ShortcutHelpControl = observer(function ShortcutHelpControl() {
+    const { ui } = useDirectorDeskStores();
+    return (
+        <Tooltip title={shortcutTitle({ label: TEXT.HELP, shortcutId: SHORTCUT_ID.HELP_TOGGLE })}>
+            <IconButton aria-label={TEXT.HELP} onClick={() => ui.toggleHelp()} size={COMPACT_SIZE}>
+                <KeyboardIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
 
-/** 右侧工具栏:所有操作统一为带 Tooltip 的图标按钮；项目菜单固定在最右端。 */
+/** 右侧工具栏:所有操作统一为带 Tooltip 的图标按钮;快捷键和项目菜单同级并固定在最右端。 */
 const OutputPill = observer(function OutputPill() {
     return (
         <Paper variant="pill" className="pointer-events-auto" sx={PILL_SX}>
@@ -428,6 +431,7 @@ const OutputPill = observer(function OutputPill() {
             <PresentationControl />
             <TrailingExtensionButtons />
             <Divider flexItem orientation="vertical" sx={PROJECT_MENU_DIVIDER_SX} />
+            <ShortcutHelpControl />
             <ProjectMenuControl />
         </Paper>
     );
@@ -501,14 +505,12 @@ interface PillActionButtonProps {
 }
 
 const CaptureControls = observer(function CaptureControls() {
-    const [sourceMenuAnchor, setSourceMenuAnchor] = useState<HTMLElement | null>(null);
     const stores = useDirectorDeskStores();
     const { presentation, timeline, videoExport } = stores;
     const image = presentation.captureImage;
     const video = presentation.captureVideo;
     const isRecording = videoExport.isRecording;
     const videoTooltip = presentation.captureVideoTooltip(timeline.document.playbackRange);
-    const closeSourceMenu = (): void => setSourceMenuAnchor(null);
 
     return (
         <>
@@ -526,29 +528,13 @@ const CaptureControls = observer(function CaptureControls() {
                 onClick={() => startVideoCapture({ source: VIDEO_EXPORT_SOURCE.PROGRAM, stores })}
                 tooltip={videoTooltip}
             />
-            <Tooltip title={TEXT.CAPTURE_VIEWPORT_MENU}>
-                <span>
-                    <IconButton
-                        aria-label={TEXT.CAPTURE_VIEWPORT_MENU}
-                        disabled={isRecording}
-                        onClick={(event) => setSourceMenuAnchor(event.currentTarget)}
-                        size={COMPACT_SIZE}
-                    >
-                        <ArrowDropDownIcon fontSize={COMPACT_SIZE} />
-                    </IconButton>
-                </span>
-            </Tooltip>
-            <Menu anchorEl={sourceMenuAnchor} onClose={closeSourceMenu} open={sourceMenuAnchor !== null}>
-                <MenuItem
-                    disabled={isRecording}
-                    onClick={() => {
-                        startVideoCapture({ source: VIDEO_EXPORT_SOURCE.VIEWPORT, stores });
-                        closeSourceMenu();
-                    }}
-                >
-                    {TEXT.CAPTURE_VIEWPORT}
-                </MenuItem>
-            </Menu>
+            <PillActionButton
+                ariaLabel={TEXT.CAPTURE_VIEWPORT}
+                disabled={isRecording}
+                icon={<VisibilityIcon fontSize={COMPACT_SIZE} />}
+                onClick={() => startVideoCapture({ source: VIDEO_EXPORT_SOURCE.VIEWPORT, stores })}
+                tooltip={TEXT.CAPTURE_VIEWPORT}
+            />
         </>
     );
 });
