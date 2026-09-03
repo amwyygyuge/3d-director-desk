@@ -1,27 +1,28 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import type { Group, Object3D } from "three";
-import { Box3, Box3Helper, BufferGeometry, Matrix4 } from "three";
+import { Box3, BufferGeometry, Matrix4 } from "three";
 
 import type { SceneObject, SceneObjectKind } from "@/core/SceneObject";
+import { SELECTION_ROLE } from "@/core/SelectionRole";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { SelectionBoxHighlight } from "@/ui/viewport/scene/SelectionHighlight";
 import { LightContent, ModelContent } from "@/ui/viewport/scene/contents";
+import { useCaptureHelperRegistration } from "@/ui/viewport/scene/useCaptureHelperRegistration";
 
-const HIGHLIGHT_COLOR = "#ffd54f";
-
+/** 实体局部包围盒:按内容变化重算一次,渲染循环内不重复 traverse。 */
 class LocalBoundsIndex {
+    readonly bounds = new Box3();
     private readonly inverseRoot = new Matrix4();
     private readonly relativeChild = new Matrix4();
     private readonly transformedBounds = new Box3();
-    private readonly localBounds = new Box3();
-    private readonly worldRoot = new Matrix4();
 
     updateLocal(root: Group): void {
         root.updateWorldMatrix(true, true);
         this.inverseRoot.copy(root.matrixWorld).invert();
-        this.localBounds.makeEmpty();
+        this.bounds.makeEmpty();
         root.traverse((candidate) => {
             const geometry = (candidate as Object3D & { geometry?: unknown }).geometry;
             if (!(geometry instanceof BufferGeometry) || candidate.userData.helper) return;
@@ -29,69 +30,56 @@ class LocalBoundsIndex {
             if (!geometry.boundingBox) return;
             this.relativeChild.multiplyMatrices(this.inverseRoot, candidate.matrixWorld);
             this.transformedBounds.copy(geometry.boundingBox).applyMatrix4(this.relativeChild);
-            this.localBounds.union(this.transformedBounds);
+            this.bounds.union(this.transformedBounds);
         });
     }
+}
 
-    updateWorld(root: Group, worldBounds: Box3): void {
-        root.updateMatrix();
-        if (root.parent) this.worldRoot.multiplyMatrices(root.parent.matrixWorld, root.matrix);
-        else this.worldRoot.copy(root.matrix);
-        worldBounds.copy(this.localBounds).applyMatrix4(this.worldRoot);
+/**
+ * 内容签名:实体运行时 group 下「非辅助物」子节点的数量、身份与本地矩阵。
+ *
+ * 矩阵必须入签名:模型壳层在挂载后第二帧才做归一化(ModelContent),身份与数量都不变,
+ * 只比身份会把归一化前的尺寸烙进包围盒——实测狐狸模型框会大 77 倍,等同于没有选中态。
+ * 辅助物排除:高亮框自身是 group 的子节点,计入会自我喂食。
+ */
+class ContentSignature {
+    private isCaptured = false;
+    private contentCount = 0;
+    private content: Object3D | undefined;
+    private readonly contentMatrix = new Matrix4();
+
+    /** 变化时更新签名并返回 true;无变化时零成本、零分配。 */
+    refresh(root: Group): boolean {
+        const content = firstContentChild(root);
+        const contentCount = contentChildCount(root);
+        const isSame =
+            this.isCaptured &&
+            this.contentCount === contentCount &&
+            this.content === content &&
+            (content === undefined || this.contentMatrix.equals(content.matrix));
+        if (isSame) return false;
+        this.isCaptured = true;
+        this.contentCount = contentCount;
+        this.content = content;
+        if (content) this.contentMatrix.copy(content.matrix);
+        return true;
+    }
+
+    /** 换了高亮框实例:强制下一帧重算一次包围盒。 */
+    invalidate(): void {
+        this.isCaptured = false;
     }
 }
 
-interface HelperSnapshot {
-    positionX: number;
-    positionY: number;
-    positionZ: number;
-    rotationX: number;
-    rotationY: number;
-    rotationZ: number;
-    scaleX: number;
-    scaleY: number;
-    scaleZ: number;
-    childCount: number;
-    childAtZero: Object3D | undefined;
-    readonly boundsIndex: LocalBoundsIndex;
+function firstContentChild(root: Group): Object3D | undefined {
+    for (const child of root.children) {
+        if (child.userData.helper !== true) return child;
+    }
+    return undefined;
 }
 
-function updateHelperSnapshot(object: Group, snapshot: HelperSnapshot): void {
-    const { position, rotation, scale } = object;
-    snapshot.positionX = position.x;
-    snapshot.positionY = position.y;
-    snapshot.positionZ = position.z;
-    snapshot.rotationX = rotation.x;
-    snapshot.rotationY = rotation.y;
-    snapshot.rotationZ = rotation.z;
-    snapshot.scaleX = scale.x;
-    snapshot.scaleY = scale.y;
-    snapshot.scaleZ = scale.z;
-    snapshot.childCount = object.children.length;
-    snapshot.childAtZero = object.children[0];
-}
-
-function helperTransformChanged(object: Group, snapshot: HelperSnapshot): boolean {
-    const { position, rotation, scale } = object;
-    return (
-        position.x !== snapshot.positionX ||
-        position.y !== snapshot.positionY ||
-        position.z !== snapshot.positionZ ||
-        rotation.x !== snapshot.rotationX ||
-        rotation.y !== snapshot.rotationY ||
-        rotation.z !== snapshot.rotationZ ||
-        scale.x !== snapshot.scaleX ||
-        scale.y !== snapshot.scaleY ||
-        scale.z !== snapshot.scaleZ
-    );
-}
-
-function helperContentChanged(object: Group, snapshot: HelperSnapshot): boolean {
-    return object.children.length !== snapshot.childCount || object.children[0] !== snapshot.childAtZero;
-}
-
-function updateWorldBounds(index: LocalBoundsIndex, object: Group, helper: Box3Helper): void {
-    index.updateWorld(object, helper.box);
+function contentChildCount(root: Group): number {
+    return root.children.reduce((count, child) => (child.userData.helper === true ? count : count + 1), 0);
 }
 
 /** kind → 渲染内容查表(纪律:禁 if 链)。 */
@@ -106,15 +94,20 @@ const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject 
  * - 外层 group 承载 transform + 运行时绑定(ref 回调);
  * - ref 回调完成 three 运行时 ↔ SceneManager 的绑定/解绑(运行时永不进 observable);
  * - 渲染体内禁止写场景 store;点选写 SelectionStore(纯 UI 态,不走命令层);
- * - 选中高亮走 Box3Helper(缓存局部 bounds):播放仅变换包围盒,内容挂载变化才重建局部 bounds。
+ * - 选中态优先走辉光(SelectionTintBinder 写 emissive):模型本体发亮,人偶远近都可辨;
+ *   材质不可着色(OBJ/FBX 的共享 Phong/Basic)时回退包围框,两者互斥不并存;
+ *   包围框挂在 group 之下,位移随父级免费更新,帧内仅在内容签名变化时重算一次局部包围盒;
+ *   灯光的选中态由灯光 helper 表达,既不着色也不叠框。
  */
 export const SceneObjectView = observer(function SceneObjectView({ entity }: { entity: SceneObject }) {
-    const { capture, scene, selection, playback } = useDirectorDeskStores();
-    const scene3 = useThree((state) => state.scene);
+    const { capture, scene, selection, playback, selectionTint } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const groupRef = useRef<Group | null>(null);
-    const helperRef = useRef<Box3Helper | null>(null);
-    const helperSnapshotRef = useRef<HelperSnapshot | null>(null);
+    const registerCaptureHelper = useCaptureHelperRegistration<Group>(capture.helpers);
+    const boundsIndex = useMemo(() => new LocalBoundsIndex(), []);
+    const signature = useMemo(() => new ContentSignature(), []);
+    const [highlight, setHighlight] = useState<SelectionBoxHighlight | null>(null);
+    const [isTinted, setIsTinted] = useState(false);
 
     // 依赖实体实例而非 id:文档导入用同 id 的新实体整体替换,只有回调标识变化才能让 React 重新绑定运行时
     const bindRuntime = useCallback(
@@ -131,62 +124,50 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
         [scene, entity, playback],
     );
 
-    const selected = selection.isSelected(entity.id);
+    const hasHighlight = selection.isSelected(entity.id) && entity.kind !== "light";
+    const role = selection.primaryId === entity.id ? SELECTION_ROLE.PRIMARY : SELECTION_ROLE.SECONDARY;
+    // 着色成功即不挂框;模型尚未加载完时材质未就位,先落框,加载后由帧内重试切换
+    useEffect(() => {
+        if (!hasHighlight) return;
+        setIsTinted(selectionTint.apply(entity.id, role));
+        signature.invalidate();
+        invalidate();
+        return () => {
+            selectionTint.clear(entity.id);
+            setIsTinted(false);
+            invalidate();
+        };
+    }, [hasHighlight, role, entity.id, selectionTint, signature, invalidate]);
+
+    // 生命周期全在 effect 内:StrictMode 重放不会漏掉一份未释放的 GL 资源
+    useEffect(() => {
+        if (!hasHighlight || isTinted) return;
+        const created = new SelectionBoxHighlight(role);
+        signature.invalidate();
+        setHighlight(created);
+        invalidate();
+        return () => {
+            setHighlight(null);
+            created.dispose();
+            invalidate();
+        };
+    }, [hasHighlight, isTinted, role, signature, invalidate]);
+
     // 渲染期直读实体 transform(observer 细粒度订阅);applyTransform 整体替换,引用变化即触发
     const transform = entity.transform;
     // transform 引用替换 → 补帧(demand 模式立即成像)
     useEffect(() => invalidate(), [invalidate, transform]);
-    useEffect(() => {
-        const object = groupRef.current;
-        if (!selected || !object || entity.kind === "light") return;
-        const boundsIndex = new LocalBoundsIndex();
-        boundsIndex.updateLocal(object);
-        const bounds = new Box3();
-        boundsIndex.updateWorld(object, bounds);
-        const helper = new Box3Helper(bounds, HIGHLIGHT_COLOR);
-        helper.userData.helper = true; // 截图时摘除(07 帧内取样)
-        helperRef.current = helper;
-        const snapshot: HelperSnapshot = {
-            positionX: 0,
-            positionY: 0,
-            positionZ: 0,
-            rotationX: 0,
-            rotationY: 0,
-            rotationZ: 0,
-            scaleX: 0,
-            scaleY: 0,
-            scaleZ: 0,
-            childCount: 0,
-            childAtZero: undefined,
-            boundsIndex,
-        };
-        updateHelperSnapshot(object, snapshot);
-        helperSnapshotRef.current = snapshot;
-        scene3.add(helper);
-        const unregisterHelper = capture.helpers.register(helper);
-        invalidate();
-        return () => {
-            helperRef.current = null;
-            helperSnapshotRef.current = null;
-            unregisterHelper();
-            scene3.remove(helper);
-            helper.geometry.dispose();
-            invalidate();
-        };
-    }, [capture, selected, scene3, invalidate, transform, entity.kind]);
 
-    // 播放仅把缓存的局部 bounds 变换到世界坐标；子内容变化才重建索引并 traverse 一次。
     useFrame(() => {
-        const helper = helperRef.current;
         const object = groupRef.current;
-        const snapshot = helperSnapshotRef.current;
-        if (!helper || !object || !snapshot) return;
-        const contentChanged = helperContentChanged(object, snapshot);
-        const transformChanged = helperTransformChanged(object, snapshot);
-        if (!contentChanged && !transformChanged) return;
-        if (contentChanged) snapshot.boundsIndex.updateLocal(object);
-        updateWorldBounds(snapshot.boundsIndex, object, helper);
-        updateHelperSnapshot(object, snapshot);
+        if (!hasHighlight || !object) return;
+        if (!signature.refresh(object)) return;
+        // 内容换过(壳层挂载、归一化、换模型重挂):旧克隆材质已作废,必须重绑辉光目标再判定回退
+        selectionTint.clear(entity.id);
+        setIsTinted(selectionTint.apply(entity.id, role));
+        if (!highlight) return;
+        boundsIndex.updateLocal(object);
+        highlight.applyBounds(boundsIndex.bounds);
     });
 
     const Content = KIND_CONTENT[entity.kind];
@@ -203,6 +184,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
             }}
         >
             <Content entity={entity} />
+            {highlight ? <primitive object={highlight.object3d} ref={registerCaptureHelper} /> : null}
         </group>
     );
 });

@@ -7,6 +7,7 @@ import { measureHeightPerScale, normalizationFor } from "@/actor/ModelNormalizat
 import { boneSpanY, lowestBoneWorldY } from "@/actor/rigMetrics";
 import type { ActorAppearance } from "@/actor/ActorAppearance";
 import type { ActorBuild } from "@/actor/ActorBuild";
+import type { ObjectMaterialRegistry } from "@/core/ObjectMaterialRegistry";
 import type { SceneManager } from "@/core/SceneManager";
 
 interface RestRigMetrics {
@@ -23,14 +24,19 @@ interface RestRigMetrics {
  * 全量重写运行时,预览因此自动作废,不需要额外的失效机制。
  */
 export class ActorRuntime {
-    private readonly appearanceBinder = new ActorAppearanceBinder();
+    private readonly appearanceBinder: ActorAppearanceBinder;
     private readonly buildBinder = new ActorBuildBinder();
     private readonly solver = new BodyBuildSolver();
     private readonly shellsByObject = new Map<string, Group>();
     /** rest 姿态标定量:身高 ÷ 壳缩放、最低骨骼 ÷ 身高。姿势会改变骨骼跨度,故只在挂载时量一次。 */
     private readonly rigMetrics = new Map<string, RestRigMetrics>();
 
-    constructor(private readonly scene: SceneManager) {}
+    constructor(
+        private readonly scene: SceneManager,
+        private readonly materials: ObjectMaterialRegistry,
+    ) {
+        this.appearanceBinder = new ActorAppearanceBinder(materials);
+    }
 
     /** 同一 shell 重复 attach 只做同步:重复克隆材质会泄漏,重复取余量会把当前姿势当成 rest。 */
     attach(objectId: string, shell: Group): void {
@@ -39,7 +45,7 @@ export class ActorRuntime {
             return;
         }
         this.shellsByObject.set(objectId, shell);
-        this.appearanceBinder.attach(objectId, shell);
+        this.materials.attach(objectId, shell);
         this.buildBinder.attach(objectId, shell);
         // 标定必须在任何姿势写入之前取:此时骨架仍是 bind 姿态
         this.recordRigMetrics(objectId, shell);
@@ -49,7 +55,7 @@ export class ActorRuntime {
     detach(objectId: string): void {
         this.shellsByObject.delete(objectId);
         this.rigMetrics.delete(objectId);
-        this.appearanceBinder.detach(objectId);
+        this.materials.detach(objectId);
         this.buildBinder.detach(objectId);
     }
 
@@ -98,9 +104,9 @@ export class ActorRuntime {
         this.rigMetrics.set(objectId, { heightPerScale, clearanceRatio: (lowest - originY) / span });
     }
 
+    /** 材质注册表由装配方(每桌 stores)释放:选中辉光与画像共用同一份,不能由单个写入者销毁。 */
     dispose(): void {
         this.shellsByObject.clear();
-        this.appearanceBinder.dispose();
         this.buildBinder.dispose();
     }
 }

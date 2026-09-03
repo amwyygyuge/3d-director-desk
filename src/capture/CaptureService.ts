@@ -2,6 +2,7 @@ import { PerspectiveCamera, Vector3 } from "three";
 import type { Box3, Camera, Scene, WebGLRenderer } from "three";
 
 import { CaptureHelperRegistry } from "@/capture/CaptureHelperRegistry";
+import type { CaptureMask } from "@/capture/CaptureMask";
 import { DeterministicMp4Exporter } from "@/capture/DeterministicMp4Exporter";
 import type { DeterministicMp4ExportResult } from "@/capture/DeterministicMp4Exporter";
 import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
@@ -45,6 +46,12 @@ export interface ShotFramingPose {
     readonly fov: number | null;
 }
 
+/** 采集让位事务:helper 可见性 + 让位物是否真的收起过(hideHelpers 关时不复原、不补渲)。 */
+interface EditingVisualHandover {
+    readonly transaction: HelperVisibilityTransaction;
+    readonly isHandedOver: boolean;
+}
+
 /**
  * 预演画面输出服务(应用服务):截图与确定性 MP4 参考视频。
  *
@@ -55,8 +62,10 @@ export interface ShotFramingPose {
 export class CaptureService {
     private handles: RenderHandles | null = null;
     private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
-    /** 编辑期辅助物根的运行时注册表；Three 引用不进 MobX，采集可直接迭代。 */
+    /** 编辑期辅助物根的运行时注册表；采集只迭代这些根，不遍历场景树。 */
     readonly helpers = new CaptureHelperRegistry();
+    /** 非 Object3D 的编辑期视觉(选中辉光等)：跟随 hideHelpers 收起与复原。 */
+    private readonly masks = new Set<CaptureMask>();
     private exporter: DeterministicMp4Exporter | null = null;
     private activeVideoExport: Promise<DeterministicMp4ExportResult | null> | null = null;
     private recordedMimeType: string | null = null;
@@ -65,12 +74,19 @@ export class CaptureService {
         this.handles = handles;
     }
 
+    /** 登记一个采集期让位物;返回注销句柄(每桌装配一次,与 helpers 注册对称)。 */
+    registerMask(mask: CaptureMask): () => void {
+        this.masks.add(mask);
+        return () => this.masks.delete(mask);
+    }
+
     detach(): void {
         this.handles = null;
     }
     dispose(): void {
         this.exporter?.requestCancel();
         this.helpers.clear();
+        this.masks.clear();
         this.detach();
     }
 
@@ -167,8 +183,7 @@ export class CaptureService {
     }): Promise<DeterministicMp4ExportResult | null> {
         const handles = this.handles;
         if (!handles || this.exporter) return Promise.resolve(null);
-        const helperVisibility = new HelperVisibilityTransaction();
-        if (options.hideHelpers) helperVisibility.hide(this.helpers);
+        const handover = this.beginEditingVisualHandover({ shouldHide: options.hideHelpers === true });
         const exporter = new DeterministicMp4Exporter({
             canvas: handles.gl.domElement,
             durationSeconds: options.durationSeconds,
@@ -179,7 +194,7 @@ export class CaptureService {
             },
         });
         this.exporter = exporter;
-        const videoExport = this.collectVideoExport({ exporter, helperVisibility });
+        const videoExport = this.collectVideoExport({ exporter, handover });
         this.activeVideoExport = videoExport;
         return videoExport;
     }
@@ -198,23 +213,40 @@ export class CaptureService {
 
     private async collectVideoExport(options: {
         readonly exporter: DeterministicMp4Exporter;
-        readonly helperVisibility: HelperVisibilityTransaction;
+        readonly handover: EditingVisualHandover;
     }): Promise<DeterministicMp4ExportResult | null> {
         try {
             const result = await options.exporter.export();
             this.recordedMimeType = result?.blob.type ?? null;
             return result;
         } finally {
-            this.restoreHelpers(options.helperVisibility);
+            this.restoreEditingVisuals(options.handover);
             this.exporter = null;
             this.activeVideoExport = null;
         }
     }
 
-    private restoreHelpers(transaction: HelperVisibilityTransaction): void {
-        this.currentHelperLifecycle = transaction.restore();
+    /**
+     * 采集让位:Object3D 辅助物按 visible 收起,非 Object3D 的编辑期视觉(选中辉光)由 mask 自报收起。
+     * 截图与视频导出共用这一对进出口,让位口径不会各写一份。
+     */
+    private beginEditingVisualHandover(options: { shouldHide: boolean }): EditingVisualHandover {
+        const transaction = new HelperVisibilityTransaction();
+        if (!options.shouldHide) return { transaction, isHandedOver: false };
+        transaction.hide(this.helpers);
+        for (const mask of this.masks) mask.suppress();
+        return { transaction, isHandedOver: true };
+    }
+
+    private restoreEditingVisuals(handover: EditingVisualHandover): void {
+        if (handover.isHandedOver) {
+            for (const mask of this.masks) mask.restore();
+        }
+        this.currentHelperLifecycle = handover.transaction.restore();
+        const isRepaintNeeded =
+            this.currentHelperLifecycle.hiddenHelperCount > 0 || (handover.isHandedOver && this.masks.size > 0);
         const handles = this.handles;
-        if (!handles || this.currentHelperLifecycle.hiddenHelperCount === 0) return;
+        if (!handles || !isRepaintNeeded) return;
         handles.gl.render(handles.scene, handles.camera);
     }
 
@@ -234,12 +266,10 @@ export class CaptureService {
             });
         }
 
-        const helperVisibility = new HelperVisibilityTransaction();
-        if (options?.hideHelpers !== false) helperVisibility.hide(this.helpers);
+        const handover = this.beginEditingVisualHandover({ shouldHide: options?.hideHelpers !== false });
         gl.render(scene, camera);
         const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
-        this.currentHelperLifecycle = helperVisibility.restore();
-        if (this.currentHelperLifecycle.hiddenHelperCount > 0) gl.render(scene, camera);
+        this.restoreEditingVisuals(handover);
         // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
         return Promise.resolve(dataUrlToBlob(dataUrl));
     }
