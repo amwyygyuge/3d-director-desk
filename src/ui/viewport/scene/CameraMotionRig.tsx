@@ -8,12 +8,14 @@ import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import type { OrbitLike } from "@/navigation/orbit";
 import { useOrbitControls } from "@/navigation/orbit";
+import type { ViewportOrbitController } from "@/camera/ViewportOrbitController";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 /** Runtime owner for temporary Program output poses. Editor camera values are restored on output exit. */
 class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
     private camera: PerspectiveCamera | null = null;
     private controls: OrbitLike | null = null;
+    private viewportOrbit: ViewportOrbitController | null = null;
     private saved = false;
     private positionX = 0;
     private positionY = 0;
@@ -23,21 +25,24 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
     private targetZ = 0;
     private fov = 45;
 
-    attach(camera: PerspectiveCamera, controls: OrbitLike): void {
+    attach(camera: PerspectiveCamera, controls: OrbitLike, viewportOrbit: ViewportOrbitController): void {
         this.camera = camera;
         this.controls = controls;
+        this.viewportOrbit = viewportOrbit;
     }
 
     detach(): void {
         this.restoreFreeDirectorPose();
         this.camera = null;
         this.controls = null;
+        this.viewportOrbit = null;
     }
 
     applyMotion(sample: CameraMotionSample): void {
         const camera = this.camera;
         const controls = this.controls;
-        if (!camera || !controls) return;
+        const viewportOrbit = this.viewportOrbit;
+        if (!camera || !controls || !viewportOrbit) return;
         if (!this.saved) {
             this.positionX = camera.position.x;
             this.positionY = camera.position.y;
@@ -48,8 +53,7 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
             this.fov = camera.fov;
             this.saved = true;
         }
-        // 先排空轨道的阻尼残量再写入采样姿态:顺序反过来会把上一次拖拽的余速叠加到成片画面上
-        controls.update();
+        viewportOrbit.drainDampingResidual();
         camera.position.set(sample.positionX, sample.positionY, sample.positionZ);
         if (camera.fov !== sample.fov) {
             camera.fov = sample.fov;
@@ -77,7 +81,8 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
     restoreFreeDirectorPose(): void {
         const camera = this.camera;
         const controls = this.controls;
-        if (!this.saved || !camera || !controls) return;
+        const viewportOrbit = this.viewportOrbit;
+        if (!this.saved || !camera || !controls || !viewportOrbit) return;
         camera.position.set(this.positionX, this.positionY, this.positionZ);
         if (camera.fov !== this.fov) {
             camera.fov = this.fov;
@@ -85,14 +90,14 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
         }
         controls.target.set(this.targetX, this.targetY, this.targetZ);
         camera.lookAt(this.targetX, this.targetY, this.targetZ);
-        controls.update();
+        viewportOrbit.drainDampingResidual();
         this.saved = false;
     }
 }
 
 /** Program 输出在全屏预览与镜头视角中接管视口相机;退出时精确复原导演姿态。 */
 export const CameraMotionRig = observer(function CameraMotionRig() {
-    const { motionAuthoring, playback } = useDirectorDeskStores();
+    const { motionAuthoring, playback, viewportOrbit } = useDirectorDeskStores();
     const isProgramOutput = motionAuthoring.programOutputActive;
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
@@ -105,7 +110,7 @@ export const CameraMotionRig = observer(function CameraMotionRig() {
             playback.restoreCameraMotion();
             return;
         }
-        sink.attach(camera, controls);
+        sink.attach(camera, controls, viewportOrbit);
         playback.bindMotionSink(sink);
         playback.bindPoseSource(sink);
         playback.sampleCurrent();
@@ -114,7 +119,7 @@ export const CameraMotionRig = observer(function CameraMotionRig() {
             playback.unbindMotionSink(sink);
             sink.detach();
         };
-    }, [camera, controls, isProgramOutput, playback]);
+    }, [camera, controls, isProgramOutput, playback, viewportOrbit]);
 
     return null;
 });

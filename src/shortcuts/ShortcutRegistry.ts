@@ -5,8 +5,8 @@ import type { ShortcutChord } from "@/shortcuts/ShortcutChord";
  * gizmo 在变换已激活(G 挂载坐标轴)时激活——X/Y/Z 轴约束与 Esc 退出变换只在该态生效;
  * shot-selected 只在选中未激活机位时激活;shot 在掌镜时激活;
  * lens 在镜头视角(视口跟随时间轴输出、手势写镜头关键帧)时激活;
- * motion-key 在选中一枚镜头关键帧时激活(它必须排在 selected 之前,否则 Delete 会先命中删除选中);
- * walk-key 在选中一枚走位关键帧时激活,同理排在 selected 之前;
+ * timeline-selection 在时间轴上选中片段/关键帧/走位轨时激活(Esc 清选、Delete 删除),
+ * 它必须排在 selected 之前,否则 Delete 会先命中删除场景选中;
  * draft 在走位草绘模式时激活(只有 Esc 退出,排在 gizmo/selected 的 Esc 之前);
  * presentation 在全屏预览时独占(壳层已隐,编辑类键位一律让位)。
  */
@@ -17,8 +17,7 @@ export type ShortcutScope =
     | "shot-selected"
     | "shot"
     | "lens"
-    | "motion-key"
-    | "walk-key"
+    | "timeline-selection"
     | "draft"
     | "presentation";
 

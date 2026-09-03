@@ -14,6 +14,7 @@ import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
 import { InertHostAdapter, PostMessageAdapter } from "@/host/HostAdapter";
 import type { HostAdapter } from "@/host/HostAdapter";
 import { CaptureService } from "@/capture/CaptureService";
+import { VideoExportSession } from "@/capture/VideoExportSession";
 import { DeskShellPresentation } from "@/ui/shell/DeskShellPresentation";
 import type { DeskShellPresentationInit } from "@/ui/shell/DeskShellPresentation";
 import { FrameRateMonitor } from "@/core/FrameRateMonitor";
@@ -27,6 +28,7 @@ import { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { PoseGroundingService } from "@/pose/PoseGroundingService";
 import { CameraStore } from "@/store/CameraStore";
 import { ViewportCameraAuthority } from "@/camera/ViewportCameraAuthority";
+import { ViewportOrbitController } from "@/camera/ViewportOrbitController";
 import { CameraMotionStore } from "@/store/CameraMotionStore";
 import { KeyframeAuthoringService } from "@/authoring/KeyframeAuthoringService";
 import { SnapResolver } from "@/authoring/SnapResolver";
@@ -38,6 +40,7 @@ import { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 import { PlayheadDisplay } from "@/ui/timeline/PlayheadDisplay";
 import { UiStore } from "@/store/UiStore";
 import { TimelineStore } from "@/store/TimelineStore";
+import { TimelineSelectionStore } from "@/store/TimelineSelectionStore";
 import { PlaybackCoordinator } from "@/timeline/PlaybackCoordinator";
 import { TimeTransport } from "@/time/TimeTransport";
 
@@ -89,10 +92,14 @@ export interface DirectorDeskStores {
     timeline: TimelineStore;
     /** 单条导演运镜路径的每实例可序列化状态容器 */
     motion: CameraMotionStore;
-    /** 运镜编排态(视口模式、预览片段、选中关键帧、轨迹显隐、时间轴窗口) */
+    /** 运镜编排态(视口模式、预览片段、轨迹显隐、时间轴窗口) */
     motionAuthoring: MotionAuthoringStore;
+    /** 时间轴选中态(片段/关键帧/走位轨):底栏、3D 把手与 Delete 的唯一真相 */
+    timelineSelection: TimelineSelectionStore;
     /** 视口相机所有权裁决:导航路径与轨道控制器的启停唯一判据 */
     viewportCamera: ViewportCameraAuthority;
+    /** 轨道控制器唯一写方：托管 Three controls 的启停与阻尼刷新，不进入 observable。 */
+    viewportOrbit: ViewportOrbitController;
     /** 三数据源 → 统一行几何的时间轴视图模型(展开轨与迷你轨共用) */
     timelineLayout: TimelineLayout;
     /** 打点上下文分派(K:镜头关键帧 / 走位关键帧) */
@@ -102,6 +109,8 @@ export interface DirectorDeskStores {
     /** TimelineDoc 与运镜路径 → Three 运行时的唯一回放写方 */
     playback: PlaybackCoordinator;
     capture: CaptureService;
+    /** 视频导出可观察生命周期；录制服务的 MediaRecorder 运行时句柄不进入 Store。 */
+    videoExport: VideoExportSession;
     /** 命令层唯一入口:UI/宿主/AI 的一切写操作经此分发 */
     dispatcher: CommandDispatcher;
     /** 已导入模型资产表(MobX 纯数据) */
@@ -184,6 +193,7 @@ export function createDirectorDeskStores(options?: {
     const layout = new WorkbenchLayoutStore({ gridSizeMeters: options?.gridSizeMeters });
     const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
     const viewportCamera = new ViewportCameraAuthority(camera, motionAuthoring);
+    const viewportOrbit = new ViewportOrbitController();
     const playback = new PlaybackCoordinator(
         timeline,
         scene.manager,
@@ -197,6 +207,8 @@ export function createDirectorDeskStores(options?: {
     const catalog = new AssetCatalog();
     const lifecycle = new DeskLifecycleGuard();
     const documentImports = new DocumentImportService();
+    const playheadDisplay = new PlayheadDisplay(clock);
+    const videoExport = new VideoExportSession(playheadDisplay);
     // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
     void catalog.loadProvider(new BuiltinAssetProvider(), "builtin", lifecycle.signal);
     for (const provider of options?.assetProviders ?? []) {
@@ -211,6 +223,7 @@ export function createDirectorDeskStores(options?: {
         camera,
         clock,
         capture: new CaptureService(),
+        videoExport,
         frameRate: new FrameRateMonitor(),
         dispatcher,
         assets: new AssetLibrary(),
@@ -218,11 +231,13 @@ export function createDirectorDeskStores(options?: {
         ui: new UiStore(),
         layout,
         motionAuthoring,
+        timelineSelection: new TimelineSelectionStore(),
         viewportCamera,
+        viewportOrbit,
         timelineLayout: new TimelineLayout(motion, timeline),
         keyframeAuthoring: new KeyframeAuthoringService(),
         snapResolver: new SnapResolver(),
-        playheadDisplay: new PlayheadDisplay(clock),
+        playheadDisplay,
         shortcuts: new ShortcutRegistry<DirectorDeskStores>(),
         host,
         presentation: new DeskShellPresentation(options?.presentation),

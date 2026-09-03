@@ -44,6 +44,7 @@ export interface FlyNavigationOptions {
  */
 export function useFlyNavigation({ active, onSettled }: FlyNavigationOptions): void {
     const stores = useDirectorDeskStores();
+    const { viewportOrbit } = stores;
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const pressed = useRef(new Set<string>());
@@ -107,6 +108,6 @@ export function useFlyNavigation({ active, onSettled }: FlyNavigationOptions): v
             controls.target.y + TMP_MOVE.y,
             controls.target.z + TMP_MOVE.z,
         );
-        controls.update();
+        viewportOrbit.drainDampingResidual();
     });
 }

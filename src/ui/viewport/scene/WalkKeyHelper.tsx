@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BufferAttribute, BufferGeometry, Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { Group, Mesh, Object3D } from "three";
 
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { AutoHandleSolver, createHandlePair } from "@/motion/AutoHandleSolver";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import { SetTimelineKeyCommand } from "@/command/timelineCommands";
@@ -87,14 +88,14 @@ export interface WalkKeyHelperProps {
  */
 export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframeId }: WalkKeyHelperProps) {
     const stores = useDirectorDeskStores();
-    const { motionAuthoring, timeline } = stores;
+    const { timelineSelection, timeline } = stores;
     const invalidate = useThree((state) => state.invalidate);
     const canvas = useThree((state) => state.gl.domElement);
     const camera = useThree((state) => state.camera);
     const track: TimelineTrack | undefined = timeline.document.track(trackId);
     const keyframe = track?.keyframe(keyframeId);
     const selected =
-        motionAuthoring.selectedWalkTrackId === trackId && motionAuthoring.selectedWalkKeyframeId === keyframeId;
+        timelineSelection.current.walkTrackId === trackId && timelineSelection.current.walkKeyframeId === keyframeId;
     const rootRef = useRef<Group | null>(null);
     const inRef = useRef<Mesh | null>(null);
     const outRef = useRef<Mesh | null>(null);
@@ -182,12 +183,12 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
             if (!target || !rootRef.current) return;
             event.stopPropagation();
             event.nativeEvent.stopPropagation();
-            motionAuthoring.selectWalkKey(trackId, keyframeId);
+            timelineSelection.select(TimelineSelection.walkKey(trackId, keyframeId));
             TMP_DRAG_PLANE.set(new Vector3(0, 1, 0), -rootRef.current.position.y);
             dragRef.current = { kind, target };
             setDragging(true);
         },
-        [keyframeId, motionAuthoring, trackId],
+        [keyframeId, timelineSelection, trackId],
     );
 
     /** 右键 = 交还自动切线:重新变回系统平滑,不必逐轴把数值调回去。 */

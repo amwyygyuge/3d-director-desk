@@ -25,7 +25,7 @@ function currentPose(camera: PerspectiveCamera, controls: OrbitLike): DirectorPo
  * 激活后机位参数被改(FOV 滑杆等)会重跑 effect 重新钉参——activeShot computed 锚定 shots 表该 key,替换即触发。
  */
 export const ShotCameraRig = observer(function ShotCameraRig() {
-    const { camera: cameraStore, viewportCamera } = useDirectorDeskStores();
+    const { camera: cameraStore, viewportCamera, viewportOrbit } = useDirectorDeskStores();
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const invalidate = useThree((state) => state.invalidate);
@@ -56,7 +56,7 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
         if (shot) {
             savedDirectorPose.current ??= currentPose(camera, controls);
             // 轨道启停归 OrbitAuthorityRig;这次 update 只为把进入机位前的阻尼残量一次清零
-            controls.update();
+            viewportOrbit.drainDampingResidual();
             camera.position.set(shot.position[0], shot.position[1], shot.position[2]);
             camera.fov = shot.fov;
             camera.updateProjectionMatrix();
@@ -72,10 +72,10 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
         camera.updateProjectionMatrix();
         camera.lookAt(saved.target[0], saved.target[1], saved.target[2]);
         controls.target.set(saved.target[0], saved.target[1], saved.target[2]);
-        controls.update();
+        viewportOrbit.drainDampingResidual();
         savedDirectorPose.current = null;
         invalidate();
-    }, [shot, camera, controls, invalidate, cameraStore]);
+    }, [shot, camera, controls, invalidate, cameraStore, viewportOrbit]);
 
     // 取景请求只作用于导演相机；机位激活时消费并丢弃，避免退出机位后回放陈旧请求。
     useEffect(() => {
@@ -90,10 +90,10 @@ export const ShotCameraRig = observer(function ShotCameraRig() {
         camera.fov = directorPoseTarget.fov;
         camera.updateProjectionMatrix();
         controls.target.set(directorPoseTarget.target[0], directorPoseTarget.target[1], directorPoseTarget.target[2]);
-        controls.update();
+        viewportOrbit.drainDampingResidual();
         cameraStore.rememberDirectorPose(directorPoseTarget);
         invalidate();
-    }, [activeShotId, camera, cameraStore, controls, directorPoseNonce, directorPoseTarget, invalidate]);
+    }, [activeShotId, camera, cameraStore, controls, directorPoseNonce, directorPoseTarget, invalidate, viewportOrbit]);
 
     return null;
 });

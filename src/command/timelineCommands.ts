@@ -1,8 +1,11 @@
 import { finiteTransform, finiteVec3 } from "@/core/SceneObject";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
+import { EASING, isEasingCurve } from "@/motion/EasingCurve";
+import type { EasingCurve } from "@/motion/EasingCurve";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TimelineTrackInit } from "@/timeline/TimelineTrack";
-import { TransformKeyframe, TIMELINE_EASING } from "@/timeline/TransformKeyframe";
+import { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import {
     GROUNDING_MODE,
     LOCOMOTION_MODE,
@@ -13,7 +16,7 @@ import {
     isStrideMeters,
 } from "@/timeline/TrackPolicies";
 import type { TrackPoliciesInit } from "@/timeline/TrackPolicies";
-import type { TimelineEasing, TransformKeyframeInit } from "@/timeline/TransformKeyframe";
+import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -30,6 +33,10 @@ const TIMELINE_COMMAND_VERSION = "1" as const;
 const TIMELINE_PERMISSION = "timeline:edit";
 const TIMELINE_READ_PERMISSION = "timeline:read";
 const EMPTY_PAYLOAD: Record<string, never> = {};
+const FIRST_KEYFRAME_INDEX = 0;
+const MINIMUM_RETIME_KEYFRAMES = 2;
+const LAST_KEYFRAME_INDEX_OFFSET = 1;
+const TIMELINE_START_SECONDS = 0;
 
 const ISSUE_CODE = {
     PAYLOAD: "timeline.invalid-payload",
@@ -61,7 +68,7 @@ interface RemoveKeyPayload {
 interface SetEasingPayload {
     readonly trackId: string;
     readonly keyframeId: string;
-    readonly easing: TimelineEasing;
+    readonly easing: EasingCurve;
 }
 
 interface SetDurationPayload {
@@ -90,6 +97,11 @@ interface SetTrackPayload {
     /** 缺省 = 沿用该对象既有策略(重画不重置作者调好的朝向/贴地/步幅) */
     readonly policies?: TrackPoliciesInit;
 }
+interface RetimeTrackPayload {
+    readonly trackId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
 
 /** 关键帧形状:单帧写入与整轨替换共用一份(Rule of Two),字段增减不会两处分叉。 */
 const KEYFRAME_SCHEMA: PayloadFieldSchema = {
@@ -98,7 +110,7 @@ const KEYFRAME_SCHEMA: PayloadFieldSchema = {
         id: { type: "string" },
         time: { type: "number" },
         value: TRANSFORM_SCHEMA,
-        easing: { type: "string", enum: Object.values(TIMELINE_EASING) },
+        easing: { type: "string", enum: Object.values(EASING) },
         inHandle: VEC3_SCHEMA,
         outHandle: VEC3_SCHEMA,
         handleMode: { type: "string", enum: Object.values(MOTION_HANDLE_MODE) },
@@ -122,6 +134,14 @@ const SetTimelineTrackContract: PayloadContract = {
         keyframes: { type: "array", items: KEYFRAME_SCHEMA },
     },
     required: ["trackId", "targetId", "keyframes"],
+};
+const RetimeTimelineTrackContract: PayloadContract = {
+    properties: {
+        trackId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+    },
+    required: ["trackId", "startTimeSeconds", "durationSeconds"],
 };
 
 const POLICIES_SCHEMA: PayloadFieldSchema = {
@@ -165,7 +185,7 @@ const SetTimelineKeyEasingContract: PayloadContract = {
     properties: {
         trackId: { type: "string" },
         keyframeId: { type: "string" },
-        easing: { type: "string", enum: Object.values(TIMELINE_EASING) },
+        easing: { type: "string", enum: Object.values(EASING) },
     },
     required: ["trackId", "keyframeId", "easing"],
 };
@@ -186,10 +206,6 @@ function issue(code: string, path: string, message: string): CommandIssue {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isTimelineEasing(value: unknown): value is TimelineEasing {
-    return value === TIMELINE_EASING.LINEAR || value === TIMELINE_EASING.SMOOTH;
 }
 
 /** 空间幻觉围栏:手柄可缺省(auto),但一旦给了就必须是有限三元组。 */
@@ -223,7 +239,7 @@ function keyframePayloadIssue(value: unknown): CommandIssue | null {
     if (!isOptionalHandle(value.inHandle) || !isOptionalHandle(value.outHandle)) {
         return issue(ISSUE_CODE.PAYLOAD, "keyframe.inHandle", "关键帧切线手柄含非法数值");
     }
-    return isTimelineEasing(value.easing)
+    return isEasingCurve(value.easing)
         ? null
         : issue(ISSUE_CODE.PAYLOAD, "keyframe.easing", "关键帧缓动必须为 linear 或 smooth");
 }
@@ -465,6 +481,7 @@ export class RemoveTimelineKeyCommand extends DirectorCommand<RemoveKeyPayload> 
     execute(ctx: DirectorContext): void {
         const targetId = ctx.timeline.document.track(this.payload.trackId)?.targetId;
         ctx.timeline.removeKey(this.payload.trackId, this.payload.keyframeId);
+        ctx.timelineSelection.forget(this.payload.keyframeId);
         if (targetId) ctx.playback.restoreObject(targetId);
         ctx.playback.sampleCurrent();
     }
@@ -503,7 +520,7 @@ export class SetTimelineKeyEasingCommand extends DirectorCommand<SetEasingPayloa
         if (typeof payload.keyframeId !== "string" || payload.keyframeId.length === 0) {
             return [issue(ISSUE_CODE.PAYLOAD, "keyframeId", "关键帧 id 格式无效")];
         }
-        if (!isTimelineEasing(payload.easing)) {
+        if (!isEasingCurve(payload.easing)) {
             return [issue(ISSUE_CODE.PAYLOAD, "easing", "关键帧缓动必须为 linear 或 smooth")];
         }
         const track = ctx.timeline.document.track(payload.trackId);
@@ -658,6 +675,7 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
             const required = lastKeyframeTime(this.payload.keyframes);
             if (required > ctx.timeline.document.duration) ctx.timeline.setDuration(required);
         }
+        convergeWalkSelection(ctx, this.payload);
         ctx.playback.sampleCurrent();
     }
 
@@ -681,6 +699,116 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
             { type: SetTimelineDurationCommand.TYPE, payload: { duration: ctx.timeline.document.duration } },
         ];
     }
+}
+
+/**
+ * 整轨重写后的选中收敛:帧 id 换了一批,旧选中会指向不存在的帧。
+ * 轨道还在就降级为整轨选中(检查器不该因为重画一次就关掉),轨道没了才清空。
+ */
+function convergeWalkSelection(ctx: DirectorContext, payload: SetTrackPayload): void {
+    const selection = ctx.timelineSelection.current;
+    if (selection.walkTrackId !== payload.trackId) return;
+    if (payload.keyframes.length === 0) {
+        ctx.timelineSelection.clear();
+        return;
+    }
+    const selectedKeyframeId = selection.walkKeyframeId;
+    const isKeyframeGone =
+        selectedKeyframeId !== null && !payload.keyframes.some((keyframe) => keyframe.id === selectedKeyframeId);
+    if (isKeyframeGone) ctx.timelineSelection.select(TimelineSelection.walkTrack(payload.trackId));
+}
+
+/**
+ * 整条走位轨保持关键帧相对节奏的仿射重定时。时间轴条只改时域，不改姿态、切线或作者策略。
+ */
+export class RetimeTimelineTrackCommand extends DirectorCommand<RetimeTrackPayload> {
+    static readonly TYPE = "timeline.retime-track";
+    readonly type = RetimeTimelineTrackCommand.TYPE;
+
+    constructor(readonly payload: RetimeTrackPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const payload = this.payload;
+        const hasValidIdentity = isRecord(payload) && typeof payload.trackId === "string" && payload.trackId.length > 0;
+        if (!hasValidIdentity) return [issue(ISSUE_CODE.PAYLOAD, "trackId", "轨道 id 格式无效")];
+        const hasValidRange =
+            Number.isFinite(payload.startTimeSeconds) &&
+            Number.isFinite(payload.durationSeconds) &&
+            payload.startTimeSeconds >= TIMELINE_START_SECONDS &&
+            payload.durationSeconds > TIMELINE_START_SECONDS;
+        if (!hasValidRange) return [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围必须是正的有限秒数")];
+        const track = ctx.timeline.document.track(payload.trackId);
+        if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
+        const hasEditableRange = track.keyframes.length >= MINIMUM_RETIME_KEYFRAMES;
+        const firstKeyframe = track.keyframes[FIRST_KEYFRAME_INDEX];
+        const lastKeyframe = track.keyframes.at(-1);
+        const hasTemporalSpan =
+            hasEditableRange &&
+            firstKeyframe !== undefined &&
+            lastKeyframe !== undefined &&
+            lastKeyframe.time > firstKeyframe.time;
+        if (!hasTemporalSpan) return [issue(ISSUE_CODE.KEY, "trackId", "走位轨至少需要两枚不同时间的关键帧才能重定时")];
+        const endTimeSeconds = payload.startTimeSeconds + payload.durationSeconds;
+        return endTimeSeconds <= ctx.timeline.document.duration
+            ? []
+            : [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围不能超出时间轴时长")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const track = ctx.timeline.document.track(this.payload.trackId);
+        if (!track) return;
+        ctx.timeline.replaceTrack(retimedTrack(track, this.payload));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const track = ctx.timeline.document.track(this.payload.trackId);
+        return track
+            ? [
+                  {
+                      type: SetTimelineTrackCommand.TYPE,
+                      payload: {
+                          trackId: track.id,
+                          targetId: track.targetId,
+                          keyframes: track.keyframes.map((keyframe) => keyframe.toJSON()),
+                          policies: track.policies.toJSON(),
+                      },
+                  },
+              ]
+            : [];
+    }
+}
+
+/** 仿射映射只换时间坐标，保留每枚关键帧承载的姿态与插值意图。 */
+function retimedTrack(track: TimelineTrack, payload: RetimeTrackPayload): TimelineTrack {
+    const firstKeyframe = track.keyframes[FIRST_KEYFRAME_INDEX];
+    const lastKeyframe = track.keyframes.at(-1);
+    if (!firstKeyframe || !lastKeyframe) return track;
+    const sourceDuration = lastKeyframe.time - firstKeyframe.time;
+    if (sourceDuration <= TIMELINE_START_SECONDS) return track;
+    const lastKeyframeIndex = track.keyframes.length - LAST_KEYFRAME_INDEX_OFFSET;
+    const timeScale = payload.durationSeconds / sourceDuration;
+    return new TimelineTrack({
+        id: track.id,
+        targetId: track.targetId,
+        kind: track.kind,
+        keyframes: track.keyframes.map((keyframe, index) => ({
+            ...keyframe.toJSON(),
+            time:
+                index === FIRST_KEYFRAME_INDEX
+                    ? payload.startTimeSeconds
+                    : index === lastKeyframeIndex
+                      ? payload.startTimeSeconds + payload.durationSeconds
+                      : payload.startTimeSeconds + (keyframe.time - firstKeyframe.time) * timeScale,
+        })),
+        policies: track.policies,
+    });
 }
 
 /**
@@ -825,7 +953,7 @@ export function transformKeyCommandFor(ctx: DirectorContext, objectId: string): 
                 id: `${TRANSFORM_KEY_PREFIX}${crypto.randomUUID()}`,
                 time: ctx.clock.time,
                 value: entity.transform,
-                easing: TIMELINE_EASING.LINEAR,
+                easing: EASING.LINEAR,
             },
         },
     };
@@ -883,6 +1011,11 @@ export function registerTimelineCommands(dispatcher: CommandDispatcher): void {
         SetTimelineTrackCommand.TYPE,
         (payload: SetTrackPayload) => new SetTimelineTrackCommand(payload),
         capability(SetTimelineTrackCommand.TYPE, "command", [TIMELINE_PERMISSION], SetTimelineTrackContract),
+    );
+    dispatcher.register(
+        RetimeTimelineTrackCommand.TYPE,
+        (payload: RetimeTrackPayload) => new RetimeTimelineTrackCommand(payload),
+        capability(RetimeTimelineTrackCommand.TYPE, "command", [TIMELINE_PERMISSION], RetimeTimelineTrackContract),
     );
     dispatcher.register(
         SetTimelineKeyCommand.TYPE,

@@ -4,9 +4,10 @@ import type { ReactNode } from "react";
 const DEFAULT_TEXT = {
     PRODUCT_NAME: "3D 导演台",
     CAPTURE_IMAGE_TOOLTIP: "截图",
-    CAPTURE_VIDEO_ARIA: "录制视频",
-    STOP_RECORDING: "停止录制",
-    RECORDING_TOOLTIP_PREFIX: "录制时间轴(0~",
+    CAPTURE_VIDEO_ARIA: "导出成片",
+    DISCARD_RECORDING: "放弃录制",
+    STOP_RECORDING: "停止并交付",
+    RECORDING_TOOLTIP_PREFIX: "导出 Program 输出轨(0~",
     RECORDING_TOOLTIP_SUFFIX: "s)为 WebM",
 } as const;
 
@@ -18,10 +19,12 @@ export interface CaptureActionPresentationInit {
     readonly tooltip?: string;
 }
 
-/** 录制动作文案定制:录制中按钮文案/aria 走 stopLabel */
+/** 视频导出动作定制:HUD 的交付/放弃动作分别走 stopLabel/discardLabel。 */
 export interface CaptureVideoPresentationInit extends CaptureActionPresentationInit {
-    /** 录制中按钮文案/aria;缺省 "停止录制"。仅在 label 已定制时参与可见渲染 */
+    /** 成片交付动作的文案;缺省 "停止并交付"。 */
     readonly stopLabel?: string;
+    /** 丢弃当前录制的动作文案;缺省 "放弃录制"。 */
+    readonly discardLabel?: string;
 }
 
 /** 工具栏外部接入按钮(值对象入参);仅直嵌形态可用——ReactNode/回调过不了 postMessage */
@@ -86,6 +89,7 @@ interface CaptureActionPresentation {
 interface CaptureVideoPresentation {
     readonly label: string | null;
     readonly ariaLabel: string;
+    readonly discardLabel: string;
     readonly stopLabel: string;
 }
 
@@ -127,6 +131,7 @@ export class DeskShellPresentation {
         this.captureVideo = {
             label: videoLabel,
             ariaLabel: videoLabel ?? DEFAULT_TEXT.CAPTURE_VIDEO_ARIA,
+            discardLabel: normalizeOptionalText(init?.captureVideo?.discardLabel) ?? DEFAULT_TEXT.DISCARD_RECORDING,
             stopLabel: normalizeOptionalText(init?.captureVideo?.stopLabel) ?? DEFAULT_TEXT.STOP_RECORDING,
         };
         this.customVideoTooltip = normalizeOptionalText(init?.captureVideo?.tooltip);

@@ -1,6 +1,10 @@
 const MINIMUM_VISIBLE_SECONDS = 0.25;
 const RATIO_MIN = 0;
 const RATIO_MAX = 1;
+/** 缩放到某段时两侧留白比例:贴边的片段两端看不清邻接关系 */
+const RANGE_PADDING_RATIO = 0.1;
+/** 翻页跟随时播放头落在窗口内的位置:留出前瞻余量,别让它贴着右缘走 */
+const FOLLOW_LEAD_RATIO = 0.1;
 
 export interface TimelineViewportInit {
     readonly startSeconds: number;
@@ -61,6 +65,31 @@ export class TimelineViewport {
             startSeconds: this.startSeconds + deltaSeconds,
             visibleSeconds: this.visibleSeconds,
         }).clampedTo(durationSeconds);
+    }
+
+    /** 缩放到指定时段(两侧留白);缩放到全长直接用 full()。 */
+    zoomedToRange(startTimeSeconds: number, endTimeSeconds: number, durationSeconds: number): TimelineViewport {
+        const span = Math.max(endTimeSeconds - startTimeSeconds, MINIMUM_VISIBLE_SECONDS);
+        const padding = span * RANGE_PADDING_RATIO;
+        return new TimelineViewport({
+            startSeconds: startTimeSeconds - padding,
+            visibleSeconds: span + padding * 2,
+        }).clampedTo(durationSeconds);
+    }
+
+    /**
+     * 播放头跟随(翻页式,非居中滚动)。
+     *
+     * 播放头仍在窗口内时**返回自身**:调用方据此跳过写入,播放期才不会每帧替换 observable 窗口。
+     * 居中跟随会让轨道每帧平移,与画布渲染叠加;翻页只在越界的那一帧动一次。
+     */
+    followingPlayhead(timeSeconds: number, durationSeconds: number): TimelineViewport {
+        const isBeyondEnd = timeSeconds > this.endSeconds;
+        const isBeforeStart = timeSeconds < this.startSeconds;
+        if (!isBeyondEnd && !isBeforeStart) return this;
+        const lead = this.visibleSeconds * FOLLOW_LEAD_RATIO;
+        const startSeconds = isBeyondEnd ? timeSeconds - lead : timeSeconds - (this.visibleSeconds - lead);
+        return new TimelineViewport({ startSeconds, visibleSeconds: this.visibleSeconds }).clampedTo(durationSeconds);
     }
 
     /** 窗口不得越出工程时长:时长变短时窗口自动收敛。 */

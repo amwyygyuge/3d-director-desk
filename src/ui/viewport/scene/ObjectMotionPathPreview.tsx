@@ -6,6 +6,7 @@ import { BufferAttribute, BufferGeometry, Color } from "three";
 import type { Mesh } from "three";
 
 import { createPositionSample } from "@/motion/MotionTrajectory";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import { createTransformSample, evaluateTransformTrack } from "@/timeline/TimelineSampler";
 import type { TransformSample } from "@/timeline/TimelineSampler";
@@ -101,7 +102,7 @@ interface ObjectTrackPathProps {
  * Three ref,播放期零 DOM 变更、零调和。
  */
 const ObjectTrackPath = observer(function ObjectTrackPath({ trackId }: ObjectTrackPathProps) {
-    const { timeline, clock, motionAuthoring, selection } = useDirectorDeskStores();
+    const { timeline, clock, timelineSelection, selection } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const markerRef = useRef<Mesh>(null);
     const track = timeline.document.track(trackId);
@@ -143,7 +144,7 @@ const ObjectTrackPath = observer(function ObjectTrackPath({ trackId }: ObjectTra
             onPointerDown={(event) => {
                 event.stopPropagation();
                 selection.clear();
-                motionAuthoring.selectWalkTrack(track.id);
+                timelineSelection.select(TimelineSelection.walkTrack(track.id));
             }}
             userData={{ helper: true, timelineTrackId: track.id }}
         >

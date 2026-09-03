@@ -79,8 +79,8 @@ export { MotionTrajectory, createPositionSample } from "@/motion/MotionTrajector
 export type { MotionPositionSample } from "@/motion/MotionTrajectory";
 export { CameraKey, cameraKeyFrom } from "@/camera/CameraKey";
 export type { CameraKeyInit, CameraKeyJSON, CameraKeyPose } from "@/camera/CameraKey";
-export { CAMERA_MOTION_EASING, easedProgress, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
-export type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
+export { EASING, EASING_LABEL, easedProgress, inverseEasedProgress, isEasingCurve } from "@/motion/EasingCurve";
+export type { EasingCurve } from "@/motion/EasingCurve";
 export { CameraMotionClip, createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
 export type { CameraMotionClipInit, CameraMotionClipJSON, CameraMotionSample } from "@/camera/CameraMotionClip";
 export { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
@@ -92,6 +92,15 @@ export { TimelineViewport } from "@/authoring/TimelineViewport";
 export type { TimelineViewportInit } from "@/authoring/TimelineViewport";
 export { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND, TIMELINE_ROW_KIND, TimelineLayout } from "@/authoring/TimelineLayout";
 export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/TimelineLayout";
+export { TIMELINE_SELECTION_KIND, TimelineSelection } from "@/authoring/TimelineSelection";
+export type { TimelineSelectionKind } from "@/authoring/TimelineSelection";
+export { TIMELINE_DRAG_KIND, TimelineClipDragResolver } from "@/authoring/TimelineClipDrag";
+export type {
+    TimelineClipDragResolveOptions,
+    TimelineClipDragTransformOptions,
+    TimelineClipRange,
+    TimelineDragKind,
+} from "@/authoring/TimelineClipDrag";
 export { SNAP_THRESHOLD_PX, SnapResolver } from "@/authoring/SnapResolver";
 export type { SnapCandidates, SnapRequest } from "@/authoring/SnapResolver";
 export { KeyframeAuthoringService, isCommandIssue } from "@/authoring/KeyframeAuthoringService";
@@ -101,8 +110,11 @@ export type { WalkDraftInput } from "@/authoring/WalkDraftCompiler";
 export {
     DEFAULT_PRESET_DURATION_SECONDS,
     isOrbitDirection,
+    MOTION_DURATION_OPTIONS_SECONDS,
     MOTION_MOVE,
     MOTION_MOVE_LABEL,
+    MOTION_PROGRAM_RANGE_DECIMALS,
+    motionProgramRangeFor,
     MotionPresetCompiler,
     ORBIT_DIRECTION,
     ORBIT_MAX_DEGREES,
@@ -111,6 +123,8 @@ export type {
     MotionMove,
     MotionPresetContext,
     MotionPresetRequest,
+    MotionProgramRange,
+    MotionProgramRangeOptions,
     OrbitDirection,
 } from "@/authoring/MotionPresetCompiler";
 export { MotionAuthoringStore, VIEW_MODE } from "@/store/MotionAuthoringStore";
@@ -128,12 +142,21 @@ export type {
 export { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 export type { CameraMotionSink } from "@/camera/CameraMotionSampler";
 export type { DirectorPose } from "@/store/CameraStore";
-export { CaptureService } from "@/capture/CaptureService";
-export type { CaptureHelperLifecycle, FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { CaptureService, VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
+export type { FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
+export type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
+export { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
+export type { CaptureProduct, CaptureProductKind } from "@/capture/CaptureProduct";
+export { VIDEO_EXPORT_SOURCE, VIDEO_EXPORT_STATE, VideoExportSession } from "@/capture/VideoExportSession";
+export type { PlayheadSource, VideoExportSource, VideoExportState } from "@/capture/VideoExportSession";
+export { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
+export type { VideoExportSourcePolicy, VideoExportStage } from "@/capture/VideoExportSourcePolicy";
 export {
-    CaptureFrameCommand,
-    CaptureVideoCommand,
     CancelVideoCaptureCommand,
+    CaptureFrameCommand,
+    CaptureStopVideoCommand,
+    CaptureVideoCommand,
     registerCaptureCommands,
 } from "@/command/captureCommands";
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "@/command/documentCommands";
@@ -197,6 +220,7 @@ export {
     AddTimelineKeyCommand,
     MoveTimelineKeyCommand,
     RemoveTimelineKeyCommand,
+    RetimeTimelineTrackCommand,
     RestoreTimelineTracksCommand,
     SetTimelineDurationCommand,
     SetTimelineKeyEasingCommand,
@@ -286,6 +310,7 @@ export { SelectionStore } from "@/store/SelectionStore";
 export { GIZMO_MODE, UiStore } from "@/store/UiStore";
 export type { CaptureMeta, VideoMeta } from "@/store/UiStore";
 export { TimelineStore } from "@/store/TimelineStore";
+export { TimelineSelectionStore } from "@/store/TimelineSelectionStore";
 export {
     GRID_SIZE,
     isGridSizeValid,
@@ -317,8 +342,8 @@ export { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 export { registerKeyframeCodec, keyframeCodecFor } from "@/timeline/keyframeCodecs";
 export type { KeyframeCodec } from "@/timeline/keyframeCodecs";
 export type { TimelineTrackInit, TimelineTrackKind } from "@/timeline/TimelineTrack";
-export { TransformKeyframe, TIMELINE_EASING } from "@/timeline/TransformKeyframe";
-export type { TimelineEasing, TransformKeyframeInit } from "@/timeline/TransformKeyframe";
+export { TransformKeyframe } from "@/timeline/TransformKeyframe";
+export type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 export { buildTransformTrajectory } from "@/timeline/transformTrajectory";
 export {
     TrackPolicies,

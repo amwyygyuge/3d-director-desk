@@ -1,6 +1,6 @@
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
-import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import MenuIcon from "@mui/icons-material/Menu";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
 import PolylineIcon from "@mui/icons-material/Polyline";
@@ -9,7 +9,6 @@ import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RedoIcon from "@mui/icons-material/Redo";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
-import StopIcon from "@mui/icons-material/Stop";
 import UndoIcon from "@mui/icons-material/Undo";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
@@ -34,6 +33,7 @@ import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "@/store/UiStore";
 import type { GizmoMode } from "@/store/UiStore";
 import { GRID_SIZE, RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
+import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { ToolbarExtension } from "@/ui/shell/DeskShellPresentation";
@@ -43,16 +43,17 @@ import { CHROME } from "@/ui/shell/theme";
 
 const COMMAND_TYPE = {
     CAPTURE_VIDEO: "capture.video",
-    CAPTURE_VIDEO_CANCEL: "capture.video-cancel",
     EXPORT_DOCUMENT: "desk.export-document",
     IMPORT_DOCUMENT: "desk.import-document",
     REMOVE_OBJECT: "object.remove",
 } as const;
 
 const TEXT = {
+    CAPTURE_PROGRAM: "导出成片",
+    CAPTURE_VIEWPORT: "录制当前视角（含网格与辅助物）",
+    CAPTURE_VIEWPORT_MENU: "选择录制来源",
     CLEAR_SCENE: "清空场景",
     DOCUMENT_FILE_INVALID: "工程文件不是合法 JSON",
-    DOWNLOAD_VIDEO: "下载录制视频",
     EXPORT_DOCUMENT: "导出工程",
     FULLSCREEN_PREVIEW: "全屏预览",
     GIZMO_TOOL: "变换工具",
@@ -75,7 +76,7 @@ const TEXT = {
 } as const;
 const DOCUMENT_MIME_TYPE = "application/json";
 const FILE_ACCEPT = { DOCUMENT: `${DOCUMENT_MIME_TYPE},.json`, MODEL: ".glb,.gltf,.fbx,.obj" } as const;
-const DOWNLOAD = { DOCUMENT: "director-desk-scene.json", VIDEO: "director-desk-preview.webm" } as const;
+const DOWNLOAD = { DOCUMENT: "director-desk-scene.json" } as const;
 const MENU_ID = "project-pill-menu";
 const BUTTON_VARIANT = { CONTAINED: "contained", TEXT: "text" } as const;
 const ICON_BUTTON_COLOR = { DEFAULT: "default", ERROR: "error" } as const;
@@ -548,31 +549,56 @@ interface PillActionButtonProps {
 }
 
 const CaptureControls = observer(function CaptureControls() {
+    const [sourceMenuAnchor, setSourceMenuAnchor] = useState<HTMLElement | null>(null);
     const stores = useDirectorDeskStores();
-    const { presentation, timeline, ui } = stores;
-    const recording = ui.videoRecording;
+    const { presentation, timeline, videoExport } = stores;
     const image = presentation.captureImage;
     const video = presentation.captureVideo;
-    // 可见文案仅在宿主定制 label 后出现;录制中切换为 stopLabel,未定制时保持纯图标
-    const videoLabel = video.label !== null && recording ? video.stopLabel : video.label;
+    const isRecording = videoExport.isRecording;
+    const videoTooltip = presentation.captureVideoTooltip(timeline.document.duration);
+    const closeSourceMenu = (): void => setSourceMenuAnchor(null);
+
     return (
         <>
             <PillActionButton
                 ariaLabel={image.ariaLabel}
+                disabled={isRecording}
                 icon={<PhotoCameraIcon fontSize={COMPACT_SIZE} />}
                 label={image.label}
                 onClick={() => requestFrameCapture({ context: stores, dispatcher: stores.dispatcher })}
                 tooltip={image.tooltip}
             />
             <PillActionButton
-                ariaLabel={recording ? video.stopLabel : video.ariaLabel}
-                color={recording ? ICON_BUTTON_COLOR.ERROR : ICON_BUTTON_COLOR.DEFAULT}
-                icon={recording ? <StopIcon fontSize={COMPACT_SIZE} /> : <VideocamIcon fontSize={COMPACT_SIZE} />}
-                label={videoLabel}
-                onClick={() => toggleRecording(stores)}
-                tooltip={presentation.captureVideoTooltip(timeline.document.duration)}
+                ariaLabel={video.ariaLabel}
+                disabled={isRecording}
+                icon={<VideocamIcon fontSize={COMPACT_SIZE} />}
+                label={video.label ?? TEXT.CAPTURE_PROGRAM}
+                onClick={() => startVideoCapture({ source: VIDEO_EXPORT_SOURCE.PROGRAM, stores })}
+                tooltip={videoTooltip}
             />
-            {ui.lastVideoUrl ? <VideoDownloadButton url={ui.lastVideoUrl} /> : null}
+            <Tooltip title={TEXT.CAPTURE_VIEWPORT_MENU}>
+                <span>
+                    <IconButton
+                        aria-label={TEXT.CAPTURE_VIEWPORT_MENU}
+                        disabled={isRecording}
+                        onClick={(event) => setSourceMenuAnchor(event.currentTarget)}
+                        size={COMPACT_SIZE}
+                    >
+                        <ArrowDropDownIcon fontSize={COMPACT_SIZE} />
+                    </IconButton>
+                </span>
+            </Tooltip>
+            <Menu anchorEl={sourceMenuAnchor} onClose={closeSourceMenu} open={sourceMenuAnchor !== null}>
+                <MenuItem
+                    disabled={isRecording}
+                    onClick={() => {
+                        startVideoCapture({ source: VIDEO_EXPORT_SOURCE.VIEWPORT, stores });
+                        closeSourceMenu();
+                    }}
+                >
+                    {TEXT.CAPTURE_VIEWPORT}
+                </MenuItem>
+            </Menu>
         </>
     );
 });
@@ -610,19 +636,14 @@ const TrailingExtensionButtons = observer(function TrailingExtensionButtons() {
     return renderExtensionButtons(presentation.trailingExtensions);
 });
 
-const VideoDownloadButton = observer(function VideoDownloadButton({ url }: { readonly url: string }) {
-    return (
-        <Tooltip title={TEXT.DOWNLOAD_VIDEO}>
-            <IconButton aria-label={TEXT.DOWNLOAD_VIDEO} download={DOWNLOAD.VIDEO} href={url} size={COMPACT_SIZE}>
-                <FileDownloadIcon fontSize={COMPACT_SIZE} />
-            </IconButton>
-        </Tooltip>
-    );
-});
-
-function toggleRecording(stores: DirectorDeskStores): void {
-    const type = stores.ui.videoRecording ? COMMAND_TYPE.CAPTURE_VIDEO_CANCEL : COMMAND_TYPE.CAPTURE_VIDEO;
-    reportCommandFailure(stores, stores.dispatcher.dispatch({ type, payload: {} }, stores));
+function startVideoCapture({
+    source,
+    stores,
+}: {
+    readonly source: (typeof VIDEO_EXPORT_SOURCE)[keyof typeof VIDEO_EXPORT_SOURCE];
+    readonly stores: DirectorDeskStores;
+}): void {
+    reportCommandFailure(stores, stores.dispatcher.dispatch({ type: COMMAND_TYPE.CAPTURE_VIDEO, payload: { source } }, stores));
 }
 
 const PresentationControl = observer(function PresentationControl() {

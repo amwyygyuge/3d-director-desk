@@ -1,13 +1,13 @@
 import type { Object3D } from "three";
 
 import type { Transform } from "@/core/SceneObject";
+import { easedProgress } from "@/motion/EasingCurve";
 import { createPositionSample } from "@/motion/MotionTrajectory";
 import type { TimelineDoc } from "@/timeline/TimelineDoc";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import { GROUND_HEIGHT_METERS } from "@/timeline/TrackPolicies";
 import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
-import { TIMELINE_EASING } from "@/timeline/TransformKeyframe";
 
 /** 曲线采样中转缓冲:求值同步且无重入,模块级复用即可维持零分配。 */
 const POSITION_SAMPLE = createPositionSample();
@@ -160,10 +160,10 @@ export function evaluateTransformTrack(track: TimelineTrack, timeSeconds: number
     if (!left || !right) return false;
     const span = right.time - left.time;
     const progress = span === 0 ? 0 : (timeSeconds - left.time) / span;
-    const easedProgress = right.easing === TIMELINE_EASING.SMOOTH ? progress * progress * (3 - 2 * progress) : progress;
-    interpolateRotationScale(left, right, easedProgress, output);
-    samplePosition(track, upperIndex - 1, left, right, easedProgress, output);
-    applyPolicies({ track, segmentIndex: upperIndex - 1, localProgress: easedProgress, output });
+    const eased = easedProgress(right.easing, progress);
+    interpolateRotationScale(left, right, eased, output);
+    samplePosition(track, upperIndex - 1, left, right, eased, output);
+    applyPolicies({ track, segmentIndex: upperIndex - 1, localProgress: eased, output });
     return true;
 }
 

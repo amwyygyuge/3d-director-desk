@@ -44,12 +44,21 @@ function useDebouncedPoseCommit(onCommit: (() => void) | undefined, active: bool
     }, []);
 }
 
+function isPrimaryDrag(event: PointerEvent): boolean {
+    return event.isPrimary && event.button === PRIMARY_MOUSE_BUTTON;
+}
+
+function releasePointerCapture(canvas: HTMLCanvasElement, pointerId: number): void {
+    if (!canvas.hasPointerCapture(pointerId)) return;
+    canvas.releasePointerCapture(pointerId);
+}
+
 function useViewportPointerPoseGesture(active: boolean, scheduleCommit: () => void): void {
     const camera = useThree((state) => state.camera);
     const controls = useOrbitControls();
     const invalidate = useThree((state) => state.invalidate);
     const canvas = useThree((state) => state.gl.domElement);
-    const dragging = useRef(false);
+    const activePointerId = useRef<number | null>(null);
 
     useEffect(() => {
         if (!active || !controls || !(camera instanceof PerspectiveCamera)) return;
@@ -77,15 +86,21 @@ function useViewportPointerPoseGesture(active: boolean, scheduleCommit: () => vo
             invalidate();
             scheduleCommit();
         };
-        const onMouseMove = (event: MouseEvent): void => {
-            if (dragging.current) turn(event.movementX, event.movementY);
+        const onPointerDown = (event: PointerEvent): void => {
+            if (!isPrimaryDrag(event)) return;
+            canvas.setPointerCapture(event.pointerId);
+            activePointerId.current = event.pointerId;
+            event.preventDefault();
         };
-        const onMouseDown = (event: MouseEvent): void => {
-            if (event.button !== PRIMARY_MOUSE_BUTTON || event.target !== canvas) return;
-            dragging.current = true;
+        const onPointerMove = (event: PointerEvent): void => {
+            if (activePointerId.current !== event.pointerId) return;
+            turn(event.movementX, event.movementY);
+            event.preventDefault();
         };
-        const onMouseUp = (): void => {
-            dragging.current = false;
+        const onPointerEnd = (event: PointerEvent): void => {
+            if (activePointerId.current !== event.pointerId) return;
+            releasePointerCapture(canvas, event.pointerId);
+            activePointerId.current = null;
         };
         const onWheel = (event: WheelEvent): void => {
             event.preventDefault();
@@ -94,15 +109,18 @@ function useViewportPointerPoseGesture(active: boolean, scheduleCommit: () => vo
             invalidate();
             scheduleCommit();
         };
-        window.addEventListener("mousemove", onMouseMove);
-        canvas.addEventListener("mousedown", onMouseDown);
-        window.addEventListener("mouseup", onMouseUp);
+        canvas.addEventListener("pointerdown", onPointerDown);
+        canvas.addEventListener("pointermove", onPointerMove);
+        canvas.addEventListener("pointerup", onPointerEnd);
+        canvas.addEventListener("pointercancel", onPointerEnd);
         canvas.addEventListener("wheel", onWheel, { passive: false });
         return () => {
-            window.removeEventListener("mousemove", onMouseMove);
-            canvas.removeEventListener("mousedown", onMouseDown);
-            window.removeEventListener("mouseup", onMouseUp);
+            canvas.removeEventListener("pointerdown", onPointerDown);
+            canvas.removeEventListener("pointermove", onPointerMove);
+            canvas.removeEventListener("pointerup", onPointerEnd);
+            canvas.removeEventListener("pointercancel", onPointerEnd);
             canvas.removeEventListener("wheel", onWheel);
+            activePointerId.current = null;
         };
     }, [active, camera, canvas, controls, invalidate, scheduleCommit]);
 }

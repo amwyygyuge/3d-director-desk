@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import { TimelineViewport } from "@/authoring/TimelineViewport";
+import { DEFAULT_PRESET_DURATION_SECONDS } from "@/authoring/MotionPresetCompiler";
 import type { ShotSize } from "@/camera/CameraShot";
 import type { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 
@@ -22,14 +23,13 @@ export interface MotionAuthoringStoreOptions {
  * 运镜编排态(每桌一套,纯 UI 态:不入工程文档、不进撤销栈)。
  *
  * 与 WorkbenchLayoutStore 的边界:那边管壳层的空间编排(左栏/时间线/预览),
- * 这边管「作者正在编排哪段运镜」——视口模式、预览片段、选中关键帧、轨迹显隐、吸附与时间轴窗口。
+ * 这边管「作者正在编排哪段运镜」——视口模式、预览片段、轨迹显隐、吸附与时间轴窗口;
+ * 「时间轴上选中的是谁」归 TimelineSelectionStore,不在这里留第二份。
  */
 export class MotionAuthoringStore {
     viewMode: ViewMode = VIEW_MODE.DIRECTOR;
     /** 尚未切入 Program 的片段也要能预览:采样器据此回退取景 */
     previewClipId: string | null = null;
-    selectedClipId: string | null = null;
-    selectedKeyId: string | null = null;
     /** 轨迹辅助物开关:与壳层显隐解耦,掌镜/镜头视角下仍可见;导演台是编排工具,默认开 */
     pathVisible: boolean;
     snapEnabled = true;
@@ -38,9 +38,7 @@ export class MotionAuthoringStore {
      * 不做弹簧键——WASD+Space/Shift 已被飞行导航持续占用,任何裸字母弹簧键都会在飞行中误触发。
      */
     draftActive = false;
-    /** 选中的走位关键帧(轨道 id + 帧 id):把手渲染、Delete 归属与检查器都读它 */
-    selectedWalkTrackId: string | null = null;
-    selectedWalkKeyframeId: string | null = null;
+
     /**
      * 被摄目标(场景对象 id):运镜预设的取景中心与新片段的跟拍绑定共用它。
      * 它不能从「当前选中」推导——选中机位时右栏才显示运镜,此时选中的就不可能是模型。
@@ -51,6 +49,8 @@ export class MotionAuthoringStore {
      * 与 subjectId 同住编排态——面板开合是壳层行为,不该把作者的编排选择清零。
      */
     landingShotSize: ShotSize | null = null;
+    /** 预设时长与目标/落幅同住编排态——面板开合不该把作者的选择清零。 */
+    presetDurationSeconds = DEFAULT_PRESET_DURATION_SECONDS;
     /** null = 未缩放,窗口跟随工程时长;一旦作者缩放/平移即固化为显式窗口 */
     timelineViewport: TimelineViewport | null = null;
 
@@ -86,22 +86,10 @@ export class MotionAuthoringStore {
         this.previewClipId = clipId;
     }
 
-    selectClip(clipId: string | null): void {
-        this.selectedClipId = clipId;
-        this.selectedKeyId = null;
-    }
-
-    selectKey(clipId: string, keyId: string | null): void {
-        this.selectedClipId = clipId;
-        this.selectedKeyId = keyId;
-    }
-
-    /** 片段被删除后收敛编排态,避免 UI 留下失效引用。 */
+    /** 片段被删除后收敛预览态,避免采样器指向已消失的片段;选中态的收敛归 TimelineSelectionStore。 */
     forgetClip(clipId: string): void {
-        this.previewClipId = this.previewClipId === clipId ? null : this.previewClipId;
-        if (this.selectedClipId !== clipId) return;
-        this.selectedClipId = null;
-        this.selectedKeyId = null;
+        if (this.previewClipId !== clipId) return;
+        this.previewClipId = null;
     }
 
     setPathVisible(visible: boolean): void {
@@ -115,21 +103,6 @@ export class MotionAuthoringStore {
     setDraftActive(active: boolean): void {
         this.draftActive = active;
     }
-    /** 选中整条走位轨:右栏编辑轨级策略或删除轨;关键帧保持未选，避免 Delete 误删一枚帧。 */
-    selectWalkTrack(trackId: string | null): void {
-        this.selectWalkKey(trackId, null);
-    }
-
-    selectWalkKey(trackId: string | null, keyframeId: string | null): void {
-        this.selectedWalkTrackId = trackId;
-        this.selectedWalkKeyframeId = keyframeId;
-    }
-
-    /** 轨道被整体重画/清空后收敛选中态,避免把手指向已消失的帧。 */
-    forgetWalkTrack(trackId: string): void {
-        if (this.selectedWalkTrackId !== trackId) return;
-        this.selectWalkKey(null, null);
-    }
 
     setSubject(objectId: string | null): void {
         this.subjectId = objectId;
@@ -137,6 +110,10 @@ export class MotionAuthoringStore {
 
     setLandingShotSize(shotSize: ShotSize | null): void {
         this.landingShotSize = shotSize;
+    }
+
+    setPresetDurationSeconds(seconds: number): void {
+        this.presetDurationSeconds = seconds;
     }
 
     setTimelineViewport(viewport: TimelineViewport): void {

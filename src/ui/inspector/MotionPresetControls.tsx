@@ -5,9 +5,15 @@ import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
-import { DEFAULT_PRESET_DURATION_SECONDS, MOTION_MOVE, MOTION_MOVE_LABEL } from "@/authoring/MotionPresetCompiler";
+import {
+    MOTION_DURATION_OPTIONS_SECONDS,
+    MOTION_MOVE,
+    MOTION_MOVE_LABEL,
+    MOTION_PROGRAM_RANGE_DECIMALS,
+    motionProgramRangeFor,
+} from "@/authoring/MotionPresetCompiler";
 import type { MotionMove } from "@/authoring/MotionPresetCompiler";
-import { CAMERA_MOTION_EASING } from "@/camera/CameraMotionEasing";
+import { EASING } from "@/motion/EasingCurve";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
@@ -61,13 +67,14 @@ function landingPreviewFor(
  * 机位面板里的运镜预设区。
  *
  * 预设天然与一台机位绑定(从它的当前姿态推导落幅),故住在机位的情境面板而非左栏全局面板。
- * 被摄目标与落幅景别都住在编排 Store:面板开合属壳层行为,不该把作者的编排选择清零。
+ * 被摄目标、落幅景别与预设时长都住在编排 Store:面板开合属壳层行为,不该把作者的编排选择清零。
  */
 export const MotionPresetControls = observer(function MotionPresetControls({ cameraId }: { cameraId: string }) {
     const stores = useDirectorDeskStores();
     const { dispatcher, motionAuthoring, playheadDisplay, scene, timeline } = stores;
     const playhead = Math.min(playheadDisplay.value, timeline.document.duration);
-    const durationSeconds = Math.min(DEFAULT_PRESET_DURATION_SECONDS, timeline.document.duration - playhead);
+    const durationSeconds = Math.min(motionAuthoring.presetDurationSeconds, timeline.document.duration - playhead);
+    const programRange = motionProgramRangeFor({ startTimeSeconds: playhead, durationSeconds });
     const subjects = scene.manager.list().filter((entity) => entity.kind === "model");
     const subjectId = motionAuthoring.subjectId;
     const hasSubject = subjectId !== null && scene.manager.getEntity(subjectId) !== undefined;
@@ -88,7 +95,7 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                     move,
                     ...(hasSubject ? { subjectId } : {}),
                     ...(landing ? { shotSize: landingShotSize } : {}),
-                    easing: CAMERA_MOTION_EASING.SMOOTH,
+                    easing: EASING.SMOOTH,
                 },
             },
             stores,
@@ -156,6 +163,23 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                     </Button>
                 </>
             )}
+            <Select
+                size="small"
+                value={motionAuthoring.presetDurationSeconds}
+                onChange={(event) => motionAuthoring.setPresetDurationSeconds(Number(event.target.value))}
+                aria-label="运镜时长"
+            >
+                {MOTION_DURATION_OPTIONS_SECONDS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                        时长 {option} 秒
+                    </MenuItem>
+                ))}
+            </Select>
+            <Typography variant="caption" color="text.secondary">
+                创建后自动切入 Program 成片输出轨，将占用成片{" "}
+                {programRange.startTimeSeconds.toFixed(MOTION_PROGRAM_RANGE_DECIMALS)}s –{" "}
+                {programRange.endTimeSeconds.toFixed(MOTION_PROGRAM_RANGE_DECIMALS)}s。
+            </Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: PRESET_GRID_COLUMNS, gap: FIELD_GAP }}>
                 {MOTION_MOVES.map((move) => (
                     <Button

@@ -253,7 +253,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
 
     execute(ctx: DirectorContext): void {
         ctx.playback.restoreObject(this.payload.id);
-        ctx.timeline.removeObjectTracks(this.payload.id);
+        for (const track of ctx.timeline.removeObjectTracks(this.payload.id)) ctx.timelineSelection.forget(track.id);
         ctx.binder.unmount(this.payload.id);
         ctx.scene.removeObject(this.payload.id);
         ctx.selection.remove(this.payload.id);

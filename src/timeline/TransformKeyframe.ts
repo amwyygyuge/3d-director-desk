@@ -1,13 +1,7 @@
 import type { Transform, Vec3 } from "@/core/SceneObject";
 import { copyVec3, MOTION_HANDLE_MODE } from "@/motion/MotionKey";
+import type { EasingCurve } from "@/motion/EasingCurve";
 import type { MotionHandleMode } from "@/motion/MotionKey";
-
-export const TIMELINE_EASING = {
-    LINEAR: "linear",
-    SMOOTH: "smooth",
-} as const;
-
-export type TimelineEasing = (typeof TIMELINE_EASING)[keyof typeof TIMELINE_EASING];
 
 const ZERO_HANDLE: Vec3 = [0, 0, 0];
 
@@ -15,7 +9,7 @@ export interface TransformKeyframeInit {
     readonly id: string;
     readonly time: number;
     readonly value: Transform;
-    readonly easing: TimelineEasing;
+    readonly easing: EasingCurve;
     /** 位置切线手柄:相对本帧位置的偏移。auto 模式下由 AutoHandleSolver 覆写,此处的值不参与求值。 */
     readonly inHandle?: Vec3;
     readonly outHandle?: Vec3;
@@ -46,7 +40,7 @@ export class TransformKeyframe {
     readonly id: string;
     readonly time: number;
     readonly value: Transform;
-    readonly easing: TimelineEasing;
+    readonly easing: EasingCurve;
     readonly inHandle: Vec3;
     readonly outHandle: Vec3;
     readonly handleMode: MotionHandleMode;

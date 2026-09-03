@@ -1,7 +1,6 @@
 # 架构债与修复方案 — 视口输入 / 运镜编排
 
-> 状态:本轮(镜头视角预览交互)暴露的问题已全部定位并修复;文末四条遗留结构债尚未动工,按优先级排期。
-> 本文是「同类 bug 不再犯」的登记簿:动这几块代码前先读,不要在补丁上再叠补丁。
+> 状态:视口输入、轨道所有权与运镜自动验收债已于 2026-09-02 清偿。本文保留事故根因与已落地机制，作为后续修改的约束记录。
 
 ## 一、本轮事故清单
 
@@ -33,9 +32,9 @@
 | `useOrbitSuspension`(计数 + 卸载兜底)                       | `src/ui/viewport/scene/useOrbitSuspension.ts`     | 「拖拽中途卸载把轨道锁死」           | 中高:配对结构自带兜底                        |
 | `useViewportPoseGesture` 的 `onCommit` 可选                 | `src/ui/viewport/scene/useViewportPoseGesture.ts` | 「手势内核与写入策略耦合」           | 中:策略显式化,掌镜自动落 / 镜头视角只有 K 落 |
 
-**仍是补丁的四处**,各自归属的债在括号里:`applyMotion` 的 `update()` 顺序(靠注释约束,**D3**)、右键 guard(**D2**)、`transport.seek` payload 修正(**D1**)、提示条文案(无债)。
+**历史补丁已收口**：`applyMotion` 的阻尼刷新经 `ViewportOrbitController`、右键输入经 `isPrimaryDrag`、payload 经 `PayloadContract` 各自拥有唯一机制；提示条文案仍为独立体验决策。
 
-## 三、遗留结构债
+## 三、已清偿结构债
 
 ### D1 命令 payload 没有契约校验(风险最高)—— 已修复(2026-09-02)
 
@@ -61,53 +60,38 @@ flowchart LR
 
 **验收**:把 `transport.seek` 的 payload 故意写成 `{ timeSeconds }`,开发期必须抛错并指名 `time`;`listCapabilities()` 输出里每条命令带 payload 键集。
 
-### D2 视口输入层同时存在两条事件流
+### D2 视口输入层同时存在两条事件流 —— 已修复(2026-09-02)
 
-**现象**:`OrbitControls` 监听 `pointerdown/move/up`,自研摆位手势监听 `mousedown/mousemove/mouseup`。今天两者不打架,靠的是「轨道已被 `OrbitAuthorityRig` 禁用」,**不是设计上的隔离**。谁再往 pointer 流上挂手势,冲突照旧;右键 guard 也只是在 mouse 流里加了个 `event.button !== 0` 判断。
+`useViewportPoseGesture` 已统一为 `pointerdown` / `pointermove` / `pointerup` / `pointercancel`；仅主指针经 `isPrimaryDrag()` 进入摆位，按下后由 Canvas `setPointerCapture()` 持有到结束。原有 `window` mousemove/mouseup 常驻监听已删除。
 
-**方案**:摆位手势统一改用 PointerEvent + `setPointerCapture`,与 R3F / OrbitControls 同流。
+### D3 `controls.enabled` 是别人对象上的可变字段 —— 已修复(2026-09-02)
 
-- `useViewportPointerPoseGesture` 只监听 `pointerdown/pointermove/pointerup/pointercancel`;按下即 `canvas.setPointerCapture(pointerId)`,拖出画布不丢事件、不必挂 window 监听。
-- 按键判定收成一处 `isPrimaryDrag(event)`,右键/中键留给上下文菜单与宿主。
-- 触控板与触屏顺带可用(现在的 mouse 流在触屏上根本不触发)。
+`ViewportOrbitController` 是每桌唯一的 OrbitControls 启停与阻尼刷新写方。`OrbitAuthorityRig` 只做 controls 挂接与所有权同步；`useOrbitSuspension` 在 gizmo/关键帧拖拽申请或归还轨道后，经控制器即时重申授权，抵消 TransformControls 的越权重设。
 
-**验收**:同一份手势代码在鼠标、触控板、触屏三种输入下行为一致;`window` 上不再有摆位相关的常驻监听。
+```mermaid
+flowchart LR
+    P[PointerEvent] --> G[useViewportPoseGesture]
+    G -->|setPointerCapture| Canvas
+    T[TransformControls drag] --> S[useOrbitSuspension]
+    S --> A[ViewportCameraAuthority]
+    A --> O[ViewportOrbitController]
+    O --> C[OrbitControls]
+```
 
-### D3 `controls.enabled` 是别人对象上的可变字段
+**验收不变量**：`controls.enabled` 与 `controls.update()` 的调用点仅保留在 `ViewportOrbitController`；掌镜、镜头视角与 gizmo 拖拽结束后均经同一控制器回收轨道授权。
 
-**现象**:`OrbitAuthorityRig` 是「对抗式」拨正——drei 的 `TransformControls` 在 `dragging-changed` 时会把默认控制器**无条件**置回 `enabled = true`(其源码 `defaultControls.enabled = !event.value`),我们只能在 gizmo 手势结束后靠 effect 再拨回去。同理 `applyMotion` 里 `controls.update()` 的调用顺序也只有注释在约束。
+### D4 这些不变量没有自动验收 —— 已修复(2026-09-02)
 
-**方案**(两档,按需要升级):
+`src/stories/camera/camera-motion.stories.tsx` 现以运行时断言覆盖：预览优先与自动 seek、smooth/linear 时间-轨迹进度往返、镜头打点闭环、空档不写/不复位镜头、镜头视角与导演视角的关键帧命令分派。该项目禁止单测，Storybook acceptance story 是此领域的自动化回归门。
 
-1. **轻**:把「轨道状态」封成 `ViewportOrbitController` 类,`enabled` / `update()` / 阻尼残量清理全部只经它;任何外部直写视为越权,rig 只调用它的方法。顺序纪律写进方法名(`drainDampingResidual()` 而不是裸 `update()`)。
-2. **重**:不再用 drei 的 `<OrbitControls>`,自持 `three-stdlib` 的实例并交给上述类管理,`makeDefault` 只作为 R3F 的引用登记。drei 组件的越权写入从根上不存在。
+## 四、清偿顺序
 
-**验收**:全仓 `controls.enabled` 的赋值点为 1(在该类内部);gizmo 拖拽结束后,掌镜/镜头视角下轨道仍保持禁用(当前只能靠 effect 事后拨正)。
-
-### D4 这些不变量没有自动验收
-
-**现象**:本轮所有结论都来自手工驱动浏览器(预览优先、progress 闭环、试镜不写入、WASD 单速、空档保持画面),**可重复性为零**。仓库禁单元测试,但 `src/stories/**/*.stories.tsx`(按模块分目录) 的运行时断言是既定机制,而它完全没覆盖这几条。
-
-**方案**:在 `src/stories/camera/camera-motion.stories.tsx` 补断言(纯 store/命令层,不需要真实画布):
-
-| 断言          | 判据                                                                                                                                           |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 预览优先      | playhead 落在 A 片段区间时 `resolveOutputClipAt(t, 'takeB')` 仍返回 A;`motion.preview.enter { takeB }` 后 playhead 被 seek 进 B,且解析结果为 B |
-| progress 往返 | 对 `smooth` / `linear` 两档,`timeAtProgress(trajectoryProgressAt(t)) === t`(容差 1e-6)                                                         |
-| 打点闭环      | 在 t 落 key 后,`clip.timeAtProgress(key.progress) === t`                                                                                       |
-| 空档保持      | scrub 出片段区间时 `sampleCurrent` 返回 false 且**不触发**任何 sink 复位调用                                                                   |
-| 写入策略      | 镜头视角下手势不产出命令;`keyframeAuthoring.resolve` 在 `lensViewActive` 时产出 `motion.set-key`,否则产出走位 key                              |
-
-**验收**:Storybook acceptance 故事全绿即覆盖上述五条;改动运镜采样/裁决相关代码时,故事失败先于人工走查。
-
-## 四、优先级
-
-| 债                  | 影响面                   | 触发频率               | 建议顺序 |
-| ------------------- | ------------------------ | ---------------------- | -------- |
-| ~~D1 payload 契约~~ | ~~UI + HostBridge + AI~~ | ~~已修复~~             | ~~1~~    |
-| D4 验收断言         | 运镜与视口全域           | 每次改采样/裁决        | 1        |
-| D2 输入层统一       | 视口手势                 | 新增视口交互时         | 2        |
-| D3 轨道所有权       | 视口相机                 | 引入新的 drei 控制器时 | 3        |
+| 债 | 状态 | 交付物 |
+| --- | --- | --- |
+| D1 payload 契约 | 已修复 | `PayloadContract` + `CommandDispatcher` |
+| D4 运镜验收 | 已修复 | `camera-motion.stories.tsx` 运行时断言 |
+| D2 输入统一 | 已修复 | Pointer Events + Pointer Capture |
+| D3 轨道所有权 | 已修复 | `ViewportOrbitController` |
 
 ## 五、判定规则(以后自评用)
 
@@ -115,4 +99,4 @@ flowchart LR
 2. **真相源有几个**:同一判据是否只剩一处、其余全部改读?否 → 补丁。
 3. **失败是否响亮**:错误路径是静默(undefined / 无操作)还是结构化报错?静默 → 补丁。
 
-三条全过才算体系化。本轮第 1、2、3 条同时满足的只有 `CameraMotionClip` 的换算收口(旧 `timeAt` 已删除)。
+三条判定规则现由 `CameraMotionClip` 的换算收口、`ViewportOrbitController` 的轨道写方收口，以及 Pointer Events 输入链共同满足。

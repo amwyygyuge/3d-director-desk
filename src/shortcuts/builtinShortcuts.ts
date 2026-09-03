@@ -1,7 +1,7 @@
 import { FrameViewCommand } from "@/command/navigationCommands";
 import { isCommandIssue } from "@/authoring/KeyframeAuthoringService";
 import { RemoveShotCommand } from "@/command/cameraCommands";
-import { RemoveMotionKeyCommand, SetViewModeCommand } from "@/command/cameraMotionCommands";
+import { SetViewModeCommand } from "@/command/cameraMotionCommands";
 import { TransportSetLoopCommand } from "@/command/actionCommands";
 import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
 import { requestFrameCapture } from "@/command/captureCommands";
@@ -33,10 +33,10 @@ export const SHORTCUT_ID = {
     PRESENTATION_EXIT: "presentation.exit",
     LENS_TOGGLE: "lens.toggle",
     LENS_EXIT: "lens.exit",
-    MOTION_KEY_DELETE: "motion.key.delete",
+    TIMELINE_SELECTION_DELETE: "timeline.selection.delete",
+    TIMELINE_SELECTION_CLEAR: "timeline.selection.clear",
     TRANSPORT_LOOP: "transport.loop",
     DRAFT_EXIT: "draft.exit",
-    WALK_KEY_DELETE: "walk.key.delete",
     PALETTE_OPEN: "palette.open",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
@@ -50,8 +50,8 @@ export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
  * Space 不做播放/暂停:WASD+Space/Shift 的飞行导航已持续占用它(见 useFlyNavigation),
  * 双绑会让抬升相机的同时启停时间轴。播放启停走 P,与 DCC 的传输键位习惯一致。
  *
- * Escape 分层:presentation → lens → shot(退出掌镜) → gizmo(退出变换) → selected(取消选中),
- * 由本表行序裁决;Delete 分层:motion-key → selected(删除选中)。
+ * Escape 分层:presentation → lens → draft → 时间轴选中 → gizmo(退出变换) → selected(取消选中),
+ * 由本表行序裁决;Delete 分层:时间轴选中 → selected(删除选中)。
  */
 export const SHORTCUT_SPECS: readonly {
     id: ShortcutId;
@@ -63,16 +63,16 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.LENS_EXIT, chords: ["escape"], scope: "lens", label: "退出镜头视角" },
     { id: SHORTCUT_ID.DRAFT_EXIT, chords: ["escape"], scope: "draft", label: "退出绘制走位" },
     {
-        id: SHORTCUT_ID.MOTION_KEY_DELETE,
-        chords: ["delete", "backspace"],
-        scope: "motion-key",
-        label: "删除选中镜头关键帧",
+        id: SHORTCUT_ID.TIMELINE_SELECTION_CLEAR,
+        chords: ["escape"],
+        scope: "timeline-selection",
+        label: "取消时间轴选中",
     },
     {
-        id: SHORTCUT_ID.WALK_KEY_DELETE,
+        id: SHORTCUT_ID.TIMELINE_SELECTION_DELETE,
         chords: ["delete", "backspace"],
-        scope: "walk-key",
-        label: "删除选中走位关键帧",
+        scope: "timeline-selection",
+        label: "删除时间轴选中项",
     },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
@@ -141,29 +141,15 @@ function toggleLensView(stores: DirectorDeskStores): void {
     stores.dispatcher.dispatch({ type: SetViewModeCommand.TYPE, payload: { mode } }, stores);
 }
 
-function removeSelectedMotionKey(stores: DirectorDeskStores): void {
-    const { selectedClipId, selectedKeyId } = stores.motionAuthoring;
-    if (!selectedClipId || !selectedKeyId) return;
-    const result = stores.dispatcher.dispatch(
-        { type: RemoveMotionKeyCommand.TYPE, payload: { clipId: selectedClipId, keyId: selectedKeyId } },
-        stores,
-    );
+/**
+ * 时间轴选中项的删除:命令由 TimelineSelection 分派,与底栏删除按钮同一条路径。
+ * 删哪一枚、能不能删(如运镜至少两枚关键帧)由命令层裁决,快捷键不预判。
+ */
+function removeTimelineSelection(stores: DirectorDeskStores): void {
+    const command = stores.timelineSelection.current.deleteCommand();
+    if (!command) return;
+    const result = stores.dispatcher.dispatch(command, stores);
     if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
-}
-
-/** 删掉最后两枚之一会让轨迹退化,交由命令层与轨道容器裁决,快捷键不预判。 */
-function removeSelectedWalkKey(stores: DirectorDeskStores): void {
-    const { selectedWalkTrackId, selectedWalkKeyframeId } = stores.motionAuthoring;
-    if (!selectedWalkTrackId || !selectedWalkKeyframeId) return;
-    const result = stores.dispatcher.dispatch(
-        { type: "timeline.remove-key", payload: { trackId: selectedWalkTrackId, keyframeId: selectedWalkKeyframeId } },
-        stores,
-    );
-    if (!result.ok) {
-        stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
-        return;
-    }
-    stores.motionAuthoring.selectWalkKey(null, null);
 }
 
 function enterPresentation(stores: DirectorDeskStores): void {
@@ -198,8 +184,8 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.LENS_TOGGLE]: toggleLensView,
     [SHORTCUT_ID.LENS_EXIT]: (s) =>
         s.dispatcher.dispatch({ type: SetViewModeCommand.TYPE, payload: { mode: VIEW_MODE.DIRECTOR } }, s),
-    [SHORTCUT_ID.MOTION_KEY_DELETE]: removeSelectedMotionKey,
-    [SHORTCUT_ID.WALK_KEY_DELETE]: removeSelectedWalkKey,
+    [SHORTCUT_ID.TIMELINE_SELECTION_DELETE]: removeTimelineSelection,
+    [SHORTCUT_ID.TIMELINE_SELECTION_CLEAR]: (s) => s.timelineSelection.clear(),
     [SHORTCUT_ID.DRAFT_EXIT]: (s) => s.motionAuthoring.setDraftActive(false),
     [SHORTCUT_ID.TRANSPORT_LOOP]: (s) =>
         s.dispatcher.dispatch({ type: TransportSetLoopCommand.TYPE, payload: { loop: !s.clock.isLooping } }, s),
@@ -225,9 +211,9 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
 /**
  * 当前激活作用域。
  * 全屏预览独占:壳层已隐、成片正在放,此时一切编辑键位都不该生效——只留退出键。
- * 其余情形 global 常驻;selected/gizmo/shot-selected/shot/lens/motion-key 各自按精确条件激活
- * (gizmo = 变换已激活,即 ui.gizmoArmedId 命中主选),Esc 的归属由 SHORTCUT_SPECS 的顺序决定
- * (注册表先命中先执行)。
+ * 其余情形 global 常驻;timeline-selection/selected/gizmo/shot-selected/shot/lens 各自按精确条件激活
+ * (timeline-selection = 时间轴上选中了片段或关键帧,gizmo = 变换已激活,即 ui.gizmoArmedId 命中主选),
+ * Esc 与 Delete 的归属由 SHORTCUT_SPECS 的顺序决定(注册表先命中先执行)。
  */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
     if (stores.layout.presentationMode) return new Set<ShortcutScope>(["presentation"]);
@@ -238,10 +224,9 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         stores.camera.director.getShot(primaryId) !== undefined;
     return new Set<ShortcutScope>([
         "global",
-        ...(stores.motionAuthoring.selectedWalkKeyframeId !== null ? ["walk-key" as const] : []),
+        ...(stores.timelineSelection.hasSelection ? ["timeline-selection" as const] : []),
         ...(stores.motionAuthoring.draftActive ? ["draft" as const] : []),
         ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
-        ...(stores.motionAuthoring.selectedKeyId !== null ? ["motion-key" as const] : []),
         ...(primaryId ? ["selected" as const] : []),
         ...(stores.ui.isGizmoArmed(primaryId) ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),

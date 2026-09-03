@@ -1,6 +1,6 @@
 import { PathSimplifier } from "@/authoring/PathSimplifier";
 import type { Transform, Vec3 } from "@/core/SceneObject";
-import { TIMELINE_EASING } from "@/timeline/TransformKeyframe";
+import { EASING } from "@/motion/EasingCurve";
 import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 
 /** 抽稀阈值 = 路径长度 × 本比例:与场景尺度无关,大场景不退化成折线,小场景不抹平细节。 */
@@ -51,7 +51,7 @@ function keyframeAt({
         id: crypto.randomUUID(),
         time: startSeconds + elapsedMeters / speed,
         value: { position: point, rotation: base.rotation, scale: base.scale },
-        easing: TIMELINE_EASING.LINEAR,
+        easing: EASING.LINEAR,
     };
 }
 

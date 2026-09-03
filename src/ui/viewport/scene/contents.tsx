@@ -1,6 +1,6 @@
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { DirectionalLight, Mesh, Object3D, PointLight, Scene, SpotLight } from "three";
 import { ArrowHelper, DirectionalLightHelper, Group, PointLightHelper, SpotLightHelper, Vector3 } from "three";
@@ -32,26 +32,48 @@ interface LightContentProps {
     readonly light: LightParams;
 }
 
+interface LightHelperRuntime {
+    update(): void;
+    dispose(): void;
+}
+
 interface SceneLightHelperRootProps {
     readonly entityId: string;
     readonly markerRef: MutableRefObject<Mesh | null>;
     readonly rootRef: MutableRefObject<Group | null>;
     readonly color: string;
     readonly scene: Scene;
+    readonly createRuntime: (root: Group) => LightHelperRuntime | null;
 }
 
+/** 选中灯光才装配高密度辅助线框；未选中灯光仅保留可点选的颜色标记。 */
 const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
     entityId,
     markerRef,
     rootRef,
     color,
     scene,
+    createRuntime,
 }: SceneLightHelperRootProps) {
     const { layout, selection } = useDirectorDeskStores();
+    const helperRuntimeRef = useRef<LightHelperRuntime | null>(null);
+    const isHelperVisible = layout.authoringVisible && selection.isSelected(entityId);
+
+    useEffect(() => {
+        if (!isHelperVisible || !rootRef.current) return;
+        const runtime = createRuntime(rootRef.current);
+        helperRuntimeRef.current = runtime;
+        return () => {
+            helperRuntimeRef.current = null;
+            runtime?.dispose();
+        };
+    }, [createRuntime, isHelperVisible, rootRef]);
+    useFrame(() => helperRuntimeRef.current?.update());
+
     // 灯光标记属编辑期辅助物:全屏预览时画面只留成片内容
     if (!layout.authoringVisible) return null;
     return createPortal(
-        <group ref={rootRef} userData={{ helper: true }}>
+        <group userData={{ helper: true }}>
             <mesh
                 ref={markerRef}
                 onClick={(event) => {
@@ -62,10 +84,91 @@ const SceneLightHelperRoot = observer(function SceneLightHelperRoot({
                 <sphereGeometry args={[LIGHT_MARKER_RADIUS, LIGHT_MARKER_SEGMENTS, LIGHT_MARKER_SEGMENTS]} />
                 <meshBasicMaterial color={color} toneMapped={false} />
             </mesh>
+            {isHelperVisible && <group ref={rootRef} />}
         </group>,
         scene,
     );
 });
+
+class DirectionalLightHelperRuntime implements LightHelperRuntime {
+    private readonly helper: DirectionalLightHelper;
+    private readonly arrow: ArrowHelper;
+
+    constructor(
+        private readonly source: DirectionalLight,
+        private readonly target: Object3D,
+        private readonly root: Group,
+    ) {
+        this.helper = new DirectionalLightHelper(source, DIRECTION_HELPER_LENGTH);
+        this.arrow = new ArrowHelper(
+            new Vector3(0, 0, -1),
+            new Vector3(),
+            DIRECTION_HELPER_LENGTH,
+            DIRECTION_HELPER_COLOR,
+            DIRECTION_HELPER_HEAD_LENGTH,
+            DIRECTION_HELPER_HEAD_WIDTH,
+        );
+        root.add(this.helper, this.arrow);
+    }
+
+    update(): void {
+        this.helper.update();
+        updateDirectionArrow(this.source, this.target, this.arrow);
+    }
+
+    dispose(): void {
+        this.root.remove(this.helper, this.arrow);
+        this.helper.dispose();
+        this.arrow.dispose();
+    }
+}
+
+class PointLightHelperRuntime implements LightHelperRuntime {
+    private readonly helper: PointLightHelper;
+
+    constructor(source: PointLight, private readonly root: Group) {
+        this.helper = new PointLightHelper(source, DIRECTION_HELPER_LENGTH);
+        root.add(this.helper);
+    }
+
+    update(): void {
+        this.helper.update();
+    }
+
+    dispose(): void {
+        this.root.remove(this.helper);
+        this.helper.dispose();
+    }
+}
+
+class SpotLightHelperRuntime implements LightHelperRuntime {
+    private readonly helper: SpotLightHelper;
+    private readonly arrow: ArrowHelper;
+
+    constructor(private readonly source: SpotLight, private readonly target: Object3D, private readonly root: Group) {
+        this.helper = new SpotLightHelper(source);
+        this.arrow = new ArrowHelper(
+            new Vector3(0, 0, -1),
+            new Vector3(),
+            DIRECTION_HELPER_LENGTH,
+            DIRECTION_HELPER_COLOR,
+            DIRECTION_HELPER_HEAD_LENGTH,
+            DIRECTION_HELPER_HEAD_WIDTH,
+        );
+        root.add(this.helper, this.arrow);
+    }
+
+    update(): void {
+        this.helper.update();
+        updateDirectionArrow(this.source, this.target, this.arrow);
+    }
+
+    dispose(): void {
+        this.root.remove(this.helper, this.arrow);
+        this.helper.dispose();
+        this.arrow.dispose();
+    }
+}
 
 function updateMarkerPosition(source: Object3D, marker: Object3D): void {
     marker.position.setFromMatrixPosition(source.matrixWorld);
@@ -96,49 +199,23 @@ function DirectionalLightContent({ entity, light }: LightContentProps) {
     const targetRef = useRef<Group | null>(null);
     const helperRootRef = useRef<Group | null>(null);
     const markerRef = useRef<Mesh | null>(null);
-    const helperRef = useRef<DirectionalLightHelper | null>(null);
-    const arrowRef = useRef<ArrowHelper | null>(null);
+    const createRuntime = useCallback((root: Group) => {
+        const source = lightRef.current;
+        const target = targetRef.current;
+        return source && target ? new DirectionalLightHelperRuntime(source, target, root) : null;
+    }, []);
 
     useEffect(() => {
         const source = lightRef.current;
         const target = targetRef.current;
-        const root = helperRootRef.current;
-        if (!source || !target || !root) return;
+        if (!source || !target) return;
         source.target = target;
-        const helper = new DirectionalLightHelper(source, DIRECTION_HELPER_LENGTH);
-        const arrow = new ArrowHelper(
-            new Vector3(0, 0, -1),
-            new Vector3(),
-            DIRECTION_HELPER_LENGTH,
-            DIRECTION_HELPER_COLOR,
-            DIRECTION_HELPER_HEAD_LENGTH,
-            DIRECTION_HELPER_HEAD_WIDTH,
-        );
-        helperRef.current = helper;
-        arrowRef.current = arrow;
-        root.add(helper, arrow);
-        return () => {
-            helperRef.current = null;
-            arrowRef.current = null;
-            root.remove(helper, arrow);
-            helper.dispose();
-            arrow.dispose();
-        };
     }, [scene]);
-
-    useEffect(() => {
-        helperRef.current?.update();
-    }, [light]);
     useFrame(() => {
         const source = lightRef.current;
-        const target = targetRef.current;
         const marker = markerRef.current;
-        const helper = helperRef.current;
-        const arrow = arrowRef.current;
-        if (!source || !target || !marker || !helper || !arrow) return;
-        helper.update();
+        if (!source || !marker) return;
         updateMarkerPosition(source, marker);
-        updateDirectionArrow(source, target, arrow);
     });
 
     return (
@@ -151,6 +228,7 @@ function DirectionalLightContent({ entity, light }: LightContentProps) {
                 rootRef={helperRootRef}
                 color={light.color}
                 scene={scene}
+                createRuntime={createRuntime}
             />
         </>
     );
@@ -161,31 +239,15 @@ function PointLightContent({ entity, light }: LightContentProps) {
     const lightRef = useRef<PointLight | null>(null);
     const helperRootRef = useRef<Group | null>(null);
     const markerRef = useRef<Mesh | null>(null);
-    const helperRef = useRef<PointLightHelper | null>(null);
-
-    useEffect(() => {
+    const createRuntime = useCallback((root: Group) => {
         const source = lightRef.current;
-        const root = helperRootRef.current;
-        if (!source || !root) return;
-        const helper = new PointLightHelper(source, DIRECTION_HELPER_LENGTH);
-        helperRef.current = helper;
-        root.add(helper);
-        return () => {
-            helperRef.current = null;
-            root.remove(helper);
-            helper.dispose();
-        };
-    }, [scene]);
+        return source ? new PointLightHelperRuntime(source, root) : null;
+    }, []);
 
-    useEffect(() => {
-        helperRef.current?.update();
-    }, [light]);
     useFrame(() => {
         const source = lightRef.current;
         const marker = markerRef.current;
-        const helper = helperRef.current;
-        if (!source || !marker || !helper) return;
-        helper.update();
+        if (!source || !marker) return;
         updateMarkerPosition(source, marker);
     });
 
@@ -198,6 +260,7 @@ function PointLightContent({ entity, light }: LightContentProps) {
                 rootRef={helperRootRef}
                 color={light.color}
                 scene={scene}
+                createRuntime={createRuntime}
             />
         </>
     );
@@ -209,49 +272,23 @@ function SpotLightContent({ entity, light }: LightContentProps) {
     const targetRef = useRef<Group | null>(null);
     const helperRootRef = useRef<Group | null>(null);
     const markerRef = useRef<Mesh | null>(null);
-    const helperRef = useRef<SpotLightHelper | null>(null);
-    const arrowRef = useRef<ArrowHelper | null>(null);
+    const createRuntime = useCallback((root: Group) => {
+        const source = lightRef.current;
+        const target = targetRef.current;
+        return source && target ? new SpotLightHelperRuntime(source, target, root) : null;
+    }, []);
 
     useEffect(() => {
         const source = lightRef.current;
         const target = targetRef.current;
-        const root = helperRootRef.current;
-        if (!source || !target || !root) return;
+        if (!source || !target) return;
         source.target = target;
-        const helper = new SpotLightHelper(source);
-        const arrow = new ArrowHelper(
-            new Vector3(0, 0, -1),
-            new Vector3(),
-            DIRECTION_HELPER_LENGTH,
-            DIRECTION_HELPER_COLOR,
-            DIRECTION_HELPER_HEAD_LENGTH,
-            DIRECTION_HELPER_HEAD_WIDTH,
-        );
-        helperRef.current = helper;
-        arrowRef.current = arrow;
-        root.add(helper, arrow);
-        return () => {
-            helperRef.current = null;
-            arrowRef.current = null;
-            root.remove(helper, arrow);
-            helper.dispose();
-            arrow.dispose();
-        };
     }, [scene]);
-
-    useEffect(() => {
-        helperRef.current?.update();
-    }, [light]);
     useFrame(() => {
         const source = lightRef.current;
-        const target = targetRef.current;
         const marker = markerRef.current;
-        const helper = helperRef.current;
-        const arrow = arrowRef.current;
-        if (!source || !target || !marker || !helper || !arrow) return;
-        helper.update();
+        if (!source || !marker) return;
         updateMarkerPosition(source, marker);
-        updateDirectionArrow(source, target, arrow);
     });
 
     return (
@@ -271,6 +308,7 @@ function SpotLightContent({ entity, light }: LightContentProps) {
                 rootRef={helperRootRef}
                 color={light.color}
                 scene={scene}
+                createRuntime={createRuntime}
             />
         </>
     );

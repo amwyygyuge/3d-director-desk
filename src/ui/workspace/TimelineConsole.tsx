@@ -46,6 +46,9 @@ const MINI_DURATION_FALLBACK_SECONDS = 1;
 const EXPANDED_OPACITY_DELAY = "100ms";
 const COLLAPSED_OPACITY_DELAY = "0ms";
 const TRANSPORT_BUTTON_SIZE_PX = 40;
+/** 展开轨的窗口框:边框比填充更省重绘,且不遮挡下方片段色块 */
+const MINI_WINDOW_BORDER = "1px solid rgba(255,255,255,0.55)";
+const MINI_WINDOW_BACKGROUND = "rgba(255,255,255,0.10)";
 
 const MINI_BAR_LAYER = {
     [TIMELINE_BAR_KIND.PROGRAM]: { top: MINI_PROGRAM_CLIP_TOP_PX, color: "secondary.main" },
@@ -87,6 +90,34 @@ const MiniPlayhead = observer(function MiniPlayhead() {
                 width: `${MINI_PLAYHEAD_WIDTH_PX}px`,
                 bgcolor: "error.main",
                 boxShadow: MINI_PLAYHEAD_GLOW,
+            }}
+        />
+    );
+});
+
+/**
+ * 展开轨当前窗口在全片中的位置。
+ *
+ * 迷你轨此前恒按全长绘制,放大后作者完全失去方位感——「我在整片的哪一段」只能靠刻度反推。
+ * 未缩放时不画:满幅的框等于噪声。
+ */
+const MiniViewportWindow = observer(function MiniViewportWindow() {
+    const { motionAuthoring, timeline } = useDirectorDeskStores();
+    const duration = timeline.document.duration;
+    const viewport = motionAuthoring.timelineViewportFor(duration);
+    if (viewport.visibleSeconds >= duration) return null;
+    return (
+        <Box
+            aria-label="展开轨窗口范围"
+            sx={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: timePercent(viewport.startSeconds, duration),
+                width: timePercent(viewport.visibleSeconds, duration),
+                border: MINI_WINDOW_BORDER,
+                borderRadius: MINI_PILL_RADIUS_PX,
+                bgcolor: MINI_WINDOW_BACKGROUND,
             }}
         />
     );
@@ -148,7 +179,7 @@ const MiniTimeline = observer(function MiniTimeline() {
             ref={trackRef}
             className="relative flex-1"
             role="slider"
-            aria-label="时间轴定位"
+            aria-label="时间轴定位（总览轨）"
             aria-valuemin={0}
             aria-valuemax={duration}
             {...scrub}
@@ -195,6 +226,7 @@ const MiniTimeline = observer(function MiniTimeline() {
                     }}
                 />
             ))}
+            <MiniViewportWindow />
             <MiniPlayhead />
         </Box>
     );

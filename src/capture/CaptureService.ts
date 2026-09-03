@@ -1,10 +1,9 @@
 import { PerspectiveCamera, Vector3 } from "three";
-import type { Box3 } from "three";
+import type { Box3, Camera, Scene, WebGLRenderer } from "three";
 
+import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
+import type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
 import { waitMs } from "@/core/waitMs";
-import type { Camera, Scene, WebGLRenderer } from "three";
-import type { Object3D } from "three";
-
 import type { Vec3 } from "@/core/SceneObject";
 
 const PNG_MIME_TYPE = "image/png";
@@ -16,6 +15,8 @@ const VIDEO_FPS = 30;
 /** 录制时长上限(秒):参考片段场景,防失控长录 */
 export const VIDEO_MAX_DURATION_SECONDS = 120;
 const VIDEO_MIME_CANDIDATES = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"] as const;
+/** 自然停止漏掉时的兜底尾部；正常结束由命令层观察播放停止后显式收口。 */
+const VIDEO_TAIL_GRACE_MS = 1_000;
 
 /** agent 可读的生效相机位姿(纯数据,可序列化) */
 export interface LiveCameraPose {
@@ -46,12 +47,6 @@ export interface ShotFramingPose {
     readonly fov: number | null;
 }
 
-/** Runtime-only observation of the most recent capture helper hide/restore transaction. */
-export interface CaptureHelperLifecycle {
-    readonly hiddenHelperCount: number;
-    readonly hiddenPoseHelperCount: number;
-    readonly helpersRestored: boolean;
-}
 
 /**
  * 预演画面输出服务(应用服务):截图与(后置)录屏。
@@ -67,7 +62,9 @@ export class CaptureService {
     private handles: RenderHandles | null = null;
     private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
     private recorder: MediaRecorder | null = null;
-    private cancelSignal: (() => void) | null = null;
+    private recordingEndSignal: ((discard: boolean) => void) | null = null;
+    private activeRecording: Promise<Blob | null> | null = null;
+    private recordedMimeType: string | null = null;
 
     attach(handles: RenderHandles): void {
         this.handles = handles;
@@ -103,6 +100,11 @@ export class CaptureService {
     }
     get isRecording(): boolean {
         return this.recorder !== null;
+    }
+
+    /** 最近一次成功启动的 MediaRecorder 实际编码；产品协议禁止猜测 MIME。 */
+    get lastVideoMimeType(): string | null {
+        return this.recordedMimeType;
     }
 
     /**
@@ -155,41 +157,86 @@ export class CaptureService {
 
     /**
      * 录制画布为 WebM 视频:canvas.captureStream 帧流 + MediaRecorder。
-     * 播放驱动由命令层负责(seek(0)+play);本服务只管画面采集。
-     * 取消经 cancelRecording:提前停录且返回 null(产物不交付)。
+     * 正常收口由命令层在播放停下时 stopRecording；墙钟只防止外部驱动失联后无限录制。
      */
-    async recordVideo(options: { durationSeconds: number }): Promise<Blob | null> {
+    recordVideo(options: { readonly durationSeconds: number; readonly hideHelpers?: boolean }): Promise<Blob | null> {
         const handles = this.handles;
-        if (!handles || this.recorder) return null;
+        if (!handles || this.recorder) return Promise.resolve(null);
         const stream = handles.gl.domElement.captureStream(VIDEO_FPS);
-        const mimeType =
+        const preferredMimeType =
             VIDEO_MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "video/webm";
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
+        const helperVisibility = new HelperVisibilityTransaction();
+        if (options.hideHelpers) helperVisibility.hide(handles.scene);
+        const { promise: endRequested, resolve: requestEnd } = Promise.withResolvers<boolean>();
         const { promise: stopped, resolve: markStopped } = Promise.withResolvers<void>();
-        const { promise: cancelled, resolve: fireCancel } = Promise.withResolvers<void>();
-        this.cancelSignal = fireCancel;
-        this.recorder = recorder;
         const chunks: Blob[] = [];
         recorder.ondataavailable = (event) => {
             if (event.data.size > 0) chunks.push(event.data);
         };
         recorder.onstop = () => markStopped();
+        this.recorder = recorder;
+        this.recordingEndSignal = requestEnd;
+        this.recordedMimeType = recorder.mimeType;
         recorder.start();
-        await Promise.race([waitMs(options.durationSeconds * 1000), cancelled]);
-        const wasCancelled = this.cancelSignal === null;
-        recorder.stop();
-        await stopped;
-        for (const track of stream.getTracks()) track.stop();
-        this.recorder = null;
-        this.cancelSignal = null;
-        return wasCancelled ? null : new Blob(chunks, { type: mimeType });
+        const recording = this.collectVideo({
+            recorder,
+            stream,
+            endRequested,
+            stopped,
+            chunks,
+            helperVisibility,
+            durationSeconds: options.durationSeconds,
+        });
+        this.activeRecording = recording;
+        return recording;
     }
 
-    /** 提前终止录制;产物丢弃(返回 null 路径) */
-    cancelRecording(): void {
-        const signal = this.cancelSignal;
-        this.cancelSignal = null;
-        signal?.();
+    /** 明确结束采集并保留 chunks；返回同一个产物 Promise 供非命令调用方等待。 */
+    stopRecording(): Promise<Blob | null> {
+        this.recordingEndSignal?.(false);
+        return this.activeRecording ?? Promise.resolve(null);
+    }
+
+    /** 明确放弃本次采集；录制任务仍负责释放 MediaRecorder 与可见性事务。 */
+    cancelRecording(): Promise<Blob | null> {
+        this.recordingEndSignal?.(true);
+        return this.activeRecording ?? Promise.resolve(null);
+    }
+
+    private async collectVideo(options: {
+        readonly recorder: MediaRecorder;
+        readonly stream: MediaStream;
+        readonly endRequested: Promise<boolean>;
+        readonly stopped: Promise<void>;
+        readonly chunks: Blob[];
+        readonly helperVisibility: HelperVisibilityTransaction;
+        readonly durationSeconds: number;
+    }): Promise<Blob | null> {
+        try {
+            const discard = await Promise.race([
+                options.endRequested,
+                waitMs(options.durationSeconds * 1_000 + VIDEO_TAIL_GRACE_MS).then(() => false),
+            ]);
+            options.recorder.stop();
+            await options.stopped;
+            const mimeType = options.recorder.mimeType;
+            this.recordedMimeType = mimeType;
+            return discard ? null : new Blob(options.chunks, { type: mimeType });
+        } finally {
+            for (const track of options.stream.getTracks()) track.stop();
+            this.restoreHelpers(options.helperVisibility);
+            this.recorder = null;
+            this.recordingEndSignal = null;
+            this.activeRecording = null;
+        }
+    }
+
+    private restoreHelpers(transaction: HelperVisibilityTransaction): void {
+        this.currentHelperLifecycle = transaction.restore();
+        const handles = this.handles;
+        if (!handles || this.currentHelperLifecycle.hiddenHelperCount === 0) return;
+        handles.gl.render(handles.scene, handles.camera);
     }
 
     /** 截取当前场景为 PNG blob;hideHelpers 默认开(网格/gizmo/高亮框不入镜) */
@@ -208,31 +255,12 @@ export class CaptureService {
             });
         }
 
-        const hidden: Object3D[] = [];
-        let hiddenPoseHelperCount = 0;
-        if (options?.hideHelpers !== false) {
-            scene.traverse((object) => {
-                if (object.userData.helper === true && object.visible) {
-                    object.visible = false;
-                    hidden.push(object);
-                    if (object.userData.poseHelper === true) hiddenPoseHelperCount += 1;
-                }
-            });
-        }
-
+        const helperVisibility = new HelperVisibilityTransaction();
+        if (options?.hideHelpers !== false) helperVisibility.hide(scene);
         gl.render(scene, camera);
         const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
-
-        for (let index = 0; index < hidden.length; index += 1) {
-            const object = hidden[index];
-            if (object) object.visible = true;
-        }
-        this.currentHelperLifecycle = Object.freeze({
-            hiddenHelperCount: hidden.length,
-            hiddenPoseHelperCount,
-            helpersRestored: hidden.every((object) => object.visible),
-        });
-        if (hidden.length > 0) gl.render(scene, camera);
+        this.currentHelperLifecycle = helperVisibility.restore();
+        if (this.currentHelperLifecycle.hiddenHelperCount > 0) gl.render(scene, camera);
         // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
         return Promise.resolve(dataUrlToBlob(dataUrl));
     }

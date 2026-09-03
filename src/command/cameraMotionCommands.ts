@@ -4,8 +4,8 @@ import { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyJSON } from "@/camera/CameraKey";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
-import { CAMERA_MOTION_EASING, isCameraMotionEasing } from "@/camera/CameraMotionEasing";
-import type { CameraMotionEasing } from "@/camera/CameraMotionEasing";
+import { EASING, isEasingCurve } from "@/motion/EasingCurve";
+import type { EasingCurve } from "@/motion/EasingCurve";
 import { CameraProgramClip, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import type { CameraProgramClipJSON, ProgramSource } from "@/camera/CameraProgramTrack";
 import { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
@@ -17,6 +17,7 @@ import {
     ORBIT_MAX_DEGREES,
 } from "@/authoring/MotionPresetCompiler";
 import type { MotionMove, MotionPresetRequest, OrbitDirection } from "@/authoring/MotionPresetCompiler";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
@@ -87,7 +88,7 @@ interface CreateTakePayload {
     readonly focus?: FocusTargetJSON | null;
     readonly program?: ProgramFollow;
     /** 整段时间曲线;缺省 smooth */
-    readonly easing?: CameraMotionEasing;
+    readonly easing?: EasingCurve;
 }
 interface AuthorMotionPayload extends MotionPresetRequest {
     /** 仅创建期读取的静态起幅机位;不会写入运镜资产。 */
@@ -123,7 +124,7 @@ interface SetMotionKeyHandlePayload extends MotionKeyPayload {
 
 interface SetMotionClipEasingPayload {
     readonly id: string;
-    readonly easing: CameraMotionEasing;
+    readonly easing: EasingCurve;
 }
 
 interface SetMotionClipFocusPayload {
@@ -205,7 +206,7 @@ const CAMERA_MOTION_CLIP_SCHEMA: PayloadFieldSchema = {
         durationSeconds: { type: "number" },
         keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
         focus: nullable(CAMERA_FOCUS_TRACK_SCHEMA),
-        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+        easing: { type: "string", enum: Object.values(EASING) },
     },
     required: ["id", "startTimeSeconds", "durationSeconds", "keys", "focus", "easing"],
 };
@@ -255,7 +256,7 @@ const CREATE_MOTION_TAKE_CONTRACT: PayloadContract = {
         keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
         focus: nullable(FOCUS_TARGET_SCHEMA),
         program: { type: "string", enum: Object.values(PROGRAM_FOLLOW) },
-        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+        easing: { type: "string", enum: Object.values(EASING) },
     },
     required: ["startTimeSeconds", "durationSeconds", "keys"],
 };
@@ -297,7 +298,7 @@ const SET_MOTION_KEY_HANDLE_CONTRACT: PayloadContract = {
 const RESET_MOTION_KEY_HANDLES_CONTRACT: PayloadContract = REMOVE_MOTION_KEY_CONTRACT;
 
 const SET_MOTION_CLIP_EASING_CONTRACT: PayloadContract = {
-    properties: { id: { type: "string" }, easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) } },
+    properties: { id: { type: "string" }, easing: { type: "string", enum: Object.values(EASING) } },
     required: ["id", "easing"],
 };
 
@@ -319,7 +320,7 @@ const AUTHOR_MOTION_CONTRACT: PayloadContract = {
         move: { type: "string", enum: Object.values(MOTION_MOVE) },
         subjectId: { type: "string" },
         shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
-        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+        easing: { type: "string", enum: Object.values(EASING) },
         degrees: { type: "number" },
         direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
     },
@@ -334,7 +335,7 @@ const QUICK_AUTHOR_MOTION_CONTRACT: PayloadContract = {
         durationSeconds: { type: "number" },
         degrees: { type: "number" },
         direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
-        easing: { type: "string", enum: Object.values(CAMERA_MOTION_EASING) },
+        easing: { type: "string", enum: Object.values(EASING) },
     },
     required: ["subjectId", "shotSize", "move", "durationSeconds"],
 };
@@ -524,7 +525,7 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
         if (!clip) return;
         ctx.motion.replaceClip(clip);
         applyProgramFollow(ctx, clip, this.programMode());
-        ctx.motionAuthoring.selectClip(clip.id);
+        ctx.timelineSelection.select(TimelineSelection.motionClip(clip.id));
         ctx.playback.sampleCurrent();
     }
 
@@ -800,7 +801,7 @@ export class RemoveMotionKeyCommand extends DirectorCommand<MotionKeyPayload> {
         if (isIssue(located)) return;
         const next = located.clip.withoutKey(this.payload.keyId);
         if (!next) return;
-        ctx.motionAuthoring.selectKey(located.clip.id, null);
+        ctx.timelineSelection.forget(this.payload.keyId);
         ctx.motion.replaceClip(next);
         ctx.playback.sampleCurrent();
     }
@@ -891,7 +892,7 @@ export class SetMotionClipEasingCommand extends DirectorCommand<SetMotionClipEas
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const clip = existingClip(ctx, this.payload.id);
         if (!clip) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
-        return isCameraMotionEasing(this.payload.easing)
+        return isEasingCurve(this.payload.easing)
             ? []
             : [issue(ISSUE_CODE.PAYLOAD, "easing", "运镜缓动必须为 linear 或 smooth")];
     }
@@ -984,6 +985,7 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
 
     execute(ctx: DirectorContext): void {
         ctx.motionAuthoring.forgetClip(this.payload.id);
+        ctx.timelineSelection.forget(this.payload.id);
         ctx.motion.removeClip(this.payload.id);
         ctx.playback.sampleCurrent();
     }
@@ -1085,7 +1087,7 @@ interface QuickAuthorPayload {
     /** 环绕类语汇的转角(度) */
     readonly degrees?: number;
     readonly direction?: OrbitDirection;
-    readonly easing?: CameraMotionEasing;
+    readonly easing?: EasingCurve;
 }
 
 /** 快建运镜 id:由被摄体、语汇与起始时刻派生,确保 undo/redo 重放不漂移。 */

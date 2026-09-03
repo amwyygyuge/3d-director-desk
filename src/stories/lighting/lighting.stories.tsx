@@ -89,8 +89,8 @@ export default meta;
 type Story = StoryObj<typeof DirectorDesk>;
 
 /**
- * 验收：三种灯光均由 dispatcher 播种。依次点击 Outliner 灯光可验证选择与 gizmo 变换；Inspector 验证类型、颜色、强度都经 light.adjust。
- * 点击截图后，成图应保留受光体的照明且不出现灯光标记、LightHelper 或方向箭头；撤销/重做与删除/恢复已在播种中断言。
+ * 验收：三种灯光均由 dispatcher 播种。未选中时视口只留三个小型颜色标记；在 Outliner 选择任一灯光后，仅该灯光展示方向箭头、范围或锥体线框，切换选择时前一线框必须立即卸载。
+ * Inspector 验证类型、颜色、强度都经 light.adjust；截图应保留受光体照明且不出现灯光标记、LightHelper 或方向箭头；撤销/重做与删除/恢复已在播种中断言。
  */
 export const LightingCommands: Story = {
     name: "三种灯光与截图纪律",

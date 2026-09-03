@@ -5,10 +5,22 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
 import { observer } from "mobx-react-lite";
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef } from "react";
+import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
 
+import { TIMELINE_DRAG_KIND, TimelineClipDragResolver } from "@/authoring/TimelineClipDrag";
+import type { TimelineClipRange, TimelineDragKind } from "@/authoring/TimelineClipDrag";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND, TIMELINE_ROW_KIND } from "@/authoring/TimelineLayout";
-import type { TimelineBar, TimelineMark, TimelineRow, TimelineRowKind } from "@/authoring/TimelineLayout";
+import type {
+    TimelineBar,
+    TimelineBarKind,
+    TimelineMark,
+    TimelineRow,
+    TimelineRowKind,
+} from "@/authoring/TimelineLayout";
+import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
+import type { MotionClipProgramSource, ProgramSource, StaticShotProgramSource } from "@/camera/CameraProgramTrack";
+import type { SerializedCommand } from "@/command/DirectorCommand";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
@@ -17,17 +29,35 @@ import { MONO_FONT_STACK } from "@/ui/shell/theme";
 const TRACK_LABEL_WIDTH_PX = 168;
 const TRACK_HEIGHT_PX = 32;
 const TRACK_ACCENT_WIDTH_PX = 2;
-const BAR_VERTICAL_INSET_PX = 4;
-const KEY_SIZE_PX = 12;
+/**
+ * 行内分层:段条与关键帧菱形各占一条互不重叠的 lane。
+ *
+ * 分层不是排版偏好,是命中问题:菱形绝对定位在关键帧时刻,而运镜/走位的首末帧恰好落在
+ * 段条两端——12px 的菱形正好盖住 6px 的 resize 把手,于是「拖边缘改时长」永远抢不到指针,
+ * 拖出来的是单枚帧的位移。让两者各占一条 lane 后,把手全程裸露,无需任何像素级命中裁决。
+ */
+const BAR_LANE_TOP_PX = 3;
+const BAR_LANE_HEIGHT_PX = 15;
+const MARK_LANE_TOP_PX = 20;
+const KEY_SIZE_PX = 10;
 const KEY_HALF_SIZE_PX = KEY_SIZE_PX / 2;
+/** 键盘微调步长(秒):聚焦后方向键逐格挪时间,与拖拽吸附各管一路 */
 const KEYBOARD_TIME_STEP_SECONDS = 0.1;
-const MINIMUM_DURATION_SECONDS = 0.001;
+/** 键盘改时长的下限:再短就退化成一个点,重定时命令也会拒 */
+const MINIMUM_BAR_DURATION_SECONDS = 0.1;
 const TIME_START_SECONDS = 0;
 const PROGRESS_MIN = 0;
 const PROGRESS_MAX = 1;
 const PERCENT_FULL = 100;
+const DRAG_READOUT_DECIMAL_PLACES = 2;
 const DRAG_HANDLE_WIDTH_PX = 6;
 const DRAG_MOVEMENT_EPSILON_SECONDS = 0.000001;
+const KEY_DRAG_CURSOR = "ew-resize";
+const HANDLE_OPACITY_TRANSITION = "opacity 120ms";
+const HANDLE_HIDDEN_OPACITY = 0;
+const HANDLE_VISIBLE_OPACITY = 1;
+const TRANSFORM_BAR_Z_INDEX = 0;
+const CLIP_BAR_Z_INDEX = 1;
 const TRACK_BACKGROUND_ALPHA = 0.14;
 const MOTION_TRACK_BACKGROUND_ALPHA = 0.12;
 const MOTION_CLIP_BACKGROUND_ALPHA = 0.4;
@@ -38,20 +68,34 @@ const KEYFRAME_TRACK_ACCENT = "secondary.main";
 const MOTION_TRACK_ACCENT = "primary.main";
 const PROGRAM_BAR_COLOR = "secondary.main";
 const MOTION_BAR_COLOR = "primary.main";
+const TRANSFORM_BAR_COLOR = "secondary.main";
 const TRACK_DATA_ATTRIBUTE = "[data-timeline-track]";
-const MOTION_DRAG_CURSOR = "ew-resize";
-const CLIP_TRANSFORM_ORIGIN = "left center";
+const BAR_TRANSFORM_ORIGIN = "left center";
+const DRAG_HANDLE_CLASS_NAME = "timeline-drag-handle";
+const DRAG_READOUT_BACKGROUND = "rgba(0,0,0,0.72)";
 const LINK_LABEL = "解除成片跟随";
 const LINK_ICON_SIZE = "small" as const;
 
-type TrackAccent = typeof PROGRAM_TRACK_ACCENT | typeof KEYFRAME_TRACK_ACCENT | typeof MOTION_TRACK_ACCENT;
-type TransformKeySelection = { readonly trackId: string; readonly keyframeId: string };
-type MotionDragKind = "move" | "resize-start" | "resize-end";
+type ProgramRangeCommandOptions = {
+    readonly clipId: string;
+    readonly source: ProgramSource;
+    readonly range: TimelineClipRange;
+};
+const TIMELINE_DRAG_HANDLE_SIDE = {
+    START: "start",
+    END: "end",
+} as const;
+type TimelineDragHandleSide = (typeof TIMELINE_DRAG_HANDLE_SIDE)[keyof typeof TIMELINE_DRAG_HANDLE_SIDE];
 
+const DRAG_HANDLE_POSITION: Record<TimelineDragHandleSide, { readonly left?: number; readonly right?: number }> = {
+    [TIMELINE_DRAG_HANDLE_SIDE.START]: { left: TIME_START_SECONDS },
+    [TIMELINE_DRAG_HANDLE_SIDE.END]: { right: TIME_START_SECONDS },
+};
+type TrackAccent = typeof PROGRAM_TRACK_ACCENT | typeof KEYFRAME_TRACK_ACCENT | typeof MOTION_TRACK_ACCENT;
+
+/** 行组件只收身份 id:选中态自取自写,不经父组件回调(props 边界纪律) */
 interface TimelineProjectedRowProps {
     readonly rowId: string;
-    readonly onSelectProgramClip: (clipId: string) => void;
-    readonly onSelectTransformKey: (selection: TransformKeySelection) => void;
 }
 
 interface TrackRowProps {
@@ -59,23 +103,33 @@ interface TrackRowProps {
     readonly children: ReactNode;
 }
 
-interface ProgramClipBarProps {
+interface TimelineClipBarProps {
     readonly barId: string;
-    readonly onSelect: (clipId: string) => void;
 }
 
-interface TransformKeyDiamondProps {
-    readonly trackId: string;
-    readonly keyId: string;
-    readonly onSelect: (selection: TransformKeySelection) => void;
-}
-
-interface MotionDragState {
+interface ClipDragState {
     readonly element: HTMLDivElement;
-    readonly kind: MotionDragKind;
-    readonly originClientX: number;
-    readonly startSeconds: number;
-    readonly durationSeconds: number;
+    readonly kind: TimelineDragKind;
+    readonly originTimeSeconds: number;
+    readonly range: TimelineClipRange;
+    readonly trackWidthPx: number;
+}
+
+interface ClipDragHookOptions {
+    readonly barId: string;
+    readonly onCommit: (range: TimelineClipRange) => void;
+}
+
+interface ClipDragHookResult {
+    readonly range: TimelineClipRange | null;
+    /** 拖拽种类决定读数措辞:改起点还是改时长,作者必须当场看得出来 */
+    readonly kind: TimelineDragKind | null;
+    readonly isDragging: boolean;
+    readonly shouldIgnoreClick: () => boolean;
+    readonly onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
+    readonly onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;
+    readonly onPointerUp: (event: PointerEvent<HTMLDivElement>) => void;
+    readonly onPointerCancel: (event: PointerEvent<HTMLDivElement>) => void;
 }
 
 interface KeyDragState {
@@ -96,7 +150,10 @@ function projectedRow(stores: DirectorDeskStores, rowId: string): TimelineRow | 
 }
 
 function projectedBar(stores: DirectorDeskStores, barId: string): TimelineBar | undefined {
-    return stores.timelineLayout.bars(motionViewport(stores)).find((bar) => bar.id === barId);
+    return stores.timelineLayout
+        .project(motionViewport(stores))
+        .flatMap((row) => row.bars)
+        .find((bar) => bar.id === barId);
 }
 
 function projectedMark(stores: DirectorDeskStores, rowId: string, markId: string): TimelineMark | undefined {
@@ -147,96 +204,117 @@ function snapTime(
     });
 }
 
-function clipTransform(
-    kind: MotionDragKind,
-    deltaSeconds: number,
-    initialDurationSeconds: number,
-    secondsPerPixel: number,
-): string {
-    const deltaPixels = deltaSeconds / secondsPerPixel;
-    const scale =
-        kind === "move"
-            ? PROGRESS_MAX
-            : (initialDurationSeconds + (kind === "resize-start" ? -deltaSeconds : deltaSeconds)) /
-              initialDurationSeconds;
-    const translate = kind === "resize-end" ? TIME_START_SECONDS : deltaPixels;
-    return `translateX(${translate}px) scaleX(${scale})`;
+const clipDragResolver = new TimelineClipDragResolver();
+
+function clipDragCandidates(stores: DirectorDeskStores, bar: TimelineBar) {
+    const rows = stores.timelineLayout.project(motionViewport(stores));
+    const edges = rows
+        .flatMap((row) => row.bars)
+        .filter((candidate) => candidate.id !== bar.id || candidate.kind !== bar.kind)
+        .flatMap((candidate) => [candidate.startSeconds, candidate.startSeconds + candidate.durationSeconds]);
+    const keys = rows.flatMap((row) => row.marks.map((mark) => mark.timeSeconds));
+    return { playheadSeconds: stores.playheadDisplay.value, edges, keys };
 }
 
-function resolveClipRange(
-    stores: DirectorDeskStores,
-    clipId: string,
-    drag: MotionDragState,
-    event: PointerEvent<HTMLDivElement>,
-): { readonly startTimeSeconds: number; readonly durationSeconds: number } | null {
-    const track = timelineTrackFor(drag.element);
-    const clip = stores.motion.clip(clipId);
-    if (!track || !clip) return null;
-    const pointer = trackTimeAtPointer(stores, track, event.clientX);
-    const rawDelta = pointer.timeSeconds - trackTimeAtPointer(stores, track, drag.originClientX).timeSeconds;
-    const duration = stores.timeline.document.duration;
-    const rawStart = drag.startSeconds + rawDelta;
-    const rawEnd = drag.startSeconds + drag.durationSeconds + rawDelta;
-    const snappedMoveStart = snapTime(
-        stores,
-        clipId,
-        null,
-        clamp(rawStart, TIME_START_SECONDS, duration - drag.durationSeconds),
-        pointer.secondsPerPixel,
-        event.altKey,
-    );
-    const snappedStart = snapTime(
-        stores,
-        clipId,
-        null,
-        clamp(rawStart, TIME_START_SECONDS, drag.startSeconds + drag.durationSeconds - MINIMUM_DURATION_SECONDS),
-        pointer.secondsPerPixel,
-        event.altKey,
-    );
-    const snappedEnd = snapTime(
-        stores,
-        clipId,
-        null,
-        clamp(rawEnd, drag.startSeconds + MINIMUM_DURATION_SECONDS, duration),
-        pointer.secondsPerPixel,
-        event.altKey,
-    );
-    const ranges: Record<MotionDragKind, { readonly startTimeSeconds: number; readonly durationSeconds: number }> = {
-        move: {
-            startTimeSeconds: clamp(snappedMoveStart, TIME_START_SECONDS, duration - drag.durationSeconds),
-            durationSeconds: drag.durationSeconds,
-        },
-        "resize-start": {
-            startTimeSeconds: clamp(
-                snappedStart,
-                TIME_START_SECONDS,
-                drag.startSeconds + drag.durationSeconds - MINIMUM_DURATION_SECONDS,
-            ),
-            durationSeconds:
-                drag.startSeconds +
-                drag.durationSeconds -
-                clamp(
-                    snappedStart,
-                    TIME_START_SECONDS,
-                    drag.startSeconds + drag.durationSeconds - MINIMUM_DURATION_SECONDS,
-                ),
-        },
-        "resize-end": {
-            startTimeSeconds: drag.startSeconds,
-            durationSeconds:
-                clamp(snappedEnd, drag.startSeconds + MINIMUM_DURATION_SECONDS, duration) - drag.startSeconds,
-        },
+function rangeAtDragPointer(options: {
+    readonly stores: DirectorDeskStores;
+    readonly bar: TimelineBar;
+    readonly drag: ClipDragState;
+    readonly event: PointerEvent<HTMLDivElement>;
+}): TimelineClipRange | null {
+    const track = timelineTrackFor(options.drag.element);
+    if (!track) return null;
+    const pointer = trackTimeAtPointer(options.stores, track, options.event.clientX);
+    return clipDragResolver.resolve({
+        kind: options.drag.kind,
+        pointer: { originTimeSeconds: options.drag.originTimeSeconds, currentTimeSeconds: pointer.timeSeconds },
+        originalRange: options.drag.range,
+        viewport: motionViewport(options.stores),
+        trackWidthPx: options.drag.trackWidthPx,
+        candidates: clipDragCandidates(options.stores, options.bar),
+        isSnapEnabled: options.stores.motionAuthoring.snapEnabled && !options.event.altKey,
+        durationSeconds: options.stores.timeline.document.duration,
+    });
+}
+
+/** 三种时段条共用的瞬时手势层；只有落点通过 onCommit 进入命令与撤销栈。 */
+function useTimelineClipDrag(options: ClipDragHookOptions): ClipDragHookResult {
+    const stores = useDirectorDeskStores();
+    const drag = useRef<ClipDragState | null>(null);
+    const ignoreClick = useRef(false);
+    const [range, setRange] = useState<TimelineClipRange | null>(null);
+    const [kind, setKind] = useState<TimelineDragKind | null>(null);
+    const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
+        const bar = projectedBar(stores, options.barId);
+        const track = timelineTrackFor(event.currentTarget);
+        if (!bar || !track) return;
+        const trackBounds = track.getBoundingClientRect();
+        const barBounds = event.currentTarget.getBoundingClientRect();
+        const pointer = trackTimeAtPointer(stores, track, event.clientX);
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = {
+            element: event.currentTarget,
+            kind: clipDragResolver.dragKindAt({
+                pointerOffsetPx: event.clientX - barBounds.left,
+                barWidthPx: barBounds.width,
+                handleWidthPx: DRAG_HANDLE_WIDTH_PX,
+            }),
+            originTimeSeconds: pointer.timeSeconds,
+            range: { startTimeSeconds: bar.startSeconds, durationSeconds: bar.durationSeconds },
+            trackWidthPx: trackBounds.width,
+        };
+        setKind(drag.current.kind);
+        setRange(drag.current.range);
     };
-    return ranges[drag.kind];
-}
-
-function motionDragKind(event: PointerEvent<HTMLDivElement>): MotionDragKind {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const pointerOffset = event.clientX - bounds.left;
-    const nearStart = pointerOffset <= DRAG_HANDLE_WIDTH_PX;
-    const nearEnd = bounds.width - pointerOffset <= DRAG_HANDLE_WIDTH_PX;
-    if (nearStart) return "resize-start";
-    return nearEnd ? "resize-end" : "move";
+    const onPointerMove = (event: PointerEvent<HTMLDivElement>): void => {
+        const currentDrag = drag.current;
+        const bar = projectedBar(stores, options.barId);
+        if (!currentDrag || !bar) return;
+        const nextRange = rangeAtDragPointer({ stores, bar, drag: currentDrag, event });
+        if (!nextRange) return;
+        currentDrag.element.style.transform = clipDragResolver.transformFor({
+            kind: currentDrag.kind,
+            originalRange: currentDrag.range,
+            range: nextRange,
+            viewport: motionViewport(stores),
+            trackWidthPx: currentDrag.trackWidthPx,
+        });
+        setRange(nextRange);
+    };
+    const complete = (event: PointerEvent<HTMLDivElement>, shouldCommit: boolean): void => {
+        const currentDrag = drag.current;
+        const bar = projectedBar(stores, options.barId);
+        const nextRange = currentDrag && bar ? rangeAtDragPointer({ stores, bar, drag: currentDrag, event }) : null;
+        currentDrag?.element.releasePointerCapture(event.pointerId);
+        if (currentDrag) currentDrag.element.style.transform = "";
+        drag.current = null;
+        setRange(null);
+        setKind(null);
+        const hasChanged =
+            currentDrag !== null &&
+            nextRange !== null &&
+            (Math.abs(nextRange.startTimeSeconds - currentDrag.range.startTimeSeconds) >
+                DRAG_MOVEMENT_EPSILON_SECONDS ||
+                Math.abs(nextRange.durationSeconds - currentDrag.range.durationSeconds) >
+                    DRAG_MOVEMENT_EPSILON_SECONDS);
+        ignoreClick.current = hasChanged;
+        if (hasChanged && nextRange && shouldCommit) options.onCommit(nextRange);
+    };
+    return {
+        range,
+        kind,
+        isDragging: range !== null,
+        shouldIgnoreClick: () => {
+            const shouldIgnore = ignoreClick.current;
+            ignoreClick.current = false;
+            return shouldIgnore;
+        },
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: (event) => complete(event, true),
+        onPointerCancel: (event) => complete(event, false),
+    };
 }
 
 function trackAccent(kind: TimelineRowKind): TrackAccent {
@@ -281,38 +359,220 @@ const TimelineTrackRow = observer(function TimelineTrackRow({ rowId, children }:
     );
 });
 
-const ProgramClipBar = observer(function ProgramClipBar({ barId, onSelect }: ProgramClipBarProps) {
+function linkedProgramRangeCommand(options: ProgramRangeCommandOptions): SerializedCommand {
+    const source = options.source as MotionClipProgramSource;
+    return {
+        type: "motion.set-clip-range",
+        payload: { id: source.motionClipId, ...options.range },
+    };
+}
+
+function staticProgramRangeCommand(options: ProgramRangeCommandOptions): SerializedCommand {
+    const source = options.source as StaticShotProgramSource;
+    return {
+        type: "program.set-clip",
+        payload: { clip: { id: options.clipId, source, ...options.range } },
+    };
+}
+
+const PROGRAM_RANGE_COMMAND: Record<ProgramSource["kind"], (options: ProgramRangeCommandOptions) => SerializedCommand> =
+    {
+        [PROGRAM_SOURCE_KIND.MOTION_CLIP]: linkedProgramRangeCommand,
+        [PROGRAM_SOURCE_KIND.STATIC_SHOT]: staticProgramRangeCommand,
+    };
+
+function rangeCommandFor(
+    stores: DirectorDeskStores,
+    bar: TimelineBar,
+    range: TimelineClipRange,
+): SerializedCommand | null {
+    const commands: Record<TimelineBarKind, () => SerializedCommand | null> = {
+        [TIMELINE_BAR_KIND.MOTION]: () => ({ type: "motion.set-clip-range", payload: { id: bar.id, ...range } }),
+        [TIMELINE_BAR_KIND.PROGRAM]: () => {
+            const clip = stores.motion.program.clip(bar.id);
+            return clip
+                ? PROGRAM_RANGE_COMMAND[clip.source.kind]({ clipId: clip.id, source: clip.source, range })
+                : null;
+        },
+        [TIMELINE_BAR_KIND.TRANSFORM]: () => ({
+            type: "timeline.retime-track",
+            payload: { trackId: bar.id, ...range },
+        }),
+    };
+    return commands[bar.kind]();
+}
+
+/** 点运镜条 = 选中它并进镜头预览:看这段画面与编辑这段是同一个意图。 */
+function activateMotionBar(stores: DirectorDeskStores, bar: TimelineBar): void {
+    stores.selection.clear();
+    stores.timelineSelection.select(TimelineSelection.motionClip(bar.id));
+    const result = stores.dispatcher.dispatch({ type: "motion.preview.enter", payload: { clipId: bar.id } }, stores);
+    reportCommandFailure(stores, result);
+}
+
+/** 三类段条的点击落点:一律写进同一个时间轴选中态,底栏与 Delete 因此永远同源。 */
+const BAR_ACTIVATION: Record<TimelineBarKind, (stores: DirectorDeskStores, bar: TimelineBar) => void> = {
+    [TIMELINE_BAR_KIND.MOTION]: activateMotionBar,
+    [TIMELINE_BAR_KIND.PROGRAM]: (stores, bar) => {
+        stores.selection.clear();
+        stores.timelineSelection.select(TimelineSelection.programClip(bar.id));
+    },
+    [TIMELINE_BAR_KIND.TRANSFORM]: (stores, bar) => {
+        stores.selection.clear();
+        stores.timelineSelection.select(TimelineSelection.walkTrack(bar.id));
+    },
+};
+
+const BAR_COLOR: Record<TimelineBarKind, string> = {
+    [TIMELINE_BAR_KIND.MOTION]: MOTION_BAR_COLOR,
+    [TIMELINE_BAR_KIND.PROGRAM]: PROGRAM_BAR_COLOR,
+    [TIMELINE_BAR_KIND.TRANSFORM]: TRANSFORM_BAR_COLOR,
+};
+
+function TimelineDragHandle({ side }: { readonly side: TimelineDragHandleSide }) {
+    return (
+        <Box
+            className={DRAG_HANDLE_CLASS_NAME}
+            sx={{
+                position: "absolute",
+                top: TIME_START_SECONDS,
+                bottom: TIME_START_SECONDS,
+                width: DRAG_HANDLE_WIDTH_PX,
+                ...DRAG_HANDLE_POSITION[side],
+                opacity: HANDLE_HIDDEN_OPACITY,
+                cursor: "col-resize",
+                transition: HANDLE_OPACITY_TRANSITION,
+            }}
+        />
+    );
+}
+
+/**
+ * 拖拽读数:同一条段条上「挪位置」与「改时长」是两种领域操作(平移 vs 整段重定时),
+ * 读数必须当场说清改的是哪一个,否则作者只能靠事后观察猜。
+ */
+function dragReadout(kind: TimelineDragKind | null, range: TimelineClipRange): string {
+    const startText = `${range.startTimeSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)}s`;
+    const durationText = `${range.durationSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)}s`;
+    const readouts: Record<TimelineDragKind, string> = {
+        [TIMELINE_DRAG_KIND.MOVE]: `起点 ${startText}`,
+        [TIMELINE_DRAG_KIND.RESIZE_START]: `起点 ${startText} · 重定时 ${durationText}`,
+        [TIMELINE_DRAG_KIND.RESIZE_END]: `重定时 ${durationText}`,
+    };
+    return kind === null ? `${startText} / ${durationText}` : readouts[kind];
+}
+
+/** Program、运镜与走位段条只在领域命令不同；手势、把手与读数必须完全同构。 */
+const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineClipBarProps) {
     const stores = useDirectorDeskStores();
+    const commitRange = (range: TimelineClipRange): void => {
+        const currentBar = projectedBar(stores, barId);
+        if (!currentBar) return;
+        const command = rangeCommandFor(stores, currentBar, range);
+        if (!command) return;
+        reportCommandFailure(stores, stores.dispatcher.dispatch(command, stores));
+    };
+    const drag = useTimelineClipDrag({ barId, onCommit: commitRange });
     const bar = projectedBar(stores, barId);
     if (!bar) return null;
     const removeFollow = (): void => {
-        const result = stores.dispatcher.dispatch({ type: "program.remove-clip", payload: { id: bar.id } }, stores);
-        reportCommandFailure(stores, result);
+        reportCommandFailure(
+            stores,
+            stores.dispatcher.dispatch({ type: "program.remove-clip", payload: { id: bar.id } }, stores),
+        );
+    };
+    const currentRange = drag.range ?? { startTimeSeconds: bar.startSeconds, durationSeconds: bar.durationSeconds };
+    const activate = BAR_ACTIVATION[bar.kind];
+    const isMotion = bar.kind === TIMELINE_BAR_KIND.MOTION;
+    const isTransform = bar.kind === TIMELINE_BAR_KIND.TRANSFORM;
+    const isSelected = stores.timelineSelection.current.ownerId === bar.id;
+    /** 键盘等价路径:方向键平移,Shift+方向键改时长——与拖拽走同一条命令。 */
+    const keydown = (event: KeyboardEvent<HTMLDivElement>): void => {
+        const stepByKey: Record<string, number> = {
+            ArrowLeft: -KEYBOARD_TIME_STEP_SECONDS,
+            ArrowRight: KEYBOARD_TIME_STEP_SECONDS,
+        };
+        const step = stepByKey[event.key];
+        if (step === undefined) return;
+        event.preventDefault();
+        const duration = stores.timeline.document.duration;
+        const range = event.shiftKey
+            ? {
+                  startTimeSeconds: bar.startSeconds,
+                  durationSeconds: clamp(
+                      bar.durationSeconds + step,
+                      MINIMUM_BAR_DURATION_SECONDS,
+                      duration - bar.startSeconds,
+                  ),
+              }
+            : {
+                  startTimeSeconds: clamp(bar.startSeconds + step, TIME_START_SECONDS, duration - bar.durationSeconds),
+                  durationSeconds: bar.durationSeconds,
+              };
+        commitRange(range);
     };
     return (
         <Box
             role="button"
             tabIndex={0}
-            aria-label={`${bar.label} 输出片段 ${bar.startSeconds.toFixed(2)} 秒`}
-            onClick={() => onSelect(bar.id)}
+            aria-keyshortcuts="ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight"
+            aria-label={`${bar.label} 片段 ${bar.startSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒，时长 ${bar.durationSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒`}
+            onClick={() => {
+                if (drag.shouldIgnoreClick()) return;
+                activate(stores, bar);
+            }}
+            onKeyDown={keydown}
+            onPointerDown={drag.onPointerDown}
+            onPointerMove={drag.onPointerMove}
+            onPointerUp={drag.onPointerUp}
+            onPointerCancel={drag.onPointerCancel}
             sx={{
                 position: "absolute",
-                top: BAR_VERTICAL_INSET_PX,
-                bottom: BAR_VERTICAL_INSET_PX,
+                top: BAR_LANE_TOP_PX,
+                height: BAR_LANE_HEIGHT_PX,
                 left: `${bar.startRatio * PERCENT_FULL}%`,
                 width: `${bar.widthRatio * PERCENT_FULL}%`,
                 px: 0.75,
+                display: "flex",
+                alignItems: "center",
                 overflow: "hidden",
-                bgcolor: PROGRAM_BAR_COLOR,
+                transformOrigin: BAR_TRANSFORM_ORIGIN,
+                border: 1,
+                borderColor: isSelected ? "common.white" : BAR_COLOR[bar.kind],
+                bgcolor: isMotion
+                    ? (theme) => alpha(theme.palette.primary.main, MOTION_CLIP_BACKGROUND_ALPHA)
+                    : BAR_COLOR[bar.kind],
                 color: "common.white",
-                cursor: "pointer",
+                cursor: drag.isDragging ? "grabbing" : "grab",
                 fontSize: 11,
                 fontWeight: 700,
                 whiteSpace: "nowrap",
                 fontFamily: MONO_FONT_STACK,
+                touchAction: "none",
+                zIndex: isTransform ? TRANSFORM_BAR_Z_INDEX : CLIP_BAR_Z_INDEX,
+                "&:hover .timeline-drag-handle, &:focus-visible .timeline-drag-handle": {
+                    opacity: HANDLE_VISIBLE_OPACITY,
+                },
             }}
         >
             {bar.label}
+            <TimelineDragHandle side={TIMELINE_DRAG_HANDLE_SIDE.START} />
+            <TimelineDragHandle side={TIMELINE_DRAG_HANDLE_SIDE.END} />
+            {drag.range && (
+                <Box
+                    sx={{
+                        position: "absolute",
+                        inset: TIME_START_SECONDS,
+                        display: "grid",
+                        placeItems: "center",
+                        pointerEvents: "none",
+                        bgcolor: DRAG_READOUT_BACKGROUND,
+                        fontFamily: MONO_FONT_STACK,
+                    }}
+                >
+                    {dragReadout(drag.kind, currentRange)}
+                </Box>
+            )}
             {bar.linked && (
                 <Tooltip title={LINK_LABEL}>
                     <IconButton
@@ -330,105 +590,6 @@ const ProgramClipBar = observer(function ProgramClipBar({ barId, onSelect }: Pro
                 </Tooltip>
             )}
         </Box>
-    );
-});
-
-const MotionClipBar = observer(function MotionClipBar({ clipId }: { readonly clipId: string }) {
-    const stores = useDirectorDeskStores();
-    const bar = projectedBar(stores, clipId);
-    const drag = useRef<MotionDragState | null>(null);
-    const ignoreClick = useRef(false);
-    if (!bar) return null;
-    const clip = stores.motion.clip(clipId);
-    if (!clip) return null;
-    const completeDrag = (event: PointerEvent<HTMLDivElement>): void => {
-        const currentDrag = drag.current;
-        if (!currentDrag) return;
-        const nextRange = resolveClipRange(stores, clipId, currentDrag, event);
-        currentDrag.element.style.transform = "";
-        currentDrag.element.releasePointerCapture(event.pointerId);
-        drag.current = null;
-        if (!nextRange) return;
-        const changed =
-            Math.abs(nextRange.startTimeSeconds - currentDrag.startSeconds) > DRAG_MOVEMENT_EPSILON_SECONDS ||
-            Math.abs(nextRange.durationSeconds - currentDrag.durationSeconds) > DRAG_MOVEMENT_EPSILON_SECONDS;
-        ignoreClick.current = changed;
-        if (!changed) return;
-        const result = stores.dispatcher.dispatch(
-            { type: "motion.set-clip-range", payload: { id: clipId, ...nextRange } },
-            stores,
-        );
-        reportCommandFailure(stores, result);
-    };
-    return (
-        <Box
-            role="button"
-            tabIndex={0}
-            aria-label={`${bar.label} 运镜片段 ${clip.startTimeSeconds.toFixed(2)} 秒`}
-            onClick={() => {
-                if (ignoreClick.current) {
-                    ignoreClick.current = false;
-                    return;
-                }
-                stores.selection.clear();
-                stores.motionAuthoring.selectClip(clipId);
-                const result = stores.dispatcher.dispatch(
-                    { type: "motion.preview.enter", payload: { clipId } },
-                    stores,
-                );
-                reportCommandFailure(stores, result);
-            }}
-            onPointerDown={(event) => {
-                event.stopPropagation();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                drag.current = {
-                    element: event.currentTarget,
-                    kind: motionDragKind(event),
-                    originClientX: event.clientX,
-                    startSeconds: clip.startTimeSeconds,
-                    durationSeconds: clip.durationSeconds,
-                };
-            }}
-            onPointerMove={(event) => {
-                const currentDrag = drag.current;
-                if (!currentDrag) return;
-                const nextRange = resolveClipRange(stores, clipId, currentDrag, event);
-                if (!nextRange) return;
-                const transformDelta =
-                    currentDrag.kind === "resize-end"
-                        ? nextRange.durationSeconds - currentDrag.durationSeconds
-                        : nextRange.startTimeSeconds - currentDrag.startSeconds;
-                currentDrag.element.style.transform = clipTransform(
-                    currentDrag.kind,
-                    transformDelta,
-                    currentDrag.durationSeconds,
-                    motionViewport(stores).secondsPerPixel(
-                        timelineTrackFor(currentDrag.element)?.getBoundingClientRect().width ?? TIME_START_SECONDS,
-                    ),
-                );
-            }}
-            onPointerUp={completeDrag}
-            onPointerCancel={(event) => {
-                const currentDrag = drag.current;
-                if (!currentDrag) return;
-                currentDrag.element.style.transform = "";
-                currentDrag.element.releasePointerCapture(event.pointerId);
-                drag.current = null;
-            }}
-            sx={{
-                position: "absolute",
-                top: BAR_VERTICAL_INSET_PX,
-                bottom: BAR_VERTICAL_INSET_PX,
-                left: `${bar.startRatio * PERCENT_FULL}%`,
-                width: `${bar.widthRatio * PERCENT_FULL}%`,
-                transformOrigin: CLIP_TRANSFORM_ORIGIN,
-                border: 1,
-                borderColor: stores.motionAuthoring.selectedClipId === clipId ? "primary.light" : MOTION_BAR_COLOR,
-                bgcolor: (theme) => alpha(theme.palette.primary.main, MOTION_CLIP_BACKGROUND_ALPHA),
-                cursor: MOTION_DRAG_CURSOR,
-                touchAction: "none",
-            }}
-        />
     );
 });
 
@@ -486,7 +647,7 @@ const MotionKeyDiamond = observer(function MotionKeyDiamond({
                     ignoreClick.current = false;
                     return;
                 }
-                stores.motionAuthoring.selectKey(clipId, keyId);
+                stores.timelineSelection.select(TimelineSelection.motionKey(clipId, keyId));
             }}
             onDoubleClick={() => {
                 const result = stores.dispatcher.dispatch(
@@ -499,7 +660,7 @@ const MotionKeyDiamond = observer(function MotionKeyDiamond({
                 event.stopPropagation();
                 event.currentTarget.setPointerCapture(event.pointerId);
                 drag.current = { element: event.currentTarget, originTimeSeconds: mark.timeSeconds };
-                stores.motionAuthoring.selectKey(clipId, keyId);
+                stores.timelineSelection.select(TimelineSelection.motionKey(clipId, keyId));
             }}
             onPointerMove={(event) => {
                 const currentDrag = drag.current;
@@ -522,16 +683,18 @@ const MotionKeyDiamond = observer(function MotionKeyDiamond({
             }}
             sx={{
                 position: "absolute",
-                top: (TRACK_HEIGHT_PX - KEY_SIZE_PX) / 2,
+                top: MARK_LANE_TOP_PX,
                 left: `calc(${mark.ratio * PERCENT_FULL}% - ${KEY_HALF_SIZE_PX}px)`,
                 width: KEY_SIZE_PX,
                 height: KEY_SIZE_PX,
                 transform: "rotate(45deg)",
                 bgcolor:
-                    stores.motionAuthoring.selectedKeyId === keyId && stores.motionAuthoring.selectedClipId === clipId
-                        ? MOTION_BAR_COLOR
+                    stores.timelineSelection.current.motionKeyId === keyId &&
+                    stores.timelineSelection.current.motionClipId === clipId
+                        ? "common.white"
                         : "primary.light",
-                cursor: MOTION_DRAG_CURSOR,
+                cursor: KEY_DRAG_CURSOR,
+                zIndex: CLIP_BAR_Z_INDEX,
                 touchAction: "none",
             }}
         />
@@ -541,8 +704,10 @@ const MotionKeyDiamond = observer(function MotionKeyDiamond({
 const TransformKeyDiamond = observer(function TransformKeyDiamond({
     trackId,
     keyId,
-    onSelect,
-}: TransformKeyDiamondProps) {
+}: {
+    readonly trackId: string;
+    readonly keyId: string;
+}) {
     const stores = useDirectorDeskStores();
     const mark = projectedMark(stores, trackId, keyId);
     const drag = useRef<KeyDragState | null>(null);
@@ -563,6 +728,9 @@ const TransformKeyDiamond = observer(function TransformKeyDiamond({
         );
         reportCommandFailure(stores, result);
     };
+    const select = (): void => {
+        stores.timelineSelection.select(TimelineSelection.walkKey(trackId, keyId));
+    };
     const keydown = (event: KeyboardEvent<HTMLDivElement>): void => {
         const deltaByKey: Record<string, number | null> = {
             ArrowLeft: -KEYBOARD_TIME_STEP_SECONDS,
@@ -571,7 +739,7 @@ const TransformKeyDiamond = observer(function TransformKeyDiamond({
         const isSelectionKey = event.key === "Enter" || event.key === " ";
         if (isSelectionKey) {
             event.preventDefault();
-            onSelect({ trackId, keyframeId: keyId });
+            select();
             return;
         }
         const delta = deltaByKey[event.key] ?? null;
@@ -579,7 +747,7 @@ const TransformKeyDiamond = observer(function TransformKeyDiamond({
         event.preventDefault();
         const duration = stores.timeline.document.duration;
         const nextTime = clamp(mark.timeSeconds + delta, TIME_START_SECONDS, duration);
-        onSelect({ trackId, keyframeId: keyId });
+        select();
         if (nextTime === mark.timeSeconds) return;
         const result = stores.dispatcher.dispatch(
             { type: "timeline.move-key", payload: { trackId, keyframeId: keyId, time: nextTime } },
@@ -593,13 +761,13 @@ const TransformKeyDiamond = observer(function TransformKeyDiamond({
             tabIndex={0}
             aria-keyshortcuts="ArrowLeft ArrowRight Enter Space"
             aria-label={`关键帧 ${mark.timeSeconds.toFixed(2)} 秒`}
-            onFocus={() => onSelect({ trackId, keyframeId: keyId })}
+            onFocus={select}
             onKeyDown={keydown}
             onPointerDown={(event) => {
                 event.stopPropagation();
                 event.currentTarget.setPointerCapture(event.pointerId);
                 drag.current = { element: event.currentTarget, originTimeSeconds: mark.timeSeconds };
-                onSelect({ trackId, keyframeId: keyId });
+                select();
             }}
             onPointerMove={(event) => {
                 const currentDrag = drag.current;
@@ -621,26 +789,22 @@ const TransformKeyDiamond = observer(function TransformKeyDiamond({
             }}
             sx={{
                 position: "absolute",
-                top: (TRACK_HEIGHT_PX - KEY_SIZE_PX) / 2,
+                top: MARK_LANE_TOP_PX,
                 left: `calc(${mark.ratio * PERCENT_FULL}% - ${KEY_HALF_SIZE_PX}px)`,
                 width: KEY_SIZE_PX,
                 height: KEY_SIZE_PX,
                 transform: "rotate(45deg)",
-                bgcolor: KEYFRAME_TRACK_ACCENT,
-                cursor: MOTION_DRAG_CURSOR,
+                bgcolor:
+                    stores.timelineSelection.current.walkKeyframeId === keyId ? "common.white" : KEYFRAME_TRACK_ACCENT,
+                cursor: KEY_DRAG_CURSOR,
+                zIndex: CLIP_BAR_Z_INDEX,
                 touchAction: "none",
             }}
         />
     );
 });
 
-const ProgramTrackBody = observer(function ProgramTrackBody({
-    rowId,
-    onSelect,
-}: {
-    readonly rowId: string;
-    readonly onSelect: (clipId: string) => void;
-}) {
+const ProgramTrackBody = observer(function ProgramTrackBody({ rowId }: { readonly rowId: string }) {
     const stores = useDirectorDeskStores();
     const row = projectedRow(stores, rowId);
     if (!row) return null;
@@ -656,7 +820,7 @@ const ProgramTrackBody = observer(function ProgramTrackBody({
             {row.bars
                 .filter((bar) => bar.kind === TIMELINE_BAR_KIND.PROGRAM)
                 .map((bar) => (
-                    <ProgramClipBar key={bar.id} barId={bar.id} onSelect={onSelect} />
+                    <TimelineClipBar key={bar.id} barId={bar.id} />
                 ))}
         </Box>
     );
@@ -678,7 +842,7 @@ const MotionTrackBody = observer(function MotionTrackBody({ rowId }: { readonly 
             {row.bars
                 .filter((bar) => bar.kind === TIMELINE_BAR_KIND.MOTION)
                 .map((bar) => (
-                    <MotionClipBar key={bar.id} clipId={bar.id} />
+                    <TimelineClipBar key={bar.id} barId={bar.id} />
                 ))}
             {row.marks
                 .filter((mark) => mark.kind === TIMELINE_MARK_KIND.CAMERA_KEY)
@@ -689,13 +853,7 @@ const MotionTrackBody = observer(function MotionTrackBody({ rowId }: { readonly 
     );
 });
 
-const TransformTrackBody = observer(function TransformTrackBody({
-    rowId,
-    onSelect,
-}: {
-    readonly rowId: string;
-    readonly onSelect: (selection: TransformKeySelection) => void;
-}) {
+const TransformTrackBody = observer(function TransformTrackBody({ rowId }: { readonly rowId: string }) {
     const stores = useDirectorDeskStores();
     const row = projectedRow(stores, rowId);
     if (!row) return null;
@@ -708,43 +866,29 @@ const TransformTrackBody = observer(function TransformTrackBody({
                 bgcolor: (theme) => alpha(theme.palette.secondary.main, TRACK_BACKGROUND_ALPHA),
             }}
         >
+            {row.bars
+                .filter((bar) => bar.kind === TIMELINE_BAR_KIND.TRANSFORM)
+                .map((bar) => (
+                    <TimelineClipBar key={bar.id} barId={bar.id} />
+                ))}
             {row.marks
                 .filter((mark) => mark.kind === TIMELINE_MARK_KIND.TRANSFORM_KEY)
                 .map((mark) => (
-                    <TransformKeyDiamond key={mark.id} trackId={mark.ownerId} keyId={mark.id} onSelect={onSelect} />
+                    <TransformKeyDiamond key={mark.id} trackId={mark.ownerId} keyId={mark.id} />
                 ))}
         </Box>
     );
 });
 
-const ROW_CONTENT: Record<
-    TimelineRowKind,
-    (
-        rowId: string,
-        onSelectProgramClip: (clipId: string) => void,
-        onSelectTransformKey: (selection: TransformKeySelection) => void,
-    ) => ReactNode
-> = {
-    [TIMELINE_ROW_KIND.PROGRAM]: (rowId, onSelectProgramClip) => (
-        <ProgramTrackBody rowId={rowId} onSelect={onSelectProgramClip} />
-    ),
+const ROW_CONTENT: Record<TimelineRowKind, (rowId: string) => ReactNode> = {
+    [TIMELINE_ROW_KIND.PROGRAM]: (rowId) => <ProgramTrackBody rowId={rowId} />,
     [TIMELINE_ROW_KIND.MOTION]: (rowId) => <MotionTrackBody rowId={rowId} />,
-    [TIMELINE_ROW_KIND.TRANSFORM]: (rowId, _onSelectProgramClip, onSelectTransformKey) => (
-        <TransformTrackBody rowId={rowId} onSelect={onSelectTransformKey} />
-    ),
+    [TIMELINE_ROW_KIND.TRANSFORM]: (rowId) => <TransformTrackBody rowId={rowId} />,
 };
 
-export const TimelineProjectedRow = observer(function TimelineProjectedRow({
-    rowId,
-    onSelectProgramClip,
-    onSelectTransformKey,
-}: TimelineProjectedRowProps) {
+export const TimelineProjectedRow = observer(function TimelineProjectedRow({ rowId }: TimelineProjectedRowProps) {
     const stores = useDirectorDeskStores();
     const row = projectedRow(stores, rowId);
     if (!row) return null;
-    return (
-        <TimelineTrackRow rowId={rowId}>
-            {ROW_CONTENT[row.kind](row.id, onSelectProgramClip, onSelectTransformKey)}
-        </TimelineTrackRow>
-    );
+    return <TimelineTrackRow rowId={rowId}>{ROW_CONTENT[row.kind](row.id)}</TimelineTrackRow>;
 });
