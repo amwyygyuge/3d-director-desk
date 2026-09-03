@@ -71,6 +71,24 @@ export type {
     WorldPointFocusTargetJSON,
 } from "@/camera/CameraFocusTrack";
 export { FocusTargetResolver } from "@/camera/FocusTargetResolver";
+export {
+    CameraFollowTrack,
+    FOLLOW_APPROACH,
+    FOLLOW_APPROACH_AZIMUTH,
+    isFollowApproach,
+    FOLLOW_ANCHOR_LIMIT_METERS,
+    FOLLOW_LAG_MAX_SECONDS,
+    FOLLOW_LAG_MIN_SECONDS,
+    FOLLOW_SMOOTHING_MAX_SECONDS,
+    FOLLOW_SMOOTHING_MIN_SECONDS,
+} from "@/camera/CameraFollowTrack";
+export type { CameraFollowTrackJSON, FollowApproach } from "@/camera/CameraFollowTrack";
+export { FOLLOW_SPACE, FollowSpaceCodec, followSpaceCodecFor } from "@/camera/FollowSpaceCodec";
+export type { FollowSpace } from "@/camera/FollowSpaceCodec";
+export { CameraFrameSolver } from "@/camera/CameraFrameSolver";
+export { FOLLOW_FRAME, isFollowFrame, SubjectFrameResolver } from "@/motion/SubjectFrameResolver";
+export type { FollowFrame, SubjectFrameRequest, TimelineDocumentSource } from "@/motion/SubjectFrameResolver";
+export { SubjectFrameSample } from "@/motion/SubjectFrameSample";
 export { MotionKey, MOTION_HANDLE_MODE, MOTION_PROGRESS_MAX, MOTION_PROGRESS_MIN } from "@/motion/MotionKey";
 export type { MotionHandleMode, MotionKeyInit, MotionKeyJSON, MotionKeyLike } from "@/motion/MotionKey";
 export { AutoHandleSolver, createHandlePair } from "@/motion/AutoHandleSolver";
@@ -198,6 +216,7 @@ export {
 export type { LightingObjectSnapshot } from "@/command/lightingCommands";
 export {
     AuthorMotionCommand,
+    BindMotionClipFollowCommand,
     CameraMotionGetQuery,
     CreateMotionClipCommand,
     CreateMotionTakeCommand,
@@ -207,17 +226,21 @@ export {
     PROGRAM_FOLLOW,
     QuickAuthorMotionCommand,
     RemoveMotionClipCommand,
+    ReplaceMotionClipCommand,
     RemoveMotionKeyCommand,
     RemoveProgramClipCommand,
     ResetMotionKeyHandlesCommand,
     registerCameraMotionCommands,
     SetMotionClipFocusCommand,
+    SetMotionClipFollowParamsCommand,
     SetMotionClipRangeCommand,
     SetMotionKeyCommand,
     SetMotionClipEasingCommand,
     SetMotionKeyHandleCommand,
     SetProgramClipCommand,
     SetViewModeCommand,
+    SetSweepPathVisibleCommand,
+    UnbindMotionClipFollowCommand,
 } from "@/command/cameraMotionCommands";
 export type { ProgramFollow } from "@/command/cameraMotionCommands";
 export { CommandHistory } from "@/command/CommandHistory";

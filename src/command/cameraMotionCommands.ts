@@ -1,5 +1,20 @@
 import { CameraFocusTrack, FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import type { FocusTargetJSON } from "@/camera/CameraFocusTrack";
+import {
+    CameraFollowTrack,
+    FOLLOW_ANCHOR_LIMIT_METERS,
+    FOLLOW_APPROACH,
+    FOLLOW_APPROACH_AZIMUTH,
+    FOLLOW_LAG_MAX_SECONDS,
+    FOLLOW_LAG_MIN_SECONDS,
+    FOLLOW_SMOOTHING_MAX_SECONDS,
+    FOLLOW_SMOOTHING_MIN_SECONDS,
+    isFollowApproach,
+} from "@/camera/CameraFollowTrack";
+import type { CameraFollowTrackJSON, FollowApproach } from "@/camera/CameraFollowTrack";
+import { FOLLOW_SPACE, followSpaceCodecFor } from "@/camera/FollowSpaceCodec";
+import { FOLLOW_FRAME, isFollowFrame } from "@/motion/SubjectFrameResolver";
+import type { FollowFrame } from "@/motion/SubjectFrameResolver";
 import { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyJSON } from "@/camera/CameraKey";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -11,6 +26,7 @@ import type { CameraProgramClipJSON, ProgramSource } from "@/camera/CameraProgra
 import { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
 import {
     isOrbitDirection,
+    isOrientationMove,
     MotionPresetCompiler,
     MOTION_MOVE,
     ORBIT_DIRECTION,
@@ -63,8 +79,14 @@ const ISSUE_CODE = {
     PROGRAM_OVERLAP: "program-overlapping-clip",
     PROGRAM_CLIP: "program-clip-not-found",
     FOCUS_OBJECT: "motion-focus-object-not-found",
+    FOLLOW_SUBJECT: "motion-follow-subject-not-found",
+    FOLLOW_FRAME: "motion-follow-frame-invalid",
+    FOLLOW_RANGE: "motion-follow-out-of-range",
+    FOLLOW_UNBOUND: "motion-follow-not-bound",
+    FOLLOW_UNRESOLVED: "motion-follow-unresolvable",
     SUBJECT: "motion-subject-not-found",
     MOVE: "motion-unknown-move",
+    MOVE_CONFLICT: "motion-move-overridden-by-focus",
 } as const;
 
 /** Program 跟随策略:UI 与 AI 共用同一组语义,冲突时由调用方二选一。 */
@@ -89,10 +111,26 @@ interface CreateTakePayload {
     readonly durationSeconds: number;
     readonly keys: readonly CameraKeyJSON[];
     readonly focus?: FocusTargetJSON | null;
+    /** 跟拍覆盖层:非空时 keys 视为跟随系坐标 */
+    readonly follow?: CameraFollowTrackJSON | null;
     readonly program?: ProgramFollow;
     /** 整段时间曲线;缺省 smooth */
     readonly easing?: EasingCurve;
 }
+
+interface ReplaceMotionClipPayload {
+    readonly clip: CameraMotionClipJSON;
+}
+
+interface MotionClipIdPayload {
+    readonly id: string;
+}
+
+/** 跟拍绑定/调参共用载荷:片段 id + 覆盖层全字段(纯数据,与 JSON 同形) */
+interface BindMotionClipFollowPayload extends CameraFollowTrackJSON {
+    readonly id: string;
+}
+
 interface AuthorMotionPayload extends MotionPresetRequest {
     /** 仅创建期读取的静态起幅机位;不会写入运镜资产。 */
     readonly cameraId: string;
@@ -201,6 +239,18 @@ const CAMERA_FOCUS_TRACK_SCHEMA: PayloadFieldSchema = {
     required: ["mode", "target"],
 };
 
+const CAMERA_FOLLOW_TRACK_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        objectId: { type: "string" },
+        anchorOffset: VEC3_SCHEMA,
+        frame: { type: "string", enum: Object.values(FOLLOW_FRAME) },
+        lagSeconds: { type: "number" },
+        smoothingSeconds: { type: "number" },
+    },
+    required: ["objectId", "anchorOffset", "frame", "lagSeconds", "smoothingSeconds"],
+};
+
 const CAMERA_MOTION_CLIP_SCHEMA: PayloadFieldSchema = {
     type: "object",
     properties: {
@@ -209,9 +259,10 @@ const CAMERA_MOTION_CLIP_SCHEMA: PayloadFieldSchema = {
         durationSeconds: { type: "number" },
         keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
         focus: nullable(CAMERA_FOCUS_TRACK_SCHEMA),
+        follow: nullable(CAMERA_FOLLOW_TRACK_SCHEMA),
         easing: { type: "string", enum: Object.values(EASING) },
     },
-    required: ["id", "startTimeSeconds", "durationSeconds", "keys", "focus", "easing"],
+    required: ["id", "startTimeSeconds", "durationSeconds", "keys", "focus", "follow", "easing"],
 };
 
 const PROGRAM_SOURCE_SCHEMA: PayloadFieldSchema = {
@@ -258,10 +309,34 @@ const CREATE_MOTION_TAKE_CONTRACT: PayloadContract = {
         durationSeconds: { type: "number" },
         keys: { type: "array", items: CAMERA_KEY_SCHEMA, minItems: MINIMUM_KEYS_PER_CLIP },
         focus: nullable(FOCUS_TARGET_SCHEMA),
+        follow: nullable(CAMERA_FOLLOW_TRACK_SCHEMA),
         program: { type: "string", enum: Object.values(PROGRAM_FOLLOW) },
         easing: { type: "string", enum: Object.values(EASING) },
     },
     required: ["startTimeSeconds", "durationSeconds", "keys"],
+};
+
+const REPLACE_MOTION_CLIP_CONTRACT: PayloadContract = {
+    properties: { clip: CAMERA_MOTION_CLIP_SCHEMA },
+    required: ["clip"],
+};
+
+/** 绑定与调参同形:片段 id + 覆盖层全字段 */
+const MOTION_FOLLOW_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        objectId: { type: "string" },
+        anchorOffset: VEC3_SCHEMA,
+        frame: { type: "string", enum: Object.values(FOLLOW_FRAME) },
+        lagSeconds: { type: "number" },
+        smoothingSeconds: { type: "number" },
+    },
+    required: ["id", "objectId", "anchorOffset", "frame", "lagSeconds", "smoothingSeconds"],
+};
+
+const UNBIND_MOTION_FOLLOW_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" } },
+    required: ["id"],
 };
 
 const SET_MOTION_CLIP_RANGE_CONTRACT: PayloadContract = {
@@ -339,6 +414,14 @@ const QUICK_AUTHOR_MOTION_CONTRACT: PayloadContract = {
         degrees: { type: "number" },
         direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
         easing: { type: "string", enum: Object.values(EASING) },
+        follow: {
+            type: "object",
+            properties: {
+                approach: { type: "string", enum: Object.values(FOLLOW_APPROACH) },
+                frame: { type: "string", enum: Object.values(FOLLOW_FRAME) },
+            },
+            required: ["approach"],
+        },
     },
     required: ["subjectId", "shotSize", "move", "durationSeconds"],
 };
@@ -377,9 +460,20 @@ function presetParamIssues(payload: {
     readonly move: MotionMove;
     readonly degrees?: number;
     readonly direction?: OrbitDirection;
+    readonly subjectId?: string | undefined;
 }): CommandIssue[] {
     if (!Object.values(MOTION_MOVE).includes(payload.move)) {
         return [issue(ISSUE_CODE.MOVE, "move", "未知的运镜语汇")];
+    }
+    // 朝向类语汇只改注视方向;绑了被摄对象就会被注视覆盖层接管,产物必然纹丝不动
+    if (payload.subjectId !== undefined && isOrientationMove(payload.move)) {
+        return [
+            issue(
+                ISSUE_CODE.MOVE_CONFLICT,
+                "move",
+                "摇镜/俯仰改的是注视方向,而注视已被被摄对象接管;改用横移或环绕,或去掉被摄对象",
+            ),
+        ];
     }
     const issues: CommandIssue[] = [];
     const { degrees, direction } = payload;
@@ -476,8 +570,60 @@ function clipIssues(ctx: DirectorContext, clip: CameraMotionClip): readonly Comm
         target.kind !== FOCUS_TARGET_KIND.SCENE_OBJECT ||
         ctx.scene.manager.getEntity(target.objectId) !== undefined;
     if (!hasFocusObject) return [issue(ISSUE_CODE.FOCUS_OBJECT, "clip.focus.target.objectId", "注视绑定对象不存在")];
+    const followObjectId = clip.follow?.objectId;
+    if (followObjectId !== undefined && !ctx.scene.manager.getEntity(followObjectId)) {
+        return [issue(ISSUE_CODE.FOLLOW_SUBJECT, "clip.follow.objectId", "跟拍主体不存在")];
+    }
     const range = clipRangeIssue(ctx, clip);
     return range ? [range] : [];
+}
+
+/** payload → 跟拍覆盖层:数值与枚举围栏由值对象构造函数统一裁决(围栏单一真相源)。 */
+function followFromPayload(payload: BindMotionClipFollowPayload): CameraFollowTrack | null {
+    try {
+        return new CameraFollowTrack(payload);
+    } catch {
+        return null;
+    }
+}
+
+/** 越界原因逐项定位,AI 才知道该改哪个字段;顺序与值对象的校验顺序一致。 */
+function followPayloadIssue(payload: BindMotionClipFollowPayload): CommandIssue {
+    if (!isFollowFrame(payload.frame)) {
+        return issue(ISSUE_CODE.FOLLOW_FRAME, "frame", "跟拍参考系只能是 world(平移)或 heading(朝向)");
+    }
+    if (!finiteVec3(payload.anchorOffset)) {
+        return issue(
+            ISSUE_CODE.FOLLOW_RANGE,
+            "anchorOffset",
+            `锚点偏移需为有限数值且不超过 ${FOLLOW_ANCHOR_LIMIT_METERS} 米`,
+        );
+    }
+    if (!isWithinRange(payload.lagSeconds, FOLLOW_LAG_MIN_SECONDS, FOLLOW_LAG_MAX_SECONDS)) {
+        return issue(
+            ISSUE_CODE.FOLLOW_RANGE,
+            "lagSeconds",
+            `滞后需在 ${FOLLOW_LAG_MIN_SECONDS} ~ ${FOLLOW_LAG_MAX_SECONDS} 秒之间`,
+        );
+    }
+    if (!isWithinRange(payload.smoothingSeconds, FOLLOW_SMOOTHING_MIN_SECONDS, FOLLOW_SMOOTHING_MAX_SECONDS)) {
+        return issue(
+            ISSUE_CODE.FOLLOW_RANGE,
+            "smoothingSeconds",
+            `平滑需在 ${FOLLOW_SMOOTHING_MIN_SECONDS} ~ ${FOLLOW_SMOOTHING_MAX_SECONDS} 秒之间`,
+        );
+    }
+    return issue(ISSUE_CODE.FOLLOW_RANGE, "anchorOffset", `锚点偏移不得超过 ${FOLLOW_ANCHOR_LIMIT_METERS} 米`);
+}
+
+function isWithinRange(value: number, min: number, max: number): boolean {
+    return Number.isFinite(value) && value >= min && value <= max;
+}
+
+/** 重写全部关键帧的聚合命令共用的逆命令:整片段回到前态。 */
+function restoreClipCommand(ctx: DirectorContext, id: unknown): readonly SerializedCommand[] | null {
+    const current = existingClip(ctx, id);
+    return current ? [{ type: ReplaceMotionClipCommand.TYPE, payload: { clip: current.toJSON() } }] : null;
 }
 
 /** 关键帧写操作共用的定位:片段 + 关键帧一次解析,失败即结构化 issue。 */
@@ -606,6 +752,7 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
                 durationSeconds: range.durationSeconds,
                 keys: this.payload.keys,
                 focus: this.payload.focus ? { mode: CAMERA_FOCUS_MODE, target: this.payload.focus } : null,
+                follow: this.payload.follow ?? null,
                 ...(this.payload.easing ? { easing: this.payload.easing } : {}),
             });
         } catch {
@@ -965,7 +1112,7 @@ export class SetMotionClipEasingCommand extends DirectorCommand<SetMotionClipEas
     }
 }
 
-/** 跟拍覆盖层:绑定对象即接管全部关键帧的注视点,target=null 解除覆盖回到关键帧插值。 */
+/** 注视覆盖层:绑定对象即接管全部关键帧的注视点,target=null 解除覆盖回到关键帧插值。 */
 export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocusPayload> {
     static readonly TYPE = "motion.set-focus";
     readonly type = SetMotionClipFocusCommand.TYPE;
@@ -1022,6 +1169,171 @@ export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocu
     }
 }
 
+/**
+ * 整片段写入(地基):任何重写全部关键帧的聚合操作都以它作逆命令。
+ *
+ * 与 create-clip 的前置条件互斥——那条要求 id 不存在,这条要求 id 已存在,
+ * 因此不是重复实现。自反:携前态 JSON 即可原样回滚。
+ */
+export class ReplaceMotionClipCommand extends DirectorCommand<ReplaceMotionClipPayload> {
+    static readonly TYPE = "motion.replace-clip";
+    readonly type = ReplaceMotionClipCommand.TYPE;
+
+    constructor(readonly payload: ReplaceMotionClipPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        if (!existingClip(ctx, this.payload.clip.id)) return [issue(ISSUE_CODE.CLIP, "clip.id", "运镜片段不存在")];
+        const clip = motionClipFrom(this.payload.clip);
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段数据无效")];
+        return clipIssues(ctx, clip);
+    }
+
+    execute(ctx: DirectorContext): void {
+        const clip = motionClipFrom(this.payload.clip);
+        if (!clip || !existingClip(ctx, clip.id)) return;
+        replaceQuantizedClip(ctx, clip);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const current = existingClip(ctx, this.payload.clip.id);
+        return current ? [{ type: ReplaceMotionClipCommand.TYPE, payload: { clip: current.toJSON() } }] : null;
+    }
+}
+
+/**
+ * 绑定跟拍(聚合):设跟拍覆盖层 + 把全部关键帧从世界系搬进主体跟随系。
+ *
+ * 两件事必须同一条命令:分开发两次会撕碎撤销,并且中途失败会留下「覆盖层已设、关键帧还在世界系」
+ * 的画面瞬移。绑定在关键帧时刻严格保画面(见 FollowSpaceCodec)。
+ */
+export class BindMotionClipFollowCommand extends DirectorCommand<BindMotionClipFollowPayload> {
+    static readonly TYPE = "motion.bind-follow";
+    readonly type = BindMotionClipFollowCommand.TYPE;
+
+    constructor(readonly payload: BindMotionClipFollowPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const clip = existingClip(ctx, this.payload.id);
+        if (!clip) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        const follow = followFromPayload(this.payload);
+        if (!follow) return [followPayloadIssue(this.payload)];
+        if (!ctx.scene.manager.getEntity(follow.objectId)) {
+            return [issue(ISSUE_CODE.FOLLOW_SUBJECT, "objectId", "跟拍主体不存在")];
+        }
+        return followSpaceCodecFor(ctx).convertKeys(clip, follow, FOLLOW_SPACE.LOCAL)
+            ? []
+            : [issue(ISSUE_CODE.FOLLOW_UNRESOLVED, "objectId", "跟拍主体在该片段时段内无法定位")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const clip = existingClip(ctx, this.payload.id);
+        const follow = followFromPayload(this.payload);
+        if (!clip || !follow) return;
+        const keys = followSpaceCodecFor(ctx).convertKeys(clip, follow, FOLLOW_SPACE.LOCAL);
+        if (!keys) return;
+        replaceQuantizedClip(ctx, clip.withKeys(keys).withFollow(follow));
+        ctx.motionAuthoring.setSubject(follow.objectId);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        return restoreClipCommand(ctx, this.payload.id);
+    }
+}
+
+/** 解除跟拍(聚合):把关键帧烘回世界系 + 清覆盖层。与绑定互为正逆,画面同样不跳。 */
+export class UnbindMotionClipFollowCommand extends DirectorCommand<MotionClipIdPayload> {
+    static readonly TYPE = "motion.unbind-follow";
+    readonly type = UnbindMotionClipFollowCommand.TYPE;
+
+    constructor(readonly payload: MotionClipIdPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const clip = existingClip(ctx, this.payload.id);
+        if (!clip) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        if (!clip.follow) return [issue(ISSUE_CODE.FOLLOW_UNBOUND, "id", "该片段未绑定跟拍")];
+        return followSpaceCodecFor(ctx).convertKeys(clip, clip.follow, FOLLOW_SPACE.WORLD)
+            ? []
+            : [issue(ISSUE_CODE.FOLLOW_UNRESOLVED, "id", "跟拍主体在该片段时段内无法定位")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const clip = existingClip(ctx, this.payload.id);
+        if (!clip?.follow) return;
+        const keys = followSpaceCodecFor(ctx).convertKeys(clip, clip.follow, FOLLOW_SPACE.WORLD);
+        if (!keys) return;
+        replaceQuantizedClip(ctx, clip.withKeys(keys).withFollow(null));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        return restoreClipCommand(ctx, this.payload.id);
+    }
+}
+
+/**
+ * 调整跟拍参数:参考系/锚点/滞后/平滑。
+ * 不重算关键帧——改这些参数本就应当改变画面,重算反而把改动抵消掉。
+ */
+export class SetMotionClipFollowParamsCommand extends DirectorCommand<BindMotionClipFollowPayload> {
+    static readonly TYPE = "motion.set-follow-params";
+    readonly type = SetMotionClipFollowParamsCommand.TYPE;
+
+    constructor(readonly payload: BindMotionClipFollowPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        const clip = existingClip(ctx, this.payload.id);
+        if (!clip) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
+        if (!clip.follow) return [issue(ISSUE_CODE.FOLLOW_UNBOUND, "id", "该片段未绑定跟拍")];
+        const follow = followFromPayload(this.payload);
+        if (!follow) return [followPayloadIssue(this.payload)];
+        return follow.objectId === clip.follow.objectId
+            ? []
+            : [issue(ISSUE_CODE.FOLLOW_SUBJECT, "objectId", "换跟拍主体请重新绑定,以免关键帧留在旧主体的坐标里")];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const clip = existingClip(ctx, this.payload.id);
+        const follow = followFromPayload(this.payload);
+        if (!clip?.follow || !follow || follow.objectId !== clip.follow.objectId) return;
+        replaceQuantizedClip(ctx, clip.withFollow(follow));
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const clip = existingClip(ctx, this.payload.id);
+        const follow = clip?.follow;
+        return follow
+            ? [{ type: SetMotionClipFollowParamsCommand.TYPE, payload: { id: clip.id, ...follow.toJSON() } }]
+            : null;
+    }
+}
+
 export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPayload> {
     static readonly TYPE = "motion.remove-clip";
     readonly type = RemoveMotionClipCommand.TYPE;
@@ -1058,12 +1370,19 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
     }
 }
 
-/** author 与 quick-author 共用的 take 装配(Rule of Two):keys 编译 + 跟拍注入一处收口 */
+/**
+ * author 与 quick-author 共用的 take 装配(Rule of Two):keys 编译 + 两层覆盖注入一处收口。
+ *
+ * 跟拍态传入的 shot/subject 已是**跟随系**里的构图(主体在原点),
+ * 因此现有全部 MOVE_RESOLVERS 一行不用改就能产出跟拍版关键帧。
+ * focus 仍绑世界系的主体,注视由它接管;keys 的 target 只是兜底。
+ */
 function takeCommandFor(
     request: MotionPresetRequest,
     shot: CameraShot,
     subject: SubjectFocusBounds | null,
     takeId: string,
+    follow: CameraFollowTrackJSON | null = null,
 ): CreateMotionTakeCommand {
     const keys = presetCompiler.compile(request, { shot, subject });
     return new CreateMotionTakeCommand({
@@ -1071,13 +1390,14 @@ function takeCommandFor(
         startTimeSeconds: request.startTimeSeconds,
         durationSeconds: request.durationSeconds,
         keys,
+        follow,
         ...(request.easing ? { easing: request.easing } : {}),
         focus:
             request.subjectId && subject
                 ? {
                       kind: FOCUS_TARGET_KIND.SCENE_OBJECT,
                       objectId: request.subjectId,
-                      worldOffset: subject.focusOffset,
+                      worldOffset: follow ? follow.anchorOffset : subject.focusOffset,
                   }
                 : null,
     });
@@ -1132,10 +1452,16 @@ export class AuthorMotionCommand extends DirectorCommand<AuthorMotionPayload> {
     }
 }
 
+/** 一句话跟拍:方位用枚举而非裸角度,LLM 永不发世界坐标 */
+interface QuickAuthorFollowRequest {
+    readonly approach: FollowApproach;
+    readonly frame?: FollowFrame;
+}
+
 interface QuickAuthorPayload {
-    /** 被摄对象(同时成为跟拍目标);机位由景别预设从它派生 */
+    /** 被摄对象(同时成为注视目标);机位由景别预设从它派生 */
     readonly subjectId: string;
-    /** 起幅景别(ShotSizePresets 定距,方位角取当前相机朝向) */
+    /** 起幅景别(ShotSizePresets 定距,方位角取当前相机朝向;跟拍态取站位枚举) */
     readonly shotSize: ShotSize;
     readonly move: MotionMove;
     readonly durationSeconds: number;
@@ -1143,6 +1469,8 @@ interface QuickAuthorPayload {
     readonly degrees?: number;
     readonly direction?: OrbitDirection;
     readonly easing?: EasingCurve;
+    /** 非空即产出跟拍片段:关键帧落在主体跟随系里 */
+    readonly follow?: QuickAuthorFollowRequest;
 }
 
 /** 快建运镜 id:由被摄体、语汇与起始时刻派生,确保 undo/redo 重放不漂移。 */
@@ -1154,6 +1482,17 @@ interface QuickAuthorPlan {
     readonly range: ProgramRangeLike;
     readonly take: CreateMotionTakeCommand;
     readonly extendDuration: SetTimelineDurationCommand | null;
+}
+
+/** 跟随系原点:跟拍态构图的主体中心恒在此处 */
+const FOLLOW_FRAME_ORIGIN: Vec3 = [0, 0, 0];
+const DEFAULT_FOLLOW_LAG_SECONDS = 0;
+const DEFAULT_FOLLOW_SMOOTHING_SECONDS = 0;
+
+interface QuickAuthorFraming {
+    readonly shot: CameraShot;
+    readonly subject: SubjectFocusBounds;
+    readonly follow: CameraFollowTrackJSON | null;
 }
 
 /**
@@ -1183,6 +1522,9 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         }
         if (!ctx.scene.manager.getEntity(this.payload.subjectId)) {
             return [issue(ISSUE_CODE.SUBJECT, "subjectId", "被摄对象不存在")];
+        }
+        if (this.payload.follow && !isFollowApproach(this.payload.follow.approach)) {
+            return [issue(ISSUE_CODE.FOLLOW_FRAME, "follow.approach", "跟拍站位只能是 back/front/left/right")];
         }
         const plan = this.plan(ctx);
         if (!plan) return [issue(ISSUE_CODE.PAYLOAD, "keys", "预设编译失败")];
@@ -1227,9 +1569,7 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         if (!subject) return null;
         const range = this.planIdentity(ctx);
         if (!range) return null;
-        const eye = ctx.camera.lastDirectorPose;
-        const azimuth = eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS;
-        const shot = shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth);
+        const framing = this.framingFor(ctx, subject);
         const request: MotionPresetRequest = {
             startTimeSeconds: range.startTimeSeconds,
             durationSeconds: range.durationSeconds,
@@ -1242,9 +1582,43 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         const end = range.startTimeSeconds + range.durationSeconds;
         return {
             range,
-            take: takeCommandFor(request, shot, subject, range.id),
+            take: takeCommandFor(request, framing.shot, framing.subject, range.id, framing.follow),
             extendDuration:
                 end > ctx.timeline.document.duration ? new SetTimelineDurationCommand({ duration: end }) : null,
+        };
+    }
+
+    /**
+     * 取景基准。跟拍态在**跟随系**里构图:主体恒在原点,站位由方位枚举查表,
+     * 于是现有 MOVE_RESOLVERS 原样复用即产出跟拍版关键帧(orbit=环绕跟拍、dolly-in=跟随推进)。
+     * 非跟拍态沿用世界系包围球与当前相机方位。
+     */
+    private framingFor(ctx: DirectorContext, subject: SubjectFocusBounds): QuickAuthorFraming {
+        const follow = this.payload.follow;
+        if (!follow) {
+            const eye = ctx.camera.lastDirectorPose;
+            const azimuth = eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS;
+            return {
+                shot: shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth),
+                subject,
+                follow: null,
+            };
+        }
+        return {
+            shot: shotSizePresets.resolve(
+                this.payload.shotSize,
+                FOLLOW_FRAME_ORIGIN,
+                subject.radius,
+                FOLLOW_APPROACH_AZIMUTH[follow.approach],
+            ),
+            subject: { center: FOLLOW_FRAME_ORIGIN, radius: subject.radius, focusOffset: FOLLOW_FRAME_ORIGIN },
+            follow: {
+                objectId: this.payload.subjectId,
+                anchorOffset: subject.focusOffset,
+                frame: follow.frame ?? FOLLOW_FRAME.HEADING,
+                lagSeconds: DEFAULT_FOLLOW_LAG_SECONDS,
+                smoothingSeconds: DEFAULT_FOLLOW_SMOOTHING_SECONDS,
+            },
         };
     }
 }
@@ -1412,6 +1786,33 @@ export class SetViewModeCommand extends DirectorCommand<SetViewModePayload> {
     }
 }
 
+interface SetSweepPathVisiblePayload {
+    readonly visible: boolean;
+}
+
+const SET_SWEEP_PATH_VISIBLE_CONTRACT: PayloadContract = {
+    properties: { visible: { type: "boolean" } },
+    required: ["visible"],
+};
+
+/** 跟拍世界扫掠路径显隐(瞬态):仅供排查世界结果,默认关闭。 */
+export class SetSweepPathVisibleCommand extends DirectorCommand<SetSweepPathVisiblePayload> {
+    static readonly TYPE = "view.set-sweep-path";
+    readonly type = SetSweepPathVisibleCommand.TYPE;
+
+    constructor(readonly payload: SetSweepPathVisiblePayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return typeof this.payload.visible === "boolean" ? [] : ["扫掠路径显隐必须是 boolean"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.motionAuthoring.setSweepPathVisible(this.payload.visible);
+    }
+}
+
 /** Read-only AI discovery and inspection endpoint. No Three references cross this boundary. */
 export class CameraMotionGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "motion.get";
@@ -1459,6 +1860,10 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         ResetMotionKeyHandlesCommand,
         SetMotionClipEasingCommand,
         SetMotionClipFocusCommand,
+        ReplaceMotionClipCommand,
+        BindMotionClipFollowCommand,
+        UnbindMotionClipFollowCommand,
+        SetMotionClipFollowParamsCommand,
         RemoveMotionClipCommand,
         AuthorMotionCommand,
         SetProgramClipCommand,
@@ -1466,6 +1871,7 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         EnterMotionPreviewCommand,
         ExitMotionPreviewCommand,
         SetViewModeCommand,
+        SetSweepPathVisibleCommand,
     ] as const;
     type CameraMotionCommandType = (typeof commands)[number]["TYPE"];
     const contracts: Record<CameraMotionCommandType, PayloadContract> = {
@@ -1480,6 +1886,10 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         [ResetMotionKeyHandlesCommand.TYPE]: RESET_MOTION_KEY_HANDLES_CONTRACT,
         [SetMotionClipEasingCommand.TYPE]: SET_MOTION_CLIP_EASING_CONTRACT,
         [SetMotionClipFocusCommand.TYPE]: SET_MOTION_CLIP_FOCUS_CONTRACT,
+        [ReplaceMotionClipCommand.TYPE]: REPLACE_MOTION_CLIP_CONTRACT,
+        [BindMotionClipFollowCommand.TYPE]: MOTION_FOLLOW_CONTRACT,
+        [UnbindMotionClipFollowCommand.TYPE]: UNBIND_MOTION_FOLLOW_CONTRACT,
+        [SetMotionClipFollowParamsCommand.TYPE]: MOTION_FOLLOW_CONTRACT,
         [RemoveMotionClipCommand.TYPE]: REMOVE_MOTION_CLIP_CONTRACT,
         [AuthorMotionCommand.TYPE]: AUTHOR_MOTION_CONTRACT,
         [SetProgramClipCommand.TYPE]: SET_PROGRAM_CLIP_CONTRACT,
@@ -1487,6 +1897,7 @@ export function registerCameraMotionCommands(dispatcher: CommandDispatcher): voi
         [EnterMotionPreviewCommand.TYPE]: ENTER_MOTION_PREVIEW_CONTRACT,
         [ExitMotionPreviewCommand.TYPE]: EXIT_MOTION_PREVIEW_CONTRACT,
         [SetViewModeCommand.TYPE]: SET_VIEW_MODE_CONTRACT,
+        [SetSweepPathVisibleCommand.TYPE]: SET_SWEEP_PATH_VISIBLE_CONTRACT,
     };
     for (const Command of commands) {
         dispatcher.register(

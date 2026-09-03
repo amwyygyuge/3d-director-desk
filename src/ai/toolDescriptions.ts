@@ -34,15 +34,22 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "motion.reset-key-handles": "重置关键帧手柄为自动求解",
     "motion.set-clip-easing": "设整段运镜缓动:linear 匀速 / smooth 起落加减速",
     "motion.set-focus": "设片段注视目标(世界点或场景对象),非空时接管各 key 的 target",
+    "motion.replace-clip": "整片段覆盖写入(片段须已存在);重写全部关键帧的聚合操作以它回滚",
+    "motion.bind-follow":
+        "把片段绑到模型上跟拍:关键帧改为相对主体的坐标,主体走到哪镜头跟到哪;frame=world 只跟位移、heading 随主体转身;绑定在关键帧时刻不改变画面",
+    "motion.unbind-follow": "解除跟拍:关键帧烘回世界坐标,画面同样不跳",
+    "motion.set-follow-params": "调跟拍参数(参考系/锚点/滞后/平滑);换主体请重新绑定",
     "motion.remove-clip": "删除运镜片段及其 Program 排期",
     "motion.author": "语义运镜编译:推近/拉远/摇/俯仰/横移/升降/环绕/定镜,产物为可再编辑关键帧；时间落点按工程帧率量化",
-    "motion.quick-author": "按被摄体+景别+运动一步生成运镜(机位定距与关键帧一次到位)；时间落点按工程帧率量化",
+    "motion.quick-author":
+        "按被摄体+景别+运动一步生成运镜(机位定距与关键帧一次到位);带 follow.approach(back/front/left/right)时直接产出跟拍片段,关键帧落在主体跟随系里；时间落点按工程帧率量化",
     "program.set-clip": "把运镜片段排入 Program 时段(同一时段只允许一个机位输出)；时间落点按工程帧率量化",
     "program.remove-clip": "从 Program 移除片段(运镜片段本身保留)",
     "motion.preview.enter": "进入片段预览,playhead 不在片段内时自动 seek 到片段起点；时间落点按工程帧率量化",
     "motion.preview.exit": "退出片段预览",
     // 视图
     "view.set-mode": "切换导演视角/镜头视角",
+    "view.set-sweep-path": "开关跟拍片段的世界扫掠路径预览(排查用,默认关)",
     "view.frame": "导演视角取景到场景内容(无内容时回默认位姿)",
     "view.reset": "复位导演视角到初始位姿",
     // 时间轴

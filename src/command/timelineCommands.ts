@@ -157,11 +157,23 @@ const AddTimelineKeyContract: PayloadContract = {
     required: ["trackId", "targetId", "keyframe"],
 };
 
+const POLICIES_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        orientation: { type: "string", enum: Object.values(ORIENTATION_MODE) },
+        grounding: { type: "string", enum: Object.values(GROUNDING_MODE) },
+        locomotion: { type: "string", enum: Object.values(LOCOMOTION_MODE) },
+        strideMeters: { type: "number" },
+    },
+};
+
 const SetTimelineTrackContract: PayloadContract = {
     properties: {
         trackId: { type: "string" },
         targetId: { type: "string" },
         keyframes: { type: "array", items: KEYFRAME_SCHEMA },
+        // SetTrackPayload 一直支持策略入参,契约漏声明会把合法调用挡在门外(未知字段即拒)
+        policies: POLICIES_SCHEMA,
     },
     required: ["trackId", "targetId", "keyframes"],
 };
@@ -172,16 +184,6 @@ const RetimeTimelineTrackContract: PayloadContract = {
         durationSeconds: { type: "number" },
     },
     required: ["trackId", "startTimeSeconds", "durationSeconds"],
-};
-
-const POLICIES_SCHEMA: PayloadFieldSchema = {
-    type: "object",
-    properties: {
-        orientation: { type: "string", enum: Object.values(ORIENTATION_MODE) },
-        grounding: { type: "string", enum: Object.values(GROUNDING_MODE) },
-        locomotion: { type: "string", enum: Object.values(LOCOMOTION_MODE) },
-        strideMeters: { type: "number" },
-    },
 };
 
 const SetTimelineKeyContract: PayloadContract = {

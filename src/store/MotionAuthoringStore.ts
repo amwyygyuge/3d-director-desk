@@ -32,6 +32,11 @@ export class MotionAuthoringStore {
     previewClipId: string | null = null;
     /** 轨迹辅助物开关:与壳层显隐解耦,掌镜/镜头视角下仍可见;导演台是编排工具,默认开 */
     pathVisible: boolean;
+    /**
+     * 跟拍世界扫掠路径仅供排查结果:作者日常编辑看相对主体的构图,故默认关闭。
+     * 由顶栏命令开关,不与通用编排轨迹显隐混用。
+     */
+    sweepPathVisible = false;
     snapEnabled = true;
     /**
      * 走位草绘模式(钉住式):开启时视口左键归绘制,导航让位给右键/中键/滚轮。
@@ -95,6 +100,10 @@ export class MotionAuthoringStore {
 
     setPathVisible(visible: boolean): void {
         this.pathVisible = visible;
+    }
+
+    setSweepPathVisible(visible: boolean): void {
+        this.sweepPathVisible = visible;
     }
 
     setSnapEnabled(enabled: boolean): void {

@@ -35,6 +35,34 @@ export const MOTION_MOVE_LABEL: Record<MotionMove, string> = {
     [MOTION_MOVE.HOLD]: "静止",
 };
 
+/**
+ * 跟拍态的语汇文案:跟随系里主体恒在原点,语汇作用于**相对主体**的运动。
+ * 与 MOTION_MOVE_LABEL 并列而非替换——同一个语汇在两种参考系下是两种画面,
+ * 按钮上直接说人话,作者不必在脑子里做参考系变换。
+ */
+export const FOLLOW_MOVE_LABEL: Record<MotionMove, string> = {
+    [MOTION_MOVE.DOLLY_IN]: "边跟边推近",
+    [MOTION_MOVE.DOLLY_OUT]: "边跟边拉开",
+    [MOTION_MOVE.PAN]: "摇镜",
+    [MOTION_MOVE.TILT]: "俯仰",
+    [MOTION_MOVE.TRUCK]: "换到侧面跟",
+    [MOTION_MOVE.CRANE]: "跟着走并升降",
+    [MOTION_MOVE.ORBIT]: "绕着他转",
+    [MOTION_MOVE.SPIRAL]: "绕着他转并升高",
+    [MOTION_MOVE.ARC_DOLLY]: "弧线贴近",
+    [MOTION_MOVE.DOLLY_ZOOM]: "跟着走的眩晕变焦",
+    [MOTION_MOVE.HOLD]: "保持站位",
+};
+
+/**
+ * 朝向类语汇:只改注视方向、不改机位(两枚关键帧 position 相同)。
+ * 一旦绑定被摄对象,注视覆盖层就接管全部关键帧的 target,这类语汇随即变成空操作——
+ * 故命令层直接拒绝,不产出「看起来创建成功却纹丝不动」的片段。
+ */
+export function isOrientationMove(move: MotionMove): boolean {
+    return move === MOTION_MOVE.PAN || move === MOTION_MOVE.TILT;
+}
+
 /** 环绕方向:从被摄体正上方俯视的顺/逆时针 */
 export const ORBIT_DIRECTION = { CW: "cw", CCW: "ccw" } as const;
 export type OrbitDirection = (typeof ORBIT_DIRECTION)[keyof typeof ORBIT_DIRECTION];
