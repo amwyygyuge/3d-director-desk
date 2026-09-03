@@ -31,11 +31,6 @@ interface InspectorSelection {
     readonly isSceneEntity: boolean;
 }
 
-interface InspectorSelectionLookup {
-    readonly stores: Pick<DirectorDeskStores, "camera" | "scene">;
-    readonly primaryId: string;
-}
-
 const INSPECTOR_SELECTION_LABEL: Record<InspectorSelectionKind, string> = {
     model: "已选模型",
     light: "已选灯光",
@@ -45,51 +40,73 @@ const INSPECTOR_SELECTION_LABEL: Record<InspectorSelectionKind, string> = {
     "motion-track": "已选走位轨迹",
 };
 
-function inspectorSelectionFor({ stores, primaryId }: InspectorSelectionLookup): InspectorSelection | null {
+function inspectorSelectionFor(
+    stores: Pick<DirectorDeskStores, "camera" | "scene">,
+    primaryId: string,
+): InspectorSelection | null {
     const shot = stores.camera.director.getShot(primaryId);
     if (shot) return { kind: "camera-shot", name: primaryId, isSceneEntity: false };
     const entity = stores.scene.manager.getEntity(primaryId);
     return entity ? { kind: entity.kind, name: entity.name, isSceneEntity: true } : null;
 }
 
-/** 仅在存在选中对象时出现的情境检查器，关闭操作复用全局清选中语义。 */
-export const InspectorSheet = observer(function InspectorSheet() {
-    const stores = useDirectorDeskStores();
-    const { layout, selection, timelineSelection, ui } = stores;
+/** 检查器目标:选中身份与解析结果的成对出口。 */
+export interface InspectorTarget {
+    readonly primaryId: string;
+    readonly selection: InspectorSelection;
+}
+
+/**
+ * 解析当前检查器目标;无选中、非编辑态或选中对象已不存在时为 null(检查器不渲染)。
+ * 检查器本体与产物停靠层(CaptureProductDock)的让位判定共用同一真相源,禁各自推导。
+ */
+export function resolveInspectorTarget(stores: DirectorDeskStores): InspectorTarget | null {
+    const { selection, timelineSelection } = stores;
     const motionClipId = selection.primaryId === null ? timelineSelection.current.motionClipId : null;
     const walkTrackId = selection.primaryId === null ? timelineSelection.current.walkTrackId : null;
     const primaryId = motionClipId ?? walkTrackId ?? selection.primaryId;
+    if (!stores.layout.authoringVisible || primaryId === null) return null;
+    if (motionClipId && stores.motion.clip(motionClipId)) {
+        return { primaryId, selection: { kind: "motion-clip", name: motionClipId, isSceneEntity: false } };
+    }
+    if (walkTrackId && stores.timeline.document.track(walkTrackId)) {
+        return { primaryId, selection: { kind: "motion-track", name: walkTrackId, isSceneEntity: false } };
+    }
+    const resolved = inspectorSelectionFor(stores, primaryId);
+    return resolved === null ? null : { primaryId, selection: resolved };
+}
+
+/** 仅在存在选中对象时出现的情境检查器，关闭操作复用全局清选中语义。 */
+export const InspectorSheet = observer(function InspectorSheet() {
+    const stores = useDirectorDeskStores();
+    const { ui } = stores;
+    const target = resolveInspectorTarget(stores);
 
     // 选中对象切换时退出骨骼点选:姿态选择是瞬时 UI 身份,不跨对象残留
+    const primaryId = target?.primaryId ?? null;
     useEffect(() => {
         if (ui.posePickingObjectId !== null && ui.posePickingObjectId !== primaryId) {
             ui.setPosePicking(null, null);
         }
     }, [ui, primaryId]);
 
-    if (!layout.authoringVisible || primaryId === null) return null;
-    const selected =
-        motionClipId && stores.motion.clip(motionClipId)
-            ? { kind: "motion-clip" as const, name: motionClipId, isSceneEntity: false }
-            : walkTrackId && stores.timeline.document.track(walkTrackId)
-              ? { kind: "motion-track" as const, name: walkTrackId, isSceneEntity: false }
-              : inspectorSelectionFor({ stores, primaryId });
-    if (selected === null) return null;
+    if (target === null) return null;
+    const selected = target.selection;
 
     // 命令失败只走全局 ApplicationNotice 一条通道;右栏不再自带 Snackbar
     const report = (result: CommandResult) => {
         if (result.ok) return;
         ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
     };
-    const context: InspectorSectionContext = { primaryId, report, stores };
+    const context: InspectorSectionContext = { primaryId: target.primaryId, report, stores };
     // 时间轴选中与场景选中是两条独立通道;关掉右栏时清哪一条由当前展示的种类决定
     const clearInspector = (): void => {
         const isTimelineSelection = selected.kind === "motion-clip" || selected.kind === "motion-track";
         if (isTimelineSelection) {
-            timelineSelection.clear();
+            stores.timelineSelection.clear();
             return;
         }
-        selection.clear();
+        stores.selection.clear();
     };
 
     return (
@@ -100,7 +117,7 @@ export const InspectorSheet = observer(function InspectorSheet() {
                 right: CHROME.edgeGapPx,
                 top: CHROME.sidePanelTopPx,
                 // 下缘骑在时间线控制台上方,随其开合联动;几何与左侧导航共用同一真相源
-                bottom: sidePanelBottomOffsetPx(layout.timelineExpanded),
+                bottom: sidePanelBottomOffsetPx(stores.layout.timelineExpanded),
                 width: CHROME.sidePanelWidthPx,
                 overflow: "hidden",
             }}

@@ -1,129 +1,109 @@
-import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
+import type { ReactNode } from "react";
 
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import type { VideoExportSource } from "@/capture/VideoExportSession";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { CHROME } from "@/ui/shell/theme";
+import { captureDockRightOffsetPx, sidePanelBottomOffsetPx } from "@/ui/shell/theme";
+import { resolveInspectorTarget } from "@/ui/workspace/InspectorSheet";
 
 const CAPTURE_PREVIEW_WIDTH_PX = 160;
 const CARD_GAP = 0.5;
 const DOCK_GAP = 1;
-const DOWNLOAD_FILENAME = "director-desk-preview.webm";
+const MEDIA_STYLE = {
+    borderRadius: CARD_GAP,
+    display: "block",
+    height: "auto",
+    width: CAPTURE_PREVIEW_WIDTH_PX,
+} as const;
 const SOURCE_LABEL: Record<VideoExportSource, string> = {
     [VIDEO_EXPORT_SOURCE.PROGRAM]: "成片",
     [VIDEO_EXPORT_SOURCE.VIEWPORT]: "当前视角",
 };
 const TEXT = {
-    DOWNLOAD_VIDEO: "下载录制视频",
     OPEN_IMAGE: "最近截图(点击打开)",
-    VIDEO_PREFIX: "最近视频",
+    OPEN_VIDEO: "最近视频(点击打开)",
 } as const;
 const VIDEO_DURATION_DECIMALS = 1;
 
-/** 截图与视频产物共用同一停靠层，避免时间线让位规则在两类产物间漂移。 */
+/** 截图与视频产物共用同一停靠层，避免时间线/检查器让位规则在两类产物间漂移。 */
 export const CaptureProductDock = observer(function CaptureProductDock() {
-    const { layout, ui } = useDirectorDeskStores();
+    const stores = useDirectorDeskStores();
+    const { layout, ui } = stores;
     const captureUrl = ui.lastCaptureUrl;
     const captureMeta = ui.lastCaptureMeta;
     const videoUrl = ui.lastVideoUrl;
     const videoMeta = ui.lastVideoMeta;
+    // 检查器在场时让开整栏:停靠层 z 序低于检查器,不让位会被完全遮挡
+    const inspectorVisible = resolveInspectorTarget(stores) !== null;
     if ((!captureUrl || !captureMeta) && (!videoUrl || !videoMeta)) return null;
 
     return (
         <Box
             sx={{
-                bottom:
-                    (layout.timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx,
+                bottom: sidePanelBottomOffsetPx(layout.timelineExpanded),
                 display: "grid",
                 gap: DOCK_GAP,
                 position: "absolute",
-                right: CHROME.edgeGapPx,
+                right: captureDockRightOffsetPx(inspectorVisible),
                 zIndex: 1,
             }}
         >
             {captureUrl && captureMeta ? (
-                <ImageProductCard height={captureMeta.height} url={captureUrl} width={captureMeta.width} />
+                <ProductCard
+                    caption={TEXT.OPEN_IMAGE}
+                    media={
+                        <img
+                            alt={TEXT.OPEN_IMAGE}
+                            height={captureMeta.height}
+                            src={captureUrl}
+                            style={MEDIA_STYLE}
+                            width={captureMeta.width}
+                        />
+                    }
+                    url={captureUrl}
+                />
             ) : null}
             {videoUrl && videoMeta ? (
-                <VideoProductCard
-                    durationSeconds={videoMeta.durationSeconds}
-                    height={videoMeta.height}
-                    source={videoMeta.source}
+                <ProductCard
+                    caption={`${TEXT.OPEN_VIDEO} · ${SOURCE_LABEL[videoMeta.source]} · ${videoMeta.durationSeconds.toFixed(VIDEO_DURATION_DECIMALS)}秒`}
+                    media={
+                        // 不带 controls:小窗只作首帧预览,点击整卡在新标签页查看(与截图同一交互)
+                        <video height={videoMeta.height} src={videoUrl} style={MEDIA_STYLE} width={videoMeta.width} />
+                    }
                     url={videoUrl}
-                    width={videoMeta.width}
                 />
             ) : null}
         </Box>
     );
 });
 
-/** 无领域身份的展示叶子只接收产物值，避免停靠层为各类产物复制几何。 */
-const ImageProductCard = observer(function ImageProductCard({
-    height,
+/** 产物卡片:整卡即外链,点击在新标签页查看;截图与视频共用壳层,仅媒体元素与说明文案不同。 */
+const ProductCard = observer(function ProductCard({
+    caption,
+    media,
     url,
-    width,
 }: {
-    readonly height: number;
+    readonly caption: string;
+    readonly media: ReactNode;
     readonly url: string;
-    readonly width: number;
 }) {
     return (
-        <Paper component="a" href={url} rel="noreferrer" target="_blank" variant="panel" sx={{ display: "block", p: CARD_GAP }}>
-            <img
-                alt="最近截图"
-                height={height}
-                src={url}
-                style={{ borderRadius: CARD_GAP, display: "block", height: "auto", width: CAPTURE_PREVIEW_WIDTH_PX }}
-                width={width}
-            />
+        <Paper
+            component="a"
+            href={url}
+            rel="noreferrer"
+            target="_blank"
+            variant="panel"
+            sx={{ display: "block", p: CARD_GAP }}
+        >
+            {media}
             <Typography color="text.secondary" sx={{ display: "block", textAlign: "center" }} variant="caption">
-                {TEXT.OPEN_IMAGE}
+                {caption}
             </Typography>
-        </Paper>
-    );
-});
-
-/** 无领域身份的展示叶子保留 video 原生控制，blob 产物可直接预览、播放与下载。 */
-const VideoProductCard = observer(function VideoProductCard({
-    durationSeconds,
-    height,
-    source,
-    url,
-    width,
-}: {
-    readonly durationSeconds: number;
-    readonly height: number;
-    readonly source: VideoExportSource;
-    readonly url: string;
-    readonly width: number;
-}) {
-    return (
-        <Paper variant="panel" sx={{ p: CARD_GAP }}>
-            <video
-                controls
-                height={height}
-                muted
-                playsInline
-                src={url}
-                style={{ borderRadius: CARD_GAP, display: "block", height: "auto", width: CAPTURE_PREVIEW_WIDTH_PX }}
-                width={width}
-            />
-            <Box sx={{ alignItems: "center", display: "flex", gap: CARD_GAP, justifyContent: "space-between" }}>
-                <Typography color="text.secondary" variant="caption">
-                    {TEXT.VIDEO_PREFIX} · {SOURCE_LABEL[source]} · {durationSeconds.toFixed(VIDEO_DURATION_DECIMALS)}秒
-                </Typography>
-                <Tooltip title={TEXT.DOWNLOAD_VIDEO}>
-                    <IconButton aria-label={TEXT.DOWNLOAD_VIDEO} download={DOWNLOAD_FILENAME} href={url} size="small">
-                        <FileDownloadIcon fontSize="small" />
-                    </IconButton>
-                </Tooltip>
-            </Box>
         </Paper>
     );
 });

@@ -53,6 +53,35 @@ export function sidePanelBottomOffsetPx(timelineExpanded: boolean): number {
     return (timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx;
 }
 
+/** 右下产物停靠层右缘让位量:检查器(右侧栏)在场时让开整栏宽度,与侧栏几何共用同一真相源 */
+export function captureDockRightOffsetPx(inspectorVisible: boolean): number {
+    return CHROME.edgeGapPx + (inspectorVisible ? CHROME.sidePanelWidthPx + CHROME.edgeGapPx : 0);
+}
+
+const SCROLLBAR_SIZE_PX = 8;
+const SCROLLBAR_THUMB_COLOR = "rgba(255,255,255,0.24)";
+const SCROLLBAR_THUMB_HOVER_COLOR = "rgba(255,255,255,0.38)";
+
+/**
+ * 滚动条材质:Mac 叠加式细轨与 Windows 占位式粗轨在两平台渲染一致的暗色细滚动条。
+ * WebKit 伪元素覆盖 Windows/Chrome 经典滚动条;scrollbar-width/color 覆盖 Firefox。
+ * 经 ScopedCssBaseline 的 sx 作用域注入,选择器限定在导演台根节点内,不外泄宿主页面。
+ */
+export const SCROLLBAR_SX = {
+    "& *": {
+        scrollbarColor: `${SCROLLBAR_THUMB_COLOR} transparent`,
+        scrollbarWidth: "thin",
+    },
+    "& *::-webkit-scrollbar": { height: SCROLLBAR_SIZE_PX, width: SCROLLBAR_SIZE_PX },
+    "& *::-webkit-scrollbar-corner, & *::-webkit-scrollbar-track": { background: "transparent" },
+    "& *::-webkit-scrollbar-thumb": {
+        background: SCROLLBAR_THUMB_COLOR,
+        // 必须 px 字符串:sx 对数值 borderRadius 按 theme.shape.borderRadius 倍率换算
+        borderRadius: `${SCROLLBAR_SIZE_PX / 2}px`,
+    },
+    "& *::-webkit-scrollbar-thumb:hover": { background: SCROLLBAR_THUMB_HOVER_COLOR },
+} as const;
+
 declare module "@mui/material/Paper" {
     interface PaperPropsVariantOverrides {
         pill: true;
