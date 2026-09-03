@@ -1,5 +1,7 @@
 import { CameraFocusTrack } from "@/camera/CameraFocusTrack";
 import type { CameraFocusTrackJSON, FocusTargetSample } from "@/camera/CameraFocusTrack";
+import { cameraFollowTrackFrom } from "@/camera/CameraFollowTrack";
+import type { CameraFollowTrack, CameraFollowTrackJSON } from "@/camera/CameraFollowTrack";
 import { cameraKeyFrom } from "@/camera/CameraKey";
 import type { CameraKey } from "@/camera/CameraKey";
 import type { CameraKeyInit, CameraKeyJSON } from "@/camera/CameraKey";
@@ -7,14 +9,17 @@ import { EASING, easedProgress, inverseEasedProgress, isEasingCurve } from "@/mo
 import type { EasingCurve } from "@/motion/EasingCurve";
 import { MotionTrajectory } from "@/motion/MotionTrajectory";
 import type { MotionPositionSample } from "@/motion/MotionTrajectory";
+import type { SubjectFrameSample } from "@/motion/SubjectFrameSample";
 
 export interface CameraMotionClipInit {
     readonly id: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly keys: readonly (CameraKey | CameraKeyInit)[];
-    /** 跟拍覆盖层:缺省 null = 注视来自关键帧插值 */
+    /** 注视覆盖层:缺省 null = 注视来自关键帧插值 */
     readonly focus?: CameraFocusTrack | CameraFocusTrackJSON | null;
+    /** 跟拍覆盖层:非空时全部关键帧改在主体跟随系里解释 */
+    readonly follow?: CameraFollowTrack | CameraFollowTrackJSON | null;
     /** 整段时间曲线:smooth = 起落加减速,linear = 全程匀速;缺省 smooth */
     readonly easing?: EasingCurve;
 }
@@ -25,6 +30,7 @@ export interface CameraMotionClipJSON {
     readonly durationSeconds: number;
     readonly keys: readonly CameraKeyJSON[];
     readonly focus: CameraFocusTrackJSON | null;
+    readonly follow: CameraFollowTrackJSON | null;
     readonly easing: EasingCurve;
 }
 
@@ -49,6 +55,11 @@ function focusFrom(value: CameraMotionClipInit["focus"]): CameraFocusTrack | nul
     return value instanceof CameraFocusTrack ? value : new CameraFocusTrack({ target: value.target });
 }
 
+function followFrom(value: CameraMotionClipInit["follow"]): CameraFollowTrack | null {
+    const isMissing = value === undefined || value === null;
+    return isMissing ? null : cameraFollowTrackFrom(value);
+}
+
 function trajectoryFrom(init: CameraMotionClipInit): MotionTrajectory<CameraKey> {
     return new MotionTrajectory<CameraKey>(init.keys.map(cameraKeyFrom));
 }
@@ -56,8 +67,8 @@ function trajectoryFrom(init: CameraMotionClipInit): MotionTrajectory<CameraKey>
 /**
  * 时序聚合根:一段可独立播放的运镜。
  *
- * 空间形状交给通用 MotionTrajectory(模型走位将复用同一实现),
- * 本类只负责时间边界、跟拍覆盖层与「时间 → 归一化进度」的换算。
+ * 空间形状交给通用 MotionTrajectory(模型走位复用同一实现),
+ * 本类只负责时间边界、两层覆盖(注视/跟拍)与「时间 → 归一化进度」的换算。
  * 运镜 key 自带完整 position/target/fov,永不回读静态机位。
  *
  * 缓动是**整段**的时间曲线,不是每段各自的:段内缓动会让每个关键帧处速度归零
@@ -68,13 +79,16 @@ export class CameraMotionClip {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly trajectory: MotionTrajectory<CameraKey>;
-    /** 跟拍目标覆盖层:非空时接管全部关键帧的注视点 */
+    /** 注视覆盖层:非空时接管全部关键帧的注视点 */
     readonly focus: CameraFocusTrack | null;
+    /** 跟拍覆盖层:非空时关键帧坐标属于主体跟随系,采样期变换回世界 */
+    readonly follow: CameraFollowTrack | null;
     /** 整段起落的时间曲线 */
     readonly easing: EasingCurve;
 
     constructor(init: CameraMotionClipInit) {
         const focus = focusFrom(init.focus);
+        const follow = followFrom(init.follow);
         const trajectory = trajectoryFrom(init);
         const easing = init.easing ?? EASING.SMOOTH;
         if (
@@ -92,6 +106,7 @@ export class CameraMotionClip {
         this.durationSeconds = init.durationSeconds;
         this.trajectory = trajectory;
         this.focus = focus;
+        this.follow = follow;
         this.easing = easing;
         Object.freeze(this);
     }
@@ -106,6 +121,11 @@ export class CameraMotionClip {
 
     get isFocusOverriding(): boolean {
         return this.focus !== null;
+    }
+
+    /** 跟拍态:关键帧坐标相对主体,视口拖拽与打点必须先换算 */
+    get isFollowBound(): boolean {
+        return this.follow !== null;
     }
 
     covers(timeSeconds: number): boolean {
@@ -144,6 +164,11 @@ export class CameraMotionClip {
         return this.replicate({ keys: this.trajectory.withKey(key).keys });
     }
 
+    /** 整批关键帧替换:绑定/解绑跟拍要把每一枚都换算到另一个空间,逐枚 withKey 会重解算 N 次轨迹。 */
+    withKeys(keys: readonly (CameraKey | CameraKeyInit)[]): CameraMotionClip {
+        return this.replicate({ keys });
+    }
+
     /** 关键帧少于两个即无轨迹可言;返回 null 让调用方决定是否连片段一并删除。 */
     withoutKey(keyId: string): CameraMotionClip | null {
         const trajectory = this.trajectory.withoutKey(keyId);
@@ -152,6 +177,10 @@ export class CameraMotionClip {
 
     withFocus(focus: CameraFocusTrack | null): CameraMotionClip {
         return this.replicate({ focus });
+    }
+
+    withFollow(follow: CameraFollowTrack | null): CameraMotionClip {
+        return this.replicate({ follow });
     }
 
     withEasing(easing: EasingCurve): CameraMotionClip {
@@ -165,6 +194,7 @@ export class CameraMotionClip {
             durationSeconds: this.durationSeconds,
             keys: this.keys.map((key) => key.toJSON()),
             focus: this.focus?.toJSON() ?? null,
+            follow: this.follow?.toJSON() ?? null,
             easing: this.easing,
         };
     }
@@ -176,10 +206,39 @@ export class CameraMotionClip {
             durationSeconds: this.durationSeconds,
             keys: this.keys,
             focus: this.focus,
+            follow: this.follow,
             easing: this.easing,
             ...overrides,
         });
     }
+}
+
+/** 注视点:注视覆盖层优先(跟拍决定站哪,注视决定看哪);否则关键帧插值,跟拍态下同样过跟随系。 */
+function writeTargetSample(
+    from: CameraKey,
+    to: CameraKey,
+    local: number,
+    frame: SubjectFrameSample | null,
+    focusTarget: FocusTargetSample | null,
+    buffer: MotionPositionSample,
+    sample: CameraMotionSample,
+): void {
+    if (focusTarget) {
+        sample.targetX = focusTarget.x;
+        sample.targetY = focusTarget.y;
+        sample.targetZ = focusTarget.z;
+        return;
+    }
+    const x = from.target[0] + (to.target[0] - from.target[0]) * local;
+    const y = from.target[1] + (to.target[1] - from.target[1]) * local;
+    const z = from.target[2] + (to.target[2] - from.target[2]) * local;
+    buffer.x = x;
+    buffer.y = y;
+    buffer.z = z;
+    if (frame) frame.toWorld(x, y, z, buffer);
+    sample.targetX = buffer.x;
+    sample.targetY = buffer.y;
+    sample.targetZ = buffer.z;
 }
 
 /**
@@ -187,11 +246,14 @@ export class CameraMotionClip {
  *
  * 时间曲线先作用于**整段进度**(起落加减速),再据此定位段并在段内线性插值——
  * 这保证速度在关键帧处连续,不会每过一枚关键帧就顿一下。
- * 帧级调用,零分配、无临时对象。
+ * frame 非空时轨迹采样值属于主体跟随系,变换回世界后才是画面。
+ *
+ * 帧级调用:参数保持位置式、缓冲由调用方持有,零分配、无临时对象。
  */
 export function sampleCameraMotionClip(
     clip: CameraMotionClip,
     timeSeconds: number,
+    frame: SubjectFrameSample | null,
     focusTarget: FocusTargetSample | null,
     positionSample: MotionPositionSample,
     sample: CameraMotionSample,
@@ -205,12 +267,12 @@ export function sampleCameraMotionClip(
     if (!from || !to) return false;
     const local = trajectory.segmentProgress(progress, segmentIndex);
     if (!trajectory.sampleSegment(segmentIndex, local, positionSample)) return false;
+    if (frame) frame.toWorld(positionSample.x, positionSample.y, positionSample.z, positionSample);
     sample.positionX = positionSample.x;
     sample.positionY = positionSample.y;
     sample.positionZ = positionSample.z;
-    sample.targetX = focusTarget ? focusTarget.x : from.target[0] + (to.target[0] - from.target[0]) * local;
-    sample.targetY = focusTarget ? focusTarget.y : from.target[1] + (to.target[1] - from.target[1]) * local;
-    sample.targetZ = focusTarget ? focusTarget.z : from.target[2] + (to.target[2] - from.target[2]) * local;
+    // positionSample 的位置分量已读走,复用它做注视点换算,不额外开缓冲
+    writeTargetSample(from, to, local, frame, focusTarget, positionSample, sample);
     sample.fov = from.fov + (to.fov - from.fov) * local;
     return true;
 }

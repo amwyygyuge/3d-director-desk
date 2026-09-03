@@ -216,7 +216,13 @@ function verifyKeyframeClosureAndWriteTarget(stores: DirectorDeskStores): void {
 }
 
 function verifyGapKeepsCurrentCamera(stores: DirectorDeskStores): void {
-    const sampler = new CameraMotionSampler(stores.motion, stores.camera, stores.scene.manager, stores.motionAuthoring);
+    const sampler = new CameraMotionSampler(
+        stores.motion,
+        stores.camera,
+        stores.scene.manager,
+        stores.timeline,
+        stores.motionAuthoring,
+    );
     const sink = new StoryCameraMotionSink();
     sampler.bindSink(sink);
     assertAcceptance(!sampler.sampleCurrent(GAP_TIME_SECONDS), "空档不应产出镜头采样");
@@ -269,7 +275,7 @@ function verifyKeyUndoRedo(stores: DirectorDeskStores): void {
 function verifyFocusIntegrity(stores: DirectorDeskStores): void {
     const removal = stores.dispatcher.dispatch({ type: "object.remove", payload: { id: FOCUS_OBJECT_ID } }, stores);
     const issue = removal.ok ? undefined : removal.issueDetails?.[0];
-    assertAcceptance(issue?.code === "focus-target-in-use", "删除被跟拍对象未被结构化拒绝");
+    assertAcceptance(issue?.code === "clip-reference-in-use", "删除被注视/跟拍引用的对象未被结构化拒绝");
 }
 
 function verifyTransportClamp(stores: DirectorDeskStores): void {

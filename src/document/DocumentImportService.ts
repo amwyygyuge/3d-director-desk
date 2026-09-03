@@ -154,10 +154,14 @@ function motionIssues(plan: DocumentImportPlan): readonly string[] {
         clipsById.set(clip.id, clip);
         const focusTarget = clip.focus?.target;
         const focusObjectId = focusTarget?.kind === FOCUS_TARGET_KIND.SCENE_OBJECT ? focusTarget.objectId : null;
+        const followObjectId = clip.follow?.objectId ?? null;
         return [
             ...(isDuplicate ? [`运镜片段 id 重复: ${clip.id}`] : []),
             ...(focusObjectId !== null && !entityIds.has(focusObjectId)
                 ? [`运镜注视绑定对象不存在: ${focusObjectId}`]
+                : []),
+            ...(followObjectId !== null && !entityIds.has(followObjectId)
+                ? [`运镜跟拍主体不存在: ${followObjectId}`]
                 : []),
             ...(clip.endTimeSeconds > plan.timeline.duration ? [`运镜片段 "${clip.id}" 超出时间轴时长`] : []),
         ];

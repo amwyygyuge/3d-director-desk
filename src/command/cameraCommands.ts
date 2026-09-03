@@ -2,8 +2,8 @@ import { Box3 } from "three";
 
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
-import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
-import { createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
+import { CameraFrameSolver } from "@/camera/CameraFrameSolver";
+import { createCameraMotionSample } from "@/camera/CameraMotionClip";
 import type { CameraMotionSample } from "@/camera/CameraMotionClip";
 import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
@@ -17,13 +17,9 @@ import { subjectBoundsFor } from "@/command/subjectBounds";
 import type { SubjectBounds } from "@/command/subjectBounds";
 import type { Vec3 } from "@/core/SceneObject";
 import { measureModelBox } from "@/core/measureModelBox";
-import { createPositionSample } from "@/motion/MotionTrajectory";
-import type { MotionPositionSample } from "@/motion/MotionTrajectory";
 
 /** 采样缓冲:查询低频但遵守零分配纪律(命令层模块级临时对象先例) */
 const TMP_MOTION_SAMPLE: CameraMotionSample = createCameraMotionSample();
-const TMP_POSITION_SAMPLE: MotionPositionSample = createPositionSample();
-const TMP_FOCUS_SAMPLE = { x: 0, y: 0, z: 0 };
 const CAMERA_COMMAND_VERSION = "1" as const;
 const CAMERA_APPLIES_WHEN = "director-desk.camera-v1";
 const CAMERA_EDIT_PERMISSION = "camera:edit";
@@ -85,13 +81,8 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
             programSource?.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP
                 ? (ctx.motion.clip(programSource.motionClipId) ?? null)
                 : null;
-        const focusResolver = new FocusTargetResolver(ctx.scene.manager);
-        const focusTarget =
-            clip?.focus && focusResolver.resolve(clip.focus, TMP_FOCUS_SAMPLE) ? TMP_FOCUS_SAMPLE : null;
-        const isSampled =
-            clip !== null &&
-            (clip.focus === null || focusTarget !== null) &&
-            sampleCameraMotionClip(clip, ctx.clock.time, focusTarget, TMP_POSITION_SAMPLE, TMP_MOTION_SAMPLE);
+        const solver = new CameraFrameSolver(ctx.timeline, ctx.scene.manager);
+        const isSampled = clip !== null && solver.solve(clip, ctx.clock.time, TMP_MOTION_SAMPLE);
         const sampled = isSampled ? TMP_MOTION_SAMPLE : null;
         return {
             activeShotId: ctx.camera.activeShotId,

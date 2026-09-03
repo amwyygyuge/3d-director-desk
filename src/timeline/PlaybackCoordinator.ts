@@ -57,7 +57,7 @@ export class PlaybackCoordinator {
         private readonly skeletons: SkeletonRuntimeRegistry,
         preview: MotionPreviewSource,
     ) {
-        this.motionSampler = new CameraMotionSampler(motion, camera, scene, preview);
+        this.motionSampler = new CameraMotionSampler(motion, camera, scene, timeline, preview);
         this.poseLayer = new PoseLayer(skeletons);
         // A single reaction owns deterministic binder → transform → camera → pose sampling order.
         this.stopTransportReaction = reaction(

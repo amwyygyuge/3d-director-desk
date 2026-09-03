@@ -1,14 +1,12 @@
-import type { FocusTargetSample } from "@/camera/CameraFocusTrack";
-import { FocusTargetResolver } from "@/camera/FocusTargetResolver";
-import type { SceneManager } from "@/core/SceneManager";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
-import type { CameraMotionStore } from "@/store/CameraMotionStore";
-import type { CameraStore } from "@/store/CameraStore";
-import { createCameraMotionSample, sampleCameraMotionClip } from "@/camera/CameraMotionClip";
+import { CameraFrameSolver } from "@/camera/CameraFrameSolver";
+import { createCameraMotionSample } from "@/camera/CameraMotionClip";
 import type { CameraMotionClip, CameraMotionSample } from "@/camera/CameraMotionClip";
 import type { CameraShot } from "@/camera/CameraShot";
-import { createPositionSample } from "@/motion/MotionTrajectory";
-import type { MotionPositionSample } from "@/motion/MotionTrajectory";
+import type { SceneManager } from "@/core/SceneManager";
+import type { TimelineDocumentSource } from "@/motion/SubjectFrameResolver";
+import type { CameraMotionStore } from "@/store/CameraMotionStore";
+import type { CameraStore } from "@/store/CameraStore";
 
 /** R3F-owned runtime bridge; no Three references ever enter MobX state. */
 export interface CameraMotionSink {
@@ -35,18 +33,17 @@ interface ResolvedTake {
  */
 export class CameraMotionSampler {
     private sink: CameraMotionSink | null = null;
-    private readonly positionSample: MotionPositionSample = createPositionSample();
-    private readonly focusSample: FocusTargetSample = { x: 0, y: 0, z: 0 };
-    private readonly focusResolver: FocusTargetResolver;
+    private readonly solver: CameraFrameSolver;
     private readonly sample: CameraMotionSample = createCameraMotionSample();
 
     constructor(
         private readonly motion: CameraMotionStore,
         private readonly camera: CameraStore,
         scene: SceneManager,
+        timeline: TimelineDocumentSource,
         private readonly preview: MotionPreviewSource,
     ) {
-        this.focusResolver = new FocusTargetResolver(scene);
+        this.solver = new CameraFrameSolver(timeline, scene);
     }
 
     bindSink(sink: CameraMotionSink): void {
@@ -69,20 +66,16 @@ export class CameraMotionSampler {
     sampleCurrent(timeSeconds: number): boolean {
         const take = this.resolveTake(timeSeconds);
         if (!take) return false;
-        const { clip, shot } = take;
-        if (clip) {
-            const focusTarget =
-                clip.focus && this.focusResolver.resolve(clip.focus, this.focusSample) ? this.focusSample : null;
-            const hasClipSample =
-                (clip.focus === null || focusTarget !== null) &&
-                sampleCameraMotionClip(clip, timeSeconds, focusTarget, this.positionSample, this.sample);
-            if (!hasClipSample) return false;
-        } else if (shot) {
-            this.writeStaticShot(shot);
-        } else {
-            return false;
-        }
+        if (!this.writeTakeSample(take, timeSeconds)) return false;
         this.sink?.applyMotion(this.sample);
+        return true;
+    }
+
+    private writeTakeSample(take: ResolvedTake, timeSeconds: number): boolean {
+        const { clip, shot } = take;
+        if (clip) return this.solver.solve(clip, timeSeconds, this.sample);
+        if (!shot) return false;
+        this.writeStaticShot(shot);
         return true;
     }
 

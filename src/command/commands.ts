@@ -49,7 +49,8 @@ export const FOV_MIN = 1;
 export const FOV_MAX = 179;
 
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
-const FOCUS_TARGET_IN_USE_CODE = "focus-target-in-use";
+/** 注视锁定与跟拍共用同一条引用拦截:删除对象前必须先解开任一层绑定 */
+const CLIP_REFERENCE_IN_USE_CODE = "clip-reference-in-use";
 const SCENE_EDIT_PERMISSION = "scene:edit";
 const SCENE_READ_PERMISSION = "scene:read";
 const CAMERA_EDIT_PERMISSION = "camera:edit";
@@ -240,16 +241,17 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
         if (!ctx.scene.manager.getEntity(this.payload.id)) {
             return [{ code: "object-not-found", path: "id", message: `对象 "${this.payload.id}" 不存在` }];
         }
-        const dependentClipIds = ctx.motion.clipsForFocusObject(this.payload.id).map((clip) => clip.id);
+        const dependentClipIds = ctx.motion.clipsReferencingObject(this.payload.id).map((clip) => clip.id);
         return dependentClipIds.length > 0
             ? [
                   {
-                      code: FOCUS_TARGET_IN_USE_CODE,
+                      code: CLIP_REFERENCE_IN_USE_CODE,
                       path: "id",
-                      message: `对象 "${this.payload.id}" 被运镜注视引用: ${dependentClipIds.join(", ")}`,
+                      message: `对象 "${this.payload.id}" 被运镜的注视或跟拍引用: ${dependentClipIds.join(", ")}`,
                       options: [
                           { type: "freeze-world-point", label: "冻结为世界点后删除" },
                           { type: "remove-dependent-focus", label: "移除关联注视后删除" },
+                          { type: "unbind-dependent-follow", label: "解除关联跟拍后删除" },
                       ],
                   },
               ]

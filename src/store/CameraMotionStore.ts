@@ -25,12 +25,15 @@ export class CameraMotionStore {
         return this.clipsById.get(clipId);
     }
 
-
-    /** 跟拍覆盖层是可选的:只有显式绑定了对象的片段才构成引用关系。 */
-    clipsForFocusObject(objectId: string): readonly CameraMotionClip[] {
+    /**
+     * 引用了该对象的片段:注视锁定 ∪ 跟拍。两层覆盖都是可选绑定,
+     * 删除对象的拦截、UI 的「谁在用我」都走这一个判据,禁两处各写一份。
+     */
+    clipsReferencingObject(objectId: string): readonly CameraMotionClip[] {
         return this.clips.filter((clip) => {
             const target = clip.focus?.target;
-            return target?.kind === FOCUS_TARGET_KIND.SCENE_OBJECT && target.objectId === objectId;
+            const isFocused = target?.kind === FOCUS_TARGET_KIND.SCENE_OBJECT && target.objectId === objectId;
+            return isFocused || clip.follow?.objectId === objectId;
         });
     }
 
