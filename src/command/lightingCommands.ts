@@ -1,13 +1,23 @@
 import { isLightingMode, LIGHTING_MODE } from "@/store/SceneStore";
 import type { LightingMode } from "@/store/SceneStore";
 
-import { LIGHT_TYPES, isLightColor, isLightIntensity, isLightType, normalizeLightParams } from "@/core/LightParams";
+import {
+    isLightColor,
+    isLightDecay,
+    isLightDistance,
+    isLightIntensity,
+    isLightPenumbra,
+    isLightType,
+    isSpotAngleDegrees,
+    normalizeLightParams,
+} from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import type { SceneObject } from "@/core/SceneObject";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
-import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
+import { LIGHT_PARAMS_SCHEMA } from "@/command/lightParamsSchema";
+import { EMPTY_PAYLOAD_CONTRACT, isPayloadRecord } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
 
 const LIGHTING_COMMAND_VERSION = "1" as const;
@@ -42,18 +52,7 @@ export interface LightingObjectSnapshot {
 }
 
 const ADJUST_LIGHT_CONTRACT: PayloadContract = {
-    properties: {
-        id: { type: "string" },
-        light: {
-            type: "object",
-            properties: {
-                type: { type: "string", enum: LIGHT_TYPES },
-                color: { type: "string" },
-                intensity: { type: "number" },
-            },
-            required: ["type", "color", "intensity"],
-        },
-    },
+    properties: { id: { type: "string" }, light: LIGHT_PARAMS_SCHEMA },
     required: ["id", "light"],
 };
 
@@ -71,20 +70,52 @@ function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
+function lightPayloadIssues(value: unknown, path: string): readonly CommandIssue[] {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return [issue(ISSUE_CODE.PAYLOAD, path, "灯光参数格式无效")];
+    }
+    const candidate = value as {
+        readonly type?: unknown;
+        readonly color?: unknown;
+        readonly intensity?: unknown;
+        readonly distance?: unknown;
+        readonly decay?: unknown;
+        readonly angleDegrees?: unknown;
+        readonly penumbra?: unknown;
+    };
+    if (!isLightType(candidate.type)) {
+        return [issue(ISSUE_CODE.PAYLOAD, `${path}.type`, "灯光类型必须是 directional、point 或 spot")];
+    }
+    const baseIssues = [
+        fieldIssue(isLightColor(candidate.color), `${path}.color`, "灯光颜色必须是 #rrggbb"),
+        fieldIssue(isLightIntensity(candidate.intensity), `${path}.intensity`, "灯光强度必须是 0~100 的有限数"),
+    ].flat();
+    switch (candidate.type) {
+        case "directional":
+            return baseIssues;
+        case "point":
+            return [
+                ...baseIssues,
+                fieldIssue(isLightDistance(candidate.distance), `${path}.distance`, "灯光范围必须是 0~100 米的有限数"),
+                fieldIssue(isLightDecay(candidate.decay), `${path}.decay`, "灯光衰减必须是 0~4 的有限数"),
+            ].flat();
+        case "spot":
+            return [
+                ...baseIssues,
+                fieldIssue(isLightDistance(candidate.distance), `${path}.distance`, "灯光范围必须是 0~100 米的有限数"),
+                fieldIssue(isLightDecay(candidate.decay), `${path}.decay`, "灯光衰减必须是 0~4 的有限数"),
+                fieldIssue(
+                    isSpotAngleDegrees(candidate.angleDegrees),
+                    `${path}.angleDegrees`,
+                    "聚光半角必须是 1~90 度的有限数",
+                ),
+                fieldIssue(isLightPenumbra(candidate.penumbra), `${path}.penumbra`, "边缘软化必须是 0~1 的有限数"),
+            ].flat();
+    }
 }
 
-function lightPayloadIssues(value: unknown, path: string): readonly CommandIssue[] {
-    if (!isRecord(value)) return [issue(ISSUE_CODE.PAYLOAD, path, "灯光参数格式无效")];
-    const issues: CommandIssue[] = [];
-    if (!isLightType(value.type))
-        issues.push(issue(ISSUE_CODE.PAYLOAD, `${path}.type`, "灯光类型必须是 directional、point 或 spot"));
-    if (!isLightColor(value.color)) issues.push(issue(ISSUE_CODE.PAYLOAD, `${path}.color`, "灯光颜色必须是 #rrggbb"));
-    if (!isLightIntensity(value.intensity)) {
-        issues.push(issue(ISSUE_CODE.PAYLOAD, `${path}.intensity`, "灯光强度必须是 0~100 的有限数"));
-    }
-    return issues;
+function fieldIssue(isValid: boolean, path: string, message: string): readonly CommandIssue[] {
+    return isValid ? [] : [issue(ISSUE_CODE.PAYLOAD, path, message)];
 }
 
 function targetLightIssue(ctx: DirectorContext, id: string): CommandIssue | null {
@@ -125,7 +156,7 @@ export class AdjustLightCommand extends DirectorCommand<AdjustLightPayload> {
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const payload = this.payload;
-        if (!isRecord(payload)) return [issue(ISSUE_CODE.PAYLOAD, "", "light.adjust 参数格式无效")];
+        if (!isPayloadRecord(payload)) return [issue(ISSUE_CODE.PAYLOAD, "", "light.adjust 参数格式无效")];
         const issues: CommandIssue[] = [];
         if (typeof payload.id !== "string" || payload.id.length === 0) {
             issues.push(issue(ISSUE_CODE.PAYLOAD, "id", "灯光对象 id 格式无效"));
@@ -163,7 +194,7 @@ export class SetLightingModeCommand extends DirectorCommand<SetLightingModePaylo
     }
 
     override validateIssues(): readonly CommandIssue[] {
-        return isRecord(this.payload) && isLightingMode(this.payload.mode)
+        return isPayloadRecord(this.payload) && isLightingMode(this.payload.mode)
             ? []
             : [issue(ISSUE_CODE.PAYLOAD, "mode", "灯光模式必须是 studio 或 custom")];
     }
@@ -188,7 +219,7 @@ export class LightingListQuery implements DirectorQuery<Record<string, never>> {
     }
 
     validateIssues(): readonly CommandIssue[] {
-        return isRecord(this.payload) &&
+        return isPayloadRecord(this.payload) &&
             Object.getPrototypeOf(this.payload) === Object.prototype &&
             Object.keys(this.payload).length === 0
             ? []
@@ -214,7 +245,7 @@ export class LightingGetQuery implements DirectorQuery<GetLightPayload> {
     }
 
     validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        if (!isRecord(this.payload) || typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+        if (!isPayloadRecord(this.payload) || typeof this.payload.id !== "string" || this.payload.id.length === 0) {
             return [issue(ISSUE_CODE.PAYLOAD, "id", "灯光对象 id 格式无效")];
         }
         const targetIssue = targetLightIssue(ctx, this.payload.id);

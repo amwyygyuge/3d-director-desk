@@ -1,6 +1,7 @@
 import { PerspectiveCamera, Vector3 } from "three";
 import type { Box3, Camera, Scene, WebGLRenderer } from "three";
 
+import { CaptureHelperRegistry } from "@/capture/CaptureHelperRegistry";
 import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 import type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
 import { waitMs } from "@/core/waitMs";
@@ -47,7 +48,6 @@ export interface ShotFramingPose {
     readonly fov: number | null;
 }
 
-
 /**
  * 预演画面输出服务(应用服务):截图与(后置)录屏。
  *
@@ -55,12 +55,14 @@ export interface ShotFramingPose {
  * capture 在单个 JS 任务内 强制渲一帧 → toBlob 取样 → 恢复辅助物 → 再渲回可视帧,
  * 屏幕永不露出"去辅助物"的中间帧,demand 模式也能出图。
  *
- * 辅助物约定:Grid/BoxHelper/gizmo 等打 userData.helper = true 标记,隐藏靠查表遍历一次。
+ * 辅助物约定:编辑期根节点登记到 CaptureHelperRegistry；采集只迭代这些根，不遍历场景树。
  * 命令层经 DirectorContext.capture 触达——AI「截图」指令的落地路径。
  */
 export class CaptureService {
     private handles: RenderHandles | null = null;
     private currentHelperLifecycle: CaptureHelperLifecycle | null = null;
+    /** 编辑期辅助物根的运行时注册表；Three 引用不进 MobX，采集可直接迭代。 */
+    readonly helpers = new CaptureHelperRegistry();
     private recorder: MediaRecorder | null = null;
     private recordingEndSignal: ((discard: boolean) => void) | null = null;
     private activeRecording: Promise<Blob | null> | null = null;
@@ -72,6 +74,10 @@ export class CaptureService {
 
     detach(): void {
         this.handles = null;
+    }
+    dispose(): void {
+        this.helpers.clear();
+        this.detach();
     }
 
     get isAttached(): boolean {
@@ -167,7 +173,7 @@ export class CaptureService {
             VIDEO_MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "video/webm";
         const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
         const helperVisibility = new HelperVisibilityTransaction();
-        if (options.hideHelpers) helperVisibility.hide(handles.scene);
+        if (options.hideHelpers) helperVisibility.hide(this.helpers);
         const { promise: endRequested, resolve: requestEnd } = Promise.withResolvers<boolean>();
         const { promise: stopped, resolve: markStopped } = Promise.withResolvers<void>();
         const chunks: Blob[] = [];
@@ -256,7 +262,7 @@ export class CaptureService {
         }
 
         const helperVisibility = new HelperVisibilityTransaction();
-        if (options?.hideHelpers !== false) helperVisibility.hide(scene);
+        if (options?.hideHelpers !== false) helperVisibility.hide(this.helpers);
         gl.render(scene, camera);
         const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
         this.currentHelperLifecycle = helperVisibility.restore();

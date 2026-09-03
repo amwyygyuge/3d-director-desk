@@ -109,7 +109,7 @@ const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject 
  * - 选中高亮走 Box3Helper(缓存局部 bounds):播放仅变换包围盒,内容挂载变化才重建局部 bounds。
  */
 export const SceneObjectView = observer(function SceneObjectView({ entity }: { entity: SceneObject }) {
-    const { scene, selection, playback } = useDirectorDeskStores();
+    const { capture, scene, selection, playback } = useDirectorDeskStores();
     const scene3 = useThree((state) => state.scene);
     const invalidate = useThree((state) => state.invalidate);
     const groupRef = useRef<Group | null>(null);
@@ -163,15 +163,17 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
         updateHelperSnapshot(object, snapshot);
         helperSnapshotRef.current = snapshot;
         scene3.add(helper);
+        const unregisterHelper = capture.helpers.register(helper);
         invalidate();
         return () => {
             helperRef.current = null;
             helperSnapshotRef.current = null;
+            unregisterHelper();
             scene3.remove(helper);
             helper.geometry.dispose();
             invalidate();
         };
-    }, [selected, scene3, invalidate, transform, entity.kind]);
+    }, [capture, selected, scene3, invalidate, transform, entity.kind]);
 
     // 播放仅把缓存的局部 bounds 变换到世界坐标；子内容变化才重建索引并 traverse 一次。
     useFrame(() => {

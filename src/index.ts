@@ -143,6 +143,7 @@ export { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 export type { CameraMotionSink } from "@/camera/CameraMotionSampler";
 export type { DirectorPose } from "@/store/CameraStore";
 export { CaptureService, VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
+export { CaptureHelperRegistry } from "@/capture/CaptureHelperRegistry";
 export type { FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
 export { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 export type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
@@ -287,14 +288,34 @@ export type { SceneObjectInit, SceneObjectKind, Transform, Vec3 } from "@/core/S
 export {
     createDefaultLightParams,
     isLightColor,
+    isLightDecay,
+    isLightDistance,
     isLightIntensity,
+    isLightParams,
+    isLightPenumbra,
     isLightType,
+    isSpotAngleDegrees,
+    LIGHT_DECAY_MAX,
+    LIGHT_DECAY_MIN,
+    LIGHT_DISTANCE_MAX_METERS,
+    LIGHT_DISTANCE_MIN_METERS,
     LIGHT_INTENSITY_MAX,
     LIGHT_INTENSITY_MIN,
+    LIGHT_PENUMBRA_MAX,
+    LIGHT_PENUMBRA_MIN,
+    LIGHT_SPOT_ANGLE_MAX_DEGREES,
+    LIGHT_SPOT_ANGLE_MIN_DEGREES,
     LIGHT_TYPES,
     normalizeLightParams,
+    retypeLightParams,
 } from "@/core/LightParams";
-export type { LightParams, LightType } from "@/core/LightParams";
+export type {
+    DirectionalLightParams,
+    LightParams,
+    LightType,
+    PointLightParams,
+    SpotLightParams,
+} from "@/core/LightParams";
 export { PoseSnapshot } from "@/pose/PoseSnapshot";
 export type { BoneKey, PoseSnapshotInit, QuaternionTuple } from "@/pose/PoseSnapshot";
 export { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";

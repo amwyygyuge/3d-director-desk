@@ -16,13 +16,28 @@ import { FOV_MAX, FOV_MIN } from "@/command/commands";
 import type { CommandResult } from "@/command/DirectorCommand";
 import { transformKeyCommandFor } from "@/command/timelineCommands";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
-import { LIGHT_INTENSITY_MAX, LIGHT_INTENSITY_MIN, LIGHT_TYPES } from "@/core/LightParams";
-import type { LightParams, LightType } from "@/core/LightParams";
+import {
+    isLightType,
+    LIGHT_DECAY_MAX,
+    LIGHT_DECAY_MIN,
+    LIGHT_DISTANCE_MAX_METERS,
+    LIGHT_DISTANCE_MIN_METERS,
+    LIGHT_INTENSITY_MAX,
+    LIGHT_INTENSITY_MIN,
+    LIGHT_PENUMBRA_MAX,
+    LIGHT_PENUMBRA_MIN,
+    LIGHT_SPOT_ANGLE_MAX_DEGREES,
+    LIGHT_SPOT_ANGLE_MIN_DEGREES,
+    LIGHT_TYPES,
+    retypeLightParams,
+} from "@/core/LightParams";
+import type { LightParams } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { listActionClips } from "@/pose/PosePresetCatalog";
 import type { EmbeddedClipPresentation } from "@/pose/PosePresetCatalog";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { SCRUB_STEP } from "@/ui/controls/numberFieldConfig";
+import type { ScrubKind } from "@/ui/controls/numberFieldConfig";
 import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { invalidInputNotice } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -338,6 +353,58 @@ const LightIntensityControl = observer(function LightIntensityControl({
         </Box>
     );
 });
+type LightNumericParameter = "distance" | "decay" | "angleDegrees" | "penumbra";
+
+interface LightParameterControlProps {
+    readonly label: string;
+    readonly ariaLabel: string;
+    readonly kind: ScrubKind;
+    readonly minimum: number;
+    readonly maximum: number;
+    readonly value: number;
+    readonly onCommit: (value: number) => void;
+}
+
+const LightParameterControl = observer(function LightParameterControl({
+    label,
+    ariaLabel,
+    kind,
+    minimum,
+    maximum,
+    value,
+    onCommit,
+}: LightParameterControlProps) {
+    const stores = useDirectorDeskStores();
+    return (
+        <ScrubNumberField
+            label={label}
+            ariaLabel={ariaLabel}
+            kind={kind}
+            min={minimum}
+            max={maximum}
+            value={value}
+            onCommit={onCommit}
+            onInvalid={invalidInputNotice(stores, label, { min: minimum, max: maximum })}
+        />
+    );
+});
+
+function replaceLightNumberParameter(
+    light: LightParams,
+    parameter: LightNumericParameter,
+    value: number,
+): LightParams | null {
+    switch (parameter) {
+        case "distance":
+            return light.type === "directional" ? null : { ...light, distance: value };
+        case "decay":
+            return light.type === "directional" ? null : { ...light, decay: value };
+        case "angleDegrees":
+            return light.type === "spot" ? { ...light, angleDegrees: value } : null;
+        case "penumbra":
+            return light.type === "spot" ? { ...light, penumbra: value } : null;
+    }
+}
 
 interface PresetGridProps {
     readonly presets: readonly EmbeddedClipPresentation[];
@@ -462,22 +529,24 @@ export const ModelActionSection = observer(function ModelActionSection({ primary
     );
 });
 
-/** 灯光参数只读实体、写回 light.adjust；不维护 LightParams 的组件本地镜像。 */
+/** 灯光参数自取实体、统一写回 light.adjust；灯型切换只保留颜色与强度，专属参数不跨型泄漏。 */
 const LightControls = observer(function LightControls({ objectId, report }: ObjectControlsProps) {
     const stores = useDirectorDeskStores();
     const entity = stores.scene.manager.getEntity(objectId);
     const light = entity?.light;
     if (!entity || !light) return null;
 
-    const adjust = (next: Partial<LightParams>) => {
+    const dispatchAdjustment = (next: LightParams) => {
+        report(stores.dispatcher.dispatch({ type: "light.adjust", payload: { id: objectId, light: next } }, stores));
+    };
+    const updateNumericParameter = (parameter: LightNumericParameter, value: number) => {
         const latest = stores.scene.manager.getEntity(objectId)?.light;
-        if (!latest) return;
-        report(
-            stores.dispatcher.dispatch(
-                { type: "light.adjust", payload: { id: objectId, light: { ...latest, ...next } } },
-                stores,
-            ),
-        );
+        const next = latest ? replaceLightNumberParameter(latest, parameter, value) : null;
+        if (next) dispatchAdjustment(next);
+    };
+    const changeLightType = (value: string) => {
+        if (!isLightType(value)) return;
+        dispatchAdjustment(retypeLightParams(light, value));
     };
 
     return (
@@ -489,7 +558,7 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
                     size="small"
                     label="类型"
                     value={light.type}
-                    onChange={(event) => adjust({ type: event.target.value as LightType })}
+                    onChange={(event) => changeLightType(event.target.value)}
                 >
                     {LIGHT_TYPES.map((type) => (
                         <MenuItem key={type} value={type}>
@@ -503,9 +572,56 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
                     type="color"
                     value={light.color}
                     slotProps={{ htmlInput: { "aria-label": "灯光颜色" } }}
-                    onChange={(event) => adjust({ color: event.target.value })}
+                    onChange={(event) => dispatchAdjustment({ ...light, color: event.target.value })}
                 />
-                <LightIntensityControl intensity={light.intensity} onCommit={(intensity) => adjust({ intensity })} />
+                <LightIntensityControl
+                    intensity={light.intensity}
+                    onCommit={(intensity) => dispatchAdjustment({ ...light, intensity })}
+                />
+                {light.type !== "directional" && (
+                    <>
+                        <LightParameterControl
+                            label="范围 (m)"
+                            ariaLabel="灯光范围"
+                            kind="distanceMeters"
+                            minimum={LIGHT_DISTANCE_MIN_METERS}
+                            maximum={LIGHT_DISTANCE_MAX_METERS}
+                            value={light.distance}
+                            onCommit={(value) => updateNumericParameter("distance", value)}
+                        />
+                        <LightParameterControl
+                            label="衰减"
+                            ariaLabel="灯光衰减"
+                            kind="decay"
+                            minimum={LIGHT_DECAY_MIN}
+                            maximum={LIGHT_DECAY_MAX}
+                            value={light.decay}
+                            onCommit={(value) => updateNumericParameter("decay", value)}
+                        />
+                    </>
+                )}
+                {light.type === "spot" && (
+                    <>
+                        <LightParameterControl
+                            label="半角 (°)"
+                            ariaLabel="聚光半角"
+                            kind="angleDeg"
+                            minimum={LIGHT_SPOT_ANGLE_MIN_DEGREES}
+                            maximum={LIGHT_SPOT_ANGLE_MAX_DEGREES}
+                            value={light.angleDegrees}
+                            onCommit={(value) => updateNumericParameter("angleDegrees", value)}
+                        />
+                        <LightParameterControl
+                            label="边缘软化"
+                            ariaLabel="聚光边缘软化"
+                            kind="ratio"
+                            minimum={LIGHT_PENUMBRA_MIN}
+                            maximum={LIGHT_PENUMBRA_MAX}
+                            value={light.penumbra}
+                            onCommit={(value) => updateNumericParameter("penumbra", value)}
+                        />
+                    </>
+                )}
             </Stack>
         </Box>
     );

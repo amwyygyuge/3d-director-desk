@@ -16,7 +16,7 @@ import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import type { PoseSnapshotInit } from "@/pose/PoseSnapshot";
-import { isLightColor, isLightIntensity, isLightType, LIGHT_TYPES, normalizeLightParams } from "@/core/LightParams";
+import { isLightParams, normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "@/core/SceneObject";
@@ -25,6 +25,7 @@ import { registerActorCommands } from "@/command/actorCommands";
 import { registerActionCommands } from "@/command/actionCommands";
 import { registerCameraCommands, RemoveShotCommand } from "@/command/cameraCommands";
 import { registerCaptureCommands } from "@/command/captureCommands";
+import { LIGHT_PARAMS_SCHEMA } from "@/command/lightParamsSchema";
 import { registerLightingCommands } from "@/command/lightingCommands";
 import { registerNavigationCommands } from "@/command/navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "@/command/timelineCommands";
@@ -90,15 +91,7 @@ const PLACE_OBJECT_CONTRACT: PayloadContract = {
         // 撤销回放带实体全快照:pose/actor 必须进契约,否则 redo/undo 删除在闸门处崩
         pose: nullable({ type: "object" }),
         actor: nullable({ type: "object" }),
-        light: nullable({
-            type: "object",
-            properties: {
-                type: { type: "string", enum: LIGHT_TYPES },
-                color: { type: "string" },
-                intensity: { type: "number" },
-            },
-            required: ["type", "color", "intensity"],
-        }),
+        light: nullable(LIGHT_PARAMS_SCHEMA),
     },
     required: ["id", "kind"],
 };
@@ -139,13 +132,8 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
         const hasLight = payload.light !== undefined && payload.light !== null;
         if ((payload.kind === "light") !== hasLight) {
             issues.push('kind="light" 必须且只能携带 light 参数');
-        } else if (
-            hasLight &&
-            (!isLightType(payload.light?.type) ||
-                !isLightColor(payload.light?.color) ||
-                !isLightIntensity(payload.light?.intensity))
-        ) {
-            issues.push("light 参数无效(类型、#rrggbb 颜色或 0~100 强度)");
+        } else if (hasLight && !isLightParams(payload.light)) {
+            issues.push("light 参数无效(灯型专属参数、#rrggbb 颜色或数值范围)");
         }
         return issues;
     }
