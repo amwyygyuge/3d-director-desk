@@ -6,9 +6,15 @@ import { createContext, type MouseEvent, type ReactNode, useContext, useState } 
 import { subjectBoundsFor } from "@/command/subjectBounds";
 import { FOLLOW_FRAME } from "@/motion/SubjectFrameResolver";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { MARKER_TEMPLATES } from "@/timeline/MarkerTemplates";
+import type { MarkerTemplate } from "@/timeline/MarkerTemplates";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 
-const DEFAULT_MARKER_LABEL = "标记";
+const DEFAULT_MARKER_TEMPLATE: MarkerTemplate = {
+    id: "default-marker",
+    label: "标记",
+    colorToken: "warning.main",
+};
 const ADD_MARKER_LABEL = "在此打标记";
 const DELETE_LABEL = "删除";
 const RESET_HANDLES_LABEL = "恢复自动手柄";
@@ -16,6 +22,18 @@ const SEEK_LABEL = "定位到此";
 const BIND_FOLLOW_LABEL = "跟拍选中模型";
 const FOLLOW_ANCHOR_ORIGIN = [0, 0, 0] as const;
 const SINGLE_SELECTION_COUNT = 1;
+
+function markerCommandAt(timeSeconds: number, template: MarkerTemplate): { readonly type: string; readonly payload: unknown } {
+    return {
+        type: "timeline.add-marker",
+        payload: {
+            id: crypto.randomUUID(),
+            timeSeconds,
+            label: template.label,
+            colorToken: template.colorToken,
+        },
+    };
+}
 
 interface TimelineMenuPosition {
     readonly left: number;
@@ -90,18 +108,20 @@ export const TimelineContextMenu = observer(function TimelineContextMenu({
                     disabled={position === null}
                     onClick={() => {
                         if (!position) return;
-                        dispatch({
-                            type: "timeline.add-marker",
-                            payload: {
-                                id: crypto.randomUUID(),
-                                timeSeconds: position.timeSeconds,
-                                label: DEFAULT_MARKER_LABEL,
-                            },
-                        });
+                        dispatch(markerCommandAt(position.timeSeconds, DEFAULT_MARKER_TEMPLATE));
                     }}
                 >
                     {ADD_MARKER_LABEL}
                 </MenuItem>
+                {MARKER_TEMPLATES.map((template) => (
+                    <MenuItem
+                        disabled={position === null}
+                        key={template.id}
+                        onClick={() => position && dispatch(markerCommandAt(position.timeSeconds, template))}
+                    >
+                        {template.label}
+                    </MenuItem>
+                ))}
                 {canBindSelectedModel && (
                     <MenuItem
                         onClick={() => {
