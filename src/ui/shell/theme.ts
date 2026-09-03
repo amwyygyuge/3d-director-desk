@@ -40,6 +40,11 @@ export const CHROME = {
     edgeGapPx: 16,
     /** 左右侧栏同宽:几何镜像,禁单侧硬编码 */
     sidePanelWidthPx: 288,
+    /** review 左栏只留 tab 图标,宽度与常规点击靶同源。 */
+    navigatorIconRailWidthPx: 48,
+    /** review 右下浮条只容纳预览、缓动和删除三条高频入口。 */
+    reviewInspectorWidthPx: 248,
+    reviewInspectorHeightPx: 48,
     /** 侧栏上缘:给顶部药丸让位 */
     sidePanelTopPx: 80,
     timelineMiniPx: 56,
@@ -48,9 +53,32 @@ export const CHROME = {
     toastZIndex: 40,
 } as const;
 
-/** 侧栏下缘让位量:骑在时间线控制台上方,随其开合联动;左右侧栏共用同一几何,禁各自拼表达式 */
-export function sidePanelBottomOffsetPx(timelineExpanded: boolean): number {
-    return (timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx;
+/**
+ * 时间线可调高度的合法域:下限保证「刻度尺 + 两条轨」仍可读,上限给画面留出足够视野。
+ * 作者拖拽与未来的宿主/AI 写入共用这一道围栏。
+ */
+export const TIMELINE_HEIGHT = { MIN_PX: 160, MAX_PX: 640, DEFAULT_PX: CHROME.timelineExpandedPx } as const;
+
+export function isTimelineHeightValid(value: number): boolean {
+    return Number.isFinite(value) && value >= TIMELINE_HEIGHT.MIN_PX && value <= TIMELINE_HEIGHT.MAX_PX;
+}
+
+/**
+ * 时间线当前高度的 CSS 变量:拖拽期直接写在导演台根节点上,壳层各处读同一个值。
+ *
+ * 用变量而不是 React 状态,是因为拖拽每帧都会改高度——若走 store,整条时间轴(轨道、片段、
+ * 关键帧)每帧重渲一次,与画布渲染叠加。变量只触发合成器读值,拖完才落一次 store。
+ */
+export const TIMELINE_HEIGHT_VAR = "--desk-timeline-height";
+
+/** 侧栏下缘让位量:骑在时间线控制台上方,随其高度联动;左右侧栏与产物停靠层共用同一表达式 */
+export function sidePanelBottomOffset(): string {
+    return `calc(var(${TIMELINE_HEIGHT_VAR}, ${CHROME.timelineMiniPx}px) + ${CHROME.edgeGapPx}px)`;
+}
+
+/** review 右下浮条骑在迷你时间线之上,沿用全局边距而非组件内拼裸数。 */
+export function reviewInspectorBottomOffsetPx(): number {
+    return CHROME.timelineMiniPx + CHROME.edgeGapPx;
 }
 
 /** 右下产物停靠层右缘让位量:检查器(右侧栏)在场时让开整栏宽度,与侧栏几何共用同一真相源 */

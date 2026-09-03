@@ -66,7 +66,11 @@ function translateTransform(translatePixels: number, scale: number): string {
 export class TimelineClipDragResolver {
     private readonly snapResolver = new SnapResolver();
 
-    dragKindAt(options: { readonly pointerOffsetPx: number; readonly barWidthPx: number; readonly handleWidthPx: number }): TimelineDragKind {
+    dragKindAt(options: {
+        readonly pointerOffsetPx: number;
+        readonly barWidthPx: number;
+        readonly handleWidthPx: number;
+    }): TimelineDragKind {
         const isNearStart = options.pointerOffsetPx <= options.handleWidthPx;
         const isNearEnd = options.barWidthPx - options.pointerOffsetPx <= options.handleWidthPx;
         const kinds: readonly [boolean, TimelineDragKind][] = [
@@ -79,14 +83,14 @@ export class TimelineClipDragResolver {
     resolve(options: TimelineClipDragResolveOptions): TimelineClipRange {
         const resolution = this.resolutionFor(options);
         const bounded = clamp(resolution.boundaryTimeSeconds, resolution.bounds);
-        const snapped = this.snapResolver.resolve({
+        const snap = this.snapResolver.resolve({
             timeSeconds: bounded,
             secondsPerPixel: options.viewport.secondsPerPixel(options.trackWidthPx),
             candidates: options.candidates,
             enabled: options.isSnapEnabled,
             durationSeconds: options.durationSeconds,
         });
-        return resolution.rangeForBoundary(clamp(snapped, resolution.bounds));
+        return resolution.rangeForBoundary(clamp(snap.timeSeconds, resolution.bounds));
     }
 
     transformFor(options: TimelineClipDragTransformOptions): string {

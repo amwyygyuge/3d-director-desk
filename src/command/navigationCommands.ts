@@ -49,9 +49,9 @@ export class FrameViewCommand extends DirectorCommand<FrameViewPayload> {
         if (this.payload.direction !== undefined && !isViewDirection(this.payload.direction)) {
             return [`未知取景方位:${String(this.payload.direction)}`];
         }
-        // 掌镜/镜头视角/全屏预览下相机由机位/运镜/播放驱动,rig 会丢弃取景请求——结构化失败,不静默
-        if (ctx.camera.activeShotId !== null || ctx.motionAuthoring.lensViewActive || ctx.layout.presentationMode) {
-            return ["掌镜/镜头视角/全屏预览中取景不生效,先 Esc 退出再取景"];
+        // 掌镜/镜头视角/成片输出下相机由机位/运镜/播放驱动,rig 会丢弃取景请求——结构化失败,不静默
+        if (ctx.camera.activeShotId !== null || ctx.motionAuthoring.lensViewActive || ctx.layout.isProgramTakeover) {
+            return ["掌镜/镜头视角/成片输出中取景不生效,先 Esc 退出再取景"];
         }
         const ids = this.payload.ids ?? ctx.scene.manager.list().map((e) => e.id);
         if (ids.length === 0) return ["场景为空,无可取景对象"];

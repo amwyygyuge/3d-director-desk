@@ -61,7 +61,7 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 
 ### R5 停止导出必须交付视频 —— ✅ 已交付
 
-**落地方式**：工具栏 Stop 调用 `capture.video-stop`，它在当前已完成帧后收口固定 30fps 的确定性 MP4 导出，并经 `host.reportCapture` 交付产品；`capture.video-cancel` 放弃导出，绝不创建产物。两条路径都会在任务 finally 中复原预览态与循环设置。
+**落地方式**：工具栏 Stop 调用 `capture.video-stop`，它在当前已完成帧后收口按工程帧率采样的确定性 MP4 导出，并经 `host.reportCapture` 交付产品；`capture.video-cancel` 放弃导出，绝不创建产物。两条路径都会在任务 finally 中复原预览态与循环设置。
 
 **验收**：
 

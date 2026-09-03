@@ -11,8 +11,9 @@ import { AssetLibraryPanel } from "@/ui/assets/AssetLibraryPanel";
 import { LightSection } from "@/ui/lighting/LightSection";
 import { OutlinerPanel } from "@/ui/outline/OutlinerPanel";
 import { ShotPanel } from "@/ui/shots/ShotPanel";
+import { SHELL_MODE } from "@/store/WorkbenchLayoutStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { CHROME, sidePanelBottomOffsetPx } from "@/ui/shell/theme";
+import { CHROME, sidePanelBottomOffset } from "@/ui/shell/theme";
 
 const SECTION_PANELS: Record<WorkspaceSection, ComponentType> = {
     [WORKSPACE_SECTION.OUTLINE]: OutlinerPanel,
@@ -55,6 +56,34 @@ const NavigatorTabBar = observer(function NavigatorTabBar() {
     );
 });
 
+/** review 只保留分区直达:内容面板卸载，避免运镜播放期后台跟随 observable 重渲。 */
+const NavigatorIconRail = observer(function NavigatorIconRail() {
+    const { layout } = useDirectorDeskStores();
+    return (
+        <Tabs
+            orientation="vertical"
+            value={layout.activeSection}
+            onChange={(_event, section: WorkspaceSection) => layout.activateWorkspaceSection(section)}
+            aria-label="工作台导航分区"
+            sx={{ width: CHROME.navigatorIconRailWidthPx, minWidth: 0 }}
+        >
+            {WORKSPACE_SECTION_ORDER.map((section) => {
+                const definition = WORKSPACE_SECTION_DEFS[section];
+                const SectionIcon = definition.icon;
+                return (
+                    <Tab
+                        key={section}
+                        value={section}
+                        aria-label={definition.label}
+                        icon={<SectionIcon fontSize="small" />}
+                        sx={{ minWidth: 0, minHeight: CHROME.navigatorIconRailWidthPx }}
+                    />
+                );
+            })}
+        </Tabs>
+    );
+});
+
 /** 当前分区内容:tab 切换即挂载/卸载,未选中的分区不留树里跟渲染。 */
 const ActiveSectionPanel = observer(function ActiveSectionPanel() {
     const { layout } = useDirectorDeskStores();
@@ -79,7 +108,8 @@ const ActiveSectionPanel = observer(function ActiveSectionPanel() {
  */
 export const WorkspaceNavigator = observer(function WorkspaceNavigator() {
     const { layout } = useDirectorDeskStores();
-    if (layout.authoringVisible === false) return null;
+    if (!layout.chromeVisible) return null;
+    const review = layout.shellMode === SHELL_MODE.REVIEW;
 
     return (
         <Paper
@@ -88,13 +118,13 @@ export const WorkspaceNavigator = observer(function WorkspaceNavigator() {
             sx={{
                 left: CHROME.edgeGapPx,
                 top: CHROME.sidePanelTopPx,
-                bottom: sidePanelBottomOffsetPx(layout.timelineExpanded),
-                width: CHROME.sidePanelWidthPx,
+                bottom: sidePanelBottomOffset(),
+                width: review ? CHROME.navigatorIconRailWidthPx : CHROME.sidePanelWidthPx,
                 overflow: "hidden",
             }}
         >
-            <NavigatorTabBar />
-            <ActiveSectionPanel />
+            {review ? <NavigatorIconRail /> : <NavigatorTabBar />}
+            {review ? null : <ActiveSectionPanel />}
         </Paper>
     );
 });

@@ -10,8 +10,6 @@ const REFERENCE_VIDEO_QUALITY = "high" as const;
 const MINIMUM_FRAME_COUNT = 1;
 const H264_PIXEL_ALIGNMENT = 2;
 const VIDEO_RESIZE_FIT = "fill" as const;
-/** 参考视频的固定时间栅格；当前时间轴没有帧率字段，沿用既有 30fps 导出契约。 */
-export const REFERENCE_VIDEO_FRAME_RATE = 30;
 
 export interface DeterministicMp4ExportOptions {
     readonly durationSeconds: number;

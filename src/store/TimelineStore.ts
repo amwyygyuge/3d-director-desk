@@ -3,6 +3,7 @@ import { makeAutoObservable } from "mobx";
 import { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "@/timeline/TimelineDoc";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
+import type { TimelineMarker } from "@/timeline/TimelineMarker";
 
 /**
  * 每个 DirectorDesk 实例各自拥有的时间轴状态。仅保存 TimelineDoc 纯数据；
@@ -25,6 +26,22 @@ export class TimelineStore {
 
     setDuration(duration: number): void {
         this.currentDocument = this.currentDocument.withDuration(duration);
+    }
+
+    setFrameRate(fps: number): void {
+        this.currentDocument = this.currentDocument.withFrameRate(fps);
+    }
+
+    setPlaybackRange(range: { readonly inSeconds: number; readonly outSeconds: number }): void {
+        this.currentDocument = this.currentDocument.withPlaybackRange(range);
+    }
+
+    setMarker(marker: TimelineMarker): void {
+        this.currentDocument = this.currentDocument.withMarker(marker);
+    }
+
+    removeMarker(markerId: string): void {
+        this.currentDocument = this.currentDocument.withoutMarker(markerId);
     }
 
     addKey(trackId: string, targetId: string, keyframe: TransformKeyframe): void {
@@ -59,10 +76,9 @@ export class TimelineStore {
     removeObjectTracks(targetId: string): readonly TimelineTrack[] {
         const removed = this.currentDocument.tracks.filter((track) => track.targetId === targetId);
         if (removed.length === 0) return removed;
-        this.currentDocument = new TimelineDoc({
-            duration: this.currentDocument.duration,
-            tracks: this.currentDocument.tracks.filter((track) => track.targetId !== targetId),
-        });
+        this.currentDocument = this.currentDocument.withTracks(
+            this.currentDocument.tracks.filter((track) => track.targetId !== targetId),
+        );
         return removed;
     }
 

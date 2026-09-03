@@ -62,28 +62,29 @@ export class MotionAuthoringStore {
         makeAutoObservable<MotionAuthoringStore, "layout">(this, { layout: false });
     }
 
-    /** 镜头视角只在编辑态成立:全屏预览本身就是成片接管,不再叠加编排语义。 */
+    /** 镜头视角只在非成片输出态成立:成片接管时不再叠加编排语义。 */
     get lensViewActive(): boolean {
-        return this.viewMode === VIEW_MODE.LENS && !this.layout.presentationMode;
+        return this.viewMode === VIEW_MODE.LENS && !this.layout.isProgramTakeover;
     }
 
-    /** 运镜期视口相机由采样器接管的判据:全屏预览或镜头视角。 */
+    /** 运镜期视口相机由成片输出或镜头视角接管。 */
     get programOutputActive(): boolean {
-        return this.layout.presentationMode || this.lensViewActive;
+        return this.layout.isProgramTakeover || this.lensViewActive;
     }
 
-    /** 轨迹辅助物最终可见性:成片画面里不该出现编排辅助物,其余情形跟随开关。 */
+    /** 轨迹辅助物不进入成片输出,review 仍保留作者的编排上下文。 */
     get pathHelpersVisible(): boolean {
-        return this.pathVisible && !this.layout.presentationMode;
+        return this.pathVisible && !this.layout.isProgramTakeover;
     }
 
     setViewMode(mode: ViewMode): void {
         this.viewMode = mode;
-        if (mode === VIEW_MODE.DIRECTOR) this.previewClipId = null;
+        if (mode === VIEW_MODE.DIRECTOR) this.setPreviewClip(null);
     }
 
     setPreviewClip(clipId: string | null): void {
         this.previewClipId = clipId;
+        this.layout.setMotionPreviewActive(clipId !== null);
     }
 
     /** 片段被删除后收敛预览态,避免采样器指向已消失的片段;选中态的收敛归 TimelineSelectionStore。 */

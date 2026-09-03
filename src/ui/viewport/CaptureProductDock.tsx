@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import type { VideoExportSource } from "@/capture/VideoExportSession";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { captureDockRightOffsetPx, sidePanelBottomOffsetPx } from "@/ui/shell/theme";
+import { captureDockRightOffsetPx, sidePanelBottomOffset } from "@/ui/shell/theme";
 import { resolveInspectorTarget } from "@/ui/workspace/InspectorSheet";
 
 const CAPTURE_PREVIEW_WIDTH_PX = 160;
@@ -32,7 +32,7 @@ const VIDEO_DURATION_DECIMALS = 1;
 /** 截图与视频产物共用同一停靠层，避免时间线/检查器让位规则在两类产物间漂移。 */
 export const CaptureProductDock = observer(function CaptureProductDock() {
     const stores = useDirectorDeskStores();
-    const { layout, ui } = stores;
+    const { ui } = stores;
     const captureUrl = ui.lastCaptureUrl;
     const captureMeta = ui.lastCaptureMeta;
     const videoUrl = ui.lastVideoUrl;
@@ -44,7 +44,7 @@ export const CaptureProductDock = observer(function CaptureProductDock() {
     return (
         <Box
             sx={{
-                bottom: sidePanelBottomOffsetPx(layout.timelineExpanded),
+                bottom: sidePanelBottomOffset(),
                 display: "grid",
                 gap: DOCK_GAP,
                 position: "absolute",

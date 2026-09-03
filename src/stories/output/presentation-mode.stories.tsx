@@ -40,11 +40,11 @@ function seedPresentationMode(stores: DirectorDeskStores): void {
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 未就位");
 
     dispatchOk(stores, "desk.enter-presentation", {});
-    assertAcceptance(stores.layout.presentationMode, "未进入预览态");
+    assertAcceptance(stores.layout.isProgramTakeover, "未进入成片输出态");
     assertAcceptance(!stores.layout.authoringVisible, "预览期壳层未隐藏");
 
     dispatchOk(stores, "desk.exit-presentation", {});
-    assertAcceptance(!stores.layout.presentationMode, "未退出预览态");
+    assertAcceptance(!stores.layout.isProgramTakeover, "未退出成片输出态");
     assertAcceptance(stores.layout.authoringVisible, "退出后壳层未还原");
 }
 

@@ -4,6 +4,7 @@ export const TIMELINE_SELECTION_KIND = {
     NONE: "none",
     PROGRAM_CLIP: "program-clip",
     MOTION_CLIP: "motion-clip",
+    MARKER: "marker",
     MOTION_KEY: "motion-key",
     WALK_TRACK: "walk-track",
     WALK_KEY: "walk-key",
@@ -19,6 +20,7 @@ const REMOVE_COMMAND_TYPE = {
     MOTION_CLIP: "motion.remove-clip",
     MOTION_KEY: "motion.remove-key",
     WALK_KEY: "timeline.remove-key",
+    MARKER: "timeline.remove-marker",
 } as const;
 
 interface SelectionIdentity {
@@ -47,6 +49,10 @@ const DELETE_COMMAND: Record<TimelineSelectionKind, (identity: SelectionIdentity
         type: REMOVE_COMMAND_TYPE.MOTION_KEY,
         payload: { clipId: ownerId, keyId: memberId },
     }),
+    [TIMELINE_SELECTION_KIND.MARKER]: ({ ownerId }) => ({
+        type: REMOVE_COMMAND_TYPE.MARKER,
+        payload: { id: ownerId },
+    }),
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: () => null,
     [TIMELINE_SELECTION_KIND.WALK_KEY]: ({ ownerId, memberId }) => ({
         type: REMOVE_COMMAND_TYPE.WALK_KEY,
@@ -60,6 +66,7 @@ const OWNER_IS_MOTION_CLIP: Record<TimelineSelectionKind, boolean> = {
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: false,
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: true,
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: true,
+    [TIMELINE_SELECTION_KIND.MARKER]: false,
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: false,
     [TIMELINE_SELECTION_KIND.WALK_KEY]: false,
 };
@@ -71,6 +78,7 @@ const OWNER_IS_WALK_TRACK: Record<TimelineSelectionKind, boolean> = {
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: false,
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: false,
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: true,
+    [TIMELINE_SELECTION_KIND.MARKER]: false,
     [TIMELINE_SELECTION_KIND.WALK_KEY]: true,
 };
 
@@ -120,6 +128,9 @@ export class TimelineSelection {
     static walkKey(trackId: string, keyframeId: string): TimelineSelection {
         return new TimelineSelection(TIMELINE_SELECTION_KIND.WALK_KEY, trackId, keyframeId);
     }
+    static marker(markerId: string): TimelineSelection {
+        return new TimelineSelection(TIMELINE_SELECTION_KIND.MARKER, markerId, null);
+    }
 
     get isEmpty(): boolean {
         return this.kind === TIMELINE_SELECTION_KIND.NONE;
@@ -144,6 +155,9 @@ export class TimelineSelection {
 
     get programClipId(): string | null {
         return this.kind === TIMELINE_SELECTION_KIND.PROGRAM_CLIP ? this.ownerId : null;
+    }
+    get markerId(): string | null {
+        return this.kind === TIMELINE_SELECTION_KIND.MARKER ? this.ownerId : null;
     }
 
     equals(other: TimelineSelection): boolean {

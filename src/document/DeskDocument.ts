@@ -6,8 +6,11 @@ import type { TimelineDocInit } from "@/timeline/TimelineDoc";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import type { PosePresetJSON } from "@/pose/PosePreset";
 
-/** 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。v6 起运镜与机位彻底解耦。 */
-export const DESK_DOCUMENT_VERSION = 6;
+/**
+ * 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。
+ * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记。
+ */
+export const DESK_DOCUMENT_VERSION = 7;
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
 export interface DeskDocumentAction {

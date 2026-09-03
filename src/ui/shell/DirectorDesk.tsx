@@ -7,6 +7,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { formatFromUrl } from "@/assets/ModelAsset";
 import type { HostBridgeConfiguration } from "@/bridge/HostBridge";
@@ -39,7 +40,7 @@ import { Hotkeys } from "@/ui/shell/Hotkeys";
 import { FrameRateIndicator } from "@/ui/viewport/FrameRateIndicator";
 import { placementFor } from "@/ui/assets/importFiles";
 import { LoadingChip } from "@/ui/viewport/LoadingChip";
-import { directorDeskTheme, SCROLLBAR_SX, VIEWPORT_BACKGROUND } from "@/ui/shell/theme";
+import { directorDeskTheme, SCROLLBAR_SX, TIMELINE_HEIGHT_VAR, VIEWPORT_BACKGROUND } from "@/ui/shell/theme";
 import { SceneRoot } from "@/ui/viewport/scene/SceneRoot";
 import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
 import { StudioRig } from "@/ui/viewport/scene/StudioRig";
@@ -221,7 +222,15 @@ export const DirectorDesk = observer(function DirectorDesk({
                     <div
                         ref={deskRef}
                         className="relative overflow-hidden"
-                        style={{ width, height }}
+                        data-desk-root
+                        // 时间线高度以 CSS 变量下发:拖拽期直接改变量即可让侧栏与产物层跟随,不触发 React 重渲
+                        style={
+                            {
+                                width,
+                                height,
+                                [TIMELINE_HEIGHT_VAR]: `${stores.layout.timelineChromeHeightPx}px`,
+                            } as CSSProperties
+                        }
                         tabIndex={-1}
                         onPointerDown={(event) => event.currentTarget.focus()}
                     >

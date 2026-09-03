@@ -174,10 +174,16 @@ export function createDirectorDeskStores(options?: {
     const host =
         options?.host ?? (options?.hostBridge ? new PostMessageAdapter(options.hostBridge) : new InertHostAdapter());
     const timeline = new TimelineStore();
-    // 时钟的时长权威来自时间轴文档:playhead 双端钳在 [0, duration],不再播过尾
+    // 时钟只读文档的播放边界；范围编辑仍经 timeline.* 命令写入聚合根。
     const clock = new TimeTransport({
         get durationSeconds() {
             return timeline.document.duration;
+        },
+        get inSeconds() {
+            return timeline.document.playbackRange.inSeconds;
+        },
+        get outSeconds() {
+            return timeline.document.playbackRange.outSeconds;
         },
     });
     const binder = new AnimationBinder();

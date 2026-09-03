@@ -94,6 +94,14 @@ export { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND, TIMELINE_ROW_KIND, TimelineLayou
 export type { TimelineBar, TimelineMark, TimelineRow } from "@/authoring/TimelineLayout";
 export { TIMELINE_SELECTION_KIND, TimelineSelection } from "@/authoring/TimelineSelection";
 export type { TimelineSelectionKind } from "@/authoring/TimelineSelection";
+export { DEFAULT_FRAME_RATE_FPS, FRAME_RATE_FPS, FrameRate, isFrameRateFps } from "@/timeline/FrameRate";
+export { Timecode } from "@/timeline/Timecode";
+export { PlaybackRange } from "@/timeline/PlaybackRange";
+export type { PlaybackRangeInit } from "@/timeline/PlaybackRange";
+export { TimelineMarker } from "@/timeline/TimelineMarker";
+export type { TimelineMarkerInit, TimelineMarkerJSON } from "@/timeline/TimelineMarker";
+export { TIMELINE_CONTENT_BLOCKER_KIND, TimelineContentSpan } from "@/authoring/TimelineContentSpan";
+export type { TimelineContentBlocker, TimelineContentBlockerKind } from "@/authoring/TimelineContentSpan";
 export { TIMELINE_DRAG_KIND, TimelineClipDragResolver } from "@/authoring/TimelineClipDrag";
 export type {
     TimelineClipDragResolveOptions,
@@ -219,12 +227,15 @@ export {
 } from "@/command/commands";
 export {
     AddTimelineKeyCommand,
+    FitTimelineDurationCommand,
     MoveTimelineKeyCommand,
     RemoveTimelineKeyCommand,
     RetimeTimelineTrackCommand,
     RestoreTimelineTracksCommand,
+    ScaleTimelineCommand,
     SetTimelineDurationCommand,
     SetTimelineKeyEasingCommand,
+    SetTimelinePlaybackRangeCommand,
     SetTimelineTrackCommand,
     SetTimelineKeyCommand,
     SetTimelineTrackPoliciesCommand,
@@ -357,6 +368,7 @@ export {
 export type { ShortcutId } from "@/shortcuts/builtinShortcuts";
 export type { GizmoAxis } from "@/store/UiStore";
 export { TimeTransport } from "@/time/TimeTransport";
+export type { TimelinePlaybackRangeSource } from "@/time/TimeTransport";
 export { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "@/timeline/TimelineDoc";
 export type { TimelineDocInit } from "@/timeline/TimelineDoc";
 export { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";

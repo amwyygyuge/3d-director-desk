@@ -4,6 +4,7 @@ import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
 
 export const TIMELINE_ROW_KIND = {
+    MARKER: "marker",
     PROGRAM: "program",
     MOTION: "motion",
     TRANSFORM: "transform",
@@ -21,6 +22,7 @@ export type TimelineMiniBar = TimelineBar & {
 };
 
 export const TIMELINE_MARK_KIND = {
+    MARKER: "marker",
     CAMERA_KEY: "camera-key",
     TRANSFORM_KEY: "transform-key",
 } as const;
@@ -55,6 +57,8 @@ export interface TimelineRow {
     readonly marks: readonly TimelineMark[];
 }
 
+const MARKER_ROW_ID = "markers";
+const MARKER_ROW_LABEL = "标记";
 const PROGRAM_ROW_ID = "program";
 const PROGRAM_ROW_LABEL = "Program 输出";
 const MOTION_ROW_ID = "motion";
@@ -86,12 +90,35 @@ export class TimelineLayout {
     ) {}
 
     project(viewport: TimelineViewport): readonly TimelineRow[] {
-        return [this.programRow(viewport), this.motionRow(viewport), ...this.transformRows(viewport)];
+        return [
+            this.markerRow(viewport),
+            this.programRow(viewport),
+            this.motionRow(viewport),
+            ...this.transformRows(viewport),
+        ];
     }
 
     /** 迷你轨只画成片与运镜:走位仍以关键帧表达,避免与迷你轨已有菱形重叠。 */
     bars(viewport: TimelineViewport): readonly TimelineMiniBar[] {
-        return this.project(viewport).flatMap((row) => row.bars).filter(isMiniBar);
+        return this.project(viewport)
+            .flatMap((row) => row.bars)
+            .filter(isMiniBar);
+    }
+
+    private markerRow(viewport: TimelineViewport): TimelineRow {
+        return {
+            kind: TIMELINE_ROW_KIND.MARKER,
+            id: MARKER_ROW_ID,
+            label: MARKER_ROW_LABEL,
+            bars: [],
+            marks: this.timeline.document.markers.map((marker) => ({
+                id: marker.id,
+                kind: TIMELINE_MARK_KIND.MARKER,
+                ownerId: marker.id,
+                timeSeconds: marker.timeSeconds,
+                ratio: viewport.ratioAt(marker.timeSeconds),
+            })),
+        };
     }
 
     private programRow(viewport: TimelineViewport): TimelineRow {
@@ -152,20 +179,21 @@ export class TimelineLayout {
             const firstKeyframe = track.keyframes[0];
             const lastKeyframe = track.keyframes.at(-1);
             const hasEditableRange = track.keyframes.length >= MINIMUM_TRANSFORM_KEYS_FOR_BAR;
-            const bars = hasEditableRange && firstKeyframe && lastKeyframe
-                ? [
-                      {
-                          id: track.id,
-                          kind: TIMELINE_BAR_KIND.TRANSFORM,
-                          label: TRANSFORM_BAR_LABEL,
-                          startSeconds: firstKeyframe.time,
-                          durationSeconds: lastKeyframe.time - firstKeyframe.time,
-                          startRatio: viewport.ratioAt(firstKeyframe.time),
-                          widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
-                          linked: false,
-                      },
-                  ]
-                : [];
+            const bars =
+                hasEditableRange && firstKeyframe && lastKeyframe
+                    ? [
+                          {
+                              id: track.id,
+                              kind: TIMELINE_BAR_KIND.TRANSFORM,
+                              label: TRANSFORM_BAR_LABEL,
+                              startSeconds: firstKeyframe.time,
+                              durationSeconds: lastKeyframe.time - firstKeyframe.time,
+                              startRatio: viewport.ratioAt(firstKeyframe.time),
+                              widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
+                              linked: false,
+                          },
+                      ]
+                    : [];
             return {
                 kind: TIMELINE_ROW_KIND.TRANSFORM,
                 id: track.id,
