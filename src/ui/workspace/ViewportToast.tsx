@@ -40,8 +40,8 @@ interface NormalViewportToastProps extends ViewportToastBaseProps {
 interface ErrorViewportToastProps extends ViewportToastBaseProps {
     readonly tone: typeof VIEWPORT_TOAST_TONE.ERROR;
     readonly open: boolean;
-    /** 错误必须显式确认，禁止自动隐藏或点击空白区域关闭。 */
-    readonly autoHideMs?: never;
+    /** 错误三秒后收起，关闭按钮始终可用于立即确认。 */
+    readonly autoHideMs: number;
     readonly onClose: () => void;
 }
 
@@ -63,13 +63,14 @@ export const ViewportToast = observer(function ViewportToast({
 }: ViewportToastProps) {
     const isError = tone === VIEWPORT_TOAST_TONE.ERROR;
     const topOffset = CHROME.edgeGapPx + slot * (CHROME.pillHeightPx + TOAST_STACK_GAP_PX);
-    const autoHideDuration = isError || autoHideMs === undefined ? undefined : autoHideMs;
+    const autoHideDuration = autoHideMs;
     const closeToast = isError ? onClose : undefined;
     return (
         <Snackbar
             open={open}
             anchorOrigin={{ vertical: "top", horizontal: "center" }}
             {...(autoHideDuration === undefined ? {} : { autoHideDuration })}
+            onClose={closeToast}
             sx={{
                 top: { xs: topOffset, sm: topOffset },
                 zIndex: CHROME.toastZIndex,
