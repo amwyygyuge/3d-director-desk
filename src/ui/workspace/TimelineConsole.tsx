@@ -6,14 +6,16 @@ import RepeatIcon from "@mui/icons-material/Repeat";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
+import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { TIMELINE_BAR_KIND, TIMELINE_MARK_KIND } from "@/authoring/TimelineLayout";
 import { TimelineViewport } from "@/authoring/TimelineViewport";
+import { Timecode } from "@/timeline/Timecode";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
@@ -22,10 +24,6 @@ import { useScrubGesture } from "@/ui/timeline/useScrubGesture";
 import { TimelinePanel } from "@/ui/timeline/TimelinePanel";
 import { TimelineDurationField } from "@/ui/workspace/TimelineDurationField";
 
-const PREVIEW_FRAME_RATE = 30;
-const SECONDS_PER_MINUTE = 60;
-const TIMECODE_PART_WIDTH = 2;
-const TIMECODE_ZERO = "0";
 /** 等宽时间码「当前 / 总长」的固定占位,防止位数变化推挤旁边的迷你轨 */
 const TIMECODE_MIN_WIDTH_PX = 150;
 const MINI_TRACK_HEIGHT_PX = 24;
@@ -49,6 +47,7 @@ const TRANSPORT_BUTTON_SIZE_PX = 40;
 /** 展开轨的窗口框:边框比填充更省重绘,且不遮挡下方片段色块 */
 const MINI_WINDOW_BORDER = "1px solid rgba(255,255,255,0.55)";
 const MINI_WINDOW_BACKGROUND = "rgba(255,255,255,0.10)";
+const MINI_PLAYBACK_RANGE_BACKGROUND = "rgba(25, 118, 210, 0.22)";
 
 const MINI_BAR_LAYER = {
     [TIMELINE_BAR_KIND.PROGRAM]: { top: MINI_PROGRAM_CLIP_TOP_PX, color: "secondary.main" },
@@ -56,19 +55,6 @@ const MINI_BAR_LAYER = {
 } as const;
 
 type TransportCommandType = "transport.stop" | "transport.play" | "transport.pause";
-
-function formatTimecodePart(value: number): string {
-    return String(value).padStart(TIMECODE_PART_WIDTH, TIMECODE_ZERO);
-}
-
-function formatTimecode(seconds: number): string {
-    const safeSeconds = Math.max(0, seconds);
-    const wholeSeconds = Math.floor(safeSeconds);
-    const minutes = Math.floor(wholeSeconds / SECONDS_PER_MINUTE);
-    const secondsWithinMinute = wholeSeconds % SECONDS_PER_MINUTE;
-    const frames = Math.floor((safeSeconds - wholeSeconds) * PREVIEW_FRAME_RATE);
-    return [minutes, secondsWithinMinute, frames].map(formatTimecodePart).join(":");
-}
 
 function timePercent(time: number, duration: number): string {
     const safeDuration = Math.max(duration, MINI_DURATION_FALLBACK_SECONDS);
@@ -123,10 +109,20 @@ const MiniViewportWindow = observer(function MiniViewportWindow() {
     );
 });
 
-/** 帧级 observable 的另一个渲染出口:等宽时间码「当前 / 总长」,位数固定不引起布局抖动。 */
+/** 帧级 observable 的另一个渲染出口:点击时间码可精确定位，解析失败保持当前时刻。 */
 const TimecodeReadout = observer(function TimecodeReadout() {
-    const { playheadDisplay, timeline } = useDirectorDeskStores();
+    const stores = useDirectorDeskStores();
+    const { playheadDisplay, timeline } = stores;
     const duration = timeline.document.duration;
+    const timecode = Timecode.format(Math.min(playheadDisplay.value, duration), timeline.document.frameRate);
+    const [draft, setDraft] = useState<string | null>(null);
+    const commit = (raw: string): void => {
+        setDraft(null);
+        const parsed = Timecode.parse(raw, timeline.document.frameRate);
+        if (parsed === null) return;
+        const result = stores.dispatcher.dispatch({ type: "transport.seek", payload: { time: parsed } }, stores);
+        reportCommandFailure(stores, result);
+    };
     return (
         <Typography
             sx={{
@@ -137,14 +133,49 @@ const TimecodeReadout = observer(function TimecodeReadout() {
                 whiteSpace: "nowrap",
             }}
         >
-            <Box component="span" sx={{ color: "primary.main" }}>
-                {formatTimecode(Math.min(playheadDisplay.value, duration))}
-            </Box>
+            {draft === null ? (
+                <Box component="span" onClick={() => setDraft(timecode)} sx={{ color: "primary.main", cursor: "text" }}>
+                    {timecode}
+                </Box>
+            ) : (
+                <InputBase
+                    autoFocus
+                    inputProps={{ "aria-label": "输入时间码" }}
+                    onBlur={(event) => commit(event.target.value)}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") commit((event.target as HTMLInputElement).value);
+                        if (event.key === "Escape") setDraft(null);
+                    }}
+                    sx={{ color: "primary.main", fontFamily: MONO_FONT_STACK, fontWeight: 700, width: "8ch" }}
+                    value={draft}
+                />
+            )}
             <Box component="span" sx={{ color: "text.secondary", fontWeight: 400 }}>
                 {" / "}
             </Box>
             <TimelineDurationField />
         </Typography>
+    );
+});
+
+/** 总览中的淡色带是实际播放/导出范围，白框仍只表示展开轨查看窗口。 */
+const MiniPlaybackRange = observer(function MiniPlaybackRange() {
+    const { timeline } = useDirectorDeskStores();
+    const { duration, playbackRange } = timeline.document;
+    if (playbackRange.isFull(duration)) return null;
+    return (
+        <Box
+            aria-label="播放范围"
+            sx={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: timePercent(playbackRange.inSeconds, duration),
+                width: timePercent(playbackRange.spanSeconds, duration),
+                bgcolor: MINI_PLAYBACK_RANGE_BACKGROUND,
+            }}
+        />
     );
 });
 
@@ -194,6 +225,7 @@ const MiniTimeline = observer(function MiniTimeline() {
                 "& > *": { pointerEvents: "none" },
             }}
         >
+            <MiniPlaybackRange />
             {bars.map((bar) => {
                 const layer = MINI_BAR_LAYER[bar.kind];
                 return (
@@ -246,7 +278,7 @@ export const TimelineConsole = observer(function TimelineConsole() {
         reportCommandFailure(stores, result);
     };
 
-    if (!layout.authoringVisible) return null;
+    if (!layout.chromeVisible) return null;
 
     return (
         <Box className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
@@ -254,6 +286,9 @@ export const TimelineConsole = observer(function TimelineConsole() {
                 variant="panel"
                 aria-label="时间线控制台"
                 className="pointer-events-auto"
+                // 指针进出即键盘归属:时间轴键位与视口飞行导航共用物理键,由此裁决谁接管
+                onPointerEnter={() => layout.setTimelinePointerOver(true)}
+                onPointerLeave={() => layout.setTimelinePointerOver(false)}
                 sx={{
                     height: expanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx,
                     display: "flex",
@@ -268,8 +303,8 @@ export const TimelineConsole = observer(function TimelineConsole() {
                     className="shrink-0 flex items-center"
                     sx={{ height: CHROME.timelineMiniPx, gap: 1, px: 1.5, bgcolor: "rgba(0,0,0,0.2)" }}
                 >
-                    <Tooltip title="回到起点">
-                        <IconButton aria-label="回到时间线起点" onClick={() => dispatchTransport("transport.stop")}>
+                    <Tooltip title="回到播放入点">
+                        <IconButton aria-label="回到播放入点" onClick={() => dispatchTransport("transport.stop")}>
                             <SkipPreviousIcon />
                         </IconButton>
                     </Tooltip>

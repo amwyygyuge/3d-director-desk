@@ -1,6 +1,7 @@
 import { BONE_MATCH_THRESHOLD } from "@/animation/BoneCompatibilityChecker";
 import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
 import type { AnimationClip, Object3D } from "three";
+import { quantizeSeconds } from "@/command/timelineCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
@@ -328,7 +329,7 @@ export class TransportSeekCommand extends DirectorCommand<TransportSeekPayload> 
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.clock.seek(this.payload.time);
+        ctx.clock.seek(quantizeSeconds(ctx, this.payload.time));
     }
 }
 

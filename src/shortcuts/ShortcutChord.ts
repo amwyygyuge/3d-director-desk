@@ -16,10 +16,19 @@ const MODIFIER_LABELS: Record<"mod" | "shift" | "alt", string> = IS_MAC
     ? { mod: "⌘", shift: "⇧", alt: "⌥" }
     : { mod: "Ctrl", shift: "Shift", alt: "Alt" };
 
-/** 特殊主键的平台化显示;单字符键统一大写 */
-const KEY_LABELS: Record<string, string> = IS_MAC
-    ? { delete: "⌫", backspace: "⌫", escape: "Esc", space: "Space", enter: "↩" }
-    : { delete: "Del", backspace: "⌫", escape: "Esc", space: "Space", enter: "Enter" };
+/** 特殊主键的平台化显示;单字符键统一大写。方向键/Home/End 必须给符号,否则速查表会印出 ARROWLEFT */
+const KEY_LABELS: Record<string, string> = {
+    ...(IS_MAC
+        ? { delete: "⌫", backspace: "⌫", escape: "Esc", space: "Space", enter: "↩", home: "↖", end: "↘" }
+        : { delete: "Del", backspace: "⌫", escape: "Esc", space: "Space", enter: "Enter", home: "Home", end: "End" }),
+    arrowleft: "←",
+    arrowright: "→",
+    arrowup: "↑",
+    arrowdown: "↓",
+    tab: "Tab",
+    ",": ",",
+    ".": ".",
+};
 
 /** Shift 上档符号 → 主键位(event.key 给的是上档字符,规范到底层键,让 spec 写 "shift+/") */
 const SHIFT_SYMBOL_ALIASES: Record<string, string> = { "?": "/" };

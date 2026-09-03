@@ -7,7 +7,7 @@ const DEFAULT_TEXT = {
     CAPTURE_VIDEO_ARIA: "导出成片",
     DISCARD_RECORDING: "放弃录制",
     STOP_RECORDING: "停止并交付",
-    RECORDING_TOOLTIP_PREFIX: "导出 Program 输出轨(0~",
+    RECORDING_TOOLTIP_PREFIX: "导出 Program 输出轨(",
     RECORDING_TOOLTIP_SUFFIX: "s)为 WebM",
 } as const;
 
@@ -139,11 +139,14 @@ export class DeskShellPresentation {
         this.trailingExtensions = normalizeExtensions(init?.trailingExtensions);
     }
 
-    /** 录制按钮悬浮提示:宿主定制优先;缺省拼时间轴时长(语义 = 录这一整段) */
-    captureVideoTooltip(durationSeconds: number): string {
+    /**
+     * 录制按钮悬浮提示:宿主定制优先;缺省拼实际导出区间。
+     * 导出范围已由播放范围(入出点)决定,提示必须跟着它走——写死 0~时长会在设了入出点后骗人。
+     */
+    captureVideoTooltip(range: { readonly inSeconds: number; readonly outSeconds: number }): string {
         return (
             this.customVideoTooltip ??
-            `${DEFAULT_TEXT.RECORDING_TOOLTIP_PREFIX}${durationSeconds}${DEFAULT_TEXT.RECORDING_TOOLTIP_SUFFIX}`
+            `${DEFAULT_TEXT.RECORDING_TOOLTIP_PREFIX}${range.inSeconds}~${range.outSeconds}${DEFAULT_TEXT.RECORDING_TOOLTIP_SUFFIX}`
         );
     }
 }

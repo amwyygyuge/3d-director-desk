@@ -33,6 +33,7 @@ import { registerCameraMotionCommands } from "@/command/cameraMotionCommands";
 import { registerAssetCatalogCommands } from "@/command/assetCatalogCommands";
 import { registerDocumentCommands } from "@/command/documentCommands";
 import { registerPresentationCommands } from "@/command/presentationCommands";
+import { registerMarkerCommands } from "@/command/markerCommands";
 import { registerPlacementCommands } from "@/command/placementCommands";
 import { registerStageCommands } from "@/command/stageCommands";
 import { entityLoadState } from "@/command/subjectBounds";
@@ -452,4 +453,5 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerAssetCatalogCommands(dispatcher);
     registerPlacementCommands(dispatcher);
     registerStageCommands(dispatcher);
+    registerMarkerCommands(dispatcher);
 }

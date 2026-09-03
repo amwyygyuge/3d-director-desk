@@ -40,6 +40,11 @@ export const CHROME = {
     edgeGapPx: 16,
     /** 左右侧栏同宽:几何镜像,禁单侧硬编码 */
     sidePanelWidthPx: 288,
+    /** review 左栏只留 tab 图标,宽度与常规点击靶同源。 */
+    navigatorIconRailWidthPx: 48,
+    /** review 右下浮条只容纳预览、缓动和删除三条高频入口。 */
+    reviewInspectorWidthPx: 248,
+    reviewInspectorHeightPx: 48,
     /** 侧栏上缘:给顶部药丸让位 */
     sidePanelTopPx: 80,
     timelineMiniPx: 56,
@@ -51,6 +56,11 @@ export const CHROME = {
 /** 侧栏下缘让位量:骑在时间线控制台上方,随其开合联动;左右侧栏共用同一几何,禁各自拼表达式 */
 export function sidePanelBottomOffsetPx(timelineExpanded: boolean): number {
     return (timelineExpanded ? CHROME.timelineExpandedPx : CHROME.timelineMiniPx) + CHROME.edgeGapPx;
+}
+
+/** review 右下浮条骑在迷你时间线之上,沿用全局边距而非组件内拼裸数。 */
+export function reviewInspectorBottomOffsetPx(): number {
+    return CHROME.timelineMiniPx + CHROME.edgeGapPx;
 }
 
 /** 右下产物停靠层右缘让位量:检查器(右侧栏)在场时让开整栏宽度,与侧栏几何共用同一真相源 */

@@ -40,7 +40,7 @@ flowchart LR
 
 ---
 
-## P1：时间基准（最高优先，未做）
+## P1：时间基准（已交付）
 
 **为什么排第一**：现在时间是裸浮点。一次拖拽产出 `7.623604465709729` 这样的关键帧时刻，
 `PREVIEW_FRAME_RATE = 30` 硬编码在 `TimelineConsole` 的时间码函数里，键盘步长是 `0.1s`。
@@ -83,7 +83,7 @@ classDiagram
 
 ---
 
-## P2：片长、播放范围与裁剪（未做）
+## P2：片长、播放范围与裁剪（P2a 已交付；trim 仍未做）
 
 **问题**：片长只有 `duration` 一层，且 `timeline.set-duration` 只会拒绝——
 实测缩短时长返回「时间轴时长不能截断已有关键帧或机位片段」，作者只能手动挪走每个片段。
@@ -116,7 +116,7 @@ flowchart LR
 
 ---
 
-## P3：组织能力（未做）
+## P3：组织能力（P3a 已交付；TrackHead 与多选未做）
 
 场景一多（10 个对象 = 10 条走位轨）现在就无法工作：轨道零能力、无多选、无复制、无标注。
 
@@ -153,7 +153,7 @@ classDiagram
 
 ---
 
-## P4：呈现与快捷键补全（未做）
+## P4：呈现与快捷键补全（已交付）
 
 ### 4.1 壳层三态
 
@@ -182,25 +182,30 @@ stateDiagram-v2
 - 另给 `Tab` = 任意状态临时全隐/恢复壳层。
 - 画面补成片安全框（复用 `ShotFrameOverlay`）。
 
-### 4.2 快捷键补全（新增 `timeline` 作用域）
+### 4.2 快捷键补全（新增 `timeline` 作用域，**已交付**）
 
-P0 只落了 `timeline-selection` 一层。以下需要「指针在时间线上 / 面板内有焦点」的判据：
+**归属规则（防串的核心，不是靠优先级碰运气）**：`timeline` 作用域**只在指针停在时间线控制台内时激活**；
+同一条件下 `useFlyNavigation` 整体让位（其 `onKeyDown` 首行即 `if (stores.layout.isTimelinePointerOver) return`）。
+于是 `Space` / `S` 这类与飞行导航共用的物理键，任一时刻**只有一方**响应。
+第二层防串：时间轴上被聚焦的段条/菱形自己消费方向键与 `Enter`/`Space`，处理后 `stopPropagation()`，
+window 上的注册表因此收不到同一次按键——「挪段条」与「挪播放头」永不同时发生。
 
 | 键 | 作用 | scope | 状态 |
 | --- | --- | --- | --- |
-| `Space` | 播放/暂停（指针在时间线上时） | timeline | 待做 |
-| `←` `→` | 播放头 ±1 帧 | timeline | 待做（依赖 P1） |
-| `Shift+←/→` | 播放头 ±1 秒 | timeline | 待做 |
-| `Home` / `End` | 回起点 / 到终点 | global | 待做，**取景全部改为 `Shift+F`** |
-| `,` `.` | 上/下一个关键帧 | timeline | 待做 |
-| `I` / `O` | 设入点 / 出点 | timeline | 待做（依赖 P2） |
-| `Shift+Z` / `Z` | 缩放到全长 / 缩放到选中 | timeline | P0 已有按钮，键位待做 |
-| `=` `-` | 以播放头为锚缩放 | timeline | 待做 |
-| `S` | 吸附开关 | timeline | 待做（依赖 P3） |
-| `T` | 展开/收起时间线 | global | 待做 |
-| `Tab` | 临时全隐/恢复壳层 | global | 待做 |
-| `⌘C` / `⌘V` | 复制 / 粘贴选中 | timeline-selection | 待做（依赖 P3） |
-| `Esc` / `Delete` | 清选 / 删除时间轴选中项 | timeline-selection | **P0 已交付** |
+| `Space` | 播放/暂停 | timeline | **已交付** |
+| `←` `→` | 播放头 ±1 帧（读工程帧率） | timeline | **已交付** |
+| `Shift+←/→` | 播放头 ±1 秒 | timeline | **已交付** |
+| `Home` / `End` | 播放头回起点 / 到终点（经播放范围钳位） | global | **已交付**，取景全部让位到 `Shift+F` |
+| `,` `.` | 上/下一个时间锚点（片段两端 + 关键帧 + 标记，取自 `TimelineLayout` 全长投影） | timeline | **已交付** |
+| `I` / `O` | 在播放头设入点 / 出点 | timeline | **已交付** |
+| `Shift+Z` | 缩放到全长 | timeline | **已交付** |
+| `=` `-` | 以播放头为锚缩放 | timeline | **已交付** |
+| `S` | 吸附开关 | timeline | **已交付** |
+| `T` | 展开/收起时间线 | global | **已交付** |
+| `Tab` | 临时全隐/恢复壳层 | global | P4a 已交付 |
+| `Esc` / `Delete` | 清选 / 删除时间轴选中项 | timeline-selection | P0 已交付 |
+| `Z` | 缩放到选中 | — | **刻意不绑**：裸 `Z` 是 gizmo 的轴约束键，同键双义正是「串」的来源；缩放到选中保留为面板按钮 |
+| `⌘C` / `⌘V` | 复制 / 粘贴选中 | timeline-selection | 待做（依赖 P3b 的多选） |
 
 另需修一处隐式耦合：退出运镜预览目前靠 `lens` 作用域的 Esc 顺带触发
 `setViewMode(DIRECTOR)` 内部清 `previewClipId`；应显式化为 `preview` 作用域 → `motion.preview.exit`。

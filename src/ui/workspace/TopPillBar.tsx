@@ -95,7 +95,7 @@ const PLAY_INDICATOR_SIZE_PX = 8;
 const PREVIEW_BUTTON_BACKGROUND = "#fff";
 const PREVIEW_BUTTON_COLOR = "#000";
 const PREVIEW_BUTTON_HOVER_BACKGROUND = "#e5e5e5";
-const PREVIEW_BUTTON_SHADOW = "0 0 15px rgba(255,255,255,0.2)";
+const PREVIEW_BUTTON_SHADOW = "0 2px 8px rgba(255,255,255,0.2)";
 /** 药丸内文字按钮:防折行,高度跟随药丸 */
 const TEXT_ACTION_SX = { whiteSpace: "nowrap" } as const;
 /** Button 无 "default" 色档;文字按钮缺省色 = inherit(IconButton 的 default 等价物) */
@@ -126,7 +126,7 @@ const PREVIEW_BUTTON_SX = {
 /** 顶部壳层只编排命令入口与瞬时菜单状态,不持有领域状态或运行时资源。 */
 export const TopPillBar = observer(function TopPillBar() {
     const { layout } = useDirectorDeskStores();
-    if (!layout.authoringVisible) return null;
+    if (!layout.chromeVisible) return null;
 
     return (
         <Box
@@ -555,7 +555,7 @@ const CaptureControls = observer(function CaptureControls() {
     const image = presentation.captureImage;
     const video = presentation.captureVideo;
     const isRecording = videoExport.isRecording;
-    const videoTooltip = presentation.captureVideoTooltip(timeline.document.duration);
+    const videoTooltip = presentation.captureVideoTooltip(timeline.document.playbackRange);
     const closeSourceMenu = (): void => setSourceMenuAnchor(null);
 
     return (
@@ -643,7 +643,10 @@ function startVideoCapture({
     readonly source: (typeof VIDEO_EXPORT_SOURCE)[keyof typeof VIDEO_EXPORT_SOURCE];
     readonly stores: DirectorDeskStores;
 }): void {
-    reportCommandFailure(stores, stores.dispatcher.dispatch({ type: COMMAND_TYPE.CAPTURE_VIDEO, payload: { source } }, stores));
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch({ type: COMMAND_TYPE.CAPTURE_VIDEO, payload: { source } }, stores),
+    );
 }
 
 const PresentationControl = observer(function PresentationControl() {
@@ -692,10 +695,9 @@ function enterPresentation(stores: DirectorDeskStores): void {
     );
 }
 
-/** 预览态仅保留退出入口,避免编辑壳层遮挡 Program 输出。 */
 export const PresentationExitHint = observer(function PresentationExitHint() {
     const stores = useDirectorDeskStores();
-    if (!stores.layout.presentationMode) return null;
+    if (!stores.layout.isProgramTakeover || stores.layout.isShellHidden) return null;
 
     return (
         <Paper

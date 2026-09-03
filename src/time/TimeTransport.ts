@@ -1,8 +1,10 @@
 import { makeAutoObservable } from "mobx";
 
-/** 时间轴的权威时长来源(窄端口):TimelineStore 天然满足,时钟不反向依赖整个 Store。 */
-export interface TimelineDurationSource {
+/** 时间轴的权威播放边界(窄端口):时钟只读秒数，永不反向依赖 TimelineStore。 */
+export interface TimelinePlaybackRangeSource {
     readonly durationSeconds: number;
+    readonly inSeconds: number;
+    readonly outSeconds: number;
 }
 
 /**
@@ -12,8 +14,8 @@ export interface TimelineDurationSource {
  * - 播放期:渲染循环调 tick(delta),transport 推进 playhead;
  * - 拖动定位(时间轴 UI):seek(t) 直接设 playhead。
  *
- * 时长封顶:playhead 双端钳在 [0, duration]。播过尾后 Program 无输出、画面停住而时间继续涨
- * 是编排期反复踩的坑,故到尾即停(或按 loop 回到 0),时长仍以时间轴文档为唯一权威。
+ * 播放范围封顶:playhead 双端钳在入出点内。播过出点即停(或按 loop 回到入点),
+ * 让作者能只审看/导出一段而不改工程片长。
  *
  * playhead 是 observable(帧级写入),消费纪律:
  * - 引擎/渲染循环:reaction/autorun(AnimationBinder、PlaybackDriver);
@@ -27,7 +29,7 @@ export class TimeTransport {
     /** 循环开关:编排期反复看同一段是评估节奏的唯一手段 */
     private looping = false;
 
-    constructor(private readonly durationSource: TimelineDurationSource) {
+    constructor(private readonly durationSource: TimelinePlaybackRangeSource) {
         makeAutoObservable<TimeTransport, "durationSource">(this, { durationSource: false });
     }
 
@@ -47,12 +49,21 @@ export class TimeTransport {
         return this.durationSource.durationSeconds;
     }
 
-    /** 停止事件与 playhead=0 区分：协调器据此恢复实体权威变换。 */
+    get playbackInSeconds(): number {
+        return this.durationSource.inSeconds;
+    }
+
+    get playbackOutSeconds(): number {
+        return this.durationSource.outSeconds;
+    }
+
+    /** 停止事件与 playhead=播放入点区分：协调器据此恢复实体权威变换。 */
     get stoppedAt(): number {
         return this.stopSequence;
     }
 
     play(): void {
+        this.seek(this.playheadSeconds);
         this.playing = true;
     }
 
@@ -62,7 +73,7 @@ export class TimeTransport {
 
     stop(): void {
         this.playing = false;
-        this.seek(0);
+        this.seek(this.playbackInSeconds);
         this.stopSequence += 1;
     }
 
@@ -71,19 +82,19 @@ export class TimeTransport {
     }
 
     seek(timeSeconds: number): void {
-        this.playheadSeconds = Math.min(Math.max(0, timeSeconds), this.durationSeconds);
+        this.playheadSeconds = Math.min(Math.max(this.playbackInSeconds, timeSeconds), this.playbackOutSeconds);
     }
 
     /** 渲染循环每帧调用;暂停时是空操作,零分配 */
     tick(deltaSeconds: number): void {
         if (!this.playing) return;
         const next = this.playheadSeconds + deltaSeconds;
-        const duration = this.durationSeconds;
-        if (next < duration) {
+        const outSeconds = this.playbackOutSeconds;
+        if (next < outSeconds) {
             this.playheadSeconds = next;
             return;
         }
-        this.playheadSeconds = this.looping ? 0 : duration;
+        this.playheadSeconds = this.looping ? this.playbackInSeconds : outSeconds;
         if (!this.looping) this.playing = false;
     }
 }

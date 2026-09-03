@@ -28,8 +28,8 @@ const FRAME_STYLE: Record<Exclude<FrameMode, "none">, FrameStyle> = {
     lens: { borderClassName: "border-indigo-300/90", labelClassName: "text-indigo-200" },
 };
 
-function resolveFrameMode(presentationMode: boolean, lensViewActive: boolean, activeShotId: string | null): FrameMode {
-    if (presentationMode) return "none";
+function resolveFrameMode(isProgramTakeover: boolean, lensViewActive: boolean, activeShotId: string | null): FrameMode {
+    if (isProgramTakeover) return "none";
     if (lensViewActive) return "lens";
     return activeShotId === null ? "none" : "shot";
 }
@@ -109,7 +109,7 @@ const LensNoClipToast = observer(function LensNoClipToast() {
 /** 三态视口取景框:掌镜写静态机位,镜头视角写当前 CameraKey,导演/全屏态不渲染。 */
 export const ShotFrameOverlay = observer(function ShotFrameOverlay() {
     const { camera, layout, motionAuthoring } = useDirectorDeskStores();
-    const mode = resolveFrameMode(layout.presentationMode, motionAuthoring.lensViewActive, camera.activeShotId);
+    const mode = resolveFrameMode(layout.isProgramTakeover, motionAuthoring.lensViewActive, camera.activeShotId);
     if (mode === "none") return null;
     const style = FRAME_STYLE[mode];
     const isLens = mode === "lens";

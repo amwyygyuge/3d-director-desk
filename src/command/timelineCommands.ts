@@ -1,11 +1,19 @@
-import { finiteTransform, finiteVec3 } from "@/core/SceneObject";
+import { TimelineContentSpan } from "@/authoring/TimelineContentSpan";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
+import { CameraMotionClip } from "@/camera/CameraMotionClip";
+import type { CameraMotionClipJSON } from "@/camera/CameraMotionClip";
+import { CameraProgramTrack } from "@/camera/CameraProgramTrack";
+import type { CameraProgramTrackJSON } from "@/camera/CameraProgramTrack";
+import { finiteTransform, finiteVec3 } from "@/core/SceneObject";
 import { EASING, isEasingCurve } from "@/motion/EasingCurve";
 import type { EasingCurve } from "@/motion/EasingCurve";
 import { MOTION_HANDLE_MODE } from "@/motion/MotionKey";
+import { isFrameRateFps } from "@/timeline/FrameRate";
+import { TimelineDoc } from "@/timeline/TimelineDoc";
+import type { TimelineDocJSON } from "@/timeline/TimelineDoc";
+import { TimelineMarker } from "@/timeline/TimelineMarker";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TimelineTrackInit } from "@/timeline/TimelineTrack";
-import { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import {
     GROUNDING_MODE,
     LOCOMOTION_MODE,
@@ -16,6 +24,7 @@ import {
     isStrideMeters,
 } from "@/timeline/TrackPolicies";
 import type { TrackPoliciesInit } from "@/timeline/TrackPolicies";
+import { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
@@ -74,7 +83,28 @@ interface SetEasingPayload {
 interface SetDurationPayload {
     readonly duration: number;
 }
+interface ScaleTimelinePayload {
+    readonly factor: number;
+}
 
+interface SetPlaybackRangePayload {
+    readonly inSeconds: number;
+    readonly outSeconds: number;
+}
+
+interface TimelineScaleSnapshot {
+    readonly document: TimelineDocJSON;
+    readonly motionClips: readonly CameraMotionClipJSON[];
+    readonly program: CameraProgramTrackJSON;
+}
+
+interface RestoreTimelineScalePayload {
+    readonly snapshot: TimelineScaleSnapshot;
+}
+
+interface SetFrameRatePayload {
+    readonly fps: number;
+}
 interface RestoreTracksPayload {
     readonly tracks: readonly TimelineTrackInit[];
 }
@@ -195,6 +225,31 @@ const SetTimelineDurationContract: PayloadContract = {
     required: ["duration"],
 };
 
+const FitTimelineDurationContract: PayloadContract = EMPTY_PAYLOAD_CONTRACT;
+
+const ScaleTimelineContract: PayloadContract = {
+    properties: { factor: { type: "number" } },
+    required: ["factor"],
+};
+
+const SetPlaybackRangeContract: PayloadContract = {
+    properties: {
+        inSeconds: { type: "number" },
+        outSeconds: { type: "number" },
+    },
+    required: ["inSeconds", "outSeconds"],
+};
+
+const RestoreTimelineScaleContract: PayloadContract = {
+    properties: { snapshot: { type: "object" } },
+    required: ["snapshot"],
+};
+
+const SetTimelineFrameRateContract: PayloadContract = {
+    properties: { fps: { type: "number" } },
+    required: ["fps"],
+};
+
 const RestoreTimelineTracksContract: PayloadContract = {
     properties: { tracks: { type: "array", items: { type: "object" } } },
     required: ["tracks"],
@@ -202,6 +257,11 @@ const RestoreTimelineTracksContract: PayloadContract = {
 
 function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
+}
+
+/** 文档时间唯一栅格入口:写命令共享，防止相邻命令各自定义舍入规则。 */
+export function quantizeSeconds(ctx: DirectorContext, seconds: number): number {
+    return ctx.timeline.document.frameRate.quantize(seconds);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -244,11 +304,17 @@ function keyframePayloadIssue(value: unknown): CommandIssue | null {
         : issue(ISSUE_CODE.PAYLOAD, "keyframe.easing", "关键帧缓动必须为 linear 或 smooth");
 }
 
+function quantizedKeyframe(ctx: DirectorContext, keyframe: TransformKeyframeInit): TransformKeyframeInit {
+    return { ...keyframe, time: quantizeSeconds(ctx, keyframe.time) };
+}
+
 /** 超出时间轴时长的第一枚关键帧;整轨替换会自动扩长时间轴,故由调用方决定用不用这条。 */
 function durationOverflowIssue(keyframes: readonly unknown[], ctx: DirectorContext, path: string): CommandIssue | null {
     const index = keyframes.findIndex(
         (keyframe) =>
-            isRecord(keyframe) && typeof keyframe.time === "number" && keyframe.time > ctx.timeline.document.duration,
+            isRecord(keyframe) &&
+            typeof keyframe.time === "number" &&
+            quantizeSeconds(ctx, keyframe.time) > ctx.timeline.document.duration,
     );
     return index >= 0 ? issue(ISSUE_CODE.DURATION, `${path}.${index}.time`, "关键帧时间超过时间轴时长") : null;
 }
@@ -272,7 +338,10 @@ function keyframeListIssues(
                 (candidate, candidateIndex) =>
                     candidateIndex !== index &&
                     isRecord(candidate) &&
-                    (candidate.id === keyframe.id || candidate.time === keyframe.time),
+                    (candidate.id === keyframe.id ||
+                        (typeof candidate.time === "number" &&
+                            typeof keyframe.time === "number" &&
+                            quantizeSeconds(ctx, candidate.time) === quantizeSeconds(ctx, keyframe.time))),
             ),
     );
     return duplicate ? [issue(ISSUE_CODE.DUPLICATE_TIME, path, "关键帧 id 或时间重复")] : [];
@@ -318,8 +387,16 @@ function restoreTrackIssue(
     return listIssues[0] ?? null;
 }
 
-function duplicateTimeIssue(track: TimelineTrack, time: number, excludedKeyId: string | null): CommandIssue | null {
-    const duplicate = track.keyframes.find((keyframe) => keyframe.id !== excludedKeyId && keyframe.time === time);
+function duplicateTimeIssue(
+    track: TimelineTrack,
+    time: number,
+    excludedKeyId: string | null,
+    ctx: DirectorContext,
+): CommandIssue | null {
+    const quantizedTime = quantizeSeconds(ctx, time);
+    const duplicate = track.keyframes.find(
+        (keyframe) => keyframe.id !== excludedKeyId && keyframe.time === quantizedTime,
+    );
     return duplicate ? issue(ISSUE_CODE.DUPLICATE_TIME, "keyframe.time", "同一轨道不能有重复时间的关键帧") : null;
 }
 
@@ -355,8 +432,9 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
         }
         const keyIssue = keyframePayloadIssue(payload.keyframe);
         if (keyIssue) return [keyIssue];
+        const keyframeTime = quantizeSeconds(ctx, payload.keyframe.time);
         const durationIssue =
-            payload.keyframe.time > ctx.timeline.document.duration
+            keyframeTime > ctx.timeline.document.duration
                 ? issue(ISSUE_CODE.DURATION, "keyframe.time", "关键帧时间不能超过时间轴时长")
                 : null;
         if (durationIssue) return [durationIssue];
@@ -371,7 +449,7 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) {
                 return [issue(ISSUE_CODE.TRACK_CONFLICT, "trackId", "轨道类型不是 transform")];
             }
-            const duplicate = duplicateTimeIssue(track, payload.keyframe.time, null);
+            const duplicate = duplicateTimeIssue(track, payload.keyframe.time, null, ctx);
             if (duplicate) return [duplicate];
             if (track.keyframe(payload.keyframe.id)) {
                 return [issue(ISSUE_CODE.PAYLOAD, "keyframe.id", "关键帧 id 已存在")];
@@ -383,7 +461,11 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.timeline.addKey(this.payload.trackId, this.payload.targetId, new TransformKeyframe(this.payload.keyframe));
+        ctx.timeline.addKey(
+            this.payload.trackId,
+            this.payload.targetId,
+            new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
+        );
         ctx.playback.sampleCurrent();
     }
 
@@ -421,7 +503,7 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
         if (!Number.isFinite(payload.time) || payload.time < 0) {
             return [issue(ISSUE_CODE.PAYLOAD, "time", "关键帧时间必须是非负有限秒数")];
         }
-        if (payload.time > ctx.timeline.document.duration) {
+        if (quantizeSeconds(ctx, payload.time) > ctx.timeline.document.duration) {
             return [issue(ISSUE_CODE.DURATION, "time", "关键帧时间不能超过时间轴时长")];
         }
         const track = ctx.timeline.document.track(payload.trackId);
@@ -429,7 +511,7 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
         if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM)
             return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
         if (!track.keyframe(payload.keyframeId)) return [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
-        const duplicate = duplicateTimeIssue(track, payload.time, payload.keyframeId);
+        const duplicate = duplicateTimeIssue(track, payload.time, payload.keyframeId, ctx);
         return duplicate ? [duplicate] : [];
     }
 
@@ -438,7 +520,10 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
         if (!keyframe) return;
         ctx.timeline.moveKey(
             this.payload.trackId,
-            new TransformKeyframe({ ...(keyframe as TransformKeyframe).toJSON(), time: this.payload.time }),
+            new TransformKeyframe({
+                ...(keyframe as TransformKeyframe).toJSON(),
+                time: quantizeSeconds(ctx, this.payload.time),
+            }),
         );
         ctx.playback.sampleCurrent();
     }
@@ -527,7 +612,10 @@ export class SetTimelineKeyEasingCommand extends DirectorCommand<SetEasingPayloa
         if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
         if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM)
             return [issue(ISSUE_CODE.TRACK, "trackId", "轨道类型不是 transform")];
-        return track.keyframe(payload.keyframeId) ? [] : [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
+        const keyframe = track.keyframe(payload.keyframeId);
+        if (!keyframe) return [issue(ISSUE_CODE.KEY, "keyframeId", "关键帧不存在")];
+        const duplicate = duplicateTimeIssue(track, keyframe.time, keyframe.id, ctx);
+        return duplicate ? [duplicate] : [];
     }
 
     execute(ctx: DirectorContext): void {
@@ -535,7 +623,11 @@ export class SetTimelineKeyEasingCommand extends DirectorCommand<SetEasingPayloa
         if (!keyframe) return;
         ctx.timeline.moveKey(
             this.payload.trackId,
-            new TransformKeyframe({ ...(keyframe as TransformKeyframe).toJSON(), easing: this.payload.easing }),
+            new TransformKeyframe({
+                ...(keyframe as TransformKeyframe).toJSON(),
+                time: quantizeSeconds(ctx, keyframe.time),
+                easing: this.payload.easing,
+            }),
         );
         ctx.playback.sampleCurrent();
     }
@@ -561,27 +653,301 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const payload = this.payload;
-        if (!isRecord(payload) || !Number.isFinite(payload.duration) || payload.duration <= 0) {
+        if (!isRecord(this.payload) || !Number.isFinite(this.payload.duration) || this.payload.duration <= 0) {
             return [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长必须是大于零的有限秒数")];
         }
-        const oversizedTrack = ctx.timeline.document.tracks.find((track) =>
-            track.keyframes.some((keyframe) => keyframe.time > payload.duration),
-        );
-        const oversizedMotionClip = ctx.motion.clips.some((clip) => clip.endTimeSeconds > payload.duration);
-        const oversizedProgramClip = ctx.motion.program.clips.some((clip) => clip.endTimeSeconds > payload.duration);
-        return oversizedTrack || oversizedMotionClip || oversizedProgramClip
-            ? [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长不能截断已有关键帧或机位片段")]
+        const duration = quantizeSeconds(ctx, this.payload.duration);
+        if (duration <= TIMELINE_START_SECONDS) {
+            return [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长必须至少覆盖一帧")];
+        }
+        const content = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion);
+        const blocker = content.blockers[0];
+        return duration < content.endSeconds && blocker
+            ? [
+                  {
+                      code: ISSUE_CODE.DURATION,
+                      path: "duration",
+                      message: `时间轴最短可用时长为 ${content.endSeconds.toFixed(1)} 秒，受 ${blocker.label} 限制`,
+                      options: [
+                          { type: FitTimelineDurationCommand.TYPE, label: "贴合内容" },
+                          { type: ScaleTimelineCommand.TYPE, label: "整轴缩放" },
+                      ],
+                  },
+              ]
             : [];
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.timeline.setDuration(this.payload.duration);
+        ctx.timeline.setDuration(quantizeSeconds(ctx, this.payload.duration));
+        ctx.clock.seek(ctx.clock.time);
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
         return [{ type: SetTimelineDurationCommand.TYPE, payload: { duration: ctx.timeline.document.duration } }];
+    }
+}
+
+function fittedDuration(ctx: DirectorContext): number {
+    const contentEnd = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion).endSeconds;
+    return Math.max(quantizeSeconds(ctx, contentEnd), ctx.timeline.document.frameRate.frameDurationSeconds);
+}
+
+export class FitTimelineDurationCommand extends DirectorCommand<Record<string, never>> {
+    static readonly TYPE = "timeline.fit-duration";
+    readonly type = FitTimelineDurationCommand.TYPE;
+
+    constructor(readonly payload: Record<string, never> = EMPTY_PAYLOAD) {
+        super();
+    }
+
+    validate(): string[] {
+        return [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.timeline.setDuration(fittedDuration(ctx));
+        ctx.clock.seek(ctx.clock.time);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetTimelineDurationCommand.TYPE, payload: { duration: ctx.timeline.document.duration } }];
+    }
+}
+
+function snapshotFor(ctx: DirectorContext): TimelineScaleSnapshot {
+    return {
+        document: ctx.timeline.document.toJSON(),
+        motionClips: ctx.motion.clips.map((clip) => clip.toJSON()),
+        program: ctx.motion.program.toJSON(),
+    };
+}
+
+function scaledRange(
+    ctx: DirectorContext,
+    startSeconds: number,
+    durationSeconds: number,
+    factor: number,
+): {
+    readonly startSeconds: number;
+    readonly durationSeconds: number;
+} {
+    const start = quantizeSeconds(ctx, startSeconds * factor);
+    const end = quantizeSeconds(ctx, (startSeconds + durationSeconds) * factor);
+    if (end <= start) throw new Error("scaled time range must cover a frame");
+    return { startSeconds: start, durationSeconds: end - start };
+}
+
+function scaledDocument(ctx: DirectorContext, factor: number): TimelineDoc {
+    const document = ctx.timeline.document;
+    const duration = quantizeSeconds(ctx, document.duration * factor);
+    if (duration <= TIMELINE_START_SECONDS) throw new Error("scaled duration must cover a frame");
+    const playbackRange = scaledRange(
+        ctx,
+        document.playbackRange.inSeconds,
+        document.playbackRange.spanSeconds,
+        factor,
+    );
+    return new TimelineDoc({
+        duration,
+        frameRate: document.frameRate.fps,
+        tracks: document.tracks.map((track) => {
+            const keyframes = track.keyframes.map(
+                (keyframe) =>
+                    new TransformKeyframe({
+                        ...keyframe.toJSON(),
+                        time: quantizeSeconds(ctx, keyframe.time * factor),
+                    }),
+            );
+            if (new Set(keyframes.map((keyframe) => keyframe.time)).size !== keyframes.length) {
+                throw new Error("scaled keyframes must stay on distinct frames");
+            }
+            return new TimelineTrack({
+                id: track.id,
+                targetId: track.targetId,
+                kind: track.kind,
+                policies: track.policies,
+                keyframes,
+            });
+        }),
+        playbackRange: {
+            inSeconds: playbackRange.startSeconds,
+            outSeconds: playbackRange.startSeconds + playbackRange.durationSeconds,
+        },
+        markers: document.markers.map(
+            (marker) =>
+                new TimelineMarker({
+                    ...marker.toJSON(),
+                    timeSeconds: quantizeSeconds(ctx, marker.timeSeconds * factor),
+                }),
+        ),
+    });
+}
+
+function scaledMotionClips(ctx: DirectorContext, factor: number): readonly CameraMotionClip[] {
+    return ctx.motion.clips.map((clip) => {
+        const range = scaledRange(ctx, clip.startTimeSeconds, clip.durationSeconds, factor);
+        return new CameraMotionClip({
+            ...clip.toJSON(),
+            startTimeSeconds: range.startSeconds,
+            durationSeconds: range.durationSeconds,
+        });
+    });
+}
+
+function scaledProgram(ctx: DirectorContext, factor: number): CameraProgramTrack {
+    return new CameraProgramTrack({
+        clips: ctx.motion.program.clips.map((clip) => {
+            const range = scaledRange(ctx, clip.startTimeSeconds, clip.durationSeconds, factor);
+            return { ...clip.toJSON(), startTimeSeconds: range.startSeconds, durationSeconds: range.durationSeconds };
+        }),
+    });
+}
+
+function scaledSnapshot(ctx: DirectorContext, factor: number): TimelineScaleSnapshot {
+    return {
+        document: scaledDocument(ctx, factor).toJSON(),
+        motionClips: scaledMotionClips(ctx, factor).map((clip) => clip.toJSON()),
+        program: scaledProgram(ctx, factor).toJSON(),
+    };
+}
+
+function applySnapshot(ctx: DirectorContext, snapshot: TimelineScaleSnapshot): void {
+    ctx.timeline.replaceDocument(new TimelineDoc(snapshot.document));
+    ctx.motion.restore(
+        snapshot.motionClips.map((clip) => new CameraMotionClip(clip)),
+        new CameraProgramTrack(snapshot.program),
+    );
+    ctx.clock.seek(ctx.clock.time);
+    ctx.playback.sampleCurrent();
+}
+
+/** 整轴重定时是聚合写入:任何一个成员落点无效就整条拒绝，不留下半段时间线。 */
+export class ScaleTimelineCommand extends DirectorCommand<ScaleTimelinePayload> {
+    static readonly TYPE = "timeline.scale";
+    readonly type = ScaleTimelineCommand.TYPE;
+
+    constructor(readonly payload: ScaleTimelinePayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        if (!isRecord(this.payload) || !Number.isFinite(this.payload.factor) || this.payload.factor <= 0) {
+            return [issue(ISSUE_CODE.DURATION, "factor", "缩放比例必须是大于零的有限数")];
+        }
+        try {
+            scaledSnapshot(ctx, this.payload.factor);
+            return [];
+        } catch {
+            return [issue(ISSUE_CODE.DURATION, "factor", "缩放后每个片段与播放范围都必须至少覆盖一帧")];
+        }
+    }
+
+    execute(ctx: DirectorContext): void {
+        applySnapshot(ctx, scaledSnapshot(ctx, this.payload.factor));
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: RestoreTimelineScaleCommand.TYPE, payload: { snapshot: snapshotFor(ctx) } }];
+    }
+}
+
+/** 只由缩放撤销使用快照，避免量化后的倒数比例累计误差。 */
+class RestoreTimelineScaleCommand extends DirectorCommand<RestoreTimelineScalePayload> {
+    static readonly TYPE = "timeline.restore-scale";
+    readonly type = RestoreTimelineScaleCommand.TYPE;
+
+    constructor(readonly payload: RestoreTimelineScalePayload) {
+        super();
+    }
+
+    validate(): string[] {
+        try {
+            new TimelineDoc(this.payload.snapshot.document);
+            this.payload.snapshot.motionClips.map((clip) => new CameraMotionClip(clip));
+            new CameraProgramTrack(this.payload.snapshot.program);
+            return [];
+        } catch {
+            return ["缩放撤销快照无效"];
+        }
+    }
+
+    execute(ctx: DirectorContext): void {
+        applySnapshot(ctx, this.payload.snapshot);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: RestoreTimelineScaleCommand.TYPE, payload: { snapshot: snapshotFor(ctx) } }];
+    }
+}
+
+export class SetTimelinePlaybackRangeCommand extends DirectorCommand<SetPlaybackRangePayload> {
+    static readonly TYPE = "timeline.set-playback-range";
+    readonly type = SetTimelinePlaybackRangeCommand.TYPE;
+
+    constructor(readonly payload: SetPlaybackRangePayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return issueMessages(this.validateIssues(ctx));
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        if (
+            !isRecord(this.payload) ||
+            !Number.isFinite(this.payload.inSeconds) ||
+            !Number.isFinite(this.payload.outSeconds)
+        ) {
+            return [issue(ISSUE_CODE.DURATION, "playbackRange", "播放范围必须是有限秒数")];
+        }
+        const inSeconds = quantizeSeconds(ctx, this.payload.inSeconds);
+        const outSeconds = quantizeSeconds(ctx, this.payload.outSeconds);
+        const duration = ctx.timeline.document.duration;
+        return inSeconds < TIMELINE_START_SECONDS || outSeconds > duration || outSeconds <= inSeconds
+            ? [issue(ISSUE_CODE.DURATION, "playbackRange", "播放范围必须落在工程时长内且出点晚于入点")]
+            : [];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.timeline.setPlaybackRange({
+            inSeconds: quantizeSeconds(ctx, this.payload.inSeconds),
+            outSeconds: quantizeSeconds(ctx, this.payload.outSeconds),
+        });
+        ctx.clock.seek(ctx.clock.time);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetTimelinePlaybackRangeCommand.TYPE, payload: ctx.timeline.document.playbackRange.toJSON() }];
+    }
+}
+
+/** 帧率只改变后续落点的栅格；重排既有关键帧会静默改变作者已确认的节奏。 */
+export class SetTimelineFrameRateCommand extends DirectorCommand<SetFrameRatePayload> {
+    static readonly TYPE = "timeline.set-frame-rate";
+    readonly type = SetTimelineFrameRateCommand.TYPE;
+
+    constructor(readonly payload: SetFrameRatePayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return isFrameRateFps(this.payload.fps) ? [] : ["帧率必须是 1 到 240 之间的有限数"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.timeline.setFrameRate(this.payload.fps);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetTimelineFrameRateCommand.TYPE, payload: { fps: ctx.timeline.document.frameRate.fps } }];
     }
 }
 
@@ -609,7 +975,15 @@ export class RestoreTimelineTracksCommand extends DirectorCommand<RestoreTracksP
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.timeline.restoreTracks(this.payload.tracks.map((track) => new TimelineTrack(track)));
+        ctx.timeline.restoreTracks(
+            this.payload.tracks.map(
+                (track) =>
+                    new TimelineTrack({
+                        ...track,
+                        keyframes: track.keyframes.map((keyframe) => quantizedKeyframe(ctx, keyframe)),
+                    }),
+            ),
+        );
         ctx.playback.sampleCurrent();
     }
 }
@@ -659,21 +1033,22 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
      * 只扩不缩——缩短是作者对成片时长的决策,归 timeline.set-duration。
      */
     execute(ctx: DirectorContext): void {
+        const keyframes = this.payload.keyframes.map((keyframe) => quantizedKeyframe(ctx, keyframe));
         const previous = ctx.timeline.document.trackForTarget(this.payload.targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         ctx.timeline.removeObjectTracks(this.payload.targetId);
-        if (this.payload.keyframes.length > 0) {
+        if (keyframes.length > 0) {
             ctx.timeline.restoreTracks([
                 new TimelineTrack({
                     id: this.payload.trackId,
                     targetId: this.payload.targetId,
                     kind: TIMELINE_TRACK_KIND.TRANSFORM,
-                    keyframes: this.payload.keyframes,
+                    keyframes,
                     // 重画只换形状:作者调好的朝向/贴地/步幅跟着对象走,不被一次重绘清零
                     policies: this.payload.policies ?? previous?.policies,
                 }),
             ]);
-            const required = lastKeyframeTime(this.payload.keyframes);
-            if (required > ctx.timeline.document.duration) ctx.timeline.setDuration(required);
+            const required = lastKeyframeTime(keyframes);
+            if (required > ctx.timeline.document.duration) ctx.timeline.setDuration(quantizeSeconds(ctx, required));
         }
         convergeWalkSelection(ctx, this.payload);
         ctx.playback.sampleCurrent();
@@ -754,16 +1129,26 @@ export class RetimeTimelineTrackCommand extends DirectorCommand<RetimeTrackPaylo
             lastKeyframe !== undefined &&
             lastKeyframe.time > firstKeyframe.time;
         if (!hasTemporalSpan) return [issue(ISSUE_CODE.KEY, "trackId", "走位轨至少需要两枚不同时间的关键帧才能重定时")];
-        const endTimeSeconds = payload.startTimeSeconds + payload.durationSeconds;
-        return endTimeSeconds <= ctx.timeline.document.duration
-            ? []
-            : [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围不能超出时间轴时长")];
+        const startTimeSeconds = quantizeSeconds(ctx, payload.startTimeSeconds);
+        const endTimeSeconds = quantizeSeconds(ctx, payload.startTimeSeconds + payload.durationSeconds);
+        if (endTimeSeconds <= startTimeSeconds) {
+            return [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围至少覆盖一帧")];
+        }
+        if (endTimeSeconds > ctx.timeline.document.duration) {
+            return [issue(ISSUE_CODE.DURATION, "durationSeconds", "重定时范围不能超出时间轴时长")];
+        }
+        try {
+            retimedTrack(ctx, track, payload);
+            return [];
+        } catch {
+            return [issue(ISSUE_CODE.DUPLICATE_TIME, "durationSeconds", "重定时后关键帧不能落在同一帧")];
+        }
     }
 
     execute(ctx: DirectorContext): void {
         const track = ctx.timeline.document.track(this.payload.trackId);
         if (!track) return;
-        ctx.timeline.replaceTrack(retimedTrack(track, this.payload));
+        ctx.timeline.replaceTrack(retimedTrack(ctx, track, this.payload));
         ctx.playback.sampleCurrent();
     }
 
@@ -786,26 +1171,30 @@ export class RetimeTimelineTrackCommand extends DirectorCommand<RetimeTrackPaylo
 }
 
 /** 仿射映射只换时间坐标，保留每枚关键帧承载的姿态与插值意图。 */
-function retimedTrack(track: TimelineTrack, payload: RetimeTrackPayload): TimelineTrack {
+function retimedTrack(ctx: DirectorContext, track: TimelineTrack, payload: RetimeTrackPayload): TimelineTrack {
     const firstKeyframe = track.keyframes[FIRST_KEYFRAME_INDEX];
     const lastKeyframe = track.keyframes.at(-1);
     if (!firstKeyframe || !lastKeyframe) return track;
     const sourceDuration = lastKeyframe.time - firstKeyframe.time;
     if (sourceDuration <= TIMELINE_START_SECONDS) return track;
     const lastKeyframeIndex = track.keyframes.length - LAST_KEYFRAME_INDEX_OFFSET;
-    const timeScale = payload.durationSeconds / sourceDuration;
+    const startTimeSeconds = quantizeSeconds(ctx, payload.startTimeSeconds);
+    const endTimeSeconds = quantizeSeconds(ctx, payload.startTimeSeconds + payload.durationSeconds);
+    const timeScale = (endTimeSeconds - startTimeSeconds) / sourceDuration;
     return new TimelineTrack({
         id: track.id,
         targetId: track.targetId,
         kind: track.kind,
         keyframes: track.keyframes.map((keyframe, index) => ({
             ...keyframe.toJSON(),
-            time:
+            time: quantizeSeconds(
+                ctx,
                 index === FIRST_KEYFRAME_INDEX
-                    ? payload.startTimeSeconds
+                    ? startTimeSeconds
                     : index === lastKeyframeIndex
-                      ? payload.startTimeSeconds + payload.durationSeconds
-                      : payload.startTimeSeconds + (keyframe.time - firstKeyframe.time) * timeScale,
+                      ? endTimeSeconds
+                      : startTimeSeconds + (keyframe.time - firstKeyframe.time) * timeScale,
+            ),
         })),
         policies: track.policies,
     });
@@ -841,15 +1230,18 @@ export class SetTimelineKeyCommand extends DirectorCommand<SetKeyPayload> {
         if (!track.keyframe(payload.keyframe.id)) {
             return [issue(ISSUE_CODE.KEY, "keyframe.id", "关键帧不存在")];
         }
-        if (payload.keyframe.time > ctx.timeline.document.duration) {
+        if (quantizeSeconds(ctx, payload.keyframe.time) > ctx.timeline.document.duration) {
             return [issue(ISSUE_CODE.DURATION, "keyframe.time", "关键帧时间不能超过时间轴时长")];
         }
-        const duplicate = duplicateTimeIssue(track, payload.keyframe.time, payload.keyframe.id);
+        const duplicate = duplicateTimeIssue(track, payload.keyframe.time, payload.keyframe.id, ctx);
         return duplicate ? [duplicate] : [];
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.timeline.moveKey(this.payload.trackId, new TransformKeyframe(this.payload.keyframe));
+        ctx.timeline.moveKey(
+            this.payload.trackId,
+            new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
+        );
         ctx.playback.sampleCurrent();
     }
 
@@ -887,17 +1279,25 @@ export class SetTimelineTrackPoliciesCommand extends DirectorCommand<SetPolicies
         if (!isRecord(payload.policies)) {
             return [issue(ISSUE_CODE.PAYLOAD, "policies", "走位策略参数格式无效")];
         }
-        if (!ctx.timeline.document.track(payload.trackId)) {
-            return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
-        }
+        const track = ctx.timeline.document.track(payload.trackId);
+        if (!track) return [issue(ISSUE_CODE.TRACK, "trackId", "轨道不存在")];
+        const temporalIssues = keyframeListIssues(
+            track.keyframes.map((keyframe) => keyframe.toJSON()),
+            ctx,
+        );
+        if (temporalIssues.length > 0) return temporalIssues;
         return policiesIssues(payload.policies);
     }
 
     execute(ctx: DirectorContext): void {
         const track = ctx.timeline.document.track(this.payload.trackId);
         if (!track) return;
-        ctx.timeline.replaceTrack(track.withPolicies(track.policies.with(this.payload.policies)));
-        ctx.playback.sampleCurrent();
+        ctx.timeline.replaceTrack(
+            new TimelineTrack({
+                ...track.toJSON(),
+                keyframes: track.keyframes.map((keyframe) => quantizedKeyframe(ctx, keyframe.toJSON())),
+            }).withPolicies(track.policies.with(this.payload.policies)),
+        );
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
@@ -951,8 +1351,7 @@ export function transformKeyCommandFor(ctx: DirectorContext, objectId: string): 
             targetId: entity.id,
             keyframe: {
                 id: `${TRANSFORM_KEY_PREFIX}${crypto.randomUUID()}`,
-                time: ctx.clock.time,
-                value: entity.transform,
+                time: quantizeSeconds(ctx, ctx.clock.time),
                 easing: EASING.LINEAR,
             },
         },
@@ -1001,6 +1400,31 @@ export function registerTimelineCommands(dispatcher: CommandDispatcher): void {
         SetTimelineDurationCommand.TYPE,
         (payload: SetDurationPayload) => new SetTimelineDurationCommand(payload),
         capability(SetTimelineDurationCommand.TYPE, "command", [TIMELINE_PERMISSION], SetTimelineDurationContract),
+    );
+    dispatcher.register(
+        FitTimelineDurationCommand.TYPE,
+        (payload: Record<string, never>) => new FitTimelineDurationCommand(payload),
+        capability(FitTimelineDurationCommand.TYPE, "command", [TIMELINE_PERMISSION], FitTimelineDurationContract),
+    );
+    dispatcher.register(
+        ScaleTimelineCommand.TYPE,
+        (payload: ScaleTimelinePayload) => new ScaleTimelineCommand(payload),
+        capability(ScaleTimelineCommand.TYPE, "command", [TIMELINE_PERMISSION], ScaleTimelineContract),
+    );
+    dispatcher.register(
+        RestoreTimelineScaleCommand.TYPE,
+        (payload: RestoreTimelineScalePayload) => new RestoreTimelineScaleCommand(payload),
+        capability(RestoreTimelineScaleCommand.TYPE, "command", [TIMELINE_PERMISSION], RestoreTimelineScaleContract),
+    );
+    dispatcher.register(
+        SetTimelinePlaybackRangeCommand.TYPE,
+        (payload: SetPlaybackRangePayload) => new SetTimelinePlaybackRangeCommand(payload),
+        capability(SetTimelinePlaybackRangeCommand.TYPE, "command", [TIMELINE_PERMISSION], SetPlaybackRangeContract),
+    );
+    dispatcher.register(
+        SetTimelineFrameRateCommand.TYPE,
+        (payload: SetFrameRatePayload) => new SetTimelineFrameRateCommand(payload),
+        capability(SetTimelineFrameRateCommand.TYPE, "command", [TIMELINE_PERMISSION], SetTimelineFrameRateContract),
     );
     dispatcher.register(
         RestoreTimelineTracksCommand.TYPE,

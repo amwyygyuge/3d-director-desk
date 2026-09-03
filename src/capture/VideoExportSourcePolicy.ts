@@ -1,11 +1,14 @@
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import type { VideoExportSource } from "@/capture/VideoExportSession";
+import { SHELL_MODE } from "@/store/WorkbenchLayoutStore";
+import type { ShellMode } from "@/store/WorkbenchLayoutStore";
 
 /** 导出策略只需控制预览态与循环，不依赖完整 DirectorContext，避免命令层反向循环。 */
 export interface VideoExportStage {
     readonly layout: {
-        readonly presentationMode: boolean;
-        setPresentationMode(active: boolean): void;
+        readonly isProgramTakeover: boolean;
+        readonly explicitShellMode: ShellMode;
+        setShellMode(mode: ShellMode): void;
     };
     readonly clock: {
         readonly isLooping: boolean;
@@ -20,21 +23,21 @@ export interface VideoExportSourcePolicy {
 
 /** 成片输出必须由预览态接管相机，避免把编辑辅助物录入产品。 */
 export class ProgramSourcePolicy implements VideoExportSourcePolicy {
-    private previousPresentationMode: boolean | null = null;
+    private previousShellMode: ShellMode | null = null;
     private previousLooping: boolean | null = null;
 
     prepare(stage: VideoExportStage): void {
-        this.previousPresentationMode = stage.layout.presentationMode;
+        this.previousShellMode = stage.layout.explicitShellMode;
         this.previousLooping = stage.clock.isLooping;
         stage.clock.setLooping(false);
-        stage.layout.setPresentationMode(true);
+        if (!stage.layout.isProgramTakeover) stage.layout.setShellMode(SHELL_MODE.PRESENTATION);
     }
 
     restore(stage: VideoExportStage): void {
-        if (this.previousLooping === null || this.previousPresentationMode === null) return;
-        stage.layout.setPresentationMode(this.previousPresentationMode);
+        if (this.previousLooping === null || this.previousShellMode === null) return;
+        stage.layout.setShellMode(this.previousShellMode);
         stage.clock.setLooping(this.previousLooping);
-        this.previousPresentationMode = null;
+        this.previousShellMode = null;
         this.previousLooping = null;
     }
 }

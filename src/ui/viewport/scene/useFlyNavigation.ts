@@ -63,6 +63,8 @@ export function useFlyNavigation({ active, onSettled }: FlyNavigationOptions): v
         }
         const onKeyDown = (event: KeyboardEvent) => {
             if (isEditingText() || event.metaKey || event.ctrlKey || event.altKey) return;
+            // 指针停在时间线上时键盘归时间轴:Space/S 同时是飞行键与时间轴键,谁接管只由指针裁决
+            if (stores.layout.isTimelinePointerOver) return;
             const key = event.key.toLowerCase();
             if (!FLY_KEYS.has(key) || event.repeat) return;
             pressed.current.add(key);

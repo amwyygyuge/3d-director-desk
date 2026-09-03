@@ -23,7 +23,7 @@ import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
 import type { SubjectFocusBounds } from "@/command/subjectBounds";
-import { SetTimelineDurationCommand } from "@/command/timelineCommands";
+import { quantizeSeconds, SetTimelineDurationCommand } from "@/command/timelineCommands";
 import { VIEW_MODE } from "@/store/MotionAuthoringStore";
 import type { ViewMode } from "@/store/MotionAuthoringStore";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -47,6 +47,9 @@ const MOTION_KEY_HANDLE_KIND = {
     OUT: "out",
 } as const;
 type MotionKeyHandleKind = (typeof MOTION_KEY_HANDLE_KIND)[keyof typeof MOTION_KEY_HANDLE_KIND];
+
+const MINIMUM_TRAJECTORY_PROGRESS = 0;
+const MAXIMUM_TRAJECTORY_PROGRESS = 1;
 
 const ISSUE_CODE = {
     PAYLOAD: "motion-invalid-payload",
@@ -396,6 +399,24 @@ interface ProgramRangeLike {
     readonly durationSeconds: number;
 }
 
+interface QuantizedTimeRange {
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
+
+/** 片段起止同帧率栅格对齐，时长只由两端相减，避免独立舍入后终点漂移。 */
+function quantizedTimeRange(
+    ctx: DirectorContext,
+    startTimeSeconds: number,
+    durationSeconds: number,
+): QuantizedTimeRange | null {
+    const quantizedStart = quantizeSeconds(ctx, startTimeSeconds);
+    const quantizedEnd = quantizeSeconds(ctx, startTimeSeconds + durationSeconds);
+    return quantizedEnd > quantizedStart
+        ? { startTimeSeconds: quantizedStart, durationSeconds: quantizedEnd - quantizedStart }
+        : null;
+}
+
 function motionProgramSource(clip: ProgramRangeLike): ProgramSource {
     return { kind: PROGRAM_SOURCE_KIND.MOTION_CLIP, motionClipId: clip.id };
 }
@@ -408,12 +429,34 @@ function motionClipFrom(clip: CameraMotionClipJSON): CameraMotionClip | null {
     }
 }
 
+function quantizedMotionClip(ctx: DirectorContext, clip: CameraMotionClip): CameraMotionClip | null {
+    const range = quantizedTimeRange(ctx, clip.startTimeSeconds, clip.durationSeconds);
+    return range ? clip.withTimeRange(range.startTimeSeconds, range.durationSeconds) : null;
+}
+
+function replaceQuantizedClip(ctx: DirectorContext, clip: CameraMotionClip): void {
+    const quantized = quantizedMotionClip(ctx, clip);
+    if (quantized) ctx.motion.replaceClip(quantized);
+}
+
 function programClipFrom(payload: SetProgramClipPayload): CameraProgramClip | null {
     try {
         return new CameraProgramClip(payload.clip);
     } catch {
         return null;
     }
+}
+
+function quantizedProgramClip(ctx: DirectorContext, clip: CameraProgramClip): CameraProgramClip | null {
+    const range = quantizedTimeRange(ctx, clip.startTimeSeconds, clip.durationSeconds);
+    return range
+        ? new CameraProgramClip({
+              id: clip.id,
+              source: clip.source,
+              startTimeSeconds: range.startTimeSeconds,
+              durationSeconds: range.durationSeconds,
+          })
+        : null;
 }
 
 function existingClip(ctx: DirectorContext, id: unknown): CameraMotionClip | null {
@@ -459,8 +502,17 @@ function restoreKeyCommand(clipId: string, key: CameraKey): SerializedCommand {
 }
 
 function replaceKey(ctx: DirectorContext, clip: CameraMotionClip, key: CameraKey): void {
-    ctx.motion.replaceClip(clip.withKey(key));
+    replaceQuantizedClip(ctx, clip.withKey(key));
     ctx.playback.sampleCurrent();
+}
+
+/** 将帧对齐时刻映回轨迹域；浮点反解越界时钳住有效进度。 */
+function quantizedTrajectoryProgress(ctx: DirectorContext, clip: CameraMotionClip, progress: number): number {
+    const timeSeconds = quantizeSeconds(ctx, clip.timeAtProgress(progress));
+    return Math.min(
+        MAXIMUM_TRAJECTORY_PROGRESS,
+        Math.max(MINIMUM_TRAJECTORY_PROGRESS, clip.trajectoryProgressAt(timeSeconds)),
+    );
 }
 
 /** Creates a serialized, independent motion segment. Trajectory and temporal range remain independently editable. */
@@ -477,15 +529,17 @@ export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPay
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const clip = motionClipFrom(this.payload.clip);
-        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段格式无效")];
+        const parsed = motionClipFrom(this.payload.clip);
+        const clip = parsed ? quantizedMotionClip(ctx, parsed) : null;
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围至少覆盖一帧")];
         if (ctx.motion.clip(clip.id)) return [issue(ISSUE_CODE.PAYLOAD, "clip.id", "运镜片段 id 已存在")];
         return clipIssues(ctx, clip);
     }
 
     execute(ctx: DirectorContext): void {
-        const clip = motionClipFrom(this.payload.clip);
-        if (clip) ctx.motion.replaceClip(clip);
+        const parsed = motionClipFrom(this.payload.clip);
+        const clip = parsed ? quantizedMotionClip(ctx, parsed) : null;
+        if (clip) replaceQuantizedClip(ctx, clip);
         ctx.playback.sampleCurrent();
     }
 
@@ -513,24 +567,24 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const clip = this.clip();
-        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "keys", "镜头关键帧格式无效或少于两个")];
+        const clip = this.clip(ctx);
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "keys", "镜头关键帧格式无效或时间范围不足一帧")];
         const clipProblems = clipIssues(ctx, clip);
         if (clipProblems.length > 0) return clipProblems;
         return programIssues(ctx, clip, this.programMode());
     }
 
     execute(ctx: DirectorContext): void {
-        const clip = this.clip();
+        const clip = this.clip(ctx);
         if (!clip) return;
-        ctx.motion.replaceClip(clip);
+        replaceQuantizedClip(ctx, clip);
         applyProgramFollow(ctx, clip, this.programMode());
         ctx.timelineSelection.select(TimelineSelection.motionClip(clip.id));
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const clip = this.clip();
+        const clip = this.clip(ctx);
         if (!clip) return null;
         return [
             { type: RemoveMotionClipCommand.TYPE, payload: { id: clip.id } },
@@ -542,12 +596,14 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
         return this.payload.program ?? PROGRAM_FOLLOW.FOLLOW;
     }
 
-    private clip(): CameraMotionClip | null {
+    private clip(ctx: DirectorContext): CameraMotionClip | null {
+        const range = quantizedTimeRange(ctx, this.payload.startTimeSeconds, this.payload.durationSeconds);
+        if (!range) return null;
         try {
             return new CameraMotionClip({
                 id: this.payload.id ?? takeIdFor(this.payload),
-                startTimeSeconds: this.payload.startTimeSeconds,
-                durationSeconds: this.payload.durationSeconds,
+                startTimeSeconds: range.startTimeSeconds,
+                durationSeconds: range.durationSeconds,
                 keys: this.payload.keys,
                 focus: this.payload.focus ? { mode: CAMERA_FOCUS_MODE, target: this.payload.focus } : null,
                 ...(this.payload.easing ? { easing: this.payload.easing } : {}),
@@ -622,17 +678,17 @@ export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRang
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const current = existingClip(ctx, this.payload.id);
         if (!current) return [issue(ISSUE_CODE.CLIP, "id", "运镜片段不存在")];
-        const candidate = this.retimed(current);
-        if (!candidate) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围必须是有限正数")];
+        const candidate = this.retimed(ctx, current);
+        if (!candidate) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围必须至少覆盖一帧")];
         return clipIssues(ctx, candidate);
     }
 
     execute(ctx: DirectorContext): void {
         const current = existingClip(ctx, this.payload.id);
-        const candidate = current ? this.retimed(current) : null;
+        const candidate = current ? this.retimed(ctx, current) : null;
         if (!current || !candidate) return;
         const following = programLinkage.followingClip(ctx.motion.program, current);
-        ctx.motion.replaceClip(candidate);
+        replaceQuantizedClip(ctx, candidate);
         if (following) {
             ctx.motion.replaceProgram(
                 ctx.motion.program.withoutClip(following.id).withClip(
@@ -665,12 +721,9 @@ export class SetMotionClipRangeCommand extends DirectorCommand<SetMotionClipRang
         ];
     }
 
-    private retimed(current: CameraMotionClip): CameraMotionClip | null {
-        try {
-            return current.withTimeRange(this.payload.startTimeSeconds, this.payload.durationSeconds);
-        } catch {
-            return null;
-        }
+    private retimed(ctx: DirectorContext, current: CameraMotionClip): CameraMotionClip | null {
+        const range = quantizedTimeRange(ctx, this.payload.startTimeSeconds, this.payload.durationSeconds);
+        return range ? current.withTimeRange(range.startTimeSeconds, range.durationSeconds) : null;
     }
 }
 
@@ -746,7 +799,8 @@ export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
         if (isIssue(located)) return [located];
-        const moved = movedKeyOrNull(located.key, this.payload.progress);
+        const progress = quantizedTrajectoryProgress(ctx, located.clip, this.payload.progress);
+        const moved = movedKeyOrNull(located.key, progress);
         if (!moved) return [issue(ISSUE_CODE.PAYLOAD, "progress", "关键帧进度必须落在 [0,1]")];
         return withKeyIssues(located.clip, moved);
     }
@@ -754,7 +808,8 @@ export class MoveMotionKeyCommand extends DirectorCommand<MoveMotionKeyPayload> 
     execute(ctx: DirectorContext): void {
         const located = locateKey(ctx, this.payload.clipId, this.payload.keyId);
         if (isIssue(located)) return;
-        const moved = movedKeyOrNull(located.key, this.payload.progress);
+        const progress = quantizedTrajectoryProgress(ctx, located.clip, this.payload.progress);
+        const moved = movedKeyOrNull(located.key, progress);
         if (moved) replaceKey(ctx, located.clip, moved);
     }
 
@@ -802,7 +857,7 @@ export class RemoveMotionKeyCommand extends DirectorCommand<MotionKeyPayload> {
         const next = located.clip.withoutKey(this.payload.keyId);
         if (!next) return;
         ctx.timelineSelection.forget(this.payload.keyId);
-        ctx.motion.replaceClip(next);
+        replaceQuantizedClip(ctx, next);
         ctx.playback.sampleCurrent();
     }
 
@@ -900,7 +955,7 @@ export class SetMotionClipEasingCommand extends DirectorCommand<SetMotionClipEas
     execute(ctx: DirectorContext): void {
         const clip = existingClip(ctx, this.payload.id);
         if (!clip) return;
-        ctx.motion.replaceClip(clip.withEasing(this.payload.easing));
+        replaceQuantizedClip(ctx, clip.withEasing(this.payload.easing));
         ctx.playback.sampleCurrent();
     }
 
@@ -940,7 +995,7 @@ export class SetMotionClipFocusCommand extends DirectorCommand<SetMotionClipFocu
         const current = existingClip(ctx, this.payload.id);
         const focus = this.focus();
         if (!current || focus === undefined) return;
-        ctx.motion.replaceClip(current.withFocus(focus));
+        replaceQuantizedClip(ctx, current.withFocus(focus));
         ctx.playback.sampleCurrent();
     }
 
@@ -1143,6 +1198,7 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
         const range = this.planIdentity(ctx);
+        if (!range) return [];
         const end = range.startTimeSeconds + range.durationSeconds;
         const durationRestore: readonly SerializedCommand[] =
             end > ctx.timeline.document.duration
@@ -1155,25 +1211,28 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         ];
     }
 
-    private planIdentity(ctx: DirectorContext): ProgramRangeLike {
-        const startTimeSeconds = programEndSeconds(ctx);
-        return {
-            id: quickMotionIdFor(this.payload.subjectId, this.payload.move, startTimeSeconds),
-            startTimeSeconds,
-            durationSeconds: this.payload.durationSeconds,
-        };
+    private planIdentity(ctx: DirectorContext): ProgramRangeLike | null {
+        const range = quantizedTimeRange(ctx, programEndSeconds(ctx), this.payload.durationSeconds);
+        return range
+            ? {
+                  id: quickMotionIdFor(this.payload.subjectId, this.payload.move, range.startTimeSeconds),
+                  startTimeSeconds: range.startTimeSeconds,
+                  durationSeconds: range.durationSeconds,
+              }
+            : null;
     }
 
     private plan(ctx: DirectorContext): QuickAuthorPlan | null {
         const subject = subjectBoundsFor(ctx, this.payload.subjectId);
         if (!subject) return null;
+        const range = this.planIdentity(ctx);
+        if (!range) return null;
         const eye = ctx.camera.lastDirectorPose;
         const azimuth = eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS;
         const shot = shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth);
-        const range = this.planIdentity(ctx);
         const request: MotionPresetRequest = {
             startTimeSeconds: range.startTimeSeconds,
-            durationSeconds: this.payload.durationSeconds,
+            durationSeconds: range.durationSeconds,
             move: this.payload.move,
             subjectId: this.payload.subjectId,
             ...(this.payload.easing ? { easing: this.payload.easing } : {}),
@@ -1228,8 +1287,9 @@ export class SetProgramClipCommand extends DirectorCommand<SetProgramClipPayload
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const clip = programClipFrom(this.payload);
-        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "输出片段格式无效")];
+        const parsed = programClipFrom(this.payload);
+        const clip = parsed ? quantizedProgramClip(ctx, parsed) : null;
+        if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "输出片段时间范围至少覆盖一帧")];
         const sourceIssues = programSourceIssues(ctx, clip);
         if (sourceIssues.length > 0) return sourceIssues;
         if (clip.endTimeSeconds > ctx.timeline.document.duration) {
@@ -1244,7 +1304,8 @@ export class SetProgramClipCommand extends DirectorCommand<SetProgramClipPayload
     }
 
     execute(ctx: DirectorContext): void {
-        const clip = programClipFrom(this.payload);
+        const parsed = programClipFrom(this.payload);
+        const clip = parsed ? quantizedProgramClip(ctx, parsed) : null;
         if (clip) ctx.motion.replaceProgram(ctx.motion.program.withClip(clip));
         ctx.playback.sampleCurrent();
     }
@@ -1308,7 +1369,7 @@ export class EnterMotionPreviewCommand extends DirectorCommand<PreviewClipPayloa
         ctx.motionAuthoring.setPreviewClip(this.payload.clipId);
         ctx.motionAuthoring.setViewMode(VIEW_MODE.LENS);
         // 预览一段就该看到这一段:playhead 不在片段内时移到片段起点,否则画面停在别的机位上
-        if (clip && !clip.covers(ctx.clock.time)) ctx.clock.seek(clip.startTimeSeconds);
+        if (clip && !clip.covers(ctx.clock.time)) ctx.clock.seek(quantizeSeconds(ctx, clip.startTimeSeconds));
         ctx.playback.sampleCurrent();
     }
 }

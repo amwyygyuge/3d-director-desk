@@ -22,7 +22,9 @@ interface CaptureFramePayload {
 interface CaptureVideoPayload {
     /** AI 连发/重试时按 requestId 对账产物归属。 */
     readonly requestId?: string;
-    /** 录制时长(秒);缺省 = 时间轴时长 */
+    /** 录制起点(秒);缺省 = 播放范围入点。 */
+    readonly startSeconds?: number;
+    /** 录制时长(秒);缺省 = 播放范围跨度。 */
     readonly durationSeconds?: number;
     /** 缺省输出 Program 成片；viewport 明确录制编辑视角。 */
     readonly source?: VideoExportSource;
@@ -66,6 +68,7 @@ const CAPTURE_FRAME_CONTRACT: PayloadContract = {
 };
 const CAPTURE_VIDEO_CONTRACT: PayloadContract = {
     properties: {
+        startSeconds: { type: "number" },
         durationSeconds: { type: "number" },
         requestId: { type: "string" },
         source: { type: "string", enum: [VIDEO_EXPORT_SOURCE.PROGRAM, VIDEO_EXPORT_SOURCE.VIEWPORT] },
@@ -149,6 +152,21 @@ export function requestFrameCapture({ dispatcher, context }: CaptureFrameRequest
     if (!result.ok) context.ui.setApplicationNotice(`${CAPTURE_FRAME_FAILURE_PREFIX}${result.error}`);
 }
 
+/** 缺省导出当前入出点；显式起点/时长同时覆盖时才离开该范围。 */
+function videoRangeFor(
+    ctx: DirectorContext,
+    payload: CaptureVideoPayload,
+): {
+    readonly startSeconds: number;
+    readonly durationSeconds: number;
+} {
+    const range = ctx.timeline.document.playbackRange;
+    return {
+        startSeconds: payload.startSeconds ?? range.inSeconds,
+        durationSeconds: payload.durationSeconds ?? range.spanSeconds,
+    };
+}
+
 /**
  * 导出 WebM：Program 走预览态接管相机，viewport 是显式保留辅助物的备选。
  * 异步产物只在录制任务完成且工作台状态已复原后交付。
@@ -164,18 +182,41 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const source = this.payload.source ?? VIDEO_EXPORT_SOURCE.PROGRAM;
         if (!ctx.capture.isAttached) {
-            return [{ code: "capture-renderer-unavailable", path: "capture", message: "渲染器未就绪(Canvas 尚未 onCreated)" }];
+            return [
+                {
+                    code: "capture-renderer-unavailable",
+                    path: "capture",
+                    message: "渲染器未就绪(Canvas 尚未 onCreated)",
+                },
+            ];
         }
         if (ctx.videoExport.isRecording) {
-            return [{ code: "capture-already-recording", path: "videoExport.state", message: "已有录制进行中(先停止或取消)" }];
+            return [
+                {
+                    code: "capture-already-recording",
+                    path: "videoExport.state",
+                    message: "已有录制进行中(先停止或取消)",
+                },
+            ];
         }
-        const durationSeconds = this.payload.durationSeconds ?? ctx.timeline.document.duration;
-        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > VIDEO_MAX_DURATION_SECONDS) {
-            return [{
-                code: "capture-invalid-duration",
-                path: "durationSeconds",
-                message: `录制时长须在 0~${VIDEO_MAX_DURATION_SECONDS} 秒之间`,
-            }];
+        const range = videoRangeFor(ctx, this.payload);
+        const endSeconds = range.startSeconds + range.durationSeconds;
+        const playbackRange = ctx.timeline.document.playbackRange;
+        if (
+            !Number.isFinite(range.startSeconds) ||
+            !Number.isFinite(range.durationSeconds) ||
+            range.startSeconds < playbackRange.inSeconds ||
+            endSeconds > playbackRange.outSeconds ||
+            range.durationSeconds <= 0 ||
+            range.durationSeconds > VIDEO_MAX_DURATION_SECONDS
+        ) {
+            return [
+                {
+                    code: "capture-invalid-duration",
+                    path: "durationSeconds",
+                    message: `录制范围须落在当前播放范围内，时长在 0~${VIDEO_MAX_DURATION_SECONDS} 秒之间`,
+                },
+            ];
         }
         if (source === VIDEO_EXPORT_SOURCE.VIEWPORT || ctx.motion.program.clips.length > 0) return [];
         return [
@@ -195,8 +236,8 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
     execute(ctx: DirectorContext): void {
         const source = this.payload.source ?? VIDEO_EXPORT_SOURCE.PROGRAM;
         const requestId = this.payload.requestId ?? crypto.randomUUID();
-        const durationSeconds = this.payload.durationSeconds ?? ctx.timeline.document.duration;
-        void this.export(ctx, { source, requestId, durationSeconds }).then((outcome) => {
+        const range = videoRangeFor(ctx, this.payload);
+        void this.export(ctx, { source, requestId, ...range }).then((outcome) => {
             if (!outcome) return;
             deliverCaptureProduct(ctx, {
                 kind: CAPTURE_PRODUCT_KIND.VIDEO,
@@ -210,13 +251,18 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
 
     private async export(
         ctx: DirectorContext,
-        options: { readonly source: VideoExportSource; readonly requestId: string; readonly durationSeconds: number },
+        options: {
+            readonly source: VideoExportSource;
+            readonly requestId: string;
+            readonly startSeconds: number;
+            readonly durationSeconds: number;
+        },
     ): Promise<VideoCaptureOutcome | null> {
         const policy = videoExportPolicyFor(options.source);
         try {
             policy.prepare(ctx);
             ctx.clock.pause();
-            ctx.clock.seek(0);
+            ctx.clock.seek(options.startSeconds);
             ctx.clock.play();
             ctx.videoExport.begin(options);
             const recording = ctx.capture.recordVideo({
@@ -230,7 +276,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
             try {
                 const blob = await recording;
                 if (!blob) return null;
-                return { blob, durationSeconds: ctx.clock.time };
+                return { blob, durationSeconds: ctx.clock.time - options.startSeconds };
             } finally {
                 naturalStop.cancel();
             }

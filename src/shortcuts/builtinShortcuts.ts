@@ -3,12 +3,34 @@ import { isCommandIssue } from "@/authoring/KeyframeAuthoringService";
 import { RemoveShotCommand } from "@/command/cameraCommands";
 import { SetViewModeCommand } from "@/command/cameraMotionCommands";
 import { TransportSetLoopCommand } from "@/command/actionCommands";
-import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";
+import {
+    EnterPresentationCommand,
+    ExitPresentationCommand,
+    SetShellHiddenCommand,
+} from "@/command/presentationCommands";
 import { requestFrameCapture } from "@/command/captureCommands";
 import { VIEW_MODE } from "@/store/MotionAuthoringStore";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { ShortcutChord } from "@/shortcuts/ShortcutChord";
 import type { ShortcutRegistry, ShortcutScope } from "@/shortcuts/ShortcutRegistry";
+import { SetTimelinePlaybackRangeCommand } from "@/command/timelineCommands";
+import { TransportSeekCommand } from "@/command/actionCommands";
+import { TimelineViewport } from "@/authoring/TimelineViewport";
+
+/** 播放头「跳一秒」的步长:与逐帧步进(读工程帧率)分工,粗定位不必按帧数 */
+const PLAYHEAD_JUMP_SECONDS = 1;
+const TIMELINE_START_SECONDS = 0;
+/** 键盘缩放与滚轮缩放同一手感:一次一档,不做加速度 */
+const TIMELINE_ZOOM_IN_FACTOR = 0.8;
+const TIMELINE_ZOOM_OUT_FACTOR = 1.25;
+const RATIO_MIN = 0;
+const RATIO_MAX = 1;
+/** 锚点跳转的死区:播放头正落在锚点上时不该原地不动,也不该被浮点噪声误判 */
+const ANCHOR_EPSILON_SECONDS = 0.0005;
+
+const ANCHOR_DIRECTION = { PREV: "prev", NEXT: "next" } as const;
+const RANGE_BOUNDARY = { IN: "in", OUT: "out" } as const;
+type RangeBoundary = (typeof RANGE_BOUNDARY)[keyof typeof RANGE_BOUNDARY];
 
 /** 快捷键动作 id:AI 工具描述/文档/冲突检测的引用键 */
 export const SHORTCUT_ID = {
@@ -38,6 +60,22 @@ export const SHORTCUT_ID = {
     TRANSPORT_LOOP: "transport.loop",
     DRAFT_EXIT: "draft.exit",
     PALETTE_OPEN: "palette.open",
+    SHELL_TOGGLE: "shell.toggle",
+    PLAYHEAD_STEP_BACK: "playhead.step-back",
+    PLAYHEAD_STEP_FORWARD: "playhead.step-forward",
+    PLAYHEAD_JUMP_BACK: "playhead.jump-back",
+    PLAYHEAD_JUMP_FORWARD: "playhead.jump-forward",
+    PLAYHEAD_START: "playhead.start",
+    PLAYHEAD_END: "playhead.end",
+    ANCHOR_PREV: "playhead.anchor-prev",
+    ANCHOR_NEXT: "playhead.anchor-next",
+    RANGE_SET_IN: "range.set-in",
+    RANGE_SET_OUT: "range.set-out",
+    TIMELINE_ZOOM_FIT: "timeline.zoom-fit",
+    TIMELINE_ZOOM_IN: "timeline.zoom-in",
+    TIMELINE_ZOOM_OUT: "timeline.zoom-out",
+    SNAP_TOGGLE: "timeline.snap-toggle",
+    TIMELINE_EXPAND_TOGGLE: "timeline.expand-toggle",
 } as const;
 export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
 
@@ -47,8 +85,12 @@ export type ShortcutId = (typeof SHORTCUT_ID)[keyof typeof SHORTCUT_ID];
  * - UI 提示经 formatShortcutHint 从本表格式化,按钮提示与真实生效键永不分叉;
  * - 顺序即优先级(注册表先命中先执行):预览退出排在一切 Escape 之前。
  *
- * Space 不做播放/暂停:WASD+Space/Shift 的飞行导航已持续占用它(见 useFlyNavigation),
- * 双绑会让抬升相机的同时启停时间轴。播放启停走 P,与 DCC 的传输键位习惯一致。
+ * **Space / S 的归属由指针裁决,不靠优先级**:飞行导航(WASD+Space/Shift)与时间轴键位共用物理键,
+ * timeline 作用域仅在指针停在时间线控制台内时激活,同时 useFlyNavigation 在该条件下整体让位——
+ * 同一时刻只有一方接管,不存在两边同时响应的窗口。P 仍是全局播放键,指针在哪儿都管用。
+ *
+ * 时间轴上被聚焦的段条/菱形自己消费方向键与 Enter/Space,并在处理后 stopPropagation,
+ * 因此不会与 timeline 作用域的播放头键位重复触发。
  *
  * Escape 分层:presentation → lens → draft → 时间轴选中 → gizmo(退出变换) → selected(取消选中),
  * 由本表行序裁决;Delete 分层:时间轴选中 → selected(删除选中)。
@@ -60,6 +102,7 @@ export const SHORTCUT_SPECS: readonly {
     label: string;
 }[] = [
     { id: SHORTCUT_ID.PRESENTATION_EXIT, chords: ["escape"], scope: "presentation", label: "退出全屏预览" },
+    { id: SHORTCUT_ID.SHELL_TOGGLE, chords: ["tab"], scope: "presentation", label: "隐藏/恢复悬浮壳层" },
     { id: SHORTCUT_ID.LENS_EXIT, chords: ["escape"], scope: "lens", label: "退出镜头视角" },
     { id: SHORTCUT_ID.DRAFT_EXIT, chords: ["escape"], scope: "draft", label: "退出绘制走位" },
     {
@@ -74,6 +117,25 @@ export const SHORTCUT_SPECS: readonly {
         scope: "timeline-selection",
         label: "删除时间轴选中项",
     },
+    // timeline 作用域:仅在指针停在时间线控制台内时激活(见 activeShortcutScopes)
+    { id: SHORTCUT_ID.TRANSPORT_TOGGLE, chords: ["space"], scope: "timeline", label: "播放/暂停时间轴" },
+    { id: SHORTCUT_ID.PLAYHEAD_STEP_BACK, chords: ["arrowleft"], scope: "timeline", label: "播放头后退一帧" },
+    { id: SHORTCUT_ID.PLAYHEAD_STEP_FORWARD, chords: ["arrowright"], scope: "timeline", label: "播放头前进一帧" },
+    { id: SHORTCUT_ID.PLAYHEAD_JUMP_BACK, chords: ["shift+arrowleft"], scope: "timeline", label: "播放头后退一秒" },
+    {
+        id: SHORTCUT_ID.PLAYHEAD_JUMP_FORWARD,
+        chords: ["shift+arrowright"],
+        scope: "timeline",
+        label: "播放头前进一秒",
+    },
+    { id: SHORTCUT_ID.ANCHOR_PREV, chords: [","], scope: "timeline", label: "跳到上一个时间锚点" },
+    { id: SHORTCUT_ID.ANCHOR_NEXT, chords: ["."], scope: "timeline", label: "跳到下一个时间锚点" },
+    { id: SHORTCUT_ID.RANGE_SET_IN, chords: ["i"], scope: "timeline", label: "在播放头设入点" },
+    { id: SHORTCUT_ID.RANGE_SET_OUT, chords: ["o"], scope: "timeline", label: "在播放头设出点" },
+    { id: SHORTCUT_ID.TIMELINE_ZOOM_FIT, chords: ["shift+z"], scope: "timeline", label: "缩放到全长" },
+    { id: SHORTCUT_ID.TIMELINE_ZOOM_IN, chords: ["="], scope: "timeline", label: "以播放头为锚放大" },
+    { id: SHORTCUT_ID.TIMELINE_ZOOM_OUT, chords: ["-"], scope: "timeline", label: "以播放头为锚缩小" },
+    { id: SHORTCUT_ID.SNAP_TOGGLE, chords: ["s"], scope: "timeline", label: "吸附开关" },
     { id: SHORTCUT_ID.AXIS_X, chords: ["x"], scope: "gizmo", label: "约束/切换 X 轴" },
     { id: SHORTCUT_ID.AXIS_Y, chords: ["y"], scope: "gizmo", label: "约束/切换 Y 轴" },
     { id: SHORTCUT_ID.AXIS_Z, chords: ["z"], scope: "gizmo", label: "约束/切换 Z 轴" },
@@ -88,10 +150,13 @@ export const SHORTCUT_SPECS: readonly {
     { id: SHORTCUT_ID.CLEAR_SELECTION, chords: ["escape"], scope: "selected", label: "取消选中" },
     { id: SHORTCUT_ID.FRAME_SELECTED, chords: ["f"], scope: "selected", label: "聚焦选中对象" },
     { id: SHORTCUT_ID.PALETTE_OPEN, chords: ["mod+k"], scope: "global", label: "视角与元素导航" },
-    { id: SHORTCUT_ID.FRAME_ALL, chords: ["home"], scope: "global", label: "取景全部对象" },
+    { id: SHORTCUT_ID.PLAYHEAD_START, chords: ["home"], scope: "global", label: "播放头回到起点" },
+    { id: SHORTCUT_ID.PLAYHEAD_END, chords: ["end"], scope: "global", label: "播放头到终点" },
+    { id: SHORTCUT_ID.TIMELINE_EXPAND_TOGGLE, chords: ["t"], scope: "global", label: "展开/收起时间线" },
+    { id: SHORTCUT_ID.FRAME_ALL, chords: ["shift+f"], scope: "global", label: "取景全部对象" },
     { id: SHORTCUT_ID.TRANSPORT_TOGGLE, chords: ["p"], scope: "global", label: "播放/暂停时间轴" },
     { id: SHORTCUT_ID.PRESENTATION_ENTER, chords: ["shift+p"], scope: "global", label: "全屏预览成片" },
-    { id: SHORTCUT_ID.EDIT_UNDO, chords: ["mod+z"], scope: "global", label: "撤销" },
+    { id: SHORTCUT_ID.SHELL_TOGGLE, chords: ["tab"], scope: "global", label: "隐藏/恢复悬浮壳层" },
     { id: SHORTCUT_ID.EDIT_REDO, chords: ["mod+shift+z"], scope: "global", label: "重做" },
     { id: SHORTCUT_ID.HELP_TOGGLE, chords: ["shift+/"], scope: "global", label: "快捷键速查" },
     { id: SHORTCUT_ID.LENS_TOGGLE, chords: ["`"], scope: "global", label: "导演视角 ↔ 镜头视角" },
@@ -157,6 +222,69 @@ function enterPresentation(stores: DirectorDeskStores): void {
     if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
 }
 
+function toggleShellChrome(stores: DirectorDeskStores): void {
+    stores.dispatcher.dispatch(
+        { type: SetShellHiddenCommand.TYPE, payload: { hidden: !stores.layout.isShellHidden } },
+        stores,
+    );
+}
+
+/** 播放头位移的唯一出口:落点交给 transport.seek 的命令层量化与钳位,快捷键不自己算边界。 */
+function seekBy(stores: DirectorDeskStores, deltaSeconds: number): void {
+    stores.dispatcher.dispatch(
+        { type: TransportSeekCommand.TYPE, payload: { time: stores.clock.time + deltaSeconds } },
+        stores,
+    );
+}
+
+/**
+ * 时间锚点集合:片段两端 + 全部关键帧 + 标记。
+ * 直接取 TimelineLayout 的全长投影——它已经是「时间轴上有意义的时刻」的单一真相,
+ * 快捷键再拼一份必然与吸附候选漂移。
+ */
+function anchorTimes(stores: DirectorDeskStores): readonly number[] {
+    const durationSeconds = stores.timeline.document.duration;
+    const rows = stores.timelineLayout.project(TimelineViewport.full(durationSeconds));
+    const times = rows.flatMap((row) => [
+        ...row.bars.flatMap((bar) => [bar.startSeconds, bar.startSeconds + bar.durationSeconds]),
+        ...row.marks.map((mark) => mark.timeSeconds),
+    ]);
+    return [...new Set(times)].sort((left, right) => left - right);
+}
+
+function seekToAnchor(
+    stores: DirectorDeskStores,
+    direction: typeof ANCHOR_DIRECTION.PREV | typeof ANCHOR_DIRECTION.NEXT,
+): void {
+    const current = stores.clock.time;
+    const anchors = anchorTimes(stores);
+    const target =
+        direction === ANCHOR_DIRECTION.NEXT
+            ? anchors.find((time) => time > current + ANCHOR_EPSILON_SECONDS)
+            : [...anchors].reverse().find((time) => time < current - ANCHOR_EPSILON_SECONDS);
+    if (target === undefined) return;
+    stores.dispatcher.dispatch({ type: TransportSeekCommand.TYPE, payload: { time: target } }, stores);
+}
+
+/** 入出点:以当前播放头改写一端,另一端原样带上——命令层负责 out > in 的合法性裁决。 */
+function setRangeBoundary(stores: DirectorDeskStores, boundary: RangeBoundary): void {
+    const range = stores.timeline.document.playbackRange;
+    const payload =
+        boundary === RANGE_BOUNDARY.IN
+            ? { inSeconds: stores.clock.time, outSeconds: range.outSeconds }
+            : { inSeconds: range.inSeconds, outSeconds: stores.clock.time };
+    const result = stores.dispatcher.dispatch({ type: SetTimelinePlaybackRangeCommand.TYPE, payload }, stores);
+    if (!result.ok) stores.ui.setApplicationNotice(result.issues?.join(";") ?? result.error);
+}
+
+/** 以播放头为锚缩放:与滚轮缩放共用 TimelineViewport 的锚点语义,只是锚点换成播放头。 */
+function zoomTimeline(stores: DirectorDeskStores, factor: number): void {
+    const durationSeconds = stores.timeline.document.duration;
+    const viewport = stores.motionAuthoring.timelineViewportFor(durationSeconds);
+    const anchorRatio = Math.min(Math.max(viewport.ratioAt(stores.clock.time), RATIO_MIN), RATIO_MAX);
+    stores.motionAuthoring.setTimelineViewport(viewport.zoomedAt(factor, anchorRatio, durationSeconds));
+}
+
 const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void> = {
     [SHORTCUT_ID.AXIS_X]: (s) => s.ui.toggleGizmoAxis("x"),
     [SHORTCUT_ID.AXIS_Y]: (s) => s.ui.toggleGizmoAxis("y"),
@@ -189,6 +317,25 @@ const SHORTCUT_ACTIONS: Record<ShortcutId, (stores: DirectorDeskStores) => void>
     [SHORTCUT_ID.DRAFT_EXIT]: (s) => s.motionAuthoring.setDraftActive(false),
     [SHORTCUT_ID.TRANSPORT_LOOP]: (s) =>
         s.dispatcher.dispatch({ type: TransportSetLoopCommand.TYPE, payload: { loop: !s.clock.isLooping } }, s),
+    [SHORTCUT_ID.SHELL_TOGGLE]: toggleShellChrome,
+    [SHORTCUT_ID.PLAYHEAD_STEP_BACK]: (s) => seekBy(s, -s.timeline.document.frameRate.frameDurationSeconds),
+    [SHORTCUT_ID.PLAYHEAD_STEP_FORWARD]: (s) => seekBy(s, s.timeline.document.frameRate.frameDurationSeconds),
+    [SHORTCUT_ID.PLAYHEAD_JUMP_BACK]: (s) => seekBy(s, -PLAYHEAD_JUMP_SECONDS),
+    [SHORTCUT_ID.PLAYHEAD_JUMP_FORWARD]: (s) => seekBy(s, PLAYHEAD_JUMP_SECONDS),
+    [SHORTCUT_ID.PLAYHEAD_START]: (s) =>
+        s.dispatcher.dispatch({ type: TransportSeekCommand.TYPE, payload: { time: TIMELINE_START_SECONDS } }, s),
+    [SHORTCUT_ID.PLAYHEAD_END]: (s) =>
+        s.dispatcher.dispatch({ type: TransportSeekCommand.TYPE, payload: { time: s.timeline.document.duration } }, s),
+    [SHORTCUT_ID.ANCHOR_PREV]: (s) => seekToAnchor(s, ANCHOR_DIRECTION.PREV),
+    [SHORTCUT_ID.ANCHOR_NEXT]: (s) => seekToAnchor(s, ANCHOR_DIRECTION.NEXT),
+    [SHORTCUT_ID.RANGE_SET_IN]: (s) => setRangeBoundary(s, RANGE_BOUNDARY.IN),
+    [SHORTCUT_ID.RANGE_SET_OUT]: (s) => setRangeBoundary(s, RANGE_BOUNDARY.OUT),
+    [SHORTCUT_ID.TIMELINE_ZOOM_FIT]: (s) =>
+        s.motionAuthoring.setTimelineViewport(TimelineViewport.full(s.timeline.document.duration)),
+    [SHORTCUT_ID.TIMELINE_ZOOM_IN]: (s) => zoomTimeline(s, TIMELINE_ZOOM_IN_FACTOR),
+    [SHORTCUT_ID.TIMELINE_ZOOM_OUT]: (s) => zoomTimeline(s, TIMELINE_ZOOM_OUT_FACTOR),
+    [SHORTCUT_ID.SNAP_TOGGLE]: (s) => s.motionAuthoring.setSnapEnabled(!s.motionAuthoring.snapEnabled),
+    [SHORTCUT_ID.TIMELINE_EXPAND_TOGGLE]: (s) => s.layout.toggleTimelineExpanded(),
 };
 
 /** 内置快捷键注册:Hotkeys 挂载时调一次,返回整体注销 */
@@ -211,12 +358,15 @@ export function registerBuiltinShortcuts(registry: ShortcutRegistry<DirectorDesk
 /**
  * 当前激活作用域。
  * 全屏预览独占:壳层已隐、成片正在放,此时一切编辑键位都不该生效——只留退出键。
- * 其余情形 global 常驻;timeline-selection/selected/gizmo/shot-selected/shot/lens 各自按精确条件激活
- * (timeline-selection = 时间轴上选中了片段或关键帧,gizmo = 变换已激活,即 ui.gizmoArmedId 命中主选),
+ * 其余情形 global 常驻;timeline/timeline-selection/selected/gizmo/shot-selected/shot/lens 各自按精确条件激活:
+ * - timeline = 指针停在时间线控制台内。它是键盘归属的仲裁面:同一时刻视口飞行导航整体让位(见 useFlyNavigation),
+ *   因此 Space/S 这类共用键永远只有一方响应,不靠优先级碰运气;
+ * - timeline-selection = 时间轴上选中了片段/关键帧/标记;
+ * - gizmo = 变换已激活(ui.gizmoArmedId 命中主选)。
  * Esc 与 Delete 的归属由 SHORTCUT_SPECS 的顺序决定(注册表先命中先执行)。
  */
 export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<ShortcutScope> {
-    if (stores.layout.presentationMode) return new Set<ShortcutScope>(["presentation"]);
+    if (stores.layout.isProgramTakeover) return new Set<ShortcutScope>(["presentation"]);
     const primaryId = stores.selection.primaryId;
     const hasSelectedInactiveShot =
         primaryId !== null &&
@@ -228,6 +378,7 @@ export function activeShortcutScopes(stores: DirectorDeskStores): ReadonlySet<Sh
         ...(stores.motionAuthoring.draftActive ? ["draft" as const] : []),
         ...(stores.motionAuthoring.lensViewActive ? ["lens" as const] : []),
         ...(primaryId ? ["selected" as const] : []),
+        ...(stores.layout.isTimelinePointerOver ? ["timeline" as const] : []),
         ...(stores.ui.isGizmoArmed(primaryId) ? ["gizmo" as const] : []),
         ...(hasSelectedInactiveShot ? ["shot-selected" as const] : []),
         ...(stores.camera.activeShotId ? ["shot" as const] : []),

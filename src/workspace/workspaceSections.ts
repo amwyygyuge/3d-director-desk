@@ -7,9 +7,9 @@ import type { SvgIconComponent } from "@mui/icons-material";
 /**
  * 左侧工作台导航的分区。
  *
- * 分区只是面板的编排索引:不改变选中、视角或场景数据,也不门控任何领域行为——
  * 这正是它取代旧 `WorkspaceStage` 的原因(旧阶段既管显隐又管 Program 回放绑定,
- * 两个职责耦在一个枚举里;Program 回放已归位到 WorkbenchLayoutStore.presentationMode)。
+ * 两个职责耦在一个枚举里;如今壳层由 WorkbenchLayoutStore.shellMode 编排,
+ * Program 回放接管则收敛为 isProgramTakeover 派生语义)。
  */
 export const WORKSPACE_SECTION = {
     OUTLINE: "outline",

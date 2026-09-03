@@ -10,7 +10,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { reaction } from "mobx";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, useEffect, useRef } from "react";
 
 import { TIMELINE_ROW_KIND } from "@/authoring/TimelineLayout";
 import { TIMELINE_SELECTION_KIND } from "@/authoring/TimelineSelection";
@@ -18,6 +18,7 @@ import type { TimelineSelection, TimelineSelectionKind } from "@/authoring/Timel
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import { TimelineViewport } from "@/authoring/TimelineViewport";
 import { EASING, EASING_LABEL } from "@/motion/EasingCurve";
+import { SetTimelinePlaybackRangeCommand } from "@/command/timelineCommands";
 import type { EasingCurve } from "@/motion/EasingCurve";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -47,6 +48,14 @@ const TRACK_HEADER_BACKGROUND = "rgba(0,0,0,0.3)";
 const TRACK_GRID_BACKGROUND =
     "repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px)";
 const TRACK_BORDER_COLOR = "divider";
+const PLAYBACK_RANGE_BACKGROUND = "rgba(25, 118, 210, 0.20)";
+const PLAYBACK_RANGE_MARK_COLOR = "primary.main";
+const PLAYBACK_RANGE_Z_INDEX = 2;
+const PLAYBACK_RANGE_HANDLE = {
+    IN: "in",
+    OUT: "out",
+} as const;
+type PlaybackRangeHandle = (typeof PLAYBACK_RANGE_HANDLE)[keyof typeof PLAYBACK_RANGE_HANDLE];
 
 /** 滚轮语义按 NLE 惯例分派:裸滚轮留给轨道列表纵向滚动,修饰键才改时间窗口 */
 type WheelMode = "scroll" | "pan" | "zoom";
@@ -125,6 +134,119 @@ const RulerPlayhead = observer(function RulerPlayhead() {
                 zIndex: PLAYHEAD_Z_INDEX,
             }}
         />
+    );
+});
+
+/** 入出点只改变播放/导出边界；实际片长与轨道内容保持不动。 */
+const PlaybackRangeControls = observer(function PlaybackRangeControls() {
+    const stores = useDirectorDeskStores();
+    const { duration, playbackRange, frameRate } = stores.timeline.document;
+    const playhead = frameRate.quantize(stores.playheadDisplay.value);
+    const dispatch = (inSeconds: number, outSeconds: number): void => {
+        const result = stores.dispatcher.dispatch(
+            { type: SetTimelinePlaybackRangeCommand.TYPE, payload: { inSeconds, outSeconds } },
+            stores,
+        );
+        reportFailure(stores, result);
+    };
+    const canSetIn = playhead < playbackRange.outSeconds;
+    const canSetOut = playhead > playbackRange.inSeconds;
+    return (
+        <Stack direction="row" spacing={0.5}>
+            <Button disabled={!canSetIn} onClick={() => dispatch(playhead, playbackRange.outSeconds)} size="small">
+                设入点
+            </Button>
+            <Button disabled={!canSetOut} onClick={() => dispatch(playbackRange.inSeconds, playhead)} size="small">
+                设出点
+            </Button>
+            <Button onClick={() => dispatch(TIME_START_SECONDS, duration)} size="small">
+                清除范围
+            </Button>
+        </Stack>
+    );
+});
+
+/** 标尺上的蓝带是播放范围；拖端点只在松手时提交一条原子命令。 */
+const RulerPlaybackRange = observer(function RulerPlaybackRange({
+    rulerRef,
+}: {
+    readonly rulerRef: RefObject<HTMLDivElement | null>;
+}) {
+    const stores = useDirectorDeskStores();
+    const draggedHandle = useRef<PlaybackRangeHandle | null>(null);
+    const { playbackRange, frameRate } = stores.timeline.document;
+    const viewport = viewportFor(stores);
+    if (playbackRange.isFull(stores.timeline.document.duration)) return null;
+    const commit = (event: ReactPointerEvent<HTMLDivElement>): void => {
+        event.stopPropagation();
+        const handle = draggedHandle.current;
+        const bounds = rulerRef.current?.getBoundingClientRect();
+        draggedHandle.current = null;
+        if (!handle || !bounds || bounds.width <= TIME_START_SECONDS) return;
+        const ratio = Math.min(
+            Math.max((event.clientX - bounds.left) / bounds.width, TIME_START_SECONDS),
+            TIME_END_RATIO,
+        );
+        const time = frameRate.quantize(viewport.timeAt(ratio));
+        const nextRange =
+            handle === PLAYBACK_RANGE_HANDLE.IN
+                ? {
+                      inSeconds: Math.min(time, playbackRange.outSeconds - frameRate.frameDurationSeconds),
+                      outSeconds: playbackRange.outSeconds,
+                  }
+                : {
+                      inSeconds: playbackRange.inSeconds,
+                      outSeconds: Math.max(time, playbackRange.inSeconds + frameRate.frameDurationSeconds),
+                  };
+        const result = stores.dispatcher.dispatch(
+            { type: SetTimelinePlaybackRangeCommand.TYPE, payload: nextRange },
+            stores,
+        );
+        reportFailure(stores, result);
+    };
+    const begin = (handle: PlaybackRangeHandle, event: ReactPointerEvent<HTMLDivElement>): void => {
+        event.stopPropagation();
+        draggedHandle.current = handle;
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+    return (
+        <>
+            <Box
+                aria-label="播放范围"
+                sx={{
+                    position: "absolute",
+                    top: TIME_START_SECONDS,
+                    bottom: TIME_START_SECONDS,
+                    left: timePercent(viewport, playbackRange.inSeconds),
+                    width: timePercent(viewport, playbackRange.spanSeconds),
+                    bgcolor: PLAYBACK_RANGE_BACKGROUND,
+                    zIndex: PLAYBACK_RANGE_Z_INDEX,
+                    pointerEvents: "none",
+                }}
+            />
+            {([PLAYBACK_RANGE_HANDLE.IN, PLAYBACK_RANGE_HANDLE.OUT] as const).map((handle) => (
+                <Box
+                    aria-label={handle === PLAYBACK_RANGE_HANDLE.IN ? "播放入点" : "播放出点"}
+                    key={handle}
+                    onPointerDown={(event) => begin(handle, event)}
+                    onPointerUp={commit}
+                    sx={{
+                        position: "absolute",
+                        top: TIME_START_SECONDS,
+                        bottom: TIME_START_SECONDS,
+                        left: timePercent(
+                            viewport,
+                            handle === PLAYBACK_RANGE_HANDLE.IN ? playbackRange.inSeconds : playbackRange.outSeconds,
+                        ),
+                        borderLeft: 2,
+                        borderColor: PLAYBACK_RANGE_MARK_COLOR,
+                        cursor: "ew-resize",
+                        touchAction: "none",
+                        zIndex: PLAYBACK_RANGE_Z_INDEX,
+                    }}
+                />
+            ))}
+        </>
     );
 });
 
@@ -256,6 +378,7 @@ const SELECTION_LABEL: Record<TimelineSelectionKind, string> = {
     [TIMELINE_SELECTION_KIND.NONE]: "",
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: "成片片段",
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: "运镜片段",
+    [TIMELINE_SELECTION_KIND.MARKER]: "标记",
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: "镜头关键帧",
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: "走位轨迹",
     [TIMELINE_SELECTION_KIND.WALK_KEY]: "走位关键帧",
@@ -266,6 +389,7 @@ const SELECTION_CONTROLS: Record<TimelineSelectionKind, () => ReactNode> = {
     [TIMELINE_SELECTION_KIND.NONE]: () => null,
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: () => null,
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: () => null,
+    [TIMELINE_SELECTION_KIND.MARKER]: () => null,
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: () => null,
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: () => null,
     [TIMELINE_SELECTION_KIND.WALK_KEY]: () => <WalkKeyEasingControls />,
@@ -386,6 +510,7 @@ export const TimelinePanel = observer(function TimelinePanel() {
                 <Typography variant="overline">时间轴</Typography>
                 <TimelineZoomControls />
                 <Box sx={{ flex: 1 }} />
+                <PlaybackRangeControls />
                 <ProgramCutInButton />
             </Box>
             <Box
@@ -434,6 +559,7 @@ export const TimelinePanel = observer(function TimelinePanel() {
                                     {timeSeconds.toFixed(rulerDecimalPlaces(rulerTickStep(viewport)))} 秒
                                 </Typography>
                             ))}
+                            <RulerPlaybackRange rulerRef={rulerRef} />
                             <RulerPlayhead />
                         </Box>
                     </Box>
