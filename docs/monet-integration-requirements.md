@@ -1,7 +1,7 @@
 # Monet 宿主接入需求 — 截图/录制产物出口定制
 
 > 需求方：Monet（dm-tapnow）画布，经 `input-3d-director` 节点嵌入导演台。
-> 状态：R1 / R2 / R3 / R4 / R5 组件方已交付且 Monet 已接线（2026-09-02）；R6 待组件方交付。
+> 状态：R1 / R2 / R3 / R4 / R5 组件方已交付且 Monet 已接线（2026-09-02）；R6 组件方已交付，Monet 待注入配置（2026-09-03）。
 
 ## 背景
 
@@ -69,11 +69,11 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 - Monet 上传后创建独立的 `input-video` 节点，不与导演台建立连线
 - 点击明确的 Cancel 才丢弃视频且不创建节点
 
-### R6 Monet 产物出口反馈由宿主接管 —— ⏳待组件方交付
+### R6 Monet 产物出口反馈由宿主接管 —— ✅组件方已交付，Monet 待接线
 
 **目标**：Monet 场景下，截图或录制成功后只显示 Monet 的单条 Toast（「截图已添加到画布」/「视频已添加到画布」）；导演台内部不得再打开、保留或跳转到产物弹窗/预览面板。
 
-**建议契约**（沿用创建期固定的 `presentation` 入参）：
+**实际契约**（沿用创建期固定的 `presentation` 入参）：
 
 ```tsx
 <DirectorDesk
@@ -89,7 +89,7 @@ Monet 画布中的导演台节点，用户在导演台内编排场景后，截�
 - `host.reportCapture` 应允许返回 `Promise<void>`；组件方等待其完成，以便宿主能在上传 OSS 和创建资源节点成功后再显示成功 Toast。Promise 拒绝时由宿主显示失败反馈，组件方仅恢复采集状态。
 - 未配置或 `captureFeedback: "default"` 时，完全保留现有组件行为，保证非 Monet 宿主向后兼容。
 
-**Monet 已接线部分**：`reportCapture` 已异步完成上传和独立资源节点创建；成功后显示上述 Toast，失败时显示「产物导出到画布失败」。待 R6 交付后，Monet 将注入 `captureFeedback: "host"`。
+**Monet 待接线**：`reportCapture` 已异步完成上传和独立资源节点创建；组件方现会等待其 `Promise<void>` 完成。Monet 包装层注入 `captureFeedback: "host"` 后，成功显示上述 Toast，失败显示「产物导出到画布失败」。
 
 **验收**：
 
