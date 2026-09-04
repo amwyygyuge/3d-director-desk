@@ -7,6 +7,7 @@ import { DeterministicMp4Exporter } from "@/capture/DeterministicMp4Exporter";
 import type { DeterministicMp4ExportResult } from "@/capture/DeterministicMp4Exporter";
 import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 import type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
+import { NeutralShadingTransaction } from "@/capture/NeutralShadingTransaction";
 import type { Vec3 } from "@/core/SceneObject";
 
 const PNG_MIME_TYPE = "image/png";
@@ -179,11 +180,14 @@ export class CaptureService {
         readonly durationSeconds: number;
         readonly frameRate: number;
         readonly hideHelpers?: boolean;
+        readonly neutralShading?: boolean;
         readonly renderFrame: (timeSeconds: number) => void;
     }): Promise<DeterministicMp4ExportResult | null> {
         const handles = this.handles;
         if (!handles || this.exporter) return Promise.resolve(null);
         const handover = this.beginEditingVisualHandover({ shouldHide: options.hideHelpers === true });
+        const shading = new NeutralShadingTransaction();
+        if (options.neutralShading) shading.apply(handles.scene);
         const exporter = new DeterministicMp4Exporter({
             canvas: handles.gl.domElement,
             durationSeconds: options.durationSeconds,
@@ -194,7 +198,12 @@ export class CaptureService {
             },
         });
         this.exporter = exporter;
-        const videoExport = this.collectVideoExport({ exporter, handover });
+        const videoExport = this.collectVideoExport({
+            exporter,
+            handover,
+            shading,
+            neutralShading: options.neutralShading === true,
+        });
         this.activeVideoExport = videoExport;
         return videoExport;
     }
@@ -214,13 +223,16 @@ export class CaptureService {
     private async collectVideoExport(options: {
         readonly exporter: DeterministicMp4Exporter;
         readonly handover: EditingVisualHandover;
+        readonly shading: NeutralShadingTransaction;
+        readonly neutralShading: boolean;
     }): Promise<DeterministicMp4ExportResult | null> {
         try {
             const result = await options.exporter.export();
             this.recordedMimeType = result?.blob.type ?? null;
             return result;
         } finally {
-            this.restoreEditingVisuals(options.handover);
+            options.shading.restore();
+            this.restoreEditingVisuals(options.handover, options.neutralShading);
             this.exporter = null;
             this.activeVideoExport = null;
         }
@@ -238,20 +250,22 @@ export class CaptureService {
         return { transaction, isHandedOver: true };
     }
 
-    private restoreEditingVisuals(handover: EditingVisualHandover): void {
+    private restoreEditingVisuals(handover: EditingVisualHandover, forceRepaint = false): void {
         if (handover.isHandedOver) {
             for (const mask of this.masks) mask.restore();
         }
         this.currentHelperLifecycle = handover.transaction.restore();
         const isRepaintNeeded =
-            this.currentHelperLifecycle.hiddenHelperCount > 0 || (handover.isHandedOver && this.masks.size > 0);
+            forceRepaint ||
+            this.currentHelperLifecycle.hiddenHelperCount > 0 ||
+            (handover.isHandedOver && this.masks.size > 0);
         const handles = this.handles;
         if (!handles || !isRepaintNeeded) return;
         handles.gl.render(handles.scene, handles.camera);
     }
 
     /** 截取当前场景为 PNG blob;hideHelpers 默认开(gizmo/高亮框等编辑辅助物不入镜) */
-    async capture(options?: { hideHelpers?: boolean }): Promise<Blob | null> {
+    async capture(options?: { hideHelpers?: boolean; neutralShading?: boolean }): Promise<Blob | null> {
         const handles = this.handles;
         if (!handles) return null;
         const { gl, scene, camera } = handles;
@@ -267,13 +281,17 @@ export class CaptureService {
         }
 
         const handover = this.beginEditingVisualHandover({ shouldHide: options?.hideHelpers !== false });
+        const neutral = options?.neutralShading === true;
+        const shading = new NeutralShadingTransaction();
+        if (neutral) shading.apply(scene);
         try {
             gl.render(scene, camera);
             const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
             // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
             return dataUrlToBlob(dataUrl);
         } finally {
-            this.restoreEditingVisuals(handover);
+            shading.restore();
+            this.restoreEditingVisuals(handover, neutral);
         }
     }
 }

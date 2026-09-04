@@ -185,6 +185,18 @@ export type { PlayheadSource, VideoExportSource, VideoExportState } from "@/capt
 export { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
 export type { VideoExportSourcePolicy, VideoExportStage } from "@/capture/VideoExportSourcePolicy";
 export {
+    CAPTURE_PROFILE,
+    CAPTURE_PROFILE_IDS,
+    CAPTURE_SCOPE,
+    CAPTURE_SHADING,
+    captureProfile,
+    isCaptureProfileId,
+} from "@/capture/CaptureProfile";
+export type { CaptureProfile, CaptureProfileId, CaptureScope, CaptureShading } from "@/capture/CaptureProfile";
+export type { HandoffBundle, HandoffSubjectRef } from "@/capture/HandoffBundle";
+export { NeutralShadingTransaction } from "@/capture/NeutralShadingTransaction";
+export { CaptureBundleCommand, registerBundleCommands } from "@/command/bundleCommands";
+export {
     CancelVideoCaptureCommand,
     CaptureFrameCommand,
     CaptureStopVideoCommand,
@@ -313,8 +325,33 @@ export {
     registerPlacementCommands,
 } from "@/command/placementCommands";
 export type { PlacementRelation } from "@/command/placementCommands";
-export { registerStageCommands, STAGE_PRESET, StagePresetCompiler, StageSceneCommand } from "@/command/stageCommands";
-export type { StagePresetId, StageSlotBinding, StageSlotSpec } from "@/command/stageCommands";
+export {
+    DEFAULT_STAGE_COMPOSITION,
+    normalizeComposition,
+    registerStageCommands,
+    STAGE_COMPOSITION_RANGE,
+    STAGE_GAZE,
+    STAGE_PRESET,
+    StagePresetCompiler,
+    StageSceneCommand,
+} from "@/command/stageCommands";
+export type {
+    StageComposition,
+    StageCompositionInput,
+    StagePresetId,
+    StageSlotBinding,
+    StageGaze,
+    StageSlotSpec,
+} from "@/command/stageCommands";
+export { registerPromptCommands, SynthesizePromptQuery } from "@/command/promptCommands";
+export { ScenePromptSynthesizer, STAGE_ARRANGEMENT } from "@/prompt/ScenePromptSynthesizer";
+export type {
+    CompositionInput,
+    PromptFacets,
+    PromptSubjectInput,
+    StageArrangement,
+    SynthesizedPrompt,
+} from "@/prompt/ScenePromptSynthesizer";
 export {
     ApplyPosePresetCommand,
     ClearPoseCommand,

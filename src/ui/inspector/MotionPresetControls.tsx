@@ -19,7 +19,7 @@ import { ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
 import type { SubjectBounds } from "@/command/subjectBounds";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
+import { SHOT_SIZE_LABEL as SHOT_SIZE_LABELS } from "@/camera/CameraShot";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 

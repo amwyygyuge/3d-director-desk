@@ -10,7 +10,7 @@ import { useState } from "react";
 
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
-import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
+import { SHOT_SIZE_LABEL as SHOT_SIZE_LABELS } from "@/camera/CameraShot";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 

@@ -1,3 +1,5 @@
+import type { HandoffBundle } from "@/capture/HandoffBundle";
+
 export const CAPTURE_PRODUCT_KIND = {
     IMAGE: "image",
     VIDEO: "video",
@@ -15,4 +17,6 @@ export interface CaptureProduct {
     readonly requestId: string;
     /** 视频为实际录制秒数；截图为 null。 */
     readonly durationSeconds: number | null;
+    /** 交接包:合成文本条件 + 被摄体身份 + 呈现档;capture.bundle 产物携带,capture.frame/video 为空 */
+    readonly bundle?: HandoffBundle;
 }

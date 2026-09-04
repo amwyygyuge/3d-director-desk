@@ -29,7 +29,7 @@ import { QuickAuthorMotionCommand } from "@/command/cameraMotionCommands";
 import type { InspectorSectionProps } from "@/ui/inspector/Inspector";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
+import { SHOT_SIZE_LABEL as SHOT_SIZE_LABELS } from "@/camera/CameraShot";
 
 const MOTION_MOVES = Object.values(MOTION_MOVE) as readonly MotionMove[];
 const SHOT_SIZES = Object.values(SHOT_SIZE) as readonly ShotSize[];

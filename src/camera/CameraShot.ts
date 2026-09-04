@@ -22,6 +22,17 @@ export const SHOT_SIZE = {
 } as const;
 export type ShotSize = (typeof SHOT_SIZE)[keyof typeof SHOT_SIZE];
 
+/** 景别中文标签(唯一真相源:机位面板/运镜落幅/布景 prompt 合成共用,禁两处漂移) */
+export const SHOT_SIZE_LABEL: Record<ShotSize, string> = {
+    [SHOT_SIZE.EXTREME_LONG]: "大远景",
+    [SHOT_SIZE.LONG]: "远景",
+    [SHOT_SIZE.MEDIUM_LONG]: "中远景",
+    [SHOT_SIZE.MEDIUM]: "中景",
+    [SHOT_SIZE.MEDIUM_CLOSE]: "中近景",
+    [SHOT_SIZE.CLOSE_UP]: "特写",
+    [SHOT_SIZE.EXTREME_CLOSE_UP]: "大特写",
+};
+
 /**
  * 机位值对象:由属性值定义、不可变。
  * 一个机位 = 相机位置 + 注视目标 + 焦距(FOV)。

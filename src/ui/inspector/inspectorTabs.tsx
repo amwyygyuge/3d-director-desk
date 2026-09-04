@@ -17,6 +17,7 @@ import {
 import { ActorImageSection, hasActorProfile } from "@/ui/actor/ActorImageSection";
 import { PoseComposerSection } from "@/ui/pose/PoseComposerSection";
 import { QuickMotionSection } from "@/ui/inspector/QuickMotionSection";
+import { StagingSection, hasStageableScene } from "@/ui/inspector/StagingSection";
 import { ObjectMotionTrackSection } from "@/ui/inspector/ObjectMotionTrackInspector";
 import { TabSectionRegistry } from "@/ui/patterns/TabbedSections";
 import type { SceneObjectKind } from "@/core/SceneObject";
@@ -64,5 +65,11 @@ inspectorTabs.register("model", {
     visible: ({ stores, primaryId }) => hasActorProfile(stores, primaryId) || modelHasActionContent(stores, primaryId),
 });
 inspectorTabs.register("model", { id: "rig", label: "姿态", content: ModelPoseSection });
+inspectorTabs.register("model", {
+    id: "staging",
+    label: "布景",
+    content: StagingSection,
+    visible: ({ stores }) => hasStageableScene(stores),
+});
 inspectorTabs.register("light", { id: "properties", label: "属性", content: LightEntitySection });
 inspectorTabs.register("camera", { id: "transform", label: "变换", content: EntityTransformSection });

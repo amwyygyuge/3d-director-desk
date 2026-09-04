@@ -17,6 +17,20 @@ const SHOT_SIZE_PARAMS: Record<ShotSize, { distanceFactor: number; elevationDeg:
     [SHOT_SIZE.EXTREME_CLOSE_UP]: { distanceFactor: 0.75, elevationDeg: 0 },
 };
 
+/**
+ * 景别反查(与 ShotSizePresets 同一 distanceFactor 表,Rule of Two):
+ * 距离/半径比 → 最接近的景别档;布景 prompt 合成据此把机位距离读回景别语义。
+ */
+export function classifyShotSize(distanceFactor: number): ShotSize {
+    const sizes = Object.keys(SHOT_SIZE_PARAMS) as ShotSize[];
+    return sizes.reduce((best, size) =>
+        Math.abs(SHOT_SIZE_PARAMS[size].distanceFactor - distanceFactor) <
+        Math.abs(SHOT_SIZE_PARAMS[best].distanceFactor - distanceFactor)
+            ? size
+            : best,
+    );
+}
+
 /** 包围球半径下限:防零距离除零/贴脸 */
 const MIN_SUBJECT_RADIUS = 0.5;
 

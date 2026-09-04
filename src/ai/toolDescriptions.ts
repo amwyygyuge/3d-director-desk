@@ -20,7 +20,8 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "camera.remove-shot": "删除机位,连带清理其运镜片段与 Program 排期",
     "camera.frame-subject": "按景别(大远景~大特写七档)为一个或多个被摄体生成同框机位(联合包围球定距)",
     "camera.check-framing": "视锥同框断言:逐被摄体返回 inFrame 与 NDC 边距,负值即出画——布景验收不截图",
-    "scene.stage": "布景配方一键成组:对峙/并肩/三角/纵深,槽位绑定实体即可,距离按包围球半径自适应尺度",
+    "scene.stage":
+        "布景配方一键成组:对峙/并肩/三角/纵深,槽位绑定实体即可,距离按包围球半径自适应尺度;槽位可带 poseHint(引用 pose.presets 摆姿势)与 gaze(anchor/mutual/camera/point 定视线);可选 composition{balance 侧偏/spread 疏密/seed 抖动}打破对称同质;姿势+站位+视线一步聚合,撤销一步全组回原",
     // 运镜
     "motion.create-clip": "创建运镜片段(完整 CameraKey 序列,不落 Program)；时间落点按工程帧率量化",
     "motion.create-take":
@@ -101,6 +102,8 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "capture.video":
         "按工程帧率导出 MP4 参考视频(缺省当前播放范围，起点/时长可显式覆盖；source=viewport 明确导出当前编辑视角);异步产物按 requestId 对账",
     "capture.video-stop": "在当前帧边界结束 MP4 导出并交付产物",
+    "capture.bundle":
+        "按呈现档一键出交接产物:i2v-hero 中性首帧、v2v-clip 中性参考片,均封入合成文本条件与被摄体身份;成片喂视频模型,外观由模型接管,故走中性着色。异步产物按 requestId 对账,bundle 随产物元数据抵达",
     "capture.video-cancel": "放弃正在导出的 MP4 参考视频",
     // 演示与文档
     "desk.enter-presentation": "进入演示模式(纯净画布)",
@@ -125,4 +128,6 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "actor.presets.list": "体型预设目录",
     "desk.export-document": "导出整桌 JSON 文档(存档/接管/全量感知兜底)",
     "program.review": "成片巡检与镜头单:返回播放范围内的 Program 空档、缺失机位/运镜来源及可定位镜头列表",
+    "desk.synthesize-prompt":
+        "布景 prompt 合成:把当前被摄体/站位构型/景别/运镜/灯光编译为结构化 facet + 中文文本,供视频模型 i2v 首帧与 v2v 参考的文本条件使用",
 };

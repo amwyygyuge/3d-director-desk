@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx";
 
 import type { LiveCameraPose } from "@/capture/CaptureService";
 import type { VideoExportSource } from "@/capture/VideoExportSession";
+import type { HandoffBundle } from "@/capture/HandoffBundle";
 /** gizmo 模式:三态查表,工具条与控制器共享 */
 export const GIZMO_MODE = {
     TRANSLATE: "translate",
@@ -17,6 +18,8 @@ export interface CaptureMeta {
     readonly width: number;
     readonly height: number;
     readonly requestId: string;
+    /** 交接包(capture.bundle 产物携带);agent 与 RGB 产物按 requestId 一并取用 */
+    readonly bundle?: HandoffBundle;
 }
 /** 最近一次视频的溯源元数据(agent 按 requestId 对账 AI 连发/重试产物归属)。 */
 export interface VideoMeta {
@@ -24,6 +27,7 @@ export interface VideoMeta {
     readonly width: number;
     readonly height: number;
     readonly requestId: string;
+    readonly bundle?: HandoffBundle;
     readonly source: VideoExportSource;
 }
 const ALL_AXES_FREE: Record<GizmoAxis, boolean> = { x: true, y: true, z: true };

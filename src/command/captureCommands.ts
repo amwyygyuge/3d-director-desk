@@ -1,5 +1,6 @@
 import { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
 import type { CaptureProduct } from "@/capture/CaptureProduct";
+import type { HandoffBundle } from "@/capture/HandoffBundle";
 import { createId } from "@/core/createId";
 import { VIDEO_MAX_DURATION_SECONDS } from "@/capture/CaptureService";
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
@@ -40,6 +41,7 @@ type CaptureDelivery =
           readonly blob: Blob;
           readonly requestId: string;
           readonly durationSeconds: null;
+          readonly bundle?: HandoffBundle;
       }
     | {
           readonly kind: typeof CAPTURE_PRODUCT_KIND.VIDEO;
@@ -47,6 +49,7 @@ type CaptureDelivery =
           readonly requestId: string;
           readonly durationSeconds: number;
           readonly source: VideoExportSource;
+          readonly bundle?: HandoffBundle;
       };
 
 const CAPTURE_FRAME_FAILURE_PREFIX = "截图被拒绝:";
@@ -91,7 +94,7 @@ async function reportCaptureToHost(ctx: DirectorContext, product: CaptureProduct
 }
 
 /** 截图与视频共用产品出口，保证宿主协议与桌内预览的产物身份一致。 */
-async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDelivery): Promise<void> {
+export async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDelivery): Promise<void> {
     const size = ctx.capture.size ?? { width: 0, height: 0 };
     const blobUrl = URL.createObjectURL(delivery.blob);
     const product: CaptureProduct = {
@@ -102,6 +105,7 @@ async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDeli
         height: size.height,
         requestId: delivery.requestId,
         durationSeconds: delivery.durationSeconds,
+        ...(delivery.bundle ? { bundle: delivery.bundle } : {}),
     };
     if (ctx.presentation.showsInternalCaptureProducts) {
         void reportCaptureToHost(ctx, product);
@@ -119,6 +123,7 @@ async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDeli
                 timeSeconds: ctx.clock.time,
                 cameraPose: ctx.capture.readCameraPose(),
                 requestId: delivery.requestId,
+                ...(delivery.bundle ? { bundle: delivery.bundle } : {}),
                 ...size,
             });
             return;
@@ -127,6 +132,7 @@ async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDeli
                 durationSeconds: delivery.durationSeconds,
                 requestId: delivery.requestId,
                 source: delivery.source,
+                ...(delivery.bundle ? { bundle: delivery.bundle } : {}),
                 ...size,
             });
     }
@@ -166,7 +172,7 @@ export function requestFrameCapture({ dispatcher, context }: CaptureFrameRequest
 }
 
 /** 缺省导出当前入出点；显式起点/时长同时覆盖时才离开该范围。 */
-function videoRangeFor(
+export function videoRangeFor(
     ctx: DirectorContext,
     payload: CaptureVideoPayload,
 ): {
@@ -178,6 +184,56 @@ function videoRangeFor(
         startSeconds: payload.startSeconds ?? range.inSeconds,
         durationSeconds: payload.durationSeconds ?? range.spanSeconds,
     };
+}
+
+interface VideoExportRequest {
+    readonly source: VideoExportSource;
+    readonly requestId: string;
+    readonly startSeconds: number;
+    readonly durationSeconds: number;
+    readonly neutralShading?: boolean;
+    readonly bundle?: HandoffBundle;
+}
+
+/**
+ * 导出并交付 MP4(capture.video 与 capture.bundle 的 v2v 片段共用出口,Rule of Two)。
+ * neutralShading 走中性着色档;bundle 封进产物元数据,与 RGB 一并按 requestId 抵达 agent。
+ */
+export async function exportVideoAndDeliver(ctx: DirectorContext, request: VideoExportRequest): Promise<void> {
+    const policy = videoExportPolicyFor(request.source);
+    try {
+        policy.prepare(ctx);
+        ctx.clock.pause();
+        ctx.clock.seek(request.startSeconds);
+        ctx.videoExport.begin({
+            source: request.source,
+            requestId: request.requestId,
+            startSeconds: request.startSeconds,
+            durationSeconds: request.durationSeconds,
+        });
+        const outcome = await ctx.capture.exportVideo({
+            durationSeconds: request.durationSeconds,
+            frameRate: ctx.timeline.document.frameRate.fps,
+            hideHelpers: request.source === VIDEO_EXPORT_SOURCE.PROGRAM,
+            neutralShading: request.neutralShading === true,
+            renderFrame: (timeSeconds) => ctx.clock.seek(request.startSeconds + timeSeconds),
+        });
+        if (!outcome) return;
+        await deliverCaptureProduct(ctx, {
+            kind: CAPTURE_PRODUCT_KIND.VIDEO,
+            blob: outcome.blob,
+            requestId: request.requestId,
+            durationSeconds: outcome.durationSeconds,
+            source: request.source,
+            ...(request.bundle ? { bundle: request.bundle } : {}),
+        });
+    } catch {
+        ctx.ui.setApplicationNotice(MP4_EXPORT_FAILURE_MESSAGE);
+    } finally {
+        ctx.videoExport.finish();
+        ctx.clock.pause();
+        policy.restore(ctx);
+    }
 }
 
 /**
@@ -250,45 +306,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
         const source = this.payload.source ?? VIDEO_EXPORT_SOURCE.PROGRAM;
         const requestId = this.payload.requestId ?? createId();
         const range = videoRangeFor(ctx, this.payload);
-        void this.exportAndDeliver(ctx, { source, requestId, ...range });
-    }
-
-    private async exportAndDeliver(
-        ctx: DirectorContext,
-        options: {
-            readonly source: VideoExportSource;
-            readonly requestId: string;
-            readonly startSeconds: number;
-            readonly durationSeconds: number;
-        },
-    ): Promise<void> {
-        const policy = videoExportPolicyFor(options.source);
-        try {
-            policy.prepare(ctx);
-            ctx.clock.pause();
-            ctx.clock.seek(options.startSeconds);
-            ctx.videoExport.begin(options);
-            const outcome = await ctx.capture.exportVideo({
-                durationSeconds: options.durationSeconds,
-                frameRate: ctx.timeline.document.frameRate.fps,
-                hideHelpers: options.source === VIDEO_EXPORT_SOURCE.PROGRAM,
-                renderFrame: (timeSeconds) => ctx.clock.seek(options.startSeconds + timeSeconds),
-            });
-            if (!outcome) return;
-            await deliverCaptureProduct(ctx, {
-                kind: CAPTURE_PRODUCT_KIND.VIDEO,
-                blob: outcome.blob,
-                requestId: options.requestId,
-                durationSeconds: outcome.durationSeconds,
-                source: options.source,
-            });
-        } catch {
-            ctx.ui.setApplicationNotice(MP4_EXPORT_FAILURE_MESSAGE);
-        } finally {
-            ctx.videoExport.finish();
-            ctx.clock.pause();
-            policy.restore(ctx);
-        }
+        void exportVideoAndDeliver(ctx, { source, requestId, ...range });
     }
 }
 
