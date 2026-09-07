@@ -32,7 +32,10 @@ export { BoneCompatibilityChecker, BONE_MATCH_THRESHOLD } from "@/animation/Bone
 export type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
 export { AssetLibrary } from "@/assets/AssetLibrary";
 export { AnimationLibrary } from "@/assets/AnimationLibrary";
-export { ActionAsset } from "@/assets/ActionAsset";
+export { ACTION_LOOP_MODE, ActionAsset } from "@/assets/ActionAsset";
+export type { ActionLoopMode } from "@/assets/ActionAsset";
+export { ActionPerformance, MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
+export type { ActionPerformanceInit } from "@/animation/ActionPerformance";
 export { formatFromFileName, formatFromUrl, ModelAsset, MODEL_FORMAT } from "@/assets/ModelAsset";
 export type { ModelFormat } from "@/assets/ModelAsset";
 export { HostBridge, HostBridgeConfiguration, HostBridgeSession } from "@/bridge/HostBridge";
@@ -136,14 +139,20 @@ export type { WalkDraftInput } from "@/authoring/WalkDraftCompiler";
 export {
     DEFAULT_PRESET_DURATION_SECONDS,
     isOrbitDirection,
+    isOrbitMove,
     MOTION_DURATION_OPTIONS_SECONDS,
     MOTION_MOVE,
     MOTION_MOVE_LABEL,
     MOTION_PROGRAM_RANGE_DECIMALS,
     motionProgramRangeFor,
     MotionPresetCompiler,
+    ORBIT_DEFAULT_DEGREES,
+    ORBIT_DEGREES_OPTIONS,
     ORBIT_DIRECTION,
     ORBIT_MAX_DEGREES,
+    ORBIT_RADIUS_MAX_METERS,
+    ORBIT_RADIUS_MIN_METERS,
+    OrbitMotionParameters,
 } from "@/authoring/MotionPresetCompiler";
 export type {
     MotionMove,
@@ -152,6 +161,7 @@ export type {
     MotionProgramRange,
     MotionProgramRangeOptions,
     OrbitDirection,
+    OrbitMotionParametersInit,
 } from "@/authoring/MotionPresetCompiler";
 export { MotionAuthoringStore, VIEW_MODE } from "@/store/MotionAuthoringStore";
 export type { ViewMode } from "@/store/MotionAuthoringStore";
@@ -196,7 +206,12 @@ export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "@/document/DeskDocu
 export { DOCUMENT_IMPORT_ISSUE_CODE, DocumentImportService } from "@/document/DocumentImportService";
 export { ProgramReviewQuery, registerReviewCommands } from "@/command/reviewCommands";
 export { PROGRAM_REVIEW_ISSUE_KIND, ProgramReviewService } from "@/review/ProgramReviewService";
-export type { ProgramReviewIssue, ProgramReviewIssueKind, ProgramReviewReport, ProgramReviewShot } from "@/review/ProgramReviewService";
+export type {
+    ProgramReviewIssue,
+    ProgramReviewIssueKind,
+    ProgramReviewReport,
+    ProgramReviewShot,
+} from "@/review/ProgramReviewService";
 export { AssetCatalog } from "@/assets/catalog/AssetCatalog";
 export { BuiltinAssetProvider } from "@/assets/catalog/AssetProvider";
 export type { AssetProvider } from "@/assets/catalog/AssetProvider";
@@ -208,7 +223,12 @@ export {
     AssetsPlaceCommand,
     registerAssetCatalogCommands,
 } from "@/command/assetCatalogCommands";
-export type { DeskDocument, DeskDocumentAction, DeskDocumentMotion } from "@/document/DeskDocument";
+export type {
+    DeskDocument,
+    DeskDocumentAction,
+    DeskDocumentActionMount,
+    DeskDocumentMotion,
+} from "@/document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "@/command/navigationCommands";
 export {
     AdjustLightCommand,
@@ -284,6 +304,7 @@ export {
 } from "@/command/cameraCommands";
 export {
     MountActionCommand,
+    SetActionRangeCommand,
     registerActionCommands,
     TransportPauseCommand,
     TransportPlayCommand,

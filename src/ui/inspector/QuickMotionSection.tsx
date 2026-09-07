@@ -9,17 +9,18 @@ import { observer } from "mobx-react-lite";
 import { useState } from "react";
 
 import {
-    FOLLOW_MOVE_LABEL,
-    isOrientationMove,
-    MOTION_MOVE,
     DEFAULT_PRESET_DURATION_SECONDS,
+    FOLLOW_MOVE_LABEL,
+    isOrbitMove,
+    isOrientationMove,
     MOTION_DURATION_OPTIONS_SECONDS,
+    MOTION_MOVE,
     MOTION_MOVE_LABEL,
     MOTION_PROGRAM_RANGE_DECIMALS,
     motionProgramRangeFor,
-    ORBIT_DIRECTION,
+    OrbitMotionParameters,
 } from "@/authoring/MotionPresetCompiler";
-import type { MotionMove, OrbitDirection } from "@/authoring/MotionPresetCompiler";
+import type { MotionMove } from "@/authoring/MotionPresetCompiler";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
 import { FOLLOW_APPROACH } from "@/camera/CameraFollowTrack";
@@ -27,14 +28,13 @@ import type { FollowApproach } from "@/camera/CameraFollowTrack";
 import { EASING } from "@/motion/EasingCurve";
 import { QuickAuthorMotionCommand } from "@/command/cameraMotionCommands";
 import type { InspectorSectionProps } from "@/ui/inspector/Inspector";
+import { OrbitMotionParameterControls } from "@/ui/inspector/OrbitMotionParameterControls";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
 
 const MOTION_MOVES = Object.values(MOTION_MOVE) as readonly MotionMove[];
 const SHOT_SIZES = Object.values(SHOT_SIZE) as readonly ShotSize[];
-/** 环绕转角档位:90 瞥一眼 / 180 半周 / 360 整圈 */
-const ORBIT_DEGREES_OPTIONS = [90, 180, 360] as const;
 const PROGRAM_START_SECONDS = 0;
 const PRESET_GRID_COLUMNS = "repeat(2, minmax(0, 1fr))";
 const NO_FOLLOW = "none";
@@ -50,16 +50,6 @@ const FOLLOW_APPROACHES = Object.values(FOLLOW_APPROACH) as readonly FollowAppro
 const DEFAULT_FOLLOW_MOVE = MOTION_MOVE.HOLD;
 const DEFAULT_FREE_MOVE = MOTION_MOVE.ORBIT;
 
-const ORBIT_DIRECTION_LABELS: Record<OrbitDirection, string> = {
-    [ORBIT_DIRECTION.CW]: "顺时针",
-    [ORBIT_DIRECTION.CCW]: "逆时针",
-};
-
-/** 环绕类语汇(转角/方向参数只对有方位语义的语汇显示) */
-function isOrbitLike(move: MotionMove): boolean {
-    return move === MOTION_MOVE.ORBIT || move === MOTION_MOVE.SPIRAL;
-}
-
 /**
  * 快速运镜分区(模型检查器):选中模型 → 景别 + 语汇 → 一步成片。
  * 编排收敛在 motion.quick-author 聚合命令(追加 Program 末尾/超时长自动扩轴);
@@ -71,10 +61,9 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
     const [shotSize, setShotSize] = useState<ShotSize>(SHOT_SIZE.MEDIUM);
     const [approach, setApproach] = useState<FollowApproach | null>(FOLLOW_APPROACH.BACK);
     const [move, setMove] = useState<MotionMove>(DEFAULT_FOLLOW_MOVE);
-    const [degrees, setDegrees] = useState<number>(ORBIT_DEGREES_OPTIONS[2]);
-    const [direction, setDirection] = useState<OrbitDirection>(ORBIT_DIRECTION.CW);
+    const [orbitParameters, setOrbitParameters] = useState(() => new OrbitMotionParameters());
     const [durationSeconds, setDurationSeconds] = useState<number>(DEFAULT_PRESET_DURATION_SECONDS);
-    const orbitLike = isOrbitLike(move);
+    const orbitLike = isOrbitMove(move);
     if (!entity) return null;
     const programEndTimeSeconds = stores.motion.program.clips.reduce(
         (endTimeSeconds, clip) => Math.max(endTimeSeconds, clip.endTimeSeconds),
@@ -100,7 +89,7 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
                     shotSize,
                     move,
                     durationSeconds,
-                    ...(orbitLike ? { degrees, direction } : {}),
+                    ...(orbitLike ? { orbit: orbitParameters.toJSON() } : {}),
                     ...(approach ? { follow: { approach } } : {}),
                     easing: EASING.SMOOTH,
                 },
@@ -164,34 +153,7 @@ export const QuickMotionSection = observer(function QuickMotionSection({ primary
                     </Button>
                 ))}
             </Box>
-            {orbitLike && (
-                <Box sx={{ display: "grid", gridTemplateColumns: PRESET_GRID_COLUMNS, gap: 1 }}>
-                    <Select
-                        size="small"
-                        value={degrees}
-                        onChange={(event) => setDegrees(Number(event.target.value))}
-                        aria-label="环绕转角"
-                    >
-                        {ORBIT_DEGREES_OPTIONS.map((option) => (
-                            <MenuItem key={option} value={option}>
-                                环绕 {option}°
-                            </MenuItem>
-                        ))}
-                    </Select>
-                    <Select
-                        size="small"
-                        value={direction}
-                        onChange={(event) => setDirection(event.target.value as OrbitDirection)}
-                        aria-label="环绕方向"
-                    >
-                        {Object.entries(ORBIT_DIRECTION_LABELS).map(([value, label]) => (
-                            <MenuItem key={value} value={value}>
-                                {label}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </Box>
-            )}
+            {orbitLike && <OrbitMotionParameterControls value={orbitParameters} onChange={setOrbitParameters} />}
             <Select
                 size="small"
                 value={durationSeconds}

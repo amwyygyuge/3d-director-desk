@@ -8,12 +8,6 @@ export interface BoneTreeNodeDto {
     readonly name: string;
     readonly children: readonly BoneTreeNodeDto[];
 }
-
-export interface SemanticBoneCandidateDto {
-    readonly label: string;
-    readonly boneKey: BoneKey;
-}
-
 export interface SkeletonDiscoveryDto {
     readonly objectId: string;
     readonly ready: boolean;
@@ -21,8 +15,15 @@ export interface SkeletonDiscoveryDto {
     readonly semanticCandidates: readonly SemanticBoneCandidateDto[];
 }
 
+export interface SemanticBoneCandidateDto {
+    readonly label: string;
+    readonly boneKey: BoneKey;
+}
+
 interface SkeletonRuntime {
     readonly bones: ReadonlyMap<BoneKey, Bone>;
+    readonly boneKeysByName: ReadonlyMap<string, BoneKey>;
+    readonly baselineRotationsByKey: ReadonlyMap<BoneKey, QuaternionTuple>;
     readonly rootBones: readonly Bone[];
     readonly indexedBones: readonly Bone[];
     readonly baselineRotations: readonly QuaternionTuple[];
@@ -62,13 +63,23 @@ export class SkeletonRuntimeRegistry {
             if (node.type === "Bone" && node.parent?.type !== "Bone") rootBones.push(node as Bone);
         });
         const bones = new Map<BoneKey, Bone>();
+        const boneKeysByName = new Map<string, BoneKey>();
         const indexedBones: Bone[] = [];
         const baselineRotations: QuaternionTuple[] = [];
+        const baselineRotationsByKey = new Map<BoneKey, QuaternionTuple>();
         const semanticKeys = new Map<string, BoneKey[]>();
         const createTree = (bone: Bone, key: BoneKey): BoneTreeNodeDto => {
             bones.set(key, bone);
             indexedBones.push(bone);
-            baselineRotations.push([bone.quaternion.x, bone.quaternion.y, bone.quaternion.z, bone.quaternion.w]);
+            if (bone.name && !boneKeysByName.has(bone.name)) boneKeysByName.set(bone.name, key);
+            const baseline: QuaternionTuple = [
+                bone.quaternion.x,
+                bone.quaternion.y,
+                bone.quaternion.z,
+                bone.quaternion.w,
+            ];
+            baselineRotations.push(baseline);
+            baselineRotationsByKey.set(key, baseline);
             const label = labelFor(bone.name);
             if (label) {
                 const candidates = semanticKeys.get(label) ?? [];
@@ -92,6 +103,8 @@ export class SkeletonRuntimeRegistry {
         if (previous) this.indexedRuntimes.splice(this.indexedRuntimes.indexOf(previous), 1);
         const runtime: SkeletonRuntime = {
             bones,
+            boneKeysByName,
+            baselineRotationsByKey,
             rootBones: Object.freeze(rootBones),
             indexedBones,
             baselineRotations,
@@ -113,6 +126,13 @@ export class SkeletonRuntimeRegistry {
 
     getBone(objectId: string, key: BoneKey): Bone | undefined {
         return this.runtimes.get(objectId)?.bones.get(key);
+    }
+
+    boneKeyForName(objectId: string, boneName: string): BoneKey | undefined {
+        return this.runtimes.get(objectId)?.boneKeysByName.get(boneName);
+    }
+    baselineRotationFor(objectId: string, key: BoneKey): QuaternionTuple | undefined {
+        return this.runtimes.get(objectId)?.baselineRotationsByKey.get(key);
     }
 
     restoreRotations(objectId: string): void {

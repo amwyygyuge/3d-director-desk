@@ -1,6 +1,8 @@
 import { reaction } from "mobx";
 
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { AnimationBinder } from "@/animation/AnimationBinder";
+import type { ActionPreviewController } from "@/animation/ActionPreviewController";
 import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 import type { CameraMotionSink, MotionPreviewSource } from "@/camera/CameraMotionSampler";
 import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
@@ -47,6 +49,19 @@ export class PlaybackCoordinator {
         this.poseLayer.apply(entity.id, entity.pose);
     };
 
+    private readonly blendActionForEntity = (entity: SceneObject): void => {
+        const performance = entity.actionPerformance;
+        if (!performance) return;
+        const attackProgress = performance.attackProgressAt(this.sampleTimeSeconds);
+        const releaseProgress =
+            this.binder.loopModeFor(entity.id) === ACTION_LOOP_MODE.ONCE
+                ? performance.releaseProgressAt(this.sampleTimeSeconds)
+                : null;
+        const baseWeight = attackProgress !== null ? 1 - attackProgress : releaseProgress;
+        if (baseWeight === null) return;
+        this.binder.blendActionWithBasePose(entity.id, entity.pose, baseWeight);
+    };
+
     constructor(
         private readonly timeline: TimelineStore,
         private readonly scene: SceneManager,
@@ -54,6 +69,7 @@ export class PlaybackCoordinator {
         motion: CameraMotionStore,
         camera: CameraStore,
         private readonly binder: AnimationBinder,
+        private readonly actionPreview: ActionPreviewController,
         private readonly skeletons: SkeletonRuntimeRegistry,
         preview: MotionPreviewSource,
     ) {
@@ -121,18 +137,24 @@ export class PlaybackCoordinator {
         const entity = this.scene.getEntity(targetId);
 
         if (!runtime || !entity) return;
+        const timeSeconds = this.currentTime();
+        this.sampleTimeSeconds = timeSeconds;
         this.skeletons.restoreRotations(targetId);
-        this.binder.setTime(this.currentTime());
-        const transformTrack = this.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
-        if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.currentTime(), runtime))
-            this.restoreObject(targetId, false);
         this.applyPose(targetId);
+        this.binder.setTime(timeSeconds);
+        this.sampleTransformForEntity(entity);
+        this.blendActionForEntity(entity);
+        this.actionPreview.applyCurrentFrame();
         this.invalidate();
     }
     restoreAll(): void {
+        const timeSeconds = this.currentTime();
+        this.sampleTimeSeconds = timeSeconds;
         this.restorePoseBaselines();
-        this.binder.setTime(this.currentTime());
         this.scene.forEachEntity(this.applyPoseForEntity);
+        this.binder.setTime(timeSeconds);
+        this.scene.forEachEntity(this.blendActionForEntity);
+        this.actionPreview.applyCurrentFrame();
         this.motionSampler.restore();
         this.invalidate();
     }
@@ -156,18 +178,20 @@ export class PlaybackCoordinator {
     }
 
     /**
-     * 单次采样的定序:动作先按墙钟对齐 → 变换/轨迹求值 → 步频同步的对象用弧长相位覆写动作 →
-     * 机位采样 → 姿态层。
+     * 单次采样的定序:常驻姿势先写底层 → 动作按墙钟对齐 → 变换/轨迹求值与步频同步 →
+     * 进入/回收段与常驻姿势混合 → 局部预览覆盖 → 机位采样。
      * 相位必须在变换之后:它是「已走弧长」的函数,而弧长只有采样完轨迹才知道;
      * 机位采样必须在变换之后:跟拍要读到本帧的新位置,否则镜头永远慢一帧。
      */
     private sample(timeSeconds: number): void {
         this.restorePoseBaselines();
-        this.binder.setTime(timeSeconds);
         this.sampleTimeSeconds = timeSeconds;
-        this.scene.forEachEntity(this.sampleTransformForEntity);
-        this.motionSampler.sampleCurrent(timeSeconds);
         this.scene.forEachEntity(this.applyPoseForEntity);
+        this.binder.setTime(timeSeconds);
+        this.scene.forEachEntity(this.sampleTransformForEntity);
+        this.scene.forEachEntity(this.blendActionForEntity);
+        this.actionPreview.applyCurrentFrame();
+        this.motionSampler.sampleCurrent(timeSeconds);
         this.invalidate();
     }
 

@@ -1,5 +1,7 @@
 import { ASSET_CATEGORY, ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
 import type { AssetEntry } from "@/assets/catalog/AssetEntry";
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import { DEFAULT_ACTION_RELEASE_SECONDS, MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import { createId } from "@/core/createId";
 import { finiteTransform } from "@/core/SceneObject";
@@ -57,6 +59,10 @@ const ASSETS_MOUNT_CONTRACT: PayloadContract = {
     properties: {
         assetId: { type: "string" },
         objectId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
+        attackSeconds: { type: "number" },
+        releaseSeconds: { type: "number" },
     },
     required: ["assetId", "objectId"],
 };
@@ -147,6 +153,47 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
 interface AssetsMountPayload {
     readonly assetId: string;
     readonly objectId: string;
+    readonly startTimeSeconds?: number;
+    readonly durationSeconds?: number;
+    readonly attackSeconds?: number;
+    readonly releaseSeconds?: number;
+}
+
+function assetsMountScheduleIssues(
+    ctx: DirectorContext,
+    payload: AssetsMountPayload,
+    entry: AssetEntry,
+): readonly string[] {
+    const frameDuration = ctx.timeline.document.frameRate.frameDurationSeconds;
+    const startTimeSeconds = payload.startTimeSeconds;
+    const durationSeconds = payload.durationSeconds;
+    const attackSeconds = payload.attackSeconds;
+    const releaseSeconds = payload.releaseSeconds;
+    const recoveryEndTimeSeconds =
+        startTimeSeconds !== undefined && durationSeconds !== undefined
+            ? startTimeSeconds +
+              durationSeconds +
+              (entry.loopMode === ACTION_LOOP_MODE.ONCE ? (releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS) : 0)
+            : null;
+    return [
+        ...(startTimeSeconds !== undefined && (!Number.isFinite(startTimeSeconds) || startTimeSeconds < 0)
+            ? ["动作开始时间必须是 ≥0 的有限秒数"]
+            : []),
+        ...(durationSeconds !== undefined &&
+        (!Number.isFinite(durationSeconds) ||
+            durationSeconds < Math.max(frameDuration, MINIMUM_ACTION_DURATION_SECONDS))
+            ? ["动作时长必须至少覆盖一帧"]
+            : []),
+        ...(attackSeconds !== undefined && (!Number.isFinite(attackSeconds) || attackSeconds < 0)
+            ? ["动作进入时长必须是 ≥0 的有限秒数"]
+            : []),
+        ...(releaseSeconds !== undefined && (!Number.isFinite(releaseSeconds) || releaseSeconds < 0)
+            ? ["动作回收时长必须是 ≥0 的有限秒数"]
+            : []),
+        ...(recoveryEndTimeSeconds !== null && recoveryEndTimeSeconds > ctx.timeline.document.duration
+            ? ["动作时段和回收不能超出时间轴时长"]
+            : []),
+    ];
 }
 
 /** 按目录条目挂载动作资产(clip 置备 + 运行时就绪等待;骨骼不兼容由动作挂载校验拦截) */
@@ -163,7 +210,7 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
         if (!entry) return [`资源 "${this.payload.assetId}" 不在目录(先 assets.list 发现)`];
         if (entry.kind !== ASSET_KIND.ACTION) return [`资源 "${this.payload.assetId}" 不是动作(模型用 assets.place)`];
         if (!ctx.scene.manager.getEntity(this.payload.objectId)) return [`对象 "${this.payload.objectId}" 不存在`];
-        return [];
+        return [...assetsMountScheduleIssues(ctx, this.payload, entry)];
     }
 
     execute(ctx: DirectorContext): void {
@@ -178,10 +225,25 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                         name: entry.name,
                         url: entry.url,
                         clipName: entry.clipName,
+                        loopMode: entry.loopMode ?? ACTION_LOOP_MODE.ONCE,
+                        ...(entry.trimStartSeconds === undefined ? {} : { trimStartSeconds: entry.trimStartSeconds }),
+                        ...(entry.trimEndSeconds === undefined ? {} : { trimEndSeconds: entry.trimEndSeconds }),
                     },
-                    { signal },
+                    { signal, targetObjectId: this.payload.objectId },
                 );
-                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id, { signal });
+                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id, {
+                    signal,
+                    ...(this.payload.startTimeSeconds !== undefined
+                        ? { startTimeSeconds: this.payload.startTimeSeconds }
+                        : {}),
+                    ...(this.payload.durationSeconds !== undefined
+                        ? { durationSeconds: this.payload.durationSeconds }
+                        : {}),
+                    ...(this.payload.attackSeconds !== undefined ? { attackSeconds: this.payload.attackSeconds } : {}),
+                    ...(this.payload.releaseSeconds !== undefined
+                        ? { releaseSeconds: this.payload.releaseSeconds }
+                        : {}),
+                });
                 if (!signal.aborted) {
                     const timeoutNotice = mounted ? null : `动作挂载等待运行时超时:${this.payload.objectId}`;
                     if (timeoutNotice) ctx.ui.setApplicationNotice(timeoutNotice);

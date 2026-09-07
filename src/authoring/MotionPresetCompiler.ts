@@ -64,6 +64,11 @@ export function isOrientationMove(move: MotionMove): boolean {
     return move === MOTION_MOVE.PAN || move === MOTION_MOVE.TILT;
 }
 
+/** 环绕类语汇:以被摄体或注视点为轴心旋转。 */
+export function isOrbitMove(move: MotionMove): boolean {
+    return move === MOTION_MOVE.ORBIT || move === MOTION_MOVE.SPIRAL;
+}
+
 /** 环绕方向:从被摄体正上方俯视的顺/逆时针 */
 export const ORBIT_DIRECTION = { CW: "cw", CCW: "ccw" } as const;
 export type OrbitDirection = (typeof ORBIT_DIRECTION)[keyof typeof ORBIT_DIRECTION];
@@ -111,10 +116,8 @@ export interface MotionPresetRequest {
     /** 落幅景别(复用 ShotSizePresets) */
     readonly shotSize?: ShotSize;
     readonly easing?: EasingCurve;
-    /** 环绕类语汇(orbit/spiral)的转角(度);缺省 90,上限 360 */
-    readonly degrees?: number;
-    /** 环绕类语汇的方向;缺省 cw(俯视顺时针) */
-    readonly direction?: OrbitDirection;
+    /** 环绕与螺旋的路径配置;缺省时使用导演默认值。 */
+    readonly orbit?: OrbitMotionParametersInit;
 }
 
 export interface MotionPresetContext {
@@ -130,9 +133,15 @@ const SWING_RADIANS = Math.PI / 9;
 /** 横移/升降的默认幅度相对被摄距离 */
 const TRAVEL_RATIO = 0.35;
 /** 环绕默认转角(度) */
-const ORBIT_DEFAULT_DEGREES = 90;
+export const ORBIT_DEFAULT_DEGREES = 90;
 /** 环绕角度上限:整圈 */
 export const ORBIT_MAX_DEGREES = 360;
+/** 环绕半径下限:防止圆心贴脸导致构图不可用。 */
+export const ORBIT_RADIUS_MIN_METERS = 0.2;
+/** 环绕半径上限:覆盖演播室尺度的远景环绕。 */
+export const ORBIT_RADIUS_MAX_METERS = 50;
+/** 环绕类 UI 可选转角:90° 瞥一眼 / 180° 半周 / 360° 整圈。 */
+export const ORBIT_DEGREES_OPTIONS = [90, 180, 360] as const;
 /** 环绕类保形密度:约每 30° 一枚关键帧(圆弧靠多点保形,不靠手柄硬掰) */
 const ORBIT_DEGREES_PER_KEY = 30;
 /** 弧线推近关键点数:弧线+推近双变化,三键保形 */
@@ -146,12 +155,89 @@ const DOLLY_ZOOM_RATIO = 0.4;
 const MIN_DISTANCE = 0.001;
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
-/** 环绕类语汇的参数解析:方向取符号,键数按角度自适应 */
-function orbitParamsOf(request: MotionPresetRequest): { readonly radians: number; readonly keyCount: number } {
-    const degrees = request.degrees ?? ORBIT_DEFAULT_DEGREES;
-    const keyCount = Math.max(Math.round(degrees / ORBIT_DEGREES_PER_KEY) + 1, 2);
-    const sign = ORBIT_DIRECTION_SIGN[request.direction ?? ORBIT_DIRECTION.CW];
-    return { radians: degrees * DEGREES_TO_RADIANS * sign, keyCount };
+/**
+ * 环绕路径值对象:方向、转角与圆半径(米)收为同一份可序列化语义。
+ *
+ * radiusMeters 为空时沿用起幅机位到轴心的当前水平距离;一旦显式给值,
+ * 所有关键帧都位于该半径的圆上,不再做收束/扩张过渡。
+ */
+export interface OrbitMotionParametersInit {
+    readonly degrees?: number;
+    readonly direction?: OrbitDirection;
+    readonly radiusMeters?: number | null;
+}
+
+export class OrbitMotionParameters {
+    readonly degrees: number;
+    readonly direction: OrbitDirection;
+    readonly radiusMeters: number | null;
+
+    constructor(init: OrbitMotionParametersInit = {}) {
+        const degrees = init.degrees ?? ORBIT_DEFAULT_DEGREES;
+        const direction = init.direction ?? ORBIT_DIRECTION.CW;
+        const radiusMeters = init.radiusMeters ?? null;
+        const isValid =
+            Number.isFinite(degrees) &&
+            degrees > 0 &&
+            degrees <= ORBIT_MAX_DEGREES &&
+            isOrbitDirection(direction) &&
+            (radiusMeters === null ||
+                (Number.isFinite(radiusMeters) &&
+                    radiusMeters >= ORBIT_RADIUS_MIN_METERS &&
+                    radiusMeters <= ORBIT_RADIUS_MAX_METERS));
+        if (!isValid) throw new Error("OrbitMotionParameters: 环绕参数无效");
+        this.degrees = degrees;
+        this.direction = direction;
+        this.radiusMeters = radiusMeters;
+        Object.freeze(this);
+    }
+
+    static isValid(value: unknown): value is OrbitMotionParametersInit {
+        if (value === undefined) return true;
+        if (typeof value !== "object" || value === null) return false;
+        const candidate = value as {
+            readonly degrees?: unknown;
+            readonly direction?: unknown;
+            readonly radiusMeters?: unknown;
+        };
+        const hasValidDegrees =
+            candidate.degrees === undefined ||
+            (typeof candidate.degrees === "number" &&
+                Number.isFinite(candidate.degrees) &&
+                candidate.degrees > 0 &&
+                candidate.degrees <= ORBIT_MAX_DEGREES);
+        const hasValidDirection = candidate.direction === undefined || isOrbitDirection(candidate.direction);
+        const hasValidRadius =
+            candidate.radiusMeters === undefined ||
+            candidate.radiusMeters === null ||
+            (typeof candidate.radiusMeters === "number" &&
+                Number.isFinite(candidate.radiusMeters) &&
+                candidate.radiusMeters >= ORBIT_RADIUS_MIN_METERS &&
+                candidate.radiusMeters <= ORBIT_RADIUS_MAX_METERS);
+        return hasValidDegrees && hasValidDirection && hasValidRadius;
+    }
+
+    with(patch: OrbitMotionParametersInit): OrbitMotionParameters {
+        return new OrbitMotionParameters({ ...this.toJSON(), ...patch });
+    }
+
+    toJSON(): OrbitMotionParametersInit {
+        return {
+            degrees: this.degrees,
+            direction: this.direction,
+            ...(this.radiusMeters === null ? {} : { radiusMeters: this.radiusMeters }),
+        };
+    }
+}
+
+/** 环绕类语汇的参数解析:方向取符号,键数按角度自适应。 */
+function orbitParamsOf(request: MotionPresetRequest): {
+    readonly orbit: OrbitMotionParameters;
+    readonly keyCount: number;
+} {
+    const orbit = new OrbitMotionParameters(request.orbit);
+    const keyCount = Math.max(Math.round(orbit.degrees / ORBIT_DEGREES_PER_KEY) + 1, 2);
+    return { orbit, keyCount };
 }
 
 const shotSizePresets = new ShotSizePresets();
@@ -179,6 +265,29 @@ function rotateAroundY(point: Vec3, pivot: Vec3, radians: number): Vec3 {
     const cos = Math.cos(radians);
     const sin = Math.sin(radians);
     return [pivot[0] + offsetX * cos - offsetZ * sin, point[1], pivot[2] + offsetX * sin + offsetZ * cos];
+}
+
+/** 环绕半径语义:显式给值即所有关键帧都在同一个圆上;空值沿用起幅到轴心的水平距离。 */
+function orbitPositionAt(
+    shot: CameraShot,
+    pivot: Vec3,
+    radians: number,
+    radiusMeters: number | null,
+    progress: number,
+): Vec3 {
+    const offsetX = shot.position[0] - pivot[0];
+    const offsetZ = shot.position[2] - pivot[2];
+    const horizontalRadius = Math.hypot(offsetX, offsetZ);
+    const targetRadius = radiusMeters ?? Math.max(horizontalRadius, MIN_DISTANCE);
+    const orbitStart: Vec3 =
+        horizontalRadius < MIN_DISTANCE
+            ? [pivot[0] + targetRadius, shot.position[1], pivot[2]]
+            : [
+                  pivot[0] + (offsetX / horizontalRadius) * targetRadius,
+                  shot.position[1],
+                  pivot[2] + (offsetZ / horizontalRadius) * targetRadius,
+              ];
+    return rotateAroundY(orbitStart, pivot, radians * progress);
 }
 
 function rightVector(shot: CameraShot): Vec3 {
@@ -235,21 +344,33 @@ const MOVE_RESOLVERS: Record<MotionMove, MoveResolver> = {
     },
     [MOTION_MOVE.ORBIT]: ({ shot, subject }, request) => {
         const pivot = subject?.center ?? shot.target;
-        const { radians, keyCount } = orbitParamsOf(request);
+        const { orbit, keyCount } = orbitParamsOf(request);
         return Array.from({ length: keyCount }, (_, index) => {
-            const step = (radians * index) / (keyCount - 1);
-            return { position: rotateAroundY(shot.position, pivot, step), target: pivot };
+            const progress = index / (keyCount - 1);
+            return {
+                position: orbitPositionAt(
+                    shot,
+                    pivot,
+                    orbit.degrees * DEGREES_TO_RADIANS * ORBIT_DIRECTION_SIGN[orbit.direction],
+                    orbit.radiusMeters,
+                    progress,
+                ),
+                target: pivot,
+            };
         });
     },
     [MOTION_MOVE.SPIRAL]: ({ shot, subject }, request) => {
         const pivot = subject?.center ?? shot.target;
-        const { radians, keyCount } = orbitParamsOf(request);
+        const { orbit, keyCount } = orbitParamsOf(request);
         const rise = length(subtract(shot.target, shot.position)) * SPIRAL_RISE_RATIO;
+        const radians = orbit.degrees * DEGREES_TO_RADIANS * ORBIT_DIRECTION_SIGN[orbit.direction];
         return Array.from({ length: keyCount }, (_, index) => {
-            const t = index / (keyCount - 1);
-            const rotated = rotateAroundY(shot.position, pivot, radians * t);
-            const lifted: Vec3 = [rotated[0], rotated[1] + rise * t, rotated[2]];
-            return { position: lifted, target: pivot };
+            const progress = index / (keyCount - 1);
+            const orbitPosition = orbitPositionAt(shot, pivot, radians, orbit.radiusMeters, progress);
+            return {
+                position: [orbitPosition[0], orbitPosition[1] + rise * progress, orbitPosition[2]],
+                target: pivot,
+            };
         });
     },
     [MOTION_MOVE.ARC_DOLLY]: ({ shot, subject }) => {
@@ -286,7 +407,11 @@ const MOVE_RESOLVERS: Record<MotionMove, MoveResolver> = {
 export class MotionPresetCompiler {
     compile(request: MotionPresetRequest, context: MotionPresetContext): readonly CameraKeyJSON[] {
         const poses = MOVE_RESOLVERS[request.move](context, request);
-        const landing = this.landingPose(request, context);
+        const hasExplicitOrbitRadius =
+            isOrbitMove(request.move) &&
+            request.orbit?.radiusMeters !== undefined &&
+            request.orbit.radiusMeters !== null;
+        const landing = hasExplicitOrbitRadius ? null : this.landingPose(request, context);
         const resolved: readonly MovePose[] = landing ? [...poses.slice(0, -1), landing] : poses;
         const divisor = Math.max(resolved.length - 1, 1);
         return resolved.map((pose, index) => ({

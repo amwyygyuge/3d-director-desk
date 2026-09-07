@@ -1,5 +1,12 @@
 import { BONE_MATCH_THRESHOLD } from "@/animation/BoneCompatibilityChecker";
 import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
+import {
+    ActionPerformance,
+    DEFAULT_ACTION_ATTACK_SECONDS,
+    DEFAULT_ACTION_RELEASE_SECONDS,
+} from "@/animation/ActionPerformance";
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import type { ActionAsset } from "@/assets/ActionAsset";
 import type { AnimationClip, Object3D } from "three";
 import { quantizeSeconds } from "@/command/timelineCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -55,18 +62,88 @@ function capability(
     return { type, version: "1", kind: "command", permissions: [permission], appliesWhen, payload };
 }
 
-interface MountActionPayload {
+interface ActionSchedulePayload {
+    /** 缺省 = 当前播放头;排期落点按工程帧率量化 */
+    readonly startTimeSeconds?: number;
+    /** 缺省 = clip 原始时长;排期时长按工程帧率量化 */
+    readonly durationSeconds?: number;
+    /** 从常驻姿势进入动作的过渡时长;缺省 0.2s */
+    readonly attackSeconds?: number;
+    /** once 结束后回常驻姿势的回收时长;缺省 0.25s */
+    readonly releaseSeconds?: number;
+}
+
+interface MountActionPayload extends ActionSchedulePayload {
     objectId: string;
     actionId: string;
 }
+
+const ACTION_SCHEDULE_PROPERTIES = {
+    startTimeSeconds: { type: "number" },
+    durationSeconds: { type: "number" },
+    attackSeconds: { type: "number" },
+    releaseSeconds: { type: "number" },
+} as const;
 
 const MOUNT_ACTION_CONTRACT: PayloadContract = {
     properties: {
         objectId: { type: "string" },
         actionId: { type: "string" },
+        ...ACTION_SCHEDULE_PROPERTIES,
     },
     required: ["objectId", "actionId"],
 };
+
+interface ActionScheduleValues {
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
+function scheduleValuesFor(
+    ctx: DirectorContext,
+    payload: ActionSchedulePayload,
+    action: ActionAsset,
+    trailingSeconds: number,
+): ActionScheduleValues {
+    const durationSeconds = quantizeSeconds(ctx, payload.durationSeconds ?? action.duration);
+    const latestStart = Math.max(0, ctx.timeline.document.duration - durationSeconds - trailingSeconds);
+    const startTimeSeconds = quantizeSeconds(
+        ctx,
+        payload.startTimeSeconds === undefined ? Math.min(ctx.clock.time, latestStart) : payload.startTimeSeconds,
+    );
+    return { startTimeSeconds, durationSeconds };
+}
+
+function scheduleIssues(
+    ctx: DirectorContext,
+    payload: ActionSchedulePayload,
+    values: ActionScheduleValues,
+    loopMode: ActionAsset["loopMode"],
+    releaseSeconds: number,
+): readonly string[] {
+    const frameDuration = ctx.timeline.document.frameRate.frameDurationSeconds;
+    const endTimeSeconds = values.startTimeSeconds + values.durationSeconds;
+    const recoveryEndTimeSeconds =
+        loopMode === ACTION_LOOP_MODE.ONCE ? endTimeSeconds + releaseSeconds : endTimeSeconds;
+    return [
+        ...(payload.startTimeSeconds !== undefined &&
+        (!Number.isFinite(payload.startTimeSeconds) || payload.startTimeSeconds < 0)
+            ? ["动作开始时间必须是 ≥0 的有限秒数"]
+            : []),
+        ...(payload.durationSeconds !== undefined && !Number.isFinite(payload.durationSeconds)
+            ? ["动作时长必须是有限秒数"]
+            : []),
+        ...(payload.attackSeconds !== undefined &&
+        (!Number.isFinite(payload.attackSeconds) || payload.attackSeconds < 0)
+            ? ["动作进入时长必须是 ≥0 的有限秒数"]
+            : []),
+        ...(payload.releaseSeconds !== undefined &&
+        (!Number.isFinite(payload.releaseSeconds) || payload.releaseSeconds < 0)
+            ? ["动作回收时长必须是 ≥0 的有限秒数"]
+            : []),
+        ...(values.durationSeconds < frameDuration ? ["动作时长必须至少覆盖一帧"] : []),
+        ...(recoveryEndTimeSeconds > ctx.timeline.document.duration ? ["动作时段和回收不能超出时间轴时长"] : []),
+    ];
+}
 
 interface PreviewActionPayload {
     readonly objectId: string;
@@ -92,10 +169,10 @@ const ACTION_PREVIEW_SEEK_CONTRACT: PayloadContract = {
 function previewTargetFor(
     ctx: DirectorContext,
     objectId: string,
-): { readonly durationSeconds: number; readonly objectId: string } | null {
+): { readonly durationSeconds: number; readonly objectId: string; readonly loopMode: ActionAsset["loopMode"] } | null {
     const actionId = ctx.scene.manager.getEntity(objectId)?.actionId;
     const action = actionId ? ctx.animations.actions.find((candidate) => candidate.id === actionId) : undefined;
-    return action ? { objectId, durationSeconds: action.duration } : null;
+    return action ? { objectId, durationSeconds: action.duration, loopMode: action.loopMode } : null;
 }
 
 /** 动作挂载:骨骼预检不过 → 结构化诊断(匹配率/缺失轨道/可用动作清单),AI 可据此重试 */
@@ -111,10 +188,25 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         if (!entity) return [`对象 "${this.payload.objectId}" 不存在`];
         if (entity.kind !== "model") return [`对象 "${this.payload.objectId}" 不是模型,无法挂动作`];
+        const action = ctx.animations.actions.find((candidate) => candidate.id === this.payload.actionId);
         const clip = ctx.animations.getClip(this.payload.actionId);
-        if (!clip) return [`动作 "${this.payload.actionId}" 不在动作库`];
+        if (!action || !clip) return [`动作 "${this.payload.actionId}" 不在动作库`];
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
         if (!runtime) return [`对象 "${this.payload.objectId}" 运行时未就绪(模型加载中?)`];
+        const releaseSeconds = this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS;
+        const scheduleIssuesFound = scheduleIssues(
+            ctx,
+            this.payload,
+            scheduleValuesFor(
+                ctx,
+                this.payload,
+                action,
+                action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0,
+            ),
+            action.loopMode,
+            releaseSeconds,
+        );
+        if (scheduleIssuesFound.length > 0) return [...scheduleIssuesFound];
 
         const check = boneCompatibilityIndex.check(runtime, clip);
         if (check.ok) return [];
@@ -133,21 +225,48 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
 
     execute(ctx: DirectorContext): void {
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
+        const action = ctx.animations.actions.find((candidate) => candidate.id === this.payload.actionId);
         const clip = ctx.animations.getClip(this.payload.actionId);
-        if (!runtime || !clip) return;
-        ctx.binder.mount(this.payload.objectId, runtime, clip);
-        ctx.scene.setObjectAction(this.payload.objectId, this.payload.actionId);
-        ctx.actionPreview.prepare({ objectId: this.payload.objectId, durationSeconds: clip.duration });
-        ctx.playback.requestRender();
+        if (!runtime || !action || !clip) return;
+        const schedule = scheduleValuesFor(
+            ctx,
+            this.payload,
+            action,
+            action.loopMode === ACTION_LOOP_MODE.ONCE
+                ? (this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS)
+                : 0,
+        );
+        const performance = new ActionPerformance({
+            actionId: action.id,
+            startTimeSeconds: schedule.startTimeSeconds,
+            durationSeconds: schedule.durationSeconds,
+            attackSeconds: this.payload.attackSeconds ?? DEFAULT_ACTION_ATTACK_SECONDS,
+            releaseSeconds: this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS,
+        });
+        ctx.binder.mount(this.payload.objectId, runtime, clip, performance, action.loopMode);
+        ctx.scene.setObjectAction(this.payload.objectId, performance);
+        ctx.actionPreview.prepare({
+            objectId: this.payload.objectId,
+            durationSeconds: clip.duration,
+            loopMode: action.loopMode,
+        });
+        ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
-        const previousActionId = ctx.scene.manager.getEntity(this.payload.objectId)?.actionId;
-        return previousActionId
+        const previous = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformance;
+        return previous
             ? [
                   {
                       type: MountActionCommand.TYPE,
-                      payload: { objectId: this.payload.objectId, actionId: previousActionId },
+                      payload: {
+                          objectId: this.payload.objectId,
+                          actionId: previous.actionId,
+                          startTimeSeconds: previous.startTimeSeconds,
+                          durationSeconds: previous.durationSeconds,
+                          attackSeconds: previous.attackSeconds,
+                          releaseSeconds: previous.releaseSeconds,
+                      },
                   },
               ]
             : [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
@@ -179,14 +298,115 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
         ctx.binder.unmount(this.payload.objectId);
         ctx.actionPreview.clear(this.payload.objectId);
         ctx.scene.setObjectAction(this.payload.objectId, null);
+        ctx.timelineSelection.forget(this.payload.objectId);
         if (ctx.binder.isEmpty) ctx.clock.pause();
-        ctx.playback.requestRender();
+        ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const actionId = ctx.scene.manager.getEntity(this.payload.objectId)?.actionId;
-        return actionId
-            ? [{ type: MountActionCommand.TYPE, payload: { objectId: this.payload.objectId, actionId } }]
+        const performance = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformance;
+        return performance
+            ? [
+                  {
+                      type: MountActionCommand.TYPE,
+                      payload: {
+                          objectId: this.payload.objectId,
+                          actionId: performance.actionId,
+                          startTimeSeconds: performance.startTimeSeconds,
+                          durationSeconds: performance.durationSeconds,
+                          attackSeconds: performance.attackSeconds,
+                          releaseSeconds: performance.releaseSeconds,
+                      },
+                  },
+              ]
+            : null;
+    }
+}
+
+interface SetActionRangePayload {
+    readonly objectId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+    readonly attackSeconds?: number;
+    readonly releaseSeconds?: number;
+}
+
+const SET_ACTION_RANGE_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        ...ACTION_SCHEDULE_PROPERTIES,
+    },
+    required: ["objectId", "startTimeSeconds", "durationSeconds"],
+};
+
+/** 动作排期重定时:时间轴段条拖拽与 AI 共用的唯一写入口。 */
+export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload> {
+    static readonly TYPE = "action.set-range";
+    readonly type = SetActionRangeCommand.TYPE;
+
+    constructor(readonly payload: SetActionRangePayload) {
+        super();
+    }
+    validate(ctx: DirectorContext): string[] {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const action = entity?.actionId
+            ? ctx.animations.actions.find((candidate) => candidate.id === entity.actionId)
+            : undefined;
+        const performance = entity?.actionPerformance;
+        if (!performance || !action) return [`对象 "${this.payload.objectId}" 没有已挂载动作`];
+        const releaseSeconds = this.payload.releaseSeconds ?? performance.releaseSeconds;
+        return [
+            ...scheduleIssues(
+                ctx,
+                this.payload,
+                scheduleValuesFor(
+                    ctx,
+                    this.payload,
+                    action,
+                    action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0,
+                ),
+                action.loopMode,
+                releaseSeconds,
+            ),
+        ];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const current = entity?.actionPerformance;
+        if (!current) return;
+        const transitioned = current.withTransitionSeconds(
+            this.payload.attackSeconds === undefined
+                ? current.attackSeconds
+                : quantizeSeconds(ctx, this.payload.attackSeconds),
+            this.payload.releaseSeconds === undefined
+                ? current.releaseSeconds
+                : quantizeSeconds(ctx, this.payload.releaseSeconds),
+        );
+        const next = transitioned.withRange(
+            quantizeSeconds(ctx, this.payload.startTimeSeconds),
+            quantizeSeconds(ctx, this.payload.durationSeconds),
+        );
+        ctx.scene.setObjectAction(this.payload.objectId, next);
+        ctx.binder.setScheduleFor(this.payload.objectId, next);
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const current = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformance;
+        return current
+            ? [
+                  {
+                      type: SetActionRangeCommand.TYPE,
+                      payload: {
+                          objectId: this.payload.objectId,
+                          startTimeSeconds: current.startTimeSeconds,
+                          durationSeconds: current.durationSeconds,
+                          attackSeconds: current.attackSeconds,
+                          releaseSeconds: current.releaseSeconds,
+                      },
+                  },
+              ]
             : null;
     }
 }
@@ -405,6 +625,11 @@ export function registerActionCommands(dispatcher: CommandDispatcher): void {
         UnmountActionCommand.TYPE,
         (payload: UnmountActionPayload) => new UnmountActionCommand(payload),
         capability(UnmountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, UNMOUNT_ACTION_CONTRACT),
+    );
+    dispatcher.register(
+        SetActionRangeCommand.TYPE,
+        (payload: SetActionRangePayload) => new SetActionRangeCommand(payload),
+        capability(SetActionRangeCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, SET_ACTION_RANGE_CONTRACT),
     );
     dispatcher.register(
         ActionPreviewPlayCommand.TYPE,

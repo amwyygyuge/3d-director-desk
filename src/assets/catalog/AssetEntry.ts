@@ -1,5 +1,7 @@
 import { MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
+import { isActionLoopMode } from "@/assets/ActionAsset";
+import type { ActionLoopMode } from "@/assets/ActionAsset";
 
 /** 资源大类:模型 / 动作 */
 export const ASSET_KIND = {
@@ -16,13 +18,14 @@ export const ASSET_SOURCE = {
 } as const;
 export type AssetSource = (typeof ASSET_SOURCE)[keyof typeof ASSET_SOURCE];
 
-/** 模型分类(开放词表,常用先行):人/动物/植物/家具/道具 */
+/** 资源分类(开放词表,常用先行):人/动物/植物/家具/道具/动作语义。 */
 export const ASSET_CATEGORY = {
     HUMAN: "character.human",
     ANIMAL: "character.animal",
     PLANT: "plant",
     FURNITURE: "furniture",
     PROP: "prop",
+    ACTION_PERFORMANCE: "action.performance",
 } as const;
 
 /** 人偶资产声明:存在即表示该模型放置后带人偶画像(可改色/体型/姿势)。 */
@@ -58,6 +61,11 @@ export interface AssetEntry {
     readonly skeletonFamily: string | null;
     /** 动作资产:目标 clip 名(多 clip 文件内定位) */
     readonly clipName?: string | null;
+    /** 动作资产:loop = 无缝循环;once = 播完进入回收段。 */
+    readonly loopMode?: ActionLoopMode | null;
+    /** 动作资产:去除源文件开头/结尾的静态参考帧;单位秒。 */
+    readonly trimStartSeconds?: number | null;
+    readonly trimEndSeconds?: number | null;
     /** 模型资产:内嵌动作名清单(AI 选型可读) */
     readonly embeddedClips?: readonly string[];
     /** 人偶资产:放置时注入默认画像;缺省即普通模型,不具备外观/体型/姿势能力 */
@@ -73,6 +81,10 @@ const ASSET_SOURCES: readonly string[] = Object.values(ASSET_SOURCE);
 const MODEL_FORMATS: readonly string[] = Object.values(MODEL_FORMAT);
 
 /** 外部输入(宿主注入/catalog.json)的条目校验;不合格条目丢弃并计数 */
+function isNonNegativeFinite(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 export function parseAssetEntry(value: unknown): AssetEntry | null {
     if (typeof value !== "object" || value === null) return null;
     if (!("id" in value) || !("kind" in value) || !("url" in value)) return null;
@@ -88,6 +100,17 @@ export function parseAssetEntry(value: unknown): AssetEntry | null {
         return null;
     if (entry.skeletonFamily !== null && typeof entry.skeletonFamily !== "string") return null;
     if (!Array.isArray(entry.tags)) return null;
-    if (entry.actor !== undefined && entry.actor !== null && !isAssetActorDefaults(entry.actor)) return null;
+    if (
+        (entry.actor !== undefined && entry.actor !== null && !isAssetActorDefaults(entry.actor)) ||
+        (entry.loopMode !== undefined && entry.loopMode !== null && !isActionLoopMode(entry.loopMode)) ||
+        (entry.trimStartSeconds !== undefined &&
+            entry.trimStartSeconds !== null &&
+            !isNonNegativeFinite(entry.trimStartSeconds)) ||
+        (entry.trimEndSeconds !== undefined &&
+            entry.trimEndSeconds !== null &&
+            !isNonNegativeFinite(entry.trimEndSeconds))
+    ) {
+        return null;
+    }
     return entry;
 }

@@ -6,6 +6,7 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
 import {
+    isOrbitMove,
     MOTION_DURATION_OPTIONS_SECONDS,
     MOTION_MOVE,
     MOTION_MOVE_LABEL,
@@ -19,6 +20,7 @@ import { ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
 import type { SubjectBounds } from "@/command/subjectBounds";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { OrbitMotionParameterControls } from "@/ui/inspector/OrbitMotionParameterControls";
 import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
@@ -82,6 +84,7 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
     const landingShotSize = motionAuthoring.landingShotSize;
     const landing = landingPreviewFor(stores, cameraId, landingShotSize, subject);
     const isAuthorable = durationSeconds > 0;
+    const orbitParameters = motionAuthoring.orbitParameters;
 
     const authorMotion = (move: MotionMove): void => {
         if (!isAuthorable) return;
@@ -96,6 +99,7 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                     ...(hasSubject ? { subjectId } : {}),
                     ...(landing ? { shotSize: landingShotSize } : {}),
                     easing: EASING.SMOOTH,
+                    ...(isOrbitMove(move) ? { orbit: orbitParameters.toJSON() } : {}),
                 },
             },
             stores,
@@ -175,6 +179,10 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
                     </MenuItem>
                 ))}
             </Select>
+            <OrbitMotionParameterControls
+                value={orbitParameters}
+                onChange={(parameters) => motionAuthoring.setOrbitParameters(parameters)}
+            />
             <Typography variant="caption" color="text.secondary">
                 创建后自动切入 Program 成片输出轨，将占用成片{" "}
                 {programRange.startTimeSeconds.toFixed(MOTION_PROGRAM_RANGE_DECIMALS)}s –{" "}

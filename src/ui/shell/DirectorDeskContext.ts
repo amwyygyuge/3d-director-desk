@@ -192,8 +192,6 @@ export function createDirectorDeskStores(options?: {
             return timeline.document.playbackRange.outSeconds;
         },
     });
-    const binder = new AnimationBinder();
-    const actionPreview = new ActionPreviewController(binder);
     const scene = new SceneStore();
     const materials = new ObjectMaterialRegistry();
     const actorRuntime = new ActorRuntime(scene.manager, materials);
@@ -202,6 +200,8 @@ export function createDirectorDeskStores(options?: {
     capture.registerMask(selectionTint);
     const poseGrounding = new PoseGroundingService(scene.manager, actorRuntime);
     const skeletons = new SkeletonRuntimeRegistry();
+    const binder = new AnimationBinder(skeletons);
+    const actionPreview = new ActionPreviewController(binder);
     const posePresets = new PosePresetLibrary();
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);
@@ -217,6 +217,7 @@ export function createDirectorDeskStores(options?: {
         motion,
         camera,
         binder,
+        actionPreview,
         skeletons,
         motionAuthoring,
     );
@@ -225,6 +226,7 @@ export function createDirectorDeskStores(options?: {
     const documentImports = new DocumentImportService();
     const playheadDisplay = new PlayheadDisplay(clock);
     const videoExport = new VideoExportSession(playheadDisplay);
+    const animations = new AnimationLibrary();
     // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
     void catalog.loadProvider(new BuiltinAssetProvider(), "builtin", lifecycle.signal);
     for (const provider of options?.assetProviders ?? []) {
@@ -250,7 +252,7 @@ export function createDirectorDeskStores(options?: {
         timelineSelection: new TimelineSelectionStore(),
         viewportCamera,
         viewportOrbit,
-        timelineLayout: new TimelineLayout(motion, timeline),
+        timelineLayout: new TimelineLayout(motion, timeline, scene.manager, animations),
         keyframeAuthoring: new KeyframeAuthoringService(),
         snapResolver: new SnapResolver(),
         playheadDisplay,
@@ -258,7 +260,7 @@ export function createDirectorDeskStores(options?: {
         host,
         presentation: new DeskShellPresentation(options?.presentation),
         history,
-        animations: new AnimationLibrary(),
+        animations,
         skeletons,
         poseGrounding,
         actorRuntime,

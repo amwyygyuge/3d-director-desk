@@ -262,6 +262,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     execute(ctx: DirectorContext): void {
         ctx.playback.restoreObject(this.payload.id);
         for (const track of ctx.timeline.removeObjectTracks(this.payload.id)) ctx.timelineSelection.forget(track.id);
+        ctx.timelineSelection.forget(this.payload.id);
         ctx.binder.unmount(this.payload.id);
         ctx.scene.removeObject(this.payload.id);
         ctx.selection.remove(this.payload.id);
@@ -353,6 +354,13 @@ interface SceneEntityDescription {
     readonly loadState: EntityLoadState;
     /** 挂载的 AnimationLibrary action id；未挂载为 null。 */
     readonly mountedActionId: string | null;
+    /** 动作时间轴排期;未挂载为 null。 */
+    readonly actionSchedule: {
+        readonly startTimeSeconds: number;
+        readonly durationSeconds: number;
+        readonly attackSeconds: number;
+        readonly releaseSeconds: number;
+    } | null;
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
 }
 
@@ -390,6 +398,14 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
         transform: toJS(entity.transform),
         loadState: entityLoadState(ctx, entity),
         mountedActionId: entity.actionId,
+        actionSchedule: entity.actionPerformance
+            ? {
+                  startTimeSeconds: entity.actionPerformance.startTimeSeconds,
+                  durationSeconds: entity.actionPerformance.durationSeconds,
+                  attackSeconds: entity.actionPerformance.attackSeconds,
+                  releaseSeconds: entity.actionPerformance.releaseSeconds,
+              }
+            : null,
         bounds,
     };
 }

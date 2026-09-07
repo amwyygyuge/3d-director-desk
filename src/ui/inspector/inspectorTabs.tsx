@@ -59,7 +59,7 @@ inspectorTabs.register("model", {
 });
 inspectorTabs.register("model", {
     id: "pose",
-    label: "姿势",
+    label: "常驻姿势",
     content: PoseComposerSection,
     visible: ({ stores, primaryId }) => hasActorProfile(stores, primaryId) || modelHasActionContent(stores, primaryId),
 });

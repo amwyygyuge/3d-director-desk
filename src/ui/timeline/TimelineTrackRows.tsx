@@ -70,8 +70,10 @@ const TRACK_BORDER_COLOR = "divider";
 const PROGRAM_TRACK_ACCENT = "primary.main";
 const KEYFRAME_TRACK_ACCENT = "secondary.main";
 const MOTION_TRACK_ACCENT = "primary.main";
+const ACTION_TRACK_ACCENT = "success.main";
 const PROGRAM_BAR_COLOR = "secondary.main";
 const MOTION_BAR_COLOR = "primary.main";
+const ACTION_BAR_COLOR = "success.main";
 const TRANSFORM_BAR_COLOR = "secondary.main";
 const TRACK_DATA_ATTRIBUTE = "[data-timeline-track]";
 const BAR_TRANSFORM_ORIGIN = "left center";
@@ -117,7 +119,8 @@ type TrackAccent =
     | typeof MARKER_TRACK_ACCENT
     | typeof PROGRAM_TRACK_ACCENT
     | typeof KEYFRAME_TRACK_ACCENT
-    | typeof MOTION_TRACK_ACCENT;
+    | typeof MOTION_TRACK_ACCENT
+    | typeof ACTION_TRACK_ACCENT;
 
 /** 行组件只收身份 id:选中态自取自写,不经父组件回调(props 边界纪律) */
 interface TimelineProjectedRowProps {
@@ -395,6 +398,7 @@ function trackAccent(kind: TimelineRowKind): TrackAccent {
         [TIMELINE_ROW_KIND.MARKER]: MARKER_TRACK_ACCENT,
         [TIMELINE_ROW_KIND.PROGRAM]: PROGRAM_TRACK_ACCENT,
         [TIMELINE_ROW_KIND.MOTION]: MOTION_TRACK_ACCENT,
+        [TIMELINE_ROW_KIND.ACTION]: ACTION_TRACK_ACCENT,
         [TIMELINE_ROW_KIND.TRANSFORM]: KEYFRAME_TRACK_ACCENT,
     };
     return accents[kind];
@@ -479,6 +483,10 @@ function rangeCommandFor(
                 ? PROGRAM_RANGE_COMMAND[clip.source.kind]({ clipId: clip.id, source: clip.source, range })
                 : null;
         },
+        [TIMELINE_BAR_KIND.ACTION]: () => ({
+            type: "action.set-range",
+            payload: { objectId: bar.id, ...range },
+        }),
         [TIMELINE_BAR_KIND.TRANSFORM]: () => ({
             type: "timeline.retime-track",
             payload: { trackId: bar.id, ...range },
@@ -492,6 +500,7 @@ const BAR_SELECTION: Record<TimelineBarKind, (stores: DirectorDeskStores, bar: T
     [TIMELINE_BAR_KIND.MOTION]: (stores, bar) => stores.timelineSelection.select(TimelineSelection.motionClip(bar.id)),
     [TIMELINE_BAR_KIND.PROGRAM]: (stores, bar) =>
         stores.timelineSelection.select(TimelineSelection.programClip(bar.id)),
+    [TIMELINE_BAR_KIND.ACTION]: (stores, bar) => stores.timelineSelection.select(TimelineSelection.actionClip(bar.id)),
     [TIMELINE_BAR_KIND.TRANSFORM]: (stores, bar) =>
         stores.timelineSelection.select(TimelineSelection.walkTrack(bar.id)),
 };
@@ -512,12 +521,14 @@ function activateMotionBar(stores: DirectorDeskStores, bar: TimelineBar): void {
 const BAR_ACTIVATION: Record<TimelineBarKind, (stores: DirectorDeskStores, bar: TimelineBar) => void> = {
     [TIMELINE_BAR_KIND.MOTION]: activateMotionBar,
     [TIMELINE_BAR_KIND.PROGRAM]: selectTimelineBar,
+    [TIMELINE_BAR_KIND.ACTION]: selectTimelineBar,
     [TIMELINE_BAR_KIND.TRANSFORM]: selectTimelineBar,
 };
 
 const BAR_COLOR: Record<TimelineBarKind, string> = {
     [TIMELINE_BAR_KIND.MOTION]: MOTION_BAR_COLOR,
     [TIMELINE_BAR_KIND.PROGRAM]: PROGRAM_BAR_COLOR,
+    [TIMELINE_BAR_KIND.ACTION]: ACTION_BAR_COLOR,
     [TIMELINE_BAR_KIND.TRANSFORM]: TRANSFORM_BAR_COLOR,
 };
 
@@ -1278,6 +1289,33 @@ const MotionTrackBody = observer(function MotionTrackBody({ rowId }: { readonly 
     );
 });
 
+const ActionTrackBody = observer(function ActionTrackBody({ rowId }: { readonly rowId: string }) {
+    const stores = useDirectorDeskStores();
+    const { open } = useTimelineContextMenu();
+    const row = projectedRow(stores, rowId);
+    if (!row) return null;
+    return (
+        <Box
+            data-timeline-track
+            onContextMenu={(event) => {
+                stores.timelineSelection.clear();
+                open(event, trackTimeAtPointer(stores, event.currentTarget, event.clientX).timeSeconds);
+            }}
+            sx={{
+                position: "relative",
+                height: TRACK_HEIGHT_PX,
+                bgcolor: (theme) => alpha(theme.palette.success.main, TRACK_BACKGROUND_ALPHA),
+            }}
+        >
+            {row.bars
+                .filter((bar) => bar.kind === TIMELINE_BAR_KIND.ACTION)
+                .map((bar) => (
+                    <TimelineClipBar key={bar.id} barId={bar.id} />
+                ))}
+        </Box>
+    );
+});
+
 const TransformTrackBody = observer(function TransformTrackBody({ rowId }: { readonly rowId: string }) {
     const stores = useDirectorDeskStores();
     const { open } = useTimelineContextMenu();
@@ -1314,6 +1352,7 @@ const ROW_CONTENT: Record<TimelineRowKind, (rowId: string) => ReactNode> = {
     [TIMELINE_ROW_KIND.MARKER]: (rowId) => <MarkerTrackBody rowId={rowId} />,
     [TIMELINE_ROW_KIND.PROGRAM]: (rowId) => <ProgramTrackBody rowId={rowId} />,
     [TIMELINE_ROW_KIND.MOTION]: (rowId) => <MotionTrackBody rowId={rowId} />,
+    [TIMELINE_ROW_KIND.ACTION]: (rowId) => <ActionTrackBody rowId={rowId} />,
     [TIMELINE_ROW_KIND.TRANSFORM]: (rowId) => <TransformTrackBody rowId={rowId} />,
 };
 

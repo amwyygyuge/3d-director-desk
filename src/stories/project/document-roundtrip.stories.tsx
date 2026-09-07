@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { COMMAND_ERROR } from "@/command/CommandDispatcher";
 import { provisionAction } from "@/command/actionProvisioning";
 import { ProgramReviewQuery } from "@/command/reviewCommands";
@@ -60,8 +61,7 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
         shotSize: "medium",
         move: "orbit",
         durationSeconds: 3,
-        degrees: 360,
-        direction: "ccw",
+        orbit: { degrees: 360, direction: "ccw" },
     });
     dispatchOk(stores, "scene.set-lighting-mode", { mode: LIGHTING_MODE.CUSTOM });
     dispatchOk(stores, "object.place", {
@@ -73,7 +73,12 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
     await waitRuntime(stores, FOX_ID);
     await waitRuntime(stores, FOX_PARTNER_ID);
     // 同一动作挂两个实体:回归「导出只记录首个挂载实体」的缺口
-    const action = await provisionAction(stores, { name: ACTION_NAME, url: TEST_ASSETS.fox, clipName: FOX_CLIP_NAME });
+    const action = await provisionAction(stores, {
+        name: ACTION_NAME,
+        url: TEST_ASSETS.fox,
+        clipName: FOX_CLIP_NAME,
+        loopMode: ACTION_LOOP_MODE.LOOP,
+    });
     dispatchOk(stores, "action.mount", { objectId: FOX_ID, actionId: action.id });
     dispatchOk(stores, "action.mount", { objectId: FOX_PARTNER_ID, actionId: action.id });
 }
@@ -85,11 +90,14 @@ function exportDocument(stores: DirectorDeskStores): DeskDocument {
     // JSON 往返一次:可序列化纪律的直接验证(阶段四地基)
     const document = JSON.parse(JSON.stringify(exported.value)) as DeskDocument;
     const action = document.actions.find((entry) => entry.name === ACTION_NAME);
+    const mountedObjectIds = action?.mountedOn.map((mount) => mount.objectId) ?? [];
     assertAcceptance(
-        action?.mountedOn.length === 2 &&
-            action.mountedOn.includes(FOX_ID) &&
-            action.mountedOn.includes(FOX_PARTNER_ID),
-        "导出的动作挂载未覆盖全部实体",
+        action?.loopMode === ACTION_LOOP_MODE.LOOP &&
+            action.mountedOn.length === 2 &&
+            mountedObjectIds.includes(FOX_ID) &&
+            mountedObjectIds.includes(FOX_PARTNER_ID) &&
+            action.mountedOn.every((mount) => mount.startTimeSeconds >= 0 && mount.durationSeconds > 0),
+        "导出的动作挂载未覆盖全部实体或缺少排期",
     );
     assertAcceptance(document.lighting.mode === LIGHTING_MODE.CUSTOM, "导出的文档缺少灯光模式");
     return document;

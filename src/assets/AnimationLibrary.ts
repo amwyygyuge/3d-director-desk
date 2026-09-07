@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx";
 import type { AnimationClip } from "three";
 
 import { ActionAsset } from "@/assets/ActionAsset";
+import type { ActionLoopMode } from "@/assets/ActionAsset";
 import { createId } from "@/core/createId";
 
 /**
@@ -17,7 +18,14 @@ export class AnimationLibrary {
         makeAutoObservable<AnimationLibrary, "clips">(this, { clips: false });
     }
 
-    register(init: { name: string; url: string; clip: AnimationClip }): { action: ActionAsset; duplicate: boolean } {
+    register(init: {
+        name: string;
+        url: string;
+        clip: AnimationClip;
+        loopMode: ActionLoopMode;
+        trimStartSeconds?: number;
+        trimEndSeconds?: number;
+    }): { action: ActionAsset; duplicate: boolean } {
         const existing = this.actions.find((a) => a.name === init.name);
         if (existing) return { action: existing, duplicate: true };
 
@@ -26,6 +34,9 @@ export class AnimationLibrary {
             name: init.name,
             url: init.url,
             duration: init.clip.duration,
+            loopMode: init.loopMode,
+            trimStartSeconds: init.trimStartSeconds ?? 0,
+            trimEndSeconds: init.trimEndSeconds ?? 0,
             trackNames: init.clip.tracks.map((track) => track.name),
         });
         this.actions.push(action);

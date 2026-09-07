@@ -1,7 +1,7 @@
 import type { PoseSnapshot } from "@/pose/PoseSnapshot";
 import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 
-/** Applies an absolute serialized pose snapshot after animation sampling. */
+/** 常驻基础姿势层:在动作采样前写入,动作只覆盖自己拥有的骨骼轨道。 */
 export class PoseLayer {
     constructor(private readonly skeletons: SkeletonRuntimeRegistry) {}
 

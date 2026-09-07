@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { provisionAction } from "@/command/actionProvisioning";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -39,6 +40,7 @@ async function seedActionMounting(stores: DirectorDeskStores): Promise<void> {
         name: `狐狸#${FOX_CLIP_NAME}`,
         url: TEST_ASSETS.fox,
         clipName: FOX_CLIP_NAME,
+        loopMode: ACTION_LOOP_MODE.LOOP,
     });
     const rejected = stores.dispatcher.dispatch(
         { type: "action.mount", payload: { objectId: HELMET_ID, actionId: action.id } },
