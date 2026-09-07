@@ -388,9 +388,7 @@ export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPaylo
             index,
         });
         if (!snapshot) return;
-        ctx.binder.unmount(this.payload.objectId);
-        ctx.actionPreview.clear(this.payload.objectId);
-        ctx.scene.setObjectAction(this.payload.objectId, null);
+        // 姿势是常驻底层,不再与动作互斥;动作保留,采样顺序会让动作覆盖其写到的骨骼。
         ctx.scene.setObjectPose(this.payload.objectId, snapshot);
         ctx.playback.sampleCurrent();
         const groundedTransform = ctx.poseGrounding.alignObjectToGround(this.payload.objectId);
@@ -401,14 +399,10 @@ export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPaylo
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         if (!entity) return null;
-        const restore: SerializedCommand[] = [
+        return [
             { type: ReplacePoseCommand.TYPE, payload: { objectId: entity.id, pose: entity.pose?.toJSON() ?? null } },
             { type: "object.move", payload: { id: entity.id, transform: entity.transform } },
         ];
-        if (entity.actionId) {
-            restore.push({ type: "action.mount", payload: { objectId: entity.id, actionId: entity.actionId } });
-        }
-        return restore;
     }
 }
 

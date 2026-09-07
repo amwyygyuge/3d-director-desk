@@ -354,7 +354,11 @@ interface SceneEntityDescription {
     /** 挂载的 AnimationLibrary action id；未挂载为 null。 */
     readonly mountedActionId: string | null;
     /** 动作时间轴排期;未挂载为 null。 */
-    readonly actionSchedule: { readonly startTimeSeconds: number; readonly durationSeconds: number } | null;
+    readonly actionSchedule: {
+        readonly startTimeSeconds: number;
+        readonly durationSeconds: number;
+        readonly releaseSeconds: number;
+    } | null;
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
 }
 
@@ -396,6 +400,7 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
             ? {
                   startTimeSeconds: entity.actionPerformance.startTimeSeconds,
                   durationSeconds: entity.actionPerformance.durationSeconds,
+                  releaseSeconds: entity.actionPerformance.releaseSeconds,
               }
             : null,
         bounds,

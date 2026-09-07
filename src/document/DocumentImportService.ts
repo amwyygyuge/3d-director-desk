@@ -128,7 +128,9 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
             !isRecord(mount) ||
             !Number.isFinite(mount.startTimeSeconds) ||
             !Number.isFinite(mount.durationSeconds) ||
+            !Number.isFinite(mount.releaseSeconds) ||
             (mount.startTimeSeconds as number) < 0 ||
+            (mount.releaseSeconds as number) < 0 ||
             (mount.durationSeconds as number) < MINIMUM_ACTION_DURATION_SECONDS,
     );
     if (missing.length > 0) return [`动作 "${value.name}" 的挂载对象不存在`];
@@ -378,6 +380,7 @@ export class DocumentImportService {
                 signal,
                 startTimeSeconds: mount.startTimeSeconds,
                 durationSeconds: mount.durationSeconds,
+                releaseSeconds: mount.releaseSeconds,
             });
             if (!isMounted && !signal.aborted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
         }

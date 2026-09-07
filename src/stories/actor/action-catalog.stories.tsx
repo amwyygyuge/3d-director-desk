@@ -24,6 +24,8 @@ const RETIMED_ACTION_START_SECONDS = 2.4;
 const RETIMED_ACTION_DURATION_SECONDS = 1.5;
 const ONCE_ACTION_ACTIVE_SECONDS = 0.2;
 const ONCE_ACTION_HOLD_SAMPLE_SECONDS = 0.5;
+const BASE_POSE_PRESET_ID = "upper-stand-arms-down";
+const BASE_POSE_BONE = "mixamorigRightArm";
 const TIME_EPSILON_SECONDS = 1e-6;
 const WAIT_ATTEMPT_LIMIT = 40;
 const WAIT_INTERVAL_MS = 250;
@@ -34,9 +36,9 @@ const TARGET_HIPS_REST_QUATERNION = [-0.70710678, 0, 0, 0.70710678] as const;
 
 const CHECKLIST = [
     "资源目录含 21 个内置动作资产(点头/摇头已回归);人偶检查器「动作资产」区按骨架族列出",
-    "依次挂「挥手/赞许/点头/庆祝·二」:不同骨骼命名前缀都重定向到通用人形并正常播放",
-    "一次性动作带明确时间轴排期;预览到尾自动停住,不会瞬回首帧",
-    "播种已断言:目录发现、四次挂载、排期段条、预览播放/暂停、文档导出动作定位符",
+    "先选常驻姿势「垂臂」,再依次挂「挥手/赞许/点头/庆祝·二」:动作与常驻姿势分层共存",
+    "一次性动作带明确时间轴排期;结束后经回收段自动回垂臂,不会停在动作末帧",
+    "播种已断言:目录发现、四次挂载、排期段条、常驻姿势恢复、预览播放/暂停、文档导出动作定位符",
 ] as const;
 
 async function waitMountedActionName(
@@ -101,27 +103,36 @@ function quaternionEquals(left: readonly number[], right: readonly number[]): bo
 function sampleTimelinePose(stores: DirectorDeskStores, timeSeconds: number): readonly number[] {
     dispatchOk(stores, "transport.seek", { time: timeSeconds });
     stores.playback.sampleCurrent();
-    return boneQuaternion(stores, ACTOR_ID, "mixamorigRightArm");
+    return boneQuaternion(stores, ACTOR_ID, BASE_POSE_BONE);
+}
+
+function basePoseBone(stores: DirectorDeskStores): readonly number[] {
+    const pose = required(stores.scene.manager.getEntity(ACTOR_ID)?.pose ?? undefined, "常驻姿势未写入实体");
+    return required(pose.bones[BASE_POSE_BONE], "常驻姿势缺少右臂骨骼");
 }
 
 function assertLoopTimelinePlays(stores: DirectorDeskStores): void {
     assertAcceptance(stores.actionPreview.activeObjectId === null, "挂载动作后未播放的预览仍抢占时间轴");
     const before = sampleTimelinePose(stores, 0);
     const active = sampleTimelinePose(stores, 0.5);
+    assertAcceptance(quaternionEquals(before, basePoseBone(stores)), "动作开始前未保持常驻姿势");
     assertAcceptance(!quaternionEquals(before, active), "循环动作未随时间轴播放");
 }
 
 function assertOnceTimelineSchedule(stores: DirectorDeskStores): void {
     assertAcceptance(stores.actionPreview.activeObjectId === null, "一次性动作挂载后预览仍抢占时间轴");
+    const base = basePoseBone(stores);
     const before = sampleTimelinePose(stores, 0);
     const active = sampleTimelinePose(stores, ONCE_ACTION_START_SECONDS + ONCE_ACTION_ACTIVE_SECONDS);
     const ended = sampleTimelinePose(stores, ONCE_ACTION_START_SECONDS + ONCE_ACTION_DURATION_SECONDS);
-    const held = sampleTimelinePose(
+    const released = sampleTimelinePose(
         stores,
         ONCE_ACTION_START_SECONDS + ONCE_ACTION_DURATION_SECONDS + ONCE_ACTION_HOLD_SAMPLE_SECONDS,
     );
+    assertAcceptance(quaternionEquals(before, base), "动作开始前未保持常驻姿势");
     assertAcceptance(!quaternionEquals(before, active), "动作排期开始后未驱动骨骼");
-    assertAcceptance(quaternionEquals(ended, held), "一次性动作到尾未钳住末帧");
+    assertAcceptance(!quaternionEquals(ended, base), "一次性动作末帧与常驻姿势相同,验收无效");
+    assertAcceptance(quaternionEquals(released, base), "一次性动作回收后未回到常驻姿势");
 }
 
 function assertPreviewPoseHoldsAfterGlobalSample(stores: DirectorDeskStores, objectId: string): void {
@@ -138,6 +149,8 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
     await waitCatalogEntry(stores, HUMANOID_ASSET_ID);
     dispatchOk(stores, "assets.place", { assetId: HUMANOID_ASSET_ID, id: ACTOR_ID });
     await waitRuntime(stores, ACTOR_ID);
+    dispatchOk(stores, "pose.apply-preset", { objectId: ACTOR_ID, presetId: BASE_POSE_PRESET_ID });
+    assertAcceptance(stores.scene.manager.getEntity(ACTOR_ID)?.pose !== null, "常驻姿势未应用");
 
     const listed = stores.dispatcher.query({ type: "assets.list", payload: { kind: "action" } }, stores);
     assertAcceptance(listed.ok, "动作目录查询失败");

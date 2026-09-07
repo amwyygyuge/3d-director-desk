@@ -115,6 +115,14 @@ export class SkeletonRuntimeRegistry {
         return this.runtimes.get(objectId)?.bones.get(key);
     }
 
+    baselineRotationFor(objectId: string, key: BoneKey): QuaternionTuple | undefined {
+        const runtime = this.runtimes.get(objectId);
+        const bone = runtime?.bones.get(key);
+        if (!runtime || !bone) return undefined;
+        const index = runtime.indexedBones.indexOf(bone);
+        return runtime.baselineRotations[index];
+    }
+
     restoreRotations(objectId: string): void {
         const runtime = this.runtimes.get(objectId);
         if (runtime) this.restoreRuntimeRotations(runtime);

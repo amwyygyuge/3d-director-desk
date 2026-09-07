@@ -60,6 +60,7 @@ const ASSETS_MOUNT_CONTRACT: PayloadContract = {
         objectId: { type: "string" },
         startTimeSeconds: { type: "number" },
         durationSeconds: { type: "number" },
+        releaseSeconds: { type: "number" },
     },
     required: ["assetId", "objectId"],
 };
@@ -152,6 +153,7 @@ interface AssetsMountPayload {
     readonly objectId: string;
     readonly startTimeSeconds?: number;
     readonly durationSeconds?: number;
+    readonly releaseSeconds?: number;
 }
 
 /** 按目录条目挂载动作资产(clip 置备 + 运行时就绪等待;骨骼不兼容由动作挂载校验拦截) */
@@ -194,6 +196,9 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                         : {}),
                     ...(this.payload.durationSeconds !== undefined
                         ? { durationSeconds: this.payload.durationSeconds }
+                        : {}),
+                    ...(this.payload.releaseSeconds !== undefined
+                        ? { releaseSeconds: this.payload.releaseSeconds }
                         : {}),
                 });
                 if (!signal.aborted) {

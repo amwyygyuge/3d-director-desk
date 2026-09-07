@@ -443,8 +443,7 @@ const ActionPresetSection = observer(function ActionPresetSection({ objectId, re
             try {
                 const clip = handle.animations.find((candidate) => candidate.name === clipName);
                 if (!clip) throw new Error(`动作 clip 不存在:${clipName}`);
-                // 动作与姿势互斥:挂动作前先清姿势,否则姿势层会在每帧采样后覆盖动作结果
-                if (entity.pose) report(dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
+                // 姿势是常驻底层:挂动作不再清姿势,动作只覆盖自己写到的骨骼。
                 const presentation = presentEmbeddedClip(clipName);
                 const action = animations.register({
                     name: `${entry.name}#${clipName}`,
@@ -491,7 +490,6 @@ const CatalogActionSection = observer(function CatalogActionSection({ objectId, 
     if (actions.length === 0) return null;
 
     const mountAction = (assetId: string) => {
-        if (entity?.pose) report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
         report(stores.dispatcher.dispatch({ type: "assets.mount", payload: { assetId, objectId } }, stores));
     };
 

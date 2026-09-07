@@ -192,8 +192,6 @@ export function createDirectorDeskStores(options?: {
             return timeline.document.playbackRange.outSeconds;
         },
     });
-    const binder = new AnimationBinder();
-    const actionPreview = new ActionPreviewController(binder);
     const scene = new SceneStore();
     const materials = new ObjectMaterialRegistry();
     const actorRuntime = new ActorRuntime(scene.manager, materials);
@@ -202,6 +200,8 @@ export function createDirectorDeskStores(options?: {
     capture.registerMask(selectionTint);
     const poseGrounding = new PoseGroundingService(scene.manager, actorRuntime);
     const skeletons = new SkeletonRuntimeRegistry();
+    const binder = new AnimationBinder(skeletons);
+    const actionPreview = new ActionPreviewController(binder);
     const posePresets = new PosePresetLibrary();
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);

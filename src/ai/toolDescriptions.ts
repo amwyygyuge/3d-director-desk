@@ -74,9 +74,10 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "timeline.set-track-policies": "设走位轨朝向、贴地与步频策略",
     // 动作与播放
     "action.mount":
-        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds 可选,缺省从当前播放头开始、按 clip 原始时长;骨骼兼容性预检不过返回结构化诊断与可用动作",
-    "action.set-range": "调整对象已挂载动作的开始时间与演出时长;一次性动作到尾钳住末帧,循环动作按排期周期循环",
-    "action.unmount": "卸载对象动作,骨骼回绑定姿态",
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/releaseSeconds 可选,缺省从当前播放头开始、按 clip 原始时长;骨骼兼容性预检不过返回结构化诊断与可用动作",
+    "action.set-range":
+        "调整对象已挂载动作的开始时间、演出时长与回收时长;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
+    "action.unmount": "卸载对象动作,骨骼回常驻基础姿势(未设置则回绑定姿态)",
     "action.preview.play": "局部预览指定对象的已挂载动作,不驱动全局 playhead",
     "action.preview.pause": "暂停局部动作预览",
     "action.preview.seek": "定位指定对象局部动作到指定秒",
@@ -90,13 +91,13 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "actor.build.set": "设人偶体型参数(身高/肩宽/围度等,范围由命令校验)",
     "actor.build.apply-preset": "套用体型预设;预设目录先查 actor.presets.list",
     // 姿势
-    "pose.set-bone": "设单根骨骼旋转;骨骼名先查 pose.bones.discover",
-    "pose.replace": "整体替换姿势快照(多骨骼一次到位)",
-    "pose.apply-preset": "套姿势预设;目录先查 pose.presets.list",
+    "pose.set-bone": "设常驻基础姿势的单根骨骼旋转;骨骼名先查 pose.bones.discover",
+    "pose.replace": "整体替换常驻基础姿势快照(多骨骼一次到位)",
+    "pose.apply-preset": "套常驻基础姿势预设;目录先查 pose.presets.list,动作播放时仍会保留未覆盖骨骼",
     "pose.preset.save": "把当前姿势存为自定义预设",
     "pose.preset.remove": "删除自定义姿势预设",
     "pose.preset.restore": "恢复内置姿势预设(撤销对它的覆盖/删除)",
-    "pose.clear": "清除姿势,回绑定姿态",
+    "pose.clear": "清除常驻基础姿势,回绑定姿态",
     // 灯光
     "scene.set-lighting-mode": "切灯光模式:studio 兜底布光 / custom 自定义",
     // 采集

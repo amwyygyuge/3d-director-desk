@@ -70,7 +70,7 @@ export interface SceneObjectInit {
     readonly transform?: Transform;
     /** kind="light" 必须有值；其他 kind 必须为 null/undefined。 */
     readonly light?: LightParams | null;
-    /** 骨骼根相对的局部绝对旋转快照；仅模型可用，且始终是纯数据。 */
+    /** 常驻基础姿势(骨骼根相对的局部绝对旋转);仅模型可用,动作采样前写入。 */
     readonly pose?: PoseSnapshot | PoseSnapshotInit | null;
     /** 人偶画像；仅模型可用，纯数据(骨架家族 + 外观 + 体型)，是「这是个人偶」的显式凭据。 */
     readonly actor?: ActorProfile | ActorProfileInit | null;
@@ -136,6 +136,7 @@ export class SceneObject {
         this.currentLight = normalizeLightParams(next);
     }
 
+    /** 常驻基础姿势:动作未开始、动作未覆盖的骨骼与 once 回收终点都从这里来。 */
     get pose(): PoseSnapshot | null {
         return this.currentPose;
     }

@@ -48,6 +48,14 @@ export class PlaybackCoordinator {
         this.poseLayer.apply(entity.id, entity.pose);
     };
 
+    private readonly releaseActionForEntity = (entity: SceneObject): void => {
+        const performance = entity.actionPerformance;
+        if (!performance) return;
+        const releaseProgress = performance.releaseProgressAt(this.sampleTimeSeconds);
+        if (releaseProgress === null) return;
+        this.binder.blendToBasePose(entity.id, entity.pose, releaseProgress);
+    };
+
     constructor(
         private readonly timeline: TimelineStore,
         private readonly scene: SceneManager,
@@ -124,7 +132,9 @@ export class PlaybackCoordinator {
 
         if (!runtime || !entity) return;
         this.skeletons.restoreRotations(targetId);
+        this.applyPose(targetId);
         this.binder.setTime(this.currentTime());
+        this.releaseActionForEntity(entity);
         this.actionPreview.applyCurrentFrame();
         const transformTrack = this.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.currentTime(), runtime))
@@ -134,9 +144,10 @@ export class PlaybackCoordinator {
     }
     restoreAll(): void {
         this.restorePoseBaselines();
-        this.binder.setTime(this.currentTime());
-        this.actionPreview.applyCurrentFrame();
         this.scene.forEachEntity(this.applyPoseForEntity);
+        this.binder.setTime(this.currentTime());
+        this.scene.forEachEntity(this.releaseActionForEntity);
+        this.actionPreview.applyCurrentFrame();
         this.motionSampler.restore();
         this.invalidate();
     }
@@ -160,19 +171,20 @@ export class PlaybackCoordinator {
     }
 
     /**
-     * 单次采样的定序:动作先按墙钟对齐 → 变换/轨迹求值 → 步频同步的对象用弧长相位覆写动作 →
-     * 机位采样 → 姿态层。
+     * 单次采样的定序:常驻姿势先写底层 → 动作按墙钟对齐 → once 回收段混回常驻姿势 →
+     * 变换/轨迹求值 → 步频同步的对象用弧长相位覆写动作 → 机位采样。
      * 相位必须在变换之后:它是「已走弧长」的函数,而弧长只有采样完轨迹才知道;
      * 机位采样必须在变换之后:跟拍要读到本帧的新位置,否则镜头永远慢一帧。
      */
     private sample(timeSeconds: number): void {
         this.restorePoseBaselines();
-        this.binder.setTime(timeSeconds);
-        this.actionPreview.applyCurrentFrame();
         this.sampleTimeSeconds = timeSeconds;
+        this.scene.forEachEntity(this.applyPoseForEntity);
+        this.binder.setTime(timeSeconds);
+        this.scene.forEachEntity(this.releaseActionForEntity);
+        this.actionPreview.applyCurrentFrame();
         this.scene.forEachEntity(this.sampleTransformForEntity);
         this.motionSampler.sampleCurrent(timeSeconds);
-        this.scene.forEachEntity(this.applyPoseForEntity);
         this.invalidate();
     }
 

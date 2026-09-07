@@ -12,14 +12,16 @@ import type { LightingMode } from "@/store/SceneStore";
  * 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。
  * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
  * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档;
- * v10 起动作带循环语义与时间轴排期(开始时间/演出时长)。
+ * v10 起动作带循环语义与时间轴排期(开始时间/演出时长);
+ * v11 起一次性动作带回收时长,结束后回到常驻姿势。
  */
-export const DESK_DOCUMENT_VERSION = 10;
+export const DESK_DOCUMENT_VERSION = 11;
 
 export interface DeskDocumentActionMount {
     readonly objectId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
+    readonly releaseSeconds: number;
 }
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
@@ -82,6 +84,7 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
                               objectId: entity.id,
                               startTimeSeconds: performance.startTimeSeconds,
                               durationSeconds: performance.durationSeconds,
+                              releaseSeconds: performance.releaseSeconds,
                           },
                       ]
                     : [];

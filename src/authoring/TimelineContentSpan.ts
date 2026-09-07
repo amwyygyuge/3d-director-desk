@@ -63,7 +63,7 @@ export class TimelineContentSpan {
                           kind: TIMELINE_CONTENT_BLOCKER_KIND.ACTION_PERFORMANCE,
                           id: entity.id,
                           label: `动作 ${entity.name}`,
-                          endSeconds: entity.actionPerformance.endTimeSeconds,
+                          endSeconds: entity.actionPerformance.releaseEndTimeSeconds,
                       },
                   ]
                 : [],

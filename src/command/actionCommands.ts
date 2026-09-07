@@ -1,6 +1,6 @@
 import { BONE_MATCH_THRESHOLD } from "@/animation/BoneCompatibilityChecker";
 import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
-import { ActionPerformance } from "@/animation/ActionPerformance";
+import { ActionPerformance, DEFAULT_ACTION_RELEASE_SECONDS } from "@/animation/ActionPerformance";
 import type { ActionAsset } from "@/assets/ActionAsset";
 import type { AnimationClip, Object3D } from "three";
 import { quantizeSeconds } from "@/command/timelineCommands";
@@ -62,6 +62,8 @@ interface ActionSchedulePayload {
     readonly startTimeSeconds?: number;
     /** 缺省 = clip 原始时长;排期时长按工程帧率量化 */
     readonly durationSeconds?: number;
+    /** once 结束后回常驻姿势的回收时长;缺省 0.25s */
+    readonly releaseSeconds?: number;
 }
 
 interface MountActionPayload extends ActionSchedulePayload {
@@ -72,6 +74,7 @@ interface MountActionPayload extends ActionSchedulePayload {
 const ACTION_SCHEDULE_PROPERTIES = {
     startTimeSeconds: { type: "number" },
     durationSeconds: { type: "number" },
+    releaseSeconds: { type: "number" },
 } as const;
 
 const MOUNT_ACTION_CONTRACT: PayloadContract = {
@@ -115,6 +118,10 @@ function scheduleIssues(
             : []),
         ...(payload.durationSeconds !== undefined && !Number.isFinite(payload.durationSeconds)
             ? ["动作时长必须是有限秒数"]
+            : []),
+        ...(payload.releaseSeconds !== undefined &&
+        (!Number.isFinite(payload.releaseSeconds) || payload.releaseSeconds < 0)
+            ? ["动作回收时长必须是 ≥0 的有限秒数"]
             : []),
         ...(values.startTimeSeconds < 0 ? ["动作开始时间必须 ≥ 0"] : []),
         ...(values.durationSeconds < frameDuration ? ["动作时长必须至少覆盖一帧"] : []),
@@ -198,6 +205,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
             actionId: action.id,
             startTimeSeconds: schedule.startTimeSeconds,
             durationSeconds: schedule.durationSeconds,
+            releaseSeconds: this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS,
         });
         ctx.binder.mount(this.payload.objectId, runtime, clip, performance, action.loopMode);
         ctx.scene.setObjectAction(this.payload.objectId, performance);
@@ -220,6 +228,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
                           actionId: previous.actionId,
                           startTimeSeconds: previous.startTimeSeconds,
                           durationSeconds: previous.durationSeconds,
+                          releaseSeconds: previous.releaseSeconds,
                       },
                   },
               ]
@@ -267,6 +276,7 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
                           actionId: performance.actionId,
                           startTimeSeconds: performance.startTimeSeconds,
                           durationSeconds: performance.durationSeconds,
+                          releaseSeconds: performance.releaseSeconds,
                       },
                   },
               ]
@@ -278,6 +288,7 @@ interface SetActionRangePayload {
     readonly objectId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
+    readonly releaseSeconds?: number;
 }
 
 const SET_ACTION_RANGE_CONTRACT: PayloadContract = {
@@ -310,7 +321,11 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         const current = entity?.actionPerformance;
         if (!current) return;
-        const next = current.withRange(
+        const released =
+            this.payload.releaseSeconds === undefined
+                ? current
+                : current.withReleaseSeconds(quantizeSeconds(ctx, this.payload.releaseSeconds));
+        const next = released.withRange(
             quantizeSeconds(ctx, this.payload.startTimeSeconds),
             quantizeSeconds(ctx, this.payload.durationSeconds),
         );
@@ -329,6 +344,7 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
                           objectId: this.payload.objectId,
                           startTimeSeconds: current.startTimeSeconds,
                           durationSeconds: current.durationSeconds,
+                          releaseSeconds: current.releaseSeconds,
                       },
                   },
               ]

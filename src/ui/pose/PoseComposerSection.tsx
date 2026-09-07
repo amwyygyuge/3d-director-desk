@@ -155,7 +155,7 @@ const PoseCombinationPanel = observer(function PoseCombinationPanel({ objectId, 
 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
-            <Typography variant="overline">姿势</Typography>
+            <Typography variant="overline">常驻姿势</Typography>
             <Box sx={{ display: "grid", gap: CONTROL_GAP, gridTemplateColumns: COLUMN_GRID }}>
                 {POSE_COLUMNS.map((column) => (
                     <PosePresetColumn
@@ -177,7 +177,7 @@ const PoseCombinationPanel = observer(function PoseCombinationPanel({ objectId, 
                     report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores))
                 }
             >
-                清除姿势
+                清除常驻姿势
             </Button>
             {!isEditing && (
                 <Typography variant="caption" sx={{ display: "block" }}>
@@ -188,7 +188,7 @@ const PoseCombinationPanel = observer(function PoseCombinationPanel({ objectId, 
     );
 });
 
-/** 姿势 tab:人偶的姿势组合器 + 动作分区(动作改的是 actionId,与静态姿势互斥)。 */
+/** 常驻姿势 tab:人偶的姿势组合器 + 动作分区(动作只覆盖自己写到的骨骼,结束后回收至常驻姿势)。 */
 export const PoseComposerSection = observer(function PoseComposerSection({ primaryId, report }: InspectorSectionProps) {
     const stores = useDirectorDeskStores();
 

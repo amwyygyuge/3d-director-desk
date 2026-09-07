@@ -1,17 +1,22 @@
-import { AnimationMixer, LoopOnce, LoopRepeat } from "three";
+import { AnimationMixer, LoopOnce, LoopRepeat, Quaternion } from "three";
 import type { AnimationClip, Object3D } from "three";
 
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionLoopMode } from "@/assets/ActionAsset";
 import type { ActionPerformance } from "@/animation/ActionPerformance";
+import type { PoseSnapshot } from "@/pose/PoseSnapshot";
+import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import type { TimeTransport } from "@/time/TimeTransport";
 
 interface MountedAction {
     readonly mixer: AnimationMixer;
     readonly clipDurationSeconds: number;
     readonly loopMode: ActionLoopMode;
+    readonly boneKeys: readonly string[];
     performance: ActionPerformance;
 }
+
+const RELEASE_TARGET_QUATERNION = new Quaternion();
 
 /**
  * 动作挂载协调器(领域服务):把动作 clip 绑定到场景对象的骨骼上。
@@ -23,6 +28,8 @@ interface MountedAction {
 export class AnimationBinder {
     private readonly mounted = new Map<string, MountedAction>();
     private transport: TimeTransport | null = null;
+
+    constructor(private readonly skeletons: SkeletonRuntimeRegistry) {}
 
     /** PlaybackCoordinator owns the frame pipeline; this keeps current time for mount-time alignment only. */
     bindTransport(transport: TimeTransport): void {
@@ -49,6 +56,7 @@ export class AnimationBinder {
             mixer,
             clipDurationSeconds: clip.duration,
             loopMode,
+            boneKeys: [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean),
             performance,
         };
         this.mounted.set(objectId, mounted);
@@ -75,6 +83,21 @@ export class AnimationBinder {
     /** 局部动作预览只推进目标 clip 的局部时间,不经过时间轴排期。 */
     setClipTimeFor(objectId: string, timeSeconds: number): void {
         this.mounted.get(objectId)?.mixer.setTime(timeSeconds);
+    }
+
+    /** once 回收段:先钉住动作末帧,再把动作写过的骨骼确定性混回常驻姿势。 */
+    blendToBasePose(objectId: string, basePose: PoseSnapshot | null, progress: number): void {
+        const mounted = this.mounted.get(objectId);
+        if (!mounted || mounted.loopMode !== ACTION_LOOP_MODE.ONCE) return;
+        mounted.mixer.setTime(mounted.clipDurationSeconds);
+        const alpha = Math.min(Math.max(progress, 0), 1);
+        for (const boneKey of mounted.boneKeys) {
+            const bone = this.skeletons.getBone(objectId, boneKey);
+            const target = basePose?.bones[boneKey] ?? this.skeletons.baselineRotationFor(objectId, boneKey);
+            if (!bone || !target) continue;
+            RELEASE_TARGET_QUATERNION.set(target[0], target[1], target[2], target[3]);
+            bone.quaternion.slerp(RELEASE_TARGET_QUATERNION, alpha);
+        }
     }
 
     /** 排期拖动/重定时后立即换表;下一次全局采样按新时段取值。 */
