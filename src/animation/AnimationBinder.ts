@@ -132,6 +132,9 @@ export class AnimationBinder {
     has(objectId: string): boolean {
         return this.mounted.has(objectId);
     }
+    loopModeFor(objectId: string): ActionLoopMode | null {
+        return this.mounted.get(objectId)?.loopMode ?? null;
+    }
 
     get isEmpty(): boolean {
         return this.mounted.size === 0;
@@ -152,9 +155,9 @@ export class AnimationBinder {
         mounted.mixer.setTime(clipTime);
     }
 
-    /** LoopOnce 播完后会停在 finished 态;离开排期再回来时 reset 才能确定性重播。 */
+    /** LoopOnce 播完后会停在 paused 态;绝对采样前必须 reset，才能稳定重放/保持末帧。 */
     private ensureActive(mounted: MountedAction): void {
-        if (mounted.isActive) return;
+        if (mounted.isActive && !mounted.action.paused) return;
         mounted.action.reset();
         mounted.action.play();
         mounted.mixer.setTime(0);

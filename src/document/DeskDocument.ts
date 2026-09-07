@@ -35,7 +35,7 @@ export interface DeskDocumentAction {
     readonly loopMode: ActionLoopMode;
     readonly trimStartSeconds: number;
     readonly trimEndSeconds: number;
-    /** 挂载该动作的全部实体及排期;空数组 = 已注册未挂载 */
+    /** 挂载该动作的全部实体及排期;GLB 可为空，FBX 必须有目标骨架以完成重定向。 */
     readonly mountedOn: readonly DeskDocumentActionMount[];
 }
 

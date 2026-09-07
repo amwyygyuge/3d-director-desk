@@ -1,4 +1,4 @@
-import { AnimationClip, Bone, Skeleton } from "three";
+import { AnimationClip, Bone, Quaternion, Skeleton } from "three";
 import type { KeyframeTrack, Object3D, SkinnedMesh } from "three";
 import { clone as cloneSkeleton, retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 
@@ -21,18 +21,63 @@ export interface MixamoActionRetargetOptions {
     readonly targetRoot?: Object3D;
 }
 
+const TRIM_LEFT_QUATERNION = new Quaternion();
+const TRIM_RIGHT_QUATERNION = new Quaternion();
+function writeTrackSample(track: KeyframeTrack, timeSeconds: number, values: Float32Array, offset: number): void {
+    const valueSize = track.getValueSize();
+    const times = track.times;
+    const rightIndex = [...times].findIndex((time) => time >= timeSeconds);
+    const clampedRightIndex = rightIndex < 0 ? times.length - 1 : rightIndex;
+    const leftIndex = clampedRightIndex === 0 ? 0 : clampedRightIndex - 1;
+    const leftTime = times[leftIndex] ?? 0;
+    const rightTime = times[clampedRightIndex] ?? leftTime;
+    const progress = rightTime === leftTime ? 0 : (timeSeconds - leftTime) / (rightTime - leftTime);
+    const leftOffset = leftIndex * valueSize;
+    const rightOffset = clampedRightIndex * valueSize;
+    if (track.name.endsWith(".quaternion") && valueSize === 4) {
+        TRIM_LEFT_QUATERNION.set(
+            track.values[leftOffset] ?? 0,
+            track.values[leftOffset + 1] ?? 0,
+            track.values[leftOffset + 2] ?? 0,
+            track.values[leftOffset + 3] ?? 1,
+        );
+        TRIM_RIGHT_QUATERNION.set(
+            track.values[rightOffset] ?? 0,
+            track.values[rightOffset + 1] ?? 0,
+            track.values[rightOffset + 2] ?? 0,
+            track.values[rightOffset + 3] ?? 1,
+        );
+        TRIM_LEFT_QUATERNION.slerp(TRIM_RIGHT_QUATERNION, progress);
+        values[offset] = TRIM_LEFT_QUATERNION.x;
+        values[offset + 1] = TRIM_LEFT_QUATERNION.y;
+        values[offset + 2] = TRIM_LEFT_QUATERNION.z;
+        values[offset + 3] = TRIM_LEFT_QUATERNION.w;
+        return;
+    }
+    for (const index of Array.from({ length: valueSize }, (_, valueIndex) => valueIndex)) {
+        const leftValue = track.values[leftOffset + index] ?? 0;
+        const rightValue = track.values[rightOffset + index] ?? leftValue;
+        values[offset + index] = leftValue + (rightValue - leftValue) * progress;
+    }
+}
+
 function trimmedTrack(track: KeyframeTrack, startTimeSeconds: number, endTimeSeconds: number): KeyframeTrack {
     const valueSize = track.getValueSize();
-    const times = [...track.times];
-    const firstIndex = times.findIndex((time) => time >= startTimeSeconds);
-    const lastIndex = times.findLastIndex((time) => time <= endTimeSeconds);
-    if (firstIndex < 0 || lastIndex < firstIndex) {
-        throw new Error("MixamoActionRetargeter: 动作轨道裁剪后为空");
-    }
+    const interiorTimes = [...track.times].filter((time) => time > startTimeSeconds && time < endTimeSeconds);
+    const times = new Float32Array(interiorTimes.length + 2);
+    const values = new Float32Array((interiorTimes.length + 2) * valueSize);
+    times[0] = 0;
+    writeTrackSample(track, startTimeSeconds, values, 0);
+    interiorTimes.forEach((time, index) => {
+        times[index + 1] = time - startTimeSeconds;
+        const sourceOffset = [...track.times].findIndex((sourceTime) => sourceTime === time) * valueSize;
+        values.set(track.values.slice(sourceOffset, sourceOffset + valueSize), (index + 1) * valueSize);
+    });
+    times[interiorTimes.length + 1] = endTimeSeconds - startTimeSeconds;
+    writeTrackSample(track, endTimeSeconds, values, (interiorTimes.length + 1) * valueSize);
     const trimmed = track.clone();
-    trimmed.times = track.times.slice(firstIndex, lastIndex + 1);
-    trimmed.times = new Float32Array(trimmed.times.map((time) => time - startTimeSeconds));
-    trimmed.values = track.values.slice(firstIndex * valueSize, (lastIndex + 1) * valueSize);
+    trimmed.times = times;
+    trimmed.values = values;
     return trimmed;
 }
 

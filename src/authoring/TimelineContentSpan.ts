@@ -1,3 +1,5 @@
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import type { AnimationLibrary } from "@/assets/AnimationLibrary";
 import type { SceneManager } from "@/core/SceneManager";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
@@ -31,7 +33,12 @@ export class TimelineContentSpan {
         Object.freeze(this);
     }
 
-    static fromDocument(timeline: TimelineStore, motion: CameraMotionStore, scene: SceneManager): TimelineContentSpan {
+    static fromDocument(
+        timeline: TimelineStore,
+        motion: CameraMotionStore,
+        scene: SceneManager,
+        animations: AnimationLibrary,
+    ): TimelineContentSpan {
         const walkTracks = timeline.document.tracks.flatMap((track) =>
             track.keyframes.length === 0
                 ? []
@@ -56,18 +63,25 @@ export class TimelineContentSpan {
             label: `Program 片段 ${clip.id}`,
             endSeconds: clip.endTimeSeconds,
         }));
-        const actionPerformances = scene.list().flatMap((entity) =>
-            entity.actionPerformance
-                ? [
-                      {
-                          kind: TIMELINE_CONTENT_BLOCKER_KIND.ACTION_PERFORMANCE,
-                          id: entity.id,
-                          label: `动作 ${entity.name}`,
-                          endSeconds: entity.actionPerformance.releaseEndTimeSeconds,
-                      },
-                  ]
-                : [],
-        );
+        const actionPerformances = scene.list().flatMap((entity) => {
+            const performance = entity.actionPerformance;
+            const action = performance
+                ? animations.actions.find((candidate) => candidate.id === performance.actionId)
+                : undefined;
+            if (!performance || !action) return [];
+            const endSeconds =
+                action.loopMode === ACTION_LOOP_MODE.ONCE
+                    ? performance.releaseEndTimeSeconds
+                    : performance.endTimeSeconds;
+            return [
+                {
+                    kind: TIMELINE_CONTENT_BLOCKER_KIND.ACTION_PERFORMANCE,
+                    id: entity.id,
+                    label: `动作 ${entity.name}`,
+                    endSeconds,
+                },
+            ];
+        });
         return new TimelineContentSpan([...walkTracks, ...motionClips, ...programClips, ...actionPerformances]);
     }
 }

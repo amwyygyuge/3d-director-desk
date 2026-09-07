@@ -37,7 +37,12 @@ const INPUT_SX = {
 export const TimelineDurationField = observer(function TimelineDurationField() {
     const stores = useDirectorDeskStores();
     const duration = stores.timeline.document.duration;
-    const content = TimelineContentSpan.fromDocument(stores.timeline, stores.motion, stores.scene.manager);
+    const content = TimelineContentSpan.fromDocument(
+        stores.timeline,
+        stores.motion,
+        stores.scene.manager,
+        stores.animations,
+    );
     const blocker = content.blockers[0];
     const [draft, setDraft] = useState<string | null>(null);
     const [rejection, setRejection] = useState<{

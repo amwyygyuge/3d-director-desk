@@ -9,6 +9,8 @@ import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/
 import type { DeskDocument, DeskDocumentAction, DeskDocumentLighting } from "@/document/DeskDocument";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import { isActionLoopMode } from "@/assets/ActionAsset";
+import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 import { parsePosePreset } from "@/pose/PosePreset";
 import type { PosePreset } from "@/pose/PosePreset";
@@ -151,9 +153,40 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
 function actionScheduleIssues(plan: DocumentImportPlan): readonly string[] {
     return plan.actions.flatMap((action) =>
         action.mountedOn
-            .filter((mount) => mount.startTimeSeconds + mount.durationSeconds > plan.timeline.duration)
-            .map((mount) => `动作 "${action.name}" 在实体 "${mount.objectId}" 上的排期超出时间轴时长`),
+            .filter((mount) => {
+                const releaseSeconds = action.loopMode === ACTION_LOOP_MODE.ONCE ? mount.releaseSeconds : 0;
+                return mount.startTimeSeconds + mount.durationSeconds + releaseSeconds > plan.timeline.duration;
+            })
+            .map((mount) => `动作 "${action.name}" 在实体 "${mount.objectId}" 上的排期或回收超出时间轴时长`),
     );
+}
+
+function actionMountIssues(plan: DocumentImportPlan): readonly string[] {
+    const entitiesById = new Map(plan.entities.map((entity) => [entity.id, entity]));
+    const mountedObjectIds = new Set<string>();
+    return plan.actions.flatMap((action) => {
+        const isFbxAction = formatFromUrl(action.url) === MODEL_FORMAT.FBX;
+        const targets = action.mountedOn.map((mount) => entitiesById.get(mount.objectId));
+        const targetSignatures = new Set(
+            targets.flatMap((entity) => (entity?.kind === "model" ? [`${entity.sourceUrl}:${entity.format}`] : [])),
+        );
+        const issues = [
+            ...(isFbxAction && action.mountedOn.length === 0 ? [`FBX 动作 "${action.name}" 必须至少挂载一个模型`] : []),
+            ...(isFbxAction && targetSignatures.size > 1
+                ? [`FBX 动作 "${action.name}" 不能同时挂到不同骨架来源的模型`]
+                : []),
+        ];
+        const mountIssues = action.mountedOn.flatMap((mount) => {
+            const entity = entitiesById.get(mount.objectId);
+            const duplicate = mountedObjectIds.has(mount.objectId);
+            mountedObjectIds.add(mount.objectId);
+            return [
+                ...(entity?.kind !== "model" ? [`动作 "${action.name}" 的挂载对象不是模型: ${mount.objectId}`] : []),
+                ...(duplicate ? [`多个动作重复挂载对象: ${mount.objectId}`] : []),
+            ];
+        });
+        return [...issues, ...mountIssues];
+    });
 }
 
 function lightingIssues(value: unknown): readonly string[] {
@@ -300,6 +333,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
             ...timelineIssues(plan.timeline, entityIdSet),
             ...motionIssues(plan),
             ...actionScheduleIssues(plan),
+            ...actionMountIssues(plan),
         ];
         return relationalIssues.length > 0 ? { issues: relationalIssues, plan: null } : { issues: [], plan };
     } catch {

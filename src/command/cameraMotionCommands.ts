@@ -395,7 +395,7 @@ const ORBIT_PARAMETERS_SCHEMA: PayloadFieldSchema = {
     properties: {
         degrees: { type: "number" },
         direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
-        radiusMeters: { type: "number" },
+        radiusMeters: nullable({ type: "number" }),
     },
 };
 

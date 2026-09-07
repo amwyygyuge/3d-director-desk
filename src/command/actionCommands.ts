@@ -5,6 +5,7 @@ import {
     DEFAULT_ACTION_ATTACK_SECONDS,
     DEFAULT_ACTION_RELEASE_SECONDS,
 } from "@/animation/ActionPerformance";
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionAsset } from "@/assets/ActionAsset";
 import type { AnimationClip, Object3D } from "three";
 import { quantizeSeconds } from "@/command/timelineCommands";
@@ -97,14 +98,14 @@ interface ActionScheduleValues {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
 }
-
 function scheduleValuesFor(
     ctx: DirectorContext,
     payload: ActionSchedulePayload,
     action: ActionAsset,
+    trailingSeconds: number,
 ): ActionScheduleValues {
     const durationSeconds = quantizeSeconds(ctx, payload.durationSeconds ?? action.duration);
-    const latestStart = Math.max(0, ctx.timeline.document.duration - durationSeconds);
+    const latestStart = Math.max(0, ctx.timeline.document.duration - durationSeconds - trailingSeconds);
     const startTimeSeconds = quantizeSeconds(
         ctx,
         payload.startTimeSeconds === undefined ? Math.min(ctx.clock.time, latestStart) : payload.startTimeSeconds,
@@ -116,12 +117,17 @@ function scheduleIssues(
     ctx: DirectorContext,
     payload: ActionSchedulePayload,
     values: ActionScheduleValues,
+    loopMode: ActionAsset["loopMode"],
+    releaseSeconds: number,
 ): readonly string[] {
     const frameDuration = ctx.timeline.document.frameRate.frameDurationSeconds;
     const endTimeSeconds = values.startTimeSeconds + values.durationSeconds;
+    const recoveryEndTimeSeconds =
+        loopMode === ACTION_LOOP_MODE.ONCE ? endTimeSeconds + releaseSeconds : endTimeSeconds;
     return [
-        ...(payload.startTimeSeconds !== undefined && !Number.isFinite(payload.startTimeSeconds)
-            ? ["动作开始时间必须是有限秒数"]
+        ...(payload.startTimeSeconds !== undefined &&
+        (!Number.isFinite(payload.startTimeSeconds) || payload.startTimeSeconds < 0)
+            ? ["动作开始时间必须是 ≥0 的有限秒数"]
             : []),
         ...(payload.durationSeconds !== undefined && !Number.isFinite(payload.durationSeconds)
             ? ["动作时长必须是有限秒数"]
@@ -134,9 +140,8 @@ function scheduleIssues(
         (!Number.isFinite(payload.releaseSeconds) || payload.releaseSeconds < 0)
             ? ["动作回收时长必须是 ≥0 的有限秒数"]
             : []),
-        ...(values.startTimeSeconds < 0 ? ["动作开始时间必须 ≥ 0"] : []),
         ...(values.durationSeconds < frameDuration ? ["动作时长必须至少覆盖一帧"] : []),
-        ...(endTimeSeconds > ctx.timeline.document.duration ? ["动作时段不能超出时间轴时长"] : []),
+        ...(recoveryEndTimeSeconds > ctx.timeline.document.duration ? ["动作时段和回收不能超出时间轴时长"] : []),
     ];
 }
 
@@ -188,7 +193,19 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         if (!action || !clip) return [`动作 "${this.payload.actionId}" 不在动作库`];
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
         if (!runtime) return [`对象 "${this.payload.objectId}" 运行时未就绪(模型加载中?)`];
-        const scheduleIssuesFound = scheduleIssues(ctx, this.payload, scheduleValuesFor(ctx, this.payload, action));
+        const releaseSeconds = this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS;
+        const scheduleIssuesFound = scheduleIssues(
+            ctx,
+            this.payload,
+            scheduleValuesFor(
+                ctx,
+                this.payload,
+                action,
+                action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0,
+            ),
+            action.loopMode,
+            releaseSeconds,
+        );
         if (scheduleIssuesFound.length > 0) return [...scheduleIssuesFound];
 
         const check = boneCompatibilityIndex.check(runtime, clip);
@@ -211,7 +228,14 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         const action = ctx.animations.actions.find((candidate) => candidate.id === this.payload.actionId);
         const clip = ctx.animations.getClip(this.payload.actionId);
         if (!runtime || !action || !clip) return;
-        const schedule = scheduleValuesFor(ctx, this.payload, action);
+        const schedule = scheduleValuesFor(
+            ctx,
+            this.payload,
+            action,
+            action.loopMode === ACTION_LOOP_MODE.ONCE
+                ? (this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS)
+                : 0,
+        );
         const performance = new ActionPerformance({
             actionId: action.id,
             startTimeSeconds: schedule.startTimeSeconds,
@@ -274,8 +298,9 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
         ctx.binder.unmount(this.payload.objectId);
         ctx.actionPreview.clear(this.payload.objectId);
         ctx.scene.setObjectAction(this.payload.objectId, null);
+        ctx.timelineSelection.forget(this.payload.objectId);
         if (ctx.binder.isEmpty) ctx.clock.pause();
-        ctx.playback.requestRender();
+        ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
@@ -322,14 +347,28 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
     constructor(readonly payload: SetActionRangePayload) {
         super();
     }
-
     validate(ctx: DirectorContext): string[] {
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         const action = entity?.actionId
             ? ctx.animations.actions.find((candidate) => candidate.id === entity.actionId)
             : undefined;
-        if (!entity?.actionPerformance || !action) return [`对象 "${this.payload.objectId}" 没有已挂载动作`];
-        return [...scheduleIssues(ctx, this.payload, scheduleValuesFor(ctx, this.payload, action))];
+        const performance = entity?.actionPerformance;
+        if (!performance || !action) return [`对象 "${this.payload.objectId}" 没有已挂载动作`];
+        const releaseSeconds = this.payload.releaseSeconds ?? performance.releaseSeconds;
+        return [
+            ...scheduleIssues(
+                ctx,
+                this.payload,
+                scheduleValuesFor(
+                    ctx,
+                    this.payload,
+                    action,
+                    action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0,
+                ),
+                action.loopMode,
+                releaseSeconds,
+            ),
+        ];
     }
 
     execute(ctx: DirectorContext): void {

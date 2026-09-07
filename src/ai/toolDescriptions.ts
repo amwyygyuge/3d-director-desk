@@ -74,7 +74,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "timeline.set-track-policies": "设走位轨朝向、贴地与步频策略",
     // 动作与播放
     "action.mount":
-        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 可选,缺省从当前播放头开始、按 clip 原始时长;骨骼兼容性预检不过返回结构化诊断与可用动作",
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
     "action.set-range":
         "调整对象已挂载动作的开始时间、演出时长、进入时长与回收时长;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
     "action.unmount": "卸载对象动作,骨骼回常驻基础姿势(未设置则回绑定姿态)",
@@ -112,7 +112,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "desk.import-document": "导入整桌文档(替换式清空重建,动作按 URL 异步恢复,可撤销)",
     "assets.place": "按资产目录条目放置模型(格式/URL 由条目携带,AI 不猜)",
     "assets.mount":
-        "按资产目录条目挂载动作(clip 置备 + 骨骼预检一体);目录条目带 loopMode,可用 startTimeSeconds/durationSeconds 指定时间轴排期",
+        "按资产目录条目挂载动作(clip 置备 + 骨骼预检一体);目录条目带 loopMode,可用 startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 指定时间轴排期",
     // 查询
     "scene.describe": "场景全貌:每实体的 transform/装载态/世界包围盒/已挂载动作",
     "assets.list": "资产目录发现,可按 kind/category 过滤;条目带许可与骨骼家族",

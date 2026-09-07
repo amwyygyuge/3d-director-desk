@@ -223,7 +223,12 @@ export {
     AssetsPlaceCommand,
     registerAssetCatalogCommands,
 } from "@/command/assetCatalogCommands";
-export type { DeskDocument, DeskDocumentAction, DeskDocumentMotion } from "@/document/DeskDocument";
+export type {
+    DeskDocument,
+    DeskDocumentAction,
+    DeskDocumentActionMount,
+    DeskDocumentMotion,
+} from "@/document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "@/command/navigationCommands";
 export {
     AdjustLightCommand,
@@ -299,6 +304,7 @@ export {
 } from "@/command/cameraCommands";
 export {
     MountActionCommand,
+    SetActionRangeCommand,
     registerActionCommands,
     TransportPauseCommand,
     TransportPlayCommand,

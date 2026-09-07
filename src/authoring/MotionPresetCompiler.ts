@@ -277,13 +277,16 @@ function orbitPositionAt(
 ): Vec3 {
     const offsetX = shot.position[0] - pivot[0];
     const offsetZ = shot.position[2] - pivot[2];
-    const currentRadius = Math.max(Math.hypot(offsetX, offsetZ), MIN_DISTANCE);
-    const targetRadiusRatio = (radiusMeters ?? currentRadius) / currentRadius;
-    const orbitStart: Vec3 = [
-        pivot[0] + offsetX * targetRadiusRatio,
-        shot.position[1],
-        pivot[2] + offsetZ * targetRadiusRatio,
-    ];
+    const horizontalRadius = Math.hypot(offsetX, offsetZ);
+    const targetRadius = radiusMeters ?? Math.max(horizontalRadius, MIN_DISTANCE);
+    const orbitStart: Vec3 =
+        horizontalRadius < MIN_DISTANCE
+            ? [pivot[0] + targetRadius, shot.position[1], pivot[2]]
+            : [
+                  pivot[0] + (offsetX / horizontalRadius) * targetRadius,
+                  shot.position[1],
+                  pivot[2] + (offsetZ / horizontalRadius) * targetRadius,
+              ];
     return rotateAroundY(orbitStart, pivot, radians * progress);
 }
 
@@ -404,7 +407,11 @@ const MOVE_RESOLVERS: Record<MotionMove, MoveResolver> = {
 export class MotionPresetCompiler {
     compile(request: MotionPresetRequest, context: MotionPresetContext): readonly CameraKeyJSON[] {
         const poses = MOVE_RESOLVERS[request.move](context, request);
-        const landing = this.landingPose(request, context);
+        const hasExplicitOrbitRadius =
+            isOrbitMove(request.move) &&
+            request.orbit?.radiusMeters !== undefined &&
+            request.orbit.radiusMeters !== null;
+        const landing = hasExplicitOrbitRadius ? null : this.landingPose(request, context);
         const resolved: readonly MovePose[] = landing ? [...poses.slice(0, -1), landing] : poses;
         const divisor = Math.max(resolved.length - 1, 1);
         return resolved.map((pose, index) => ({

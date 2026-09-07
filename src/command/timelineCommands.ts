@@ -1,3 +1,4 @@
+import { ActionPerformance } from "@/animation/ActionPerformance";
 import { TimelineContentSpan } from "@/authoring/TimelineContentSpan";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -93,10 +94,20 @@ interface SetPlaybackRangePayload {
     readonly outSeconds: number;
 }
 
+interface ActionScheduleSnapshot {
+    readonly objectId: string;
+    readonly actionId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+    readonly attackSeconds: number;
+    readonly releaseSeconds: number;
+}
+
 interface TimelineScaleSnapshot {
     readonly document: TimelineDocJSON;
     readonly motionClips: readonly CameraMotionClipJSON[];
     readonly program: CameraProgramTrackJSON;
+    readonly actionSchedules: readonly ActionScheduleSnapshot[];
 }
 
 interface RestoreTimelineScalePayload {
@@ -663,7 +674,7 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
         if (duration <= TIMELINE_START_SECONDS) {
             return [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长必须至少覆盖一帧")];
         }
-        const content = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion, ctx.scene.manager);
+        const content = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion, ctx.scene.manager, ctx.animations);
         const blocker = content.blockers[0];
         return duration < content.endSeconds && blocker
             ? [
@@ -692,7 +703,12 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
 }
 
 function fittedDuration(ctx: DirectorContext): number {
-    const contentEnd = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion, ctx.scene.manager).endSeconds;
+    const contentEnd = TimelineContentSpan.fromDocument(
+        ctx.timeline,
+        ctx.motion,
+        ctx.scene.manager,
+        ctx.animations,
+    ).endSeconds;
     return Math.max(quantizeSeconds(ctx, contentEnd), ctx.timeline.document.frameRate.frameDurationSeconds);
 }
 
@@ -719,11 +735,30 @@ export class FitTimelineDurationCommand extends DirectorCommand<Record<string, n
     }
 }
 
+function actionScheduleSnapshots(ctx: DirectorContext): readonly ActionScheduleSnapshot[] {
+    return ctx.scene.manager.list().flatMap((entity) => {
+        const performance = entity.actionPerformance;
+        return performance
+            ? [
+                  {
+                      objectId: entity.id,
+                      actionId: performance.actionId,
+                      startTimeSeconds: performance.startTimeSeconds,
+                      durationSeconds: performance.durationSeconds,
+                      attackSeconds: performance.attackSeconds,
+                      releaseSeconds: performance.releaseSeconds,
+                  },
+              ]
+            : [];
+    });
+}
+
 function snapshotFor(ctx: DirectorContext): TimelineScaleSnapshot {
     return {
         document: ctx.timeline.document.toJSON(),
         motionClips: ctx.motion.clips.map((clip) => clip.toJSON()),
         program: ctx.motion.program.toJSON(),
+        actionSchedules: actionScheduleSnapshots(ctx),
     };
 }
 
@@ -808,11 +843,25 @@ function scaledProgram(ctx: DirectorContext, factor: number): CameraProgramTrack
     });
 }
 
+function scaledActionSchedules(ctx: DirectorContext, factor: number): readonly ActionScheduleSnapshot[] {
+    return actionScheduleSnapshots(ctx).map((schedule) => {
+        const range = scaledRange(ctx, schedule.startTimeSeconds, schedule.durationSeconds, factor);
+        return {
+            ...schedule,
+            startTimeSeconds: range.startSeconds,
+            durationSeconds: range.durationSeconds,
+            attackSeconds: quantizeSeconds(ctx, schedule.attackSeconds * factor),
+            releaseSeconds: quantizeSeconds(ctx, schedule.releaseSeconds * factor),
+        };
+    });
+}
+
 function scaledSnapshot(ctx: DirectorContext, factor: number): TimelineScaleSnapshot {
     return {
         document: scaledDocument(ctx, factor).toJSON(),
         motionClips: scaledMotionClips(ctx, factor).map((clip) => clip.toJSON()),
         program: scaledProgram(ctx, factor).toJSON(),
+        actionSchedules: scaledActionSchedules(ctx, factor),
     };
 }
 
@@ -822,6 +871,13 @@ function applySnapshot(ctx: DirectorContext, snapshot: TimelineScaleSnapshot): v
         snapshot.motionClips.map((clip) => new CameraMotionClip(clip)),
         new CameraProgramTrack(snapshot.program),
     );
+    for (const schedule of snapshot.actionSchedules) {
+        const entity = ctx.scene.manager.getEntity(schedule.objectId);
+        if (!entity || entity.actionId !== schedule.actionId) continue;
+        const performance = new ActionPerformance(schedule);
+        ctx.scene.setObjectAction(schedule.objectId, performance);
+        ctx.binder.setScheduleFor(schedule.objectId, performance);
+    }
     ctx.clock.seek(ctx.clock.time);
     ctx.playback.sampleCurrent();
 }
@@ -874,6 +930,7 @@ class RestoreTimelineScaleCommand extends DirectorCommand<RestoreTimelineScalePa
             new TimelineDoc(this.payload.snapshot.document);
             this.payload.snapshot.motionClips.map((clip) => new CameraMotionClip(clip));
             new CameraProgramTrack(this.payload.snapshot.program);
+            this.payload.snapshot.actionSchedules.map((schedule) => new ActionPerformance(schedule));
             return [];
         } catch {
             return ["缩放撤销快照无效"];

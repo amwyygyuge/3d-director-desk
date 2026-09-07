@@ -26,6 +26,7 @@ const ONCE_ACTION_ACTIVE_SECONDS = 0.2;
 const ONCE_ACTION_HOLD_SAMPLE_SECONDS = 0.5;
 const BASE_POSE_PRESET_ID = "upper-stand-arms-down";
 const BASE_POSE_BONE = "mixamorigRightArm";
+const TIMELINE_SCALE_FACTOR = 0.5;
 const TIME_EPSILON_SECONDS = 1e-6;
 const WAIT_ATTEMPT_LIMIT = 40;
 const WAIT_INTERVAL_MS = 250;
@@ -115,10 +116,16 @@ function basePoseBone(stores: DirectorDeskStores): readonly number[] {
 
 function assertLoopTimelinePlays(stores: DirectorDeskStores): void {
     assertAcceptance(stores.actionPreview.activeObjectId === null, "挂载动作后未播放的预览仍抢占时间轴");
-    const before = sampleTimelinePose(stores, 0);
-    const active = sampleTimelinePose(stores, 0.5);
+    const performance = required(
+        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance ?? undefined,
+        "循环动作缺少时间轴排期",
+    );
+    const before = sampleTimelinePose(stores, performance.startTimeSeconds);
+    const active = sampleTimelinePose(stores, performance.startTimeSeconds + 0.5);
+    const nextCycle = sampleTimelinePose(stores, performance.startTimeSeconds + performance.durationSeconds + 0.5);
     assertAcceptance(quaternionEquals(before, basePoseBone(stores)), "动作开始前未保持常驻姿势");
     assertAcceptance(!quaternionEquals(before, active), "循环动作未随时间轴播放");
+    assertAcceptance(quaternionEquals(active, nextCycle), "循环动作跨周期后未回到同一相位");
 }
 
 function assertOnceTimelineSchedule(stores: DirectorDeskStores): void {
@@ -223,6 +230,20 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
     );
     assertAcceptance(stores.history.redo(stores).ok, "动作排期重做失败");
     assertAcceptance(stores.history.undo(stores).ok, "动作排期验收恢复失败");
+    assertOnceTimelineSchedule(stores);
+    dispatchOk(stores, "timeline.scale", { factor: TIMELINE_SCALE_FACTOR });
+    const scaledPerformance = required(
+        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance ?? undefined,
+        "整轴缩放后动作排期丢失",
+    );
+    assertAcceptance(
+        Math.abs(scaledPerformance.startTimeSeconds - ONCE_ACTION_START_SECONDS * TIMELINE_SCALE_FACTOR) <=
+            TIME_EPSILON_SECONDS &&
+            Math.abs(scaledPerformance.durationSeconds - ONCE_ACTION_DURATION_SECONDS * TIMELINE_SCALE_FACTOR) <=
+                TIME_EPSILON_SECONDS,
+        "整轴缩放未重定时动作排期",
+    );
+    assertAcceptance(stores.history.undo(stores).ok, "整轴缩放撤销失败");
     assertOnceTimelineSchedule(stores);
 
     dispatchOk(stores, "action.preview.play", { objectId: ACTOR_ID });
