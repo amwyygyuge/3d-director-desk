@@ -97,7 +97,9 @@ export class AnimationBinder {
         const mounted = this.mounted.get(objectId);
         if (!mounted) return;
         const alpha = Math.min(Math.max(baseWeight, 0), 1);
-        for (const boneKey of mounted.boneKeys) {
+        for (const boneName of mounted.boneKeys) {
+            const boneKey = this.skeletons.boneKeyForName(objectId, boneName);
+            if (!boneKey) continue;
             const bone = this.skeletons.getBone(objectId, boneKey);
             const target = basePose?.bones[boneKey] ?? this.skeletons.baselineRotationFor(objectId, boneKey);
             if (!bone || !target) continue;

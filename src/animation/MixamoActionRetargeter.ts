@@ -1,5 +1,5 @@
 import { AnimationClip, Bone, Skeleton } from "three";
-import type { Object3D, SkinnedMesh } from "three";
+import type { KeyframeTrack, Object3D, SkinnedMesh } from "three";
 import { clone as cloneSkeleton, retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { normalizeMixamoBoneName } from "@/actor/mixamoSkeleton";
@@ -12,10 +12,41 @@ export type ActionChannelPolicy = (typeof ACTION_CHANNEL_POLICY)[keyof typeof AC
 
 export interface MixamoActionRetargetOptions {
     readonly channels?: ActionChannelPolicy;
+    /** 去除源动作开头/结尾的静态参考帧;单位秒。 */
+    readonly trimStartSeconds?: number;
+    readonly trimEndSeconds?: number;
     /** 动作文件自己的骨架;FBX 重定向必须提供。 */
     readonly sourceRoot?: Object3D;
     /** 目标人偶当前运行时;会被克隆,实际场景不受 retargetClip 的 skeleton.pose() 影响。 */
     readonly targetRoot?: Object3D;
+}
+
+function trimmedTrack(track: KeyframeTrack, startTimeSeconds: number, endTimeSeconds: number): KeyframeTrack {
+    const valueSize = track.getValueSize();
+    const times = [...track.times];
+    const firstIndex = times.findIndex((time) => time >= startTimeSeconds);
+    const lastIndex = times.findLastIndex((time) => time <= endTimeSeconds);
+    if (firstIndex < 0 || lastIndex < firstIndex) {
+        throw new Error("MixamoActionRetargeter: 动作轨道裁剪后为空");
+    }
+    const trimmed = track.clone();
+    trimmed.times = track.times.slice(firstIndex, lastIndex + 1);
+    trimmed.times = new Float32Array(trimmed.times.map((time) => time - startTimeSeconds));
+    trimmed.values = track.values.slice(firstIndex * valueSize, (lastIndex + 1) * valueSize);
+    return trimmed;
+}
+
+function trimClip(clip: AnimationClip, trimStartSeconds: number, trimEndSeconds: number): AnimationClip {
+    if (trimStartSeconds === 0 && trimEndSeconds === 0) return clip;
+    const endTimeSeconds = clip.duration - trimEndSeconds;
+    if (trimStartSeconds < 0 || trimEndSeconds < 0 || endTimeSeconds <= trimStartSeconds) {
+        throw new Error("MixamoActionRetargeter: 动作裁剪窗口无效");
+    }
+    return new AnimationClip(
+        clip.name,
+        endTimeSeconds - trimStartSeconds,
+        clip.tracks.map((track) => trimmedTrack(track, trimStartSeconds, endTimeSeconds)),
+    );
 }
 
 function sourceBonesOf(root: Object3D): Bone[] {
@@ -70,7 +101,8 @@ export class MixamoActionRetargeter {
             if (rotationOnly && retargetedTrack.name === TARGET_HIPS_TRACK_NAME) return [];
             return [retargetedTrack];
         });
-        return new AnimationClip(retargeted.name, retargeted.duration, tracks);
+        const normalized = new AnimationClip(retargeted.name, retargeted.duration, tracks);
+        return trimClip(normalized, options.trimStartSeconds ?? 0, options.trimEndSeconds ?? 0);
     }
 
     private retargetWithSkeleton(clip: AnimationClip, sourceRoot: Object3D, targetRoot: Object3D): AnimationClip {

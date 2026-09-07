@@ -21,6 +21,8 @@ export class ActionAsset {
     readonly url: string;
     readonly duration: number;
     readonly loopMode: ActionLoopMode;
+    readonly trimStartSeconds: number;
+    readonly trimEndSeconds: number;
     /** clip 轨道目标节点名(骨骼预检的展示/诊断素材) */
     readonly trackNames: readonly string[];
 
@@ -30,6 +32,8 @@ export class ActionAsset {
         url: string;
         duration: number;
         loopMode: ActionLoopMode;
+        trimStartSeconds: number;
+        trimEndSeconds: number;
         trackNames: readonly string[];
     }) {
         this.id = init.id;
@@ -37,6 +41,8 @@ export class ActionAsset {
         this.url = init.url;
         this.duration = init.duration;
         this.loopMode = init.loopMode;
+        this.trimStartSeconds = init.trimStartSeconds;
+        this.trimEndSeconds = init.trimEndSeconds;
         this.trackNames = init.trackNames;
         Object.freeze(this);
     }

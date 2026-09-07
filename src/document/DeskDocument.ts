@@ -14,9 +14,10 @@ import type { LightingMode } from "@/store/SceneStore";
  * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档;
  * v10 起动作带循环语义与时间轴排期(开始时间/演出时长);
  * v11 起一次性动作带回收时长,结束后回到常驻姿势;
- * v12 起动作排期带进入时长,从常驻姿势平滑进入动作。
+ * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
+ * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 12;
+export const DESK_DOCUMENT_VERSION = 13;
 
 export interface DeskDocumentActionMount {
     readonly objectId: string;
@@ -32,6 +33,8 @@ export interface DeskDocumentAction {
     readonly url: string;
     readonly clipName: string;
     readonly loopMode: ActionLoopMode;
+    readonly trimStartSeconds: number;
+    readonly trimEndSeconds: number;
     /** 挂载该动作的全部实体及排期;空数组 = 已注册未挂载 */
     readonly mountedOn: readonly DeskDocumentActionMount[];
 }
@@ -78,6 +81,8 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
             url: action.url,
             clipName: ctx.animations.getClip(action.id)?.name ?? "",
             loopMode: action.loopMode,
+            trimStartSeconds: action.trimStartSeconds,
+            trimEndSeconds: action.trimEndSeconds,
             mountedOn: entities.flatMap((entity) => {
                 const performance = entity.actionPerformance;
                 return performance?.actionId === action.id

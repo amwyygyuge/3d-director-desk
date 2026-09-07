@@ -118,6 +118,14 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
     }
     if (typeof value.clipName !== "string") return [`动作 "${value.name}" 的 clipName 无效`];
     if (!isActionLoopMode(value.loopMode)) return [`动作 "${value.name}" 的 loopMode 无效`];
+    if (
+        !Number.isFinite(value.trimStartSeconds) ||
+        !Number.isFinite(value.trimEndSeconds) ||
+        (value.trimStartSeconds as number) < 0 ||
+        (value.trimEndSeconds as number) < 0
+    ) {
+        return [`动作 "${value.name}" 的裁剪窗口无效`];
+    }
     if (!Array.isArray(value.mountedOn)) return [`动作 "${value.name}" 的挂载列表无效`];
     const mounts = value.mountedOn;
     const missing = mounts.filter(

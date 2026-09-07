@@ -188,6 +188,8 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                         url: entry.url,
                         clipName: entry.clipName,
                         loopMode: entry.loopMode ?? ACTION_LOOP_MODE.ONCE,
+                        ...(entry.trimStartSeconds === undefined ? {} : { trimStartSeconds: entry.trimStartSeconds }),
+                        ...(entry.trimEndSeconds === undefined ? {} : { trimEndSeconds: entry.trimEndSeconds }),
                     },
                     { signal, targetObjectId: this.payload.objectId },
                 );

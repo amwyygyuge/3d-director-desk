@@ -69,7 +69,9 @@
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "loopMode": "once",
-            "tags": ["gesture", "yes"]
+            "tags": ["gesture", "yes"],
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.shake-head-no",
@@ -82,7 +84,9 @@
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "loopMode": "once",
-            "tags": ["gesture", "no"]
+            "tags": ["gesture", "no"],
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.come-here",
@@ -95,7 +99,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "beckon"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.go-away-quickly",
@@ -108,7 +114,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "dismiss"],
-            "loopMode": "loop"
+            "loopMode": "loop",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.hands-on-head",
@@ -121,7 +129,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "distress"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.stop-one-hand",
@@ -134,7 +144,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.stop-two-hand",
@@ -147,7 +159,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.thumbs-up",
@@ -160,7 +174,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "approve"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.thumbs-down",
@@ -173,7 +189,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "reject"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.celebrate",
@@ -186,7 +204,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "celebrate"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.celebrate-alt",
@@ -199,7 +219,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "celebrate"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.celebrate-jump",
@@ -212,7 +234,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "celebrate", "jump"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.come-here-alt",
@@ -225,7 +249,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "beckon"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.come-here-emphatic",
@@ -238,7 +264,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "beckon"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.go-away-angry",
@@ -251,7 +279,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "dismiss", "angry"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.go-away-annoyed",
@@ -264,7 +294,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "dismiss"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.stop-one-hand-alt",
@@ -277,7 +309,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.stop-two-hand-alt",
@@ -290,7 +324,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         },
         {
             "id": "builtin.action.thumbs-down-alt",
@@ -303,7 +339,9 @@
             "license": "FreeMotionPack1 (J-Beardmore)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "reject"],
-            "loopMode": "once"
+            "loopMode": "once",
+            "trimStartSeconds": 0.06666666666666667,
+            "trimEndSeconds": 0.03333333333333333
         }
     ]
 }

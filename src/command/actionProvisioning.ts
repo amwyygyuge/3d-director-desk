@@ -18,7 +18,14 @@ const actionRetargeter = new MixamoActionRetargeter();
  */
 export async function provisionAction(
     ctx: DirectorContext,
-    init: { name: string; url: string; clipName?: string | null | undefined; loopMode: ActionLoopMode },
+    init: {
+        name: string;
+        url: string;
+        clipName?: string | null | undefined;
+        loopMode: ActionLoopMode;
+        trimStartSeconds?: number | null;
+        trimEndSeconds?: number | null;
+    },
     options?: { signal?: AbortSignal; targetObjectId?: string },
 ): Promise<ActionAsset> {
     const format = formatFromUrl(init.url);
@@ -39,6 +46,8 @@ export async function provisionAction(
         if (!clip) throw new Error(`资产无动作 clip: ${init.url}`);
         const retargetedClip = actionRetargeter.normalize(clip, {
             channels: needsRetarget ? ACTION_CHANNEL_POLICY.ROTATION_ONLY : ACTION_CHANNEL_POLICY.PRESERVE,
+            trimStartSeconds: init.trimStartSeconds ?? 0,
+            trimEndSeconds: init.trimEndSeconds ?? 0,
             sourceRoot: handle.object3d,
             ...(targetRuntime ? { targetRoot: targetRuntime } : {}),
         });
@@ -47,6 +56,8 @@ export async function provisionAction(
             url: init.url,
             clip: retargetedClip,
             loopMode: init.loopMode,
+            trimStartSeconds: init.trimStartSeconds ?? 0,
+            trimEndSeconds: init.trimEndSeconds ?? 0,
         }).action;
     } finally {
         handle.release();
