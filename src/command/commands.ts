@@ -353,6 +353,8 @@ interface SceneEntityDescription {
     readonly loadState: EntityLoadState;
     /** 挂载的 AnimationLibrary action id；未挂载为 null。 */
     readonly mountedActionId: string | null;
+    /** 动作时间轴排期;未挂载为 null。 */
+    readonly actionSchedule: { readonly startTimeSeconds: number; readonly durationSeconds: number } | null;
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
 }
 
@@ -390,6 +392,12 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
         transform: toJS(entity.transform),
         loadState: entityLoadState(ctx, entity),
         mountedActionId: entity.actionId,
+        actionSchedule: entity.actionPerformance
+            ? {
+                  startTimeSeconds: entity.actionPerformance.startTimeSeconds,
+                  durationSeconds: entity.actionPerformance.durationSeconds,
+              }
+            : null,
         bounds,
     };
 }

@@ -1,5 +1,7 @@
 import { MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
+import { isActionLoopMode } from "@/assets/ActionAsset";
+import type { ActionLoopMode } from "@/assets/ActionAsset";
 
 /** 资源大类:模型 / 动作 */
 export const ASSET_KIND = {
@@ -16,13 +18,14 @@ export const ASSET_SOURCE = {
 } as const;
 export type AssetSource = (typeof ASSET_SOURCE)[keyof typeof ASSET_SOURCE];
 
-/** 模型分类(开放词表,常用先行):人/动物/植物/家具/道具 */
+/** 资源分类(开放词表,常用先行):人/动物/植物/家具/道具/动作语义。 */
 export const ASSET_CATEGORY = {
     HUMAN: "character.human",
     ANIMAL: "character.animal",
     PLANT: "plant",
     FURNITURE: "furniture",
     PROP: "prop",
+    ACTION_PERFORMANCE: "action.performance",
 } as const;
 
 /** 人偶资产声明:存在即表示该模型放置后带人偶画像(可改色/体型/姿势)。 */
@@ -58,6 +61,8 @@ export interface AssetEntry {
     readonly skeletonFamily: string | null;
     /** 动作资产:目标 clip 名(多 clip 文件内定位) */
     readonly clipName?: string | null;
+    /** 动作资产:loop = 无缝循环;once = 播完钳住末帧。 */
+    readonly loopMode?: ActionLoopMode | null;
     /** 模型资产:内嵌动作名清单(AI 选型可读) */
     readonly embeddedClips?: readonly string[];
     /** 人偶资产:放置时注入默认画像;缺省即普通模型,不具备外观/体型/姿势能力 */
@@ -89,5 +94,6 @@ export function parseAssetEntry(value: unknown): AssetEntry | null {
     if (entry.skeletonFamily !== null && typeof entry.skeletonFamily !== "string") return null;
     if (!Array.isArray(entry.tags)) return null;
     if (entry.actor !== undefined && entry.actor !== null && !isAssetActorDefaults(entry.actor)) return null;
+    if (entry.loopMode !== undefined && entry.loopMode !== null && !isActionLoopMode(entry.loopMode)) return null;
     return entry;
 }

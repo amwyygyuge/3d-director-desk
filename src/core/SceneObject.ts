@@ -2,6 +2,7 @@ import { makeAutoObservable, observableRef } from "mobx";
 
 import { ActorProfile } from "@/actor/ActorProfile";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
+import type { ActionPerformance } from "@/animation/ActionPerformance";
 import type { ModelFormat } from "@/assets/ModelAsset";
 import { normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
@@ -85,7 +86,7 @@ export class SceneObject {
     /** 显示名(Outliner/Inspector);缺省按 kind + id 尾缀派生(确定性,undo/redo 回放不漂移) */
     readonly name: string;
     private currentTransform: Transform;
-    private mountedActionId: string | null = null;
+    private mountedAction: ActionPerformance | null = null;
     /** 灯光参数值对象；仅 light 实体有值，Three 光源仍由运行时树拥有。 */
     private currentLight: LightParams | null;
     private currentPose: PoseSnapshot | null;
@@ -110,10 +111,11 @@ export class SceneObject {
         if (this.currentActor && init.kind !== "model") {
             throw new Error("SceneObject: 只有模型实体可以持有人偶画像");
         }
-        makeAutoObservable<SceneObject, "currentLight" | "currentPose" | "currentActor">(this, {
+        makeAutoObservable<SceneObject, "currentLight" | "currentPose" | "currentActor" | "mountedAction">(this, {
             currentLight: observableRef,
             currentPose: observableRef,
             currentActor: observableRef,
+            mountedAction: observableRef,
         });
     }
 
@@ -168,10 +170,15 @@ export class SceneObject {
 
     /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
     get actionId(): string | null {
-        return this.mountedActionId;
+        return this.mountedAction?.actionId ?? null;
     }
 
-    applyAction(actionId: string | null): void {
-        this.mountedActionId = actionId;
+    /** 动作演出排期:开始时间与时长属于实体状态,文档从它派生。 */
+    get actionPerformance(): ActionPerformance | null {
+        return this.mountedAction;
+    }
+
+    applyAction(action: ActionPerformance | null): void {
+        this.mountedAction = action;
     }
 }

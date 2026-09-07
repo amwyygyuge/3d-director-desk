@@ -4,6 +4,7 @@ export const TIMELINE_SELECTION_KIND = {
     NONE: "none",
     PROGRAM_CLIP: "program-clip",
     MOTION_CLIP: "motion-clip",
+    ACTION_CLIP: "action-clip",
     MARKER: "marker",
     MOTION_KEY: "motion-key",
     WALK_TRACK: "walk-track",
@@ -18,6 +19,7 @@ export type TimelineSelectionKind = (typeof TIMELINE_SELECTION_KIND)[keyof typeo
 const REMOVE_COMMAND_TYPE = {
     PROGRAM_CLIP: "program.remove-clip",
     MOTION_CLIP: "motion.remove-clip",
+    ACTION_CLIP: "action.unmount",
     MOTION_KEY: "motion.remove-key",
     WALK_KEY: "timeline.remove-key",
     MARKER: "timeline.remove-marker",
@@ -45,6 +47,10 @@ const DELETE_COMMAND: Record<TimelineSelectionKind, (identity: SelectionIdentity
         type: REMOVE_COMMAND_TYPE.MOTION_CLIP,
         payload: { id: ownerId },
     }),
+    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: ({ ownerId }) => ({
+        type: REMOVE_COMMAND_TYPE.ACTION_CLIP,
+        payload: { objectId: ownerId },
+    }),
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: ({ ownerId, memberId }) => ({
         type: REMOVE_COMMAND_TYPE.MOTION_KEY,
         payload: { clipId: ownerId, keyId: memberId },
@@ -65,6 +71,7 @@ const OWNER_IS_MOTION_CLIP: Record<TimelineSelectionKind, boolean> = {
     [TIMELINE_SELECTION_KIND.NONE]: false,
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: false,
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: true,
+    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: false,
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: true,
     [TIMELINE_SELECTION_KIND.MARKER]: false,
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: false,
@@ -76,6 +83,7 @@ const OWNER_IS_WALK_TRACK: Record<TimelineSelectionKind, boolean> = {
     [TIMELINE_SELECTION_KIND.NONE]: false,
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: false,
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: false,
+    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: false,
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: false,
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: true,
     [TIMELINE_SELECTION_KIND.MARKER]: false,
@@ -115,6 +123,10 @@ export class TimelineSelection {
 
     static motionClip(clipId: string): TimelineSelection {
         return new TimelineSelection(TIMELINE_SELECTION_KIND.MOTION_CLIP, clipId, null);
+    }
+
+    static actionClip(objectId: string): TimelineSelection {
+        return new TimelineSelection(TIMELINE_SELECTION_KIND.ACTION_CLIP, objectId, null);
     }
 
     static motionKey(clipId: string, keyId: string): TimelineSelection {

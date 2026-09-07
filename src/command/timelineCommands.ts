@@ -663,7 +663,7 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
         if (duration <= TIMELINE_START_SECONDS) {
             return [issue(ISSUE_CODE.DURATION, "duration", "时间轴时长必须至少覆盖一帧")];
         }
-        const content = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion);
+        const content = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion, ctx.scene.manager);
         const blocker = content.blockers[0];
         return duration < content.endSeconds && blocker
             ? [
@@ -692,7 +692,7 @@ export class SetTimelineDurationCommand extends DirectorCommand<SetDurationPaylo
 }
 
 function fittedDuration(ctx: DirectorContext): number {
-    const contentEnd = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion).endSeconds;
+    const contentEnd = TimelineContentSpan.fromDocument(ctx.timeline, ctx.motion, ctx.scene.manager).endSeconds;
     return Math.max(quantizeSeconds(ctx, contentEnd), ctx.timeline.document.frameRate.frameDurationSeconds);
 }
 

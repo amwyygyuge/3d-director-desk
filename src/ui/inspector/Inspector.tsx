@@ -33,14 +33,16 @@ import {
 } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
-import { listActionClips } from "@/pose/PosePresetCatalog";
-import type { EmbeddedClipPresentation } from "@/pose/PosePresetCatalog";
+import { ASSET_KIND } from "@/assets/catalog/AssetEntry";
+import { ACTION_LOOP_MODE, ACTION_LOOP_MODE_LABEL } from "@/assets/ActionAsset";
+import { listActionClips, presentEmbeddedClip } from "@/pose/PosePresetCatalog";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { SCRUB_STEP } from "@/ui/controls/numberFieldConfig";
 import type { ScrubKind } from "@/ui/controls/numberFieldConfig";
 import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { invalidInputNotice } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { PresetButtonGrid } from "@/ui/inspector/PresetButtonGrid";
 import { INSPECTOR_FIELD_SX, TransformFields } from "@/ui/inspector/TransformFields";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { WalkPolicySection } from "@/ui/inspector/WalkPolicyControls";
@@ -51,8 +53,6 @@ const AXIS_Z = 2;
 const FIELD_GROUP_GAP = 1;
 const FIELD_COLUMN_GAP = 0.5;
 
-const PRESET_GRID_TEMPLATE_COLUMNS = "repeat(2, minmax(0, 1fr))";
-const PRESET_BUTTON_MIN_HEIGHT_PX = 40;
 const FIELD_LABEL_WIDTH_PX = 32;
 const NUMBER_COMPANION_WIDTH_PX = 96;
 /** 与 INSPECTOR_FIELD_SX 的区内节奏同源:浮起标签上溢约 9px,小于 12px 会与上一控件相切 */
@@ -406,28 +406,6 @@ function replaceLightNumberParameter(
     }
 }
 
-interface PresetGridProps {
-    readonly presets: readonly EmbeddedClipPresentation[];
-    readonly onApply: (clipName: string) => void;
-}
-
-function renderPresetGrid({ presets, onApply }: PresetGridProps) {
-    return (
-        <Box sx={{ display: "grid", gap: 0.5, gridTemplateColumns: PRESET_GRID_TEMPLATE_COLUMNS }}>
-            {presets.map((preset) => (
-                <Button
-                    key={preset.clipName}
-                    size="small"
-                    variant="outlined"
-                    sx={{ minHeight: PRESET_BUTTON_MIN_HEIGHT_PX, px: 0.75, py: 0.5 }}
-                    onClick={() => onApply(preset.clipName)}
-                >
-                    {preset.labelZh}
-                </Button>
-            ))}
-        </Box>
-    );
-}
 /** 内嵌 clip 目录条目查找:姿势/动作预设区与「动作」tab 可见性谓词共用同一真相。 */
 function embeddedClipEntryFor(stores: DirectorDeskStores, entity: SceneObject) {
     return entity.kind === "model" && entity.sourceUrl
@@ -441,7 +419,12 @@ function embeddedClipEntryFor(stores: DirectorDeskStores, entity: SceneObject) {
 export function modelHasActionContent(stores: DirectorDeskStores, objectId: string): boolean {
     const entity = stores.scene.manager.getEntity(objectId);
     if (!entity || entity.kind !== "model") return false;
-    return Boolean(entity.actionId) || embeddedClipEntryFor(stores, entity) !== undefined;
+    const hasCatalogActions = entity.actor
+        ? stores.catalog
+              .list({ kind: ASSET_KIND.ACTION })
+              .some((entry) => entry.skeletonFamily === entity.actor?.skeletonFamily)
+        : false;
+    return Boolean(entity.actionId) || hasCatalogActions || embeddedClipEntryFor(stores, entity) !== undefined;
 }
 
 /** 动作分区:只呈现可播放动作,静态造型归「姿势」组合器,同一造型不再有两个入口。 */
@@ -462,7 +445,13 @@ const ActionPresetSection = observer(function ActionPresetSection({ objectId, re
                 if (!clip) throw new Error(`动作 clip 不存在:${clipName}`);
                 // 动作与姿势互斥:挂动作前先清姿势,否则姿势层会在每帧采样后覆盖动作结果
                 if (entity.pose) report(dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
-                const action = animations.register({ name: `${entry.name}#${clipName}`, url: entry.url, clip }).action;
+                const presentation = presentEmbeddedClip(clipName);
+                const action = animations.register({
+                    name: `${entry.name}#${clipName}`,
+                    url: entry.url,
+                    clip,
+                    loopMode: presentation.loopMode ?? ACTION_LOOP_MODE.ONCE,
+                }).action;
                 report(
                     dispatcher.dispatch({ type: "action.mount", payload: { objectId, actionId: action.id } }, stores),
                 );
@@ -478,7 +467,44 @@ const ActionPresetSection = observer(function ActionPresetSection({ objectId, re
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
             <Typography variant="overline">动作（{actionPresets.length}）</Typography>
-            {renderPresetGrid({ presets: actionPresets, onApply: mountAction })}
+            <PresetButtonGrid
+                items={actionPresets.map((preset) => {
+                    const loopMode = preset.loopMode ?? ACTION_LOOP_MODE.ONCE;
+                    return { id: preset.clipName, label: `${preset.labelZh} · ${ACTION_LOOP_MODE_LABEL[loopMode]}` };
+                })}
+                onApply={mountAction}
+            />
+        </Box>
+    );
+});
+
+/** 目录动作分区:按人偶骨架族列出动作资产,写入统一走 assets.mount。 */
+const CatalogActionSection = observer(function CatalogActionSection({ objectId, report }: ObjectControlsProps) {
+    const stores = useDirectorDeskStores();
+    const entity = stores.scene.manager.getEntity(objectId);
+    const actor = entity?.actor;
+    const actions = actor
+        ? stores.catalog
+              .list({ kind: ASSET_KIND.ACTION })
+              .filter((entry) => entry.skeletonFamily === actor.skeletonFamily)
+        : [];
+    if (actions.length === 0) return null;
+
+    const mountAction = (assetId: string) => {
+        if (entity?.pose) report(stores.dispatcher.dispatch({ type: "pose.clear", payload: { objectId } }, stores));
+        report(stores.dispatcher.dispatch({ type: "assets.mount", payload: { assetId, objectId } }, stores));
+    };
+
+    return (
+        <Box sx={INSPECTOR_FIELD_SX}>
+            <Typography variant="overline">动作资产（{actions.length}）</Typography>
+            <PresetButtonGrid
+                items={actions.map((action) => {
+                    const loopMode = action.loopMode ?? ACTION_LOOP_MODE.ONCE;
+                    return { id: action.id, label: `${action.name} · ${ACTION_LOOP_MODE_LABEL[loopMode]}` };
+                })}
+                onApply={mountAction}
+            />
         </Box>
     );
 });
@@ -496,7 +522,7 @@ const PlaybackControls = observer(function PlaybackControls({ objectId, report }
         <Box sx={INSPECTOR_FIELD_SX}>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
                 <Typography variant="overline" sx={{ flex: 1 }}>
-                    当前动作
+                    {mountedAction.name} · {ACTION_LOOP_MODE_LABEL[mountedAction.loopMode]}
                 </Typography>
                 <IconButton
                     size="small"
@@ -524,6 +550,7 @@ export const ModelActionSection = observer(function ModelActionSection({ primary
     return (
         <>
             <ActionPresetSection objectId={primaryId} report={report} />
+            <CatalogActionSection objectId={primaryId} report={report} />
             <PlaybackControls objectId={primaryId} report={report} />
         </>
     );

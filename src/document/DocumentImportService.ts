@@ -8,6 +8,8 @@ import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
 import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/core/SceneObject";
 import type { DeskDocument, DeskDocumentAction, DeskDocumentLighting } from "@/document/DeskDocument";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
+import { isActionLoopMode } from "@/assets/ActionAsset";
+import { MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 import { parsePosePreset } from "@/pose/PosePreset";
 import type { PosePreset } from "@/pose/PosePreset";
 import { TimelineDoc } from "@/timeline/TimelineDoc";
@@ -115,10 +117,31 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
         return ["动作资产参数无效"];
     }
     if (typeof value.clipName !== "string") return [`动作 "${value.name}" 的 clipName 无效`];
+    if (!isActionLoopMode(value.loopMode)) return [`动作 "${value.name}" 的 loopMode 无效`];
     if (!Array.isArray(value.mountedOn)) return [`动作 "${value.name}" 的挂载列表无效`];
-    const missing = value.mountedOn.filter((id: unknown) => typeof id !== "string" || !entityIds.has(id));
+    const mounts = value.mountedOn;
+    const missing = mounts.filter(
+        (mount: unknown) => !isRecord(mount) || typeof mount.objectId !== "string" || !entityIds.has(mount.objectId),
+    );
+    const invalidSchedule = mounts.filter(
+        (mount: unknown) =>
+            !isRecord(mount) ||
+            !Number.isFinite(mount.startTimeSeconds) ||
+            !Number.isFinite(mount.durationSeconds) ||
+            (mount.startTimeSeconds as number) < 0 ||
+            (mount.durationSeconds as number) < MINIMUM_ACTION_DURATION_SECONDS,
+    );
     if (missing.length > 0) return [`动作 "${value.name}" 的挂载对象不存在`];
+    if (invalidSchedule.length > 0) return [`动作 "${value.name}" 的排期无效`];
     return value.url.length > 0 ? [] : [`动作 "${value.name}" 的 url 无效`];
+}
+
+function actionScheduleIssues(plan: DocumentImportPlan): readonly string[] {
+    return plan.actions.flatMap((action) =>
+        action.mountedOn
+            .filter((mount) => mount.startTimeSeconds + mount.durationSeconds > plan.timeline.duration)
+            .map((mount) => `动作 "${action.name}" 在实体 "${mount.objectId}" 上的排期超出时间轴时长`),
+    );
 }
 
 function lightingIssues(value: unknown): readonly string[] {
@@ -261,7 +284,11 @@ function preparePlan(document: unknown): DocumentImportPreparation {
             }),
             lighting: typed.lighting,
         };
-        const relationalIssues = [...timelineIssues(plan.timeline, entityIdSet), ...motionIssues(plan)];
+        const relationalIssues = [
+            ...timelineIssues(plan.timeline, entityIdSet),
+            ...motionIssues(plan),
+            ...actionScheduleIssues(plan),
+        ];
         return relationalIssues.length > 0 ? { issues: relationalIssues, plan: null } : { issues: [], plan };
     } catch {
         return { issues: ["文档包含无法恢复的领域数据"], plan: null };
@@ -319,7 +346,11 @@ export class DocumentImportService {
         for (const action of actions) {
             if (signal.aborted) return;
             try {
-                const registered = await provisionAction(ctx, action, { signal });
+                const targetObjectId = action.mountedOn[0]?.objectId;
+                const registered = await provisionAction(ctx, action, {
+                    signal,
+                    ...(targetObjectId ? { targetObjectId } : {}),
+                });
                 if (signal.aborted) return;
                 await this.mountOnEntities({ ctx, action, actionId: registered.id, signal });
             } catch {
@@ -341,11 +372,14 @@ export class DocumentImportService {
         readonly actionId: string;
         readonly signal: AbortSignal;
     }): Promise<void> {
-        for (const objectId of action.mountedOn) {
+        for (const mount of action.mountedOn) {
             if (signal.aborted) return;
-            const isMounted = await mountWhenReady(ctx, objectId, actionId, { signal });
-            if (!isMounted && !signal.aborted)
-                ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${objectId}`);
+            const isMounted = await mountWhenReady(ctx, mount.objectId, actionId, {
+                signal,
+                startTimeSeconds: mount.startTimeSeconds,
+                durationSeconds: mount.durationSeconds,
+            });
+            if (!isMounted && !signal.aborted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
         }
     }
 }

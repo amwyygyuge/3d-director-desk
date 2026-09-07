@@ -1,3 +1,6 @@
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import type { ActionLoopMode } from "@/assets/ActionAsset";
+
 /**
  * 内嵌 clip 的角色划分。
  *
@@ -14,14 +17,21 @@ export interface EmbeddedClipPresentation {
     readonly clipName: string;
     readonly role: ClipRole;
     readonly labelZh: string;
+    /** 仅 ACTION 消费;POSE_SOURCE 不进入动作区,无需声明循环语义。 */
+    readonly loopMode?: ActionLoopMode;
 }
 
 const HUMANOID_CLIPS: readonly EmbeddedClipPresentation[] = [
-    { clipName: "Idle", role: CLIP_ROLE.ACTION, labelZh: "待机" },
-    { clipName: "Walking", role: CLIP_ROLE.ACTION, labelZh: "行走" },
-    { clipName: "Walking Backward", role: CLIP_ROLE.ACTION, labelZh: "倒退行走" },
-    { clipName: "Jump", role: CLIP_ROLE.ACTION, labelZh: "跳跃" },
-    { clipName: "Running", role: CLIP_ROLE.ACTION, labelZh: "奔跑" },
+    { clipName: "Idle", role: CLIP_ROLE.ACTION, labelZh: "待机", loopMode: ACTION_LOOP_MODE.LOOP },
+    { clipName: "Walking", role: CLIP_ROLE.ACTION, labelZh: "行走", loopMode: ACTION_LOOP_MODE.LOOP },
+    {
+        clipName: "Walking Backward",
+        role: CLIP_ROLE.ACTION,
+        labelZh: "倒退行走",
+        loopMode: ACTION_LOOP_MODE.LOOP,
+    },
+    { clipName: "Jump", role: CLIP_ROLE.ACTION, labelZh: "跳跃", loopMode: ACTION_LOOP_MODE.ONCE },
+    { clipName: "Running", role: CLIP_ROLE.ACTION, labelZh: "奔跑", loopMode: ACTION_LOOP_MODE.LOOP },
     { clipName: "Standing", role: CLIP_ROLE.POSE_SOURCE, labelZh: "站立" },
     { clipName: "Sitting", role: CLIP_ROLE.POSE_SOURCE, labelZh: "椅上坐" },
     { clipName: "Sitting Floor", role: CLIP_ROLE.POSE_SOURCE, labelZh: "坐地" },
@@ -37,7 +47,14 @@ const CLIP_BY_NAME = new Map(HUMANOID_CLIPS.map((clip) => [clip.clipName, clip])
 
 /** 未登记的 clip(宿主注入资产)一律按动作呈现,原名即标签——不认识不等于不可用。 */
 export function presentEmbeddedClip(clipName: string): EmbeddedClipPresentation {
-    return CLIP_BY_NAME.get(clipName) ?? { clipName, role: CLIP_ROLE.ACTION, labelZh: clipName };
+    return (
+        CLIP_BY_NAME.get(clipName) ?? {
+            clipName,
+            role: CLIP_ROLE.ACTION,
+            labelZh: clipName,
+            loopMode: ACTION_LOOP_MODE.ONCE,
+        }
+    );
 }
 
 export function listActionClips(clipNames: readonly string[]): readonly EmbeddedClipPresentation[] {

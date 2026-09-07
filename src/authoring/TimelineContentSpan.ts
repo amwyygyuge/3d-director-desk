@@ -1,3 +1,4 @@
+import type { SceneManager } from "@/core/SceneManager";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
 
@@ -5,6 +6,7 @@ export const TIMELINE_CONTENT_BLOCKER_KIND = {
     WALK_TRACK: "walk-track",
     MOTION_CLIP: "motion-clip",
     PROGRAM_CLIP: "program-clip",
+    ACTION_PERFORMANCE: "action-performance",
 } as const;
 export type TimelineContentBlockerKind =
     (typeof TIMELINE_CONTENT_BLOCKER_KIND)[keyof typeof TIMELINE_CONTENT_BLOCKER_KIND];
@@ -29,7 +31,7 @@ export class TimelineContentSpan {
         Object.freeze(this);
     }
 
-    static fromDocument(timeline: TimelineStore, motion: CameraMotionStore): TimelineContentSpan {
+    static fromDocument(timeline: TimelineStore, motion: CameraMotionStore, scene: SceneManager): TimelineContentSpan {
         const walkTracks = timeline.document.tracks.flatMap((track) =>
             track.keyframes.length === 0
                 ? []
@@ -54,6 +56,18 @@ export class TimelineContentSpan {
             label: `Program 片段 ${clip.id}`,
             endSeconds: clip.endTimeSeconds,
         }));
-        return new TimelineContentSpan([...walkTracks, ...motionClips, ...programClips]);
+        const actionPerformances = scene.list().flatMap((entity) =>
+            entity.actionPerformance
+                ? [
+                      {
+                          kind: TIMELINE_CONTENT_BLOCKER_KIND.ACTION_PERFORMANCE,
+                          id: entity.id,
+                          label: `动作 ${entity.name}`,
+                          endSeconds: entity.actionPerformance.endTimeSeconds,
+                      },
+                  ]
+                : [],
+        );
+        return new TimelineContentSpan([...walkTracks, ...motionClips, ...programClips, ...actionPerformances]);
     }
 }

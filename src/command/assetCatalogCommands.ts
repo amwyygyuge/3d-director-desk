@@ -1,5 +1,6 @@
 import { ASSET_CATEGORY, ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
 import type { AssetEntry } from "@/assets/catalog/AssetEntry";
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import { createId } from "@/core/createId";
 import { finiteTransform } from "@/core/SceneObject";
@@ -57,6 +58,8 @@ const ASSETS_MOUNT_CONTRACT: PayloadContract = {
     properties: {
         assetId: { type: "string" },
         objectId: { type: "string" },
+        startTimeSeconds: { type: "number" },
+        durationSeconds: { type: "number" },
     },
     required: ["assetId", "objectId"],
 };
@@ -147,6 +150,8 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
 interface AssetsMountPayload {
     readonly assetId: string;
     readonly objectId: string;
+    readonly startTimeSeconds?: number;
+    readonly durationSeconds?: number;
 }
 
 /** 按目录条目挂载动作资产(clip 置备 + 运行时就绪等待;骨骼不兼容由动作挂载校验拦截) */
@@ -178,10 +183,19 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                         name: entry.name,
                         url: entry.url,
                         clipName: entry.clipName,
+                        loopMode: entry.loopMode ?? ACTION_LOOP_MODE.ONCE,
                     },
-                    { signal },
+                    { signal, targetObjectId: this.payload.objectId },
                 );
-                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id, { signal });
+                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id, {
+                    signal,
+                    ...(this.payload.startTimeSeconds !== undefined
+                        ? { startTimeSeconds: this.payload.startTimeSeconds }
+                        : {}),
+                    ...(this.payload.durationSeconds !== undefined
+                        ? { durationSeconds: this.payload.durationSeconds }
+                        : {}),
+                });
                 if (!signal.aborted) {
                     const timeoutNotice = mounted ? null : `动作挂载等待运行时超时:${this.payload.objectId}`;
                     if (timeoutNotice) ctx.ui.setApplicationNotice(timeoutNotice);

@@ -1,5 +1,8 @@
+import { ACTION_LOOP_MODE_LABEL } from "@/assets/ActionAsset";
+import type { AnimationLibrary } from "@/assets/AnimationLibrary";
 import type { TimelineViewport } from "@/authoring/TimelineViewport";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
+import type { SceneManager } from "@/core/SceneManager";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
 
@@ -7,6 +10,7 @@ export const TIMELINE_ROW_KIND = {
     MARKER: "marker",
     PROGRAM: "program",
     MOTION: "motion",
+    ACTION: "action",
     TRANSFORM: "transform",
 } as const;
 export type TimelineRowKind = (typeof TIMELINE_ROW_KIND)[keyof typeof TIMELINE_ROW_KIND];
@@ -14,6 +18,7 @@ export type TimelineRowKind = (typeof TIMELINE_ROW_KIND)[keyof typeof TIMELINE_R
 export const TIMELINE_BAR_KIND = {
     PROGRAM: "program",
     MOTION: "motion",
+    ACTION: "action",
     TRANSFORM: "transform",
 } as const;
 export type TimelineBarKind = (typeof TIMELINE_BAR_KIND)[keyof typeof TIMELINE_BAR_KIND];
@@ -66,12 +71,14 @@ const PROGRAM_ROW_LABEL = "Program 输出";
 const MOTION_ROW_ID = "motion";
 const MOTION_ROW_LABEL = "运镜";
 const MOTION_LABEL_PREFIX = "运镜 ";
+const ACTION_ROW_PREFIX = "动作 ";
 const TRANSFORM_BAR_LABEL = "走位";
 const MINIMUM_TRANSFORM_KEYS_FOR_BAR = 2;
 
 const MINI_BAR_KIND: Record<TimelineBarKind, boolean> = {
     [TIMELINE_BAR_KIND.PROGRAM]: true,
     [TIMELINE_BAR_KIND.MOTION]: true,
+    [TIMELINE_BAR_KIND.ACTION]: false,
     [TIMELINE_BAR_KIND.TRANSFORM]: false,
 };
 
@@ -80,7 +87,7 @@ function isMiniBar(bar: TimelineBar): bar is TimelineMiniBar {
 }
 
 /**
- * 时间轴视图模型(投影,应用层):Program 输出、独立运镜片段与走位轨三个数据源 → 统一行几何。
+ * 时间轴视图模型(投影,应用层):Program 输出、运镜、动作排期与走位轨 → 统一行几何。
  *
  * 展开轨、迷你轨与未来的音频轨共用这一份投影;缩放平移退化为「换一个 TimelineViewport 值对象」,
  * 像素换算不再在两处各写一套。投影结果不入文档、不进撤销栈。
@@ -89,6 +96,8 @@ export class TimelineLayout {
     constructor(
         private readonly motion: CameraMotionStore,
         private readonly timeline: TimelineStore,
+        private readonly scene: SceneManager,
+        private readonly animations: AnimationLibrary,
     ) {}
 
     project(viewport: TimelineViewport): readonly TimelineRow[] {
@@ -96,6 +105,7 @@ export class TimelineLayout {
             this.markerRow(viewport),
             this.programRow(viewport),
             this.motionRow(viewport),
+            ...this.actionRows(viewport),
             ...this.transformRows(viewport),
         ];
     }
@@ -176,6 +186,38 @@ export class TimelineLayout {
                 }),
             ),
         };
+    }
+
+    /** 已挂载动作按实体成行:开始时间与演出时长就是条块几何。 */
+    private actionRows(viewport: TimelineViewport): readonly TimelineRow[] {
+        return this.scene.list().flatMap((entity) => {
+            const performance = entity.actionPerformance;
+            const action = performance
+                ? this.animations.actions.find((candidate) => candidate.id === performance.actionId)
+                : undefined;
+            if (!performance || !action) return [];
+            return [
+                {
+                    kind: TIMELINE_ROW_KIND.ACTION,
+                    id: `action:${entity.id}`,
+                    label: `${ACTION_ROW_PREFIX}${entity.name}`,
+                    bars: [
+                        {
+                            id: entity.id,
+                            kind: TIMELINE_BAR_KIND.ACTION,
+                            label: `${action.name} · ${ACTION_LOOP_MODE_LABEL[action.loopMode]}`,
+                            startSeconds: performance.startTimeSeconds,
+                            durationSeconds: performance.durationSeconds,
+                            startRatio: viewport.ratioAt(performance.startTimeSeconds),
+                            widthRatio: performance.durationSeconds / viewport.visibleSeconds,
+                            linked: false,
+                            followSubjectId: null,
+                        },
+                    ],
+                    marks: [],
+                },
+            ];
+        });
     }
 
     private transformRows(viewport: TimelineViewport): readonly TimelineRow[] {

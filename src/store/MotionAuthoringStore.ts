@@ -1,7 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import { TimelineViewport } from "@/authoring/TimelineViewport";
-import { DEFAULT_PRESET_DURATION_SECONDS } from "@/authoring/MotionPresetCompiler";
+import { DEFAULT_PRESET_DURATION_SECONDS, OrbitMotionParameters } from "@/authoring/MotionPresetCompiler";
 import type { ShotSize } from "@/camera/CameraShot";
 import type { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 
@@ -56,6 +56,8 @@ export class MotionAuthoringStore {
     landingShotSize: ShotSize | null = null;
     /** 预设时长与目标/落幅同住编排态——面板开合不该把作者的选择清零。 */
     presetDurationSeconds = DEFAULT_PRESET_DURATION_SECONDS;
+    /** 环绕与螺旋的 UI 草稿;命令执行时序列化进 payload,不进入工程文档。 */
+    orbitParameters = new OrbitMotionParameters();
     /** null = 未缩放,窗口跟随工程时长;一旦作者缩放/平移即固化为显式窗口 */
     timelineViewport: TimelineViewport | null = null;
 
@@ -124,6 +126,10 @@ export class MotionAuthoringStore {
 
     setPresetDurationSeconds(seconds: number): void {
         this.presetDurationSeconds = seconds;
+    }
+
+    setOrbitParameters(parameters: OrbitMotionParameters): void {
+        this.orbitParameters = parameters;
     }
 
     setTimelineViewport(viewport: TimelineViewport): void {

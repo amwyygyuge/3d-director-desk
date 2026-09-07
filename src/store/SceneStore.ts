@@ -1,6 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
 import type { ActorProfile } from "@/actor/ActorProfile";
+import type { ActionPerformance } from "@/animation/ActionPerformance";
 import { SceneManager } from "@/core/SceneManager";
 import { SceneObject } from "@/core/SceneObject";
 import type { LightParams } from "@/core/LightParams";
@@ -70,10 +71,10 @@ export class SceneStore {
         this.revision += 1;
     }
 
-    setObjectAction(id: string, actionId: string | null): void {
+    setObjectAction(id: string, action: ActionPerformance | null): void {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
-        entity.applyAction(actionId);
+        entity.applyAction(action);
     }
 
     setObjectPose(id: string, pose: PoseSnapshot | null): void {

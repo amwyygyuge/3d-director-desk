@@ -1,5 +1,7 @@
 import { makeAutoObservable } from "mobx";
 
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import type { ActionLoopMode } from "@/assets/ActionAsset";
 import type { AnimationBinder } from "@/animation/AnimationBinder";
 
 const INITIAL_PREVIEW_TIME_SECONDS = 0;
@@ -8,12 +10,14 @@ const MINIMUM_DURATION_SECONDS = Number.EPSILON;
 export interface ActionPreviewTarget {
     readonly objectId: string;
     readonly durationSeconds: number;
+    readonly loopMode: ActionLoopMode;
 }
 
 /** Per-desk, non-persistent action preview state. Only its active object advances on each render frame. */
 export class ActionPreviewController {
     activeObjectId: string | null = null;
     durationSeconds = INITIAL_PREVIEW_TIME_SECONDS;
+    loopMode: ActionLoopMode = ACTION_LOOP_MODE.LOOP;
     isPlaying = false;
     timeSeconds = INITIAL_PREVIEW_TIME_SECONDS;
 
@@ -22,36 +26,47 @@ export class ActionPreviewController {
     }
 
     prepare(target: ActionPreviewTarget): void {
-        this.activeObjectId = target.objectId;
+        // 挂载不等于预览:这里只更新目标参数，不占用 activeObjectId;
+        // 否则全局时间轴采样后会被「未播放的预览第 0 帧」盖回，动作看起来完全不动。
+        this.activeObjectId = null;
         this.durationSeconds = target.durationSeconds;
+        this.loopMode = target.loopMode;
         this.isPlaying = false;
         this.timeSeconds = INITIAL_PREVIEW_TIME_SECONDS;
-        this.binder.setTimeFor(target.objectId, INITIAL_PREVIEW_TIME_SECONDS);
     }
 
     play(target: ActionPreviewTarget): void {
         const shouldReset = this.activeObjectId !== target.objectId || this.durationSeconds !== target.durationSeconds;
         this.activeObjectId = target.objectId;
         this.durationSeconds = target.durationSeconds;
+        this.loopMode = target.loopMode;
         if (shouldReset) this.timeSeconds = INITIAL_PREVIEW_TIME_SECONDS;
         this.isPlaying = true;
-        this.binder.setTimeFor(target.objectId, this.timeSeconds);
+        this.binder.setClipTimeFor(target.objectId, this.timeSeconds);
     }
 
     pause(): void {
         this.isPlaying = false;
+        this.applyCurrentFrame();
+    }
+
+    /** 全局时间轴采样后重新压上局部预览帧;暂停的预览不应被全局 playhead 抢回第一帧。 */
+    applyCurrentFrame(): void {
+        if (this.activeObjectId) this.binder.setClipTimeFor(this.activeObjectId, this.timeSeconds);
     }
 
     seek(target: ActionPreviewTarget, timeSeconds: number): void {
         this.activeObjectId = target.objectId;
         this.durationSeconds = target.durationSeconds;
+        this.loopMode = target.loopMode;
         this.timeSeconds = Math.min(Math.max(INITIAL_PREVIEW_TIME_SECONDS, timeSeconds), target.durationSeconds);
-        this.binder.setTimeFor(target.objectId, this.timeSeconds);
+        this.binder.setClipTimeFor(target.objectId, this.timeSeconds);
     }
     /** 工程替换时清除瞬时预览态，避免新场景继续驱动旧对象。 */
     reset(): void {
         this.activeObjectId = null;
         this.durationSeconds = INITIAL_PREVIEW_TIME_SECONDS;
+        this.loopMode = ACTION_LOOP_MODE.LOOP;
         this.isPlaying = false;
         this.timeSeconds = INITIAL_PREVIEW_TIME_SECONDS;
     }
@@ -60,6 +75,7 @@ export class ActionPreviewController {
         if (this.activeObjectId !== objectId) return;
         this.activeObjectId = null;
         this.durationSeconds = INITIAL_PREVIEW_TIME_SECONDS;
+        this.loopMode = ACTION_LOOP_MODE.LOOP;
         this.isPlaying = false;
         this.timeSeconds = INITIAL_PREVIEW_TIME_SECONDS;
     }
@@ -67,7 +83,13 @@ export class ActionPreviewController {
     tick(deltaSeconds: number): void {
         if (!this.isPlaying || !this.activeObjectId || this.durationSeconds <= MINIMUM_DURATION_SECONDS) return;
         const nextTime = this.timeSeconds + deltaSeconds;
-        this.timeSeconds = nextTime >= this.durationSeconds ? nextTime % this.durationSeconds : nextTime;
-        this.binder.setTimeFor(this.activeObjectId, this.timeSeconds);
+        const isOnceFinished = this.loopMode === ACTION_LOOP_MODE.ONCE && nextTime >= this.durationSeconds;
+        this.timeSeconds = isOnceFinished
+            ? this.durationSeconds
+            : nextTime >= this.durationSeconds
+              ? nextTime % this.durationSeconds
+              : nextTime;
+        if (isOnceFinished) this.isPlaying = false;
+        this.binder.setClipTimeFor(this.activeObjectId, this.timeSeconds);
     }
 }

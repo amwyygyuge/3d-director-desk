@@ -34,7 +34,7 @@ function presentationOf(entry: AssetEntry): { icon: ReactNode; label: string } {
     return CATEGORY_PRESENTATION[entry.category] ?? FALLBACK_PRESENTATION;
 }
 
-/** 资源库只放模型；动作随模型的内嵌 clip 在 Inspector 的预设区直接应用。 */
+/** 资源库只放可放置模型；动作资产在选中兼容人偶后的检查器动作区挂载。 */
 export const AssetLibraryPanel = observer(function AssetLibraryPanel() {
     const stores = useDirectorDeskStores();
     const { catalog, dispatcher, ui } = stores;

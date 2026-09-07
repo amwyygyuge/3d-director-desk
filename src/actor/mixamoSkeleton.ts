@@ -130,6 +130,18 @@ export function isMixamoBone(boneName: string): boolean {
     return MIXAMO_PARENTS.has(boneName);
 }
 
+/**
+ * 动作资产的目标名归一到本仓 rig:Mixamo 导出可能是 mixamorig:Hips、
+ * Blender 重新导出的 Armature:Hips,或 Unity 解包后的 Hips。
+ */
+export function normalizeMixamoBoneName(boneName: string): string | null {
+    if (isMixamoBone(boneName)) return boneName;
+    const withoutNamespace = boneName.split(":").pop() ?? boneName;
+    const shortName = withoutNamespace.replace(/^Armature(?=mixamorig|[A-Z])/, "");
+    const normalized = bone(shortName);
+    return isMixamoBone(normalized) ? normalized : null;
+}
+
 const LOWER_BONES: readonly string[] = [
     MIXAMO_TREE.name,
     ...flattenNames(legChain(SIDE_LEFT)),

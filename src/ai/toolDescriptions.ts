@@ -40,9 +40,10 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "motion.unbind-follow": "解除跟拍:关键帧烘回世界坐标,画面同样不跳",
     "motion.set-follow-params": "调跟拍参数(参考系/锚点/滞后/平滑);换主体请重新绑定",
     "motion.remove-clip": "删除运镜片段及其 Program 排期",
-    "motion.author": "语义运镜编译:推近/拉远/摇/俯仰/横移/升降/环绕/定镜,产物为可再编辑关键帧；时间落点按工程帧率量化",
+    "motion.author":
+        "语义运镜编译:推近/拉远/摇/俯仰/横移/升降/环绕/定镜,产物为可再编辑关键帧;环绕/螺旋可传 orbit.degrees、direction 与 radiusMeters(固定圆半径,米)；时间落点按工程帧率量化",
     "motion.quick-author":
-        "按被摄体+景别+运动一步生成运镜(机位定距与关键帧一次到位);带 follow.approach(back/front/left/right)时直接产出跟拍片段,关键帧落在主体跟随系里；时间落点按工程帧率量化",
+        "按被摄体+景别+运动一步生成运镜(机位定距与关键帧一次到位);带 follow.approach(back/front/left/right)时直接产出跟拍片段;环绕/螺旋可传 orbit.degrees、direction 与 radiusMeters(固定圆半径,米)；时间落点按工程帧率量化",
     "program.set-clip": "把运镜片段排入 Program 时段(同一时段只允许一个机位输出)；时间落点按工程帧率量化",
     "program.remove-clip": "从 Program 移除片段(运镜片段本身保留)",
     "motion.preview.enter": "进入片段预览,playhead 不在片段内时自动 seek 到片段起点；时间落点按工程帧率量化",
@@ -72,7 +73,9 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "timeline.restore-tracks": "整体恢复时间轴轨道(撤销删除/文档导入的配套回放)；时间落点按工程帧率量化",
     "timeline.set-track-policies": "设走位轨朝向、贴地与步频策略",
     // 动作与播放
-    "action.mount": "给对象挂载动作,骨骼兼容性预检不过返回结构化诊断与可用动作",
+    "action.mount":
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds 可选,缺省从当前播放头开始、按 clip 原始时长;骨骼兼容性预检不过返回结构化诊断与可用动作",
+    "action.set-range": "调整对象已挂载动作的开始时间与演出时长;一次性动作到尾钳住末帧,循环动作按排期周期循环",
     "action.unmount": "卸载对象动作,骨骼回绑定姿态",
     "action.preview.play": "局部预览指定对象的已挂载动作,不驱动全局 playhead",
     "action.preview.pause": "暂停局部动作预览",
@@ -107,7 +110,8 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "desk.exit-presentation": "退出演示模式",
     "desk.import-document": "导入整桌文档(替换式清空重建,动作按 URL 异步恢复,可撤销)",
     "assets.place": "按资产目录条目放置模型(格式/URL 由条目携带,AI 不猜)",
-    "assets.mount": "按资产目录条目挂载动作(clip 置备与骨骼预检一体)",
+    "assets.mount":
+        "按资产目录条目挂载动作(clip 置备 + 骨骼预检一体);目录条目带 loopMode,可用 startTimeSeconds/durationSeconds 指定时间轴排期",
     // 查询
     "scene.describe": "场景全貌:每实体的 transform/装载态/世界包围盒/已挂载动作",
     "assets.list": "资产目录发现,可按 kind/category 过滤;条目带许可与骨骼家族",

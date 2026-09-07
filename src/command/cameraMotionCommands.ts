@@ -25,14 +25,14 @@ import { CameraProgramClip, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTr
 import type { CameraProgramClipJSON, ProgramSource } from "@/camera/CameraProgramTrack";
 import { PROGRAM_SLOT_KIND, ProgramLinkage } from "@/camera/ProgramLinkage";
 import {
-    isOrbitDirection,
+    isOrbitMove,
     isOrientationMove,
     MotionPresetCompiler,
     MOTION_MOVE,
     ORBIT_DIRECTION,
-    ORBIT_MAX_DEGREES,
+    OrbitMotionParameters,
 } from "@/authoring/MotionPresetCompiler";
-import type { MotionMove, MotionPresetRequest, OrbitDirection } from "@/authoring/MotionPresetCompiler";
+import type { MotionMove, MotionPresetRequest, OrbitMotionParametersInit } from "@/authoring/MotionPresetCompiler";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
@@ -54,7 +54,7 @@ import type { PayloadContract, PayloadFieldSchema } from "@/command/PayloadContr
 const MOTION_COMMAND_VERSION = "1" as const;
 const MOTION_PERMISSION = "motion:edit";
 const MOTION_READ_PERMISSION = "motion:read";
-const MOTION_APPLIES_WHEN = "director-desk.camera-motion-v3";
+const MOTION_APPLIES_WHEN = "director-desk.camera-motion-v4";
 const EMPTY_PAYLOAD: Record<string, never> = {};
 const MINIMUM_KEYS_PER_CLIP = 2;
 const CAMERA_FOCUS_MODE = "single" as const;
@@ -390,6 +390,15 @@ const REMOVE_MOTION_CLIP_CONTRACT: PayloadContract = {
     required: ["id"],
 };
 
+const ORBIT_PARAMETERS_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        degrees: { type: "number" },
+        direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
+        radiusMeters: { type: "number" },
+    },
+};
+
 const AUTHOR_MOTION_CONTRACT: PayloadContract = {
     properties: {
         cameraId: { type: "string" },
@@ -399,8 +408,7 @@ const AUTHOR_MOTION_CONTRACT: PayloadContract = {
         subjectId: { type: "string" },
         shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
         easing: { type: "string", enum: Object.values(EASING) },
-        degrees: { type: "number" },
-        direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
+        orbit: ORBIT_PARAMETERS_SCHEMA,
     },
     required: ["cameraId", "startTimeSeconds", "durationSeconds", "move"],
 };
@@ -411,8 +419,7 @@ const QUICK_AUTHOR_MOTION_CONTRACT: PayloadContract = {
         shotSize: { type: "string", enum: Object.values(SHOT_SIZE) },
         move: { type: "string", enum: Object.values(MOTION_MOVE) },
         durationSeconds: { type: "number" },
-        degrees: { type: "number" },
-        direction: { type: "string", enum: Object.values(ORBIT_DIRECTION) },
+        orbit: ORBIT_PARAMETERS_SCHEMA,
         easing: { type: "string", enum: Object.values(EASING) },
         follow: {
             type: "object",
@@ -455,35 +462,38 @@ function issueMessages(issues: readonly CommandIssue[]): string[] {
     return issues.map((current) => current.message);
 }
 
-/** author 与 quick-author 共用的语汇参数围栏(Rule of Two):语汇枚举 + 环绕参数 */
+function orbitParameterIssueFor(move: MotionMove, orbit: unknown): CommandIssue | null {
+    switch (true) {
+        case orbit === undefined:
+            return null;
+        case !isOrbitMove(move):
+            return issue(ISSUE_CODE.PAYLOAD, "orbit", "环绕参数仅适用于环绕或螺旋升降");
+        case OrbitMotionParameters.isValid(orbit):
+            return null;
+        default:
+            return issue(ISSUE_CODE.PAYLOAD, "orbit", "环绕参数无效:转角须为 (0, 360],方向为 cw/ccw,半径为 0.2–50 米");
+    }
+}
+
+/** author 与 quick-author 共用的语汇参数围栏(Rule of Two):语汇枚举、注视冲突与环绕值对象。 */
 function presetParamIssues(payload: {
     readonly move: MotionMove;
-    readonly degrees?: number;
-    readonly direction?: OrbitDirection;
+    readonly orbit?: unknown;
     readonly subjectId?: string | undefined;
 }): CommandIssue[] {
-    if (!Object.values(MOTION_MOVE).includes(payload.move)) {
-        return [issue(ISSUE_CODE.MOVE, "move", "未知的运镜语汇")];
-    }
-    // 朝向类语汇只改注视方向;绑了被摄对象就会被注视覆盖层接管,产物必然纹丝不动
-    if (payload.subjectId !== undefined && isOrientationMove(payload.move)) {
-        return [
-            issue(
-                ISSUE_CODE.MOVE_CONFLICT,
-                "move",
-                "摇镜/俯仰改的是注视方向,而注视已被被摄对象接管;改用横移或环绕,或去掉被摄对象",
-            ),
-        ];
-    }
-    const issues: CommandIssue[] = [];
-    const { degrees, direction } = payload;
-    if (degrees !== undefined && (!Number.isFinite(degrees) || degrees <= 0 || degrees > ORBIT_MAX_DEGREES)) {
-        issues.push(issue(ISSUE_CODE.PAYLOAD, "degrees", `环绕转角须为 (0, ${ORBIT_MAX_DEGREES}] 度的有限数`));
-    }
-    if (direction !== undefined && !isOrbitDirection(direction)) {
-        issues.push(issue(ISSUE_CODE.PAYLOAD, "direction", "环绕方向须为 cw/ccw"));
-    }
-    return issues;
+    const moveIssue = Object.values(MOTION_MOVE).includes(payload.move)
+        ? null
+        : issue(ISSUE_CODE.MOVE, "move", "未知的运镜语汇");
+    const orientationIssue =
+        payload.subjectId !== undefined && isOrientationMove(payload.move)
+            ? issue(
+                  ISSUE_CODE.MOVE_CONFLICT,
+                  "move",
+                  "摇镜/俯仰改的是注视方向,而注视已被被摄对象接管;改用横移或环绕,或去掉被摄对象",
+              )
+            : null;
+    const orbitIssue = orbitParameterIssueFor(payload.move, payload.orbit);
+    return [moveIssue, orientationIssue, orbitIssue].filter((current): current is CommandIssue => current !== null);
 }
 
 /** Program 跟随三件套只消费这个切片(拓宽签名:quick-author 的计划结构免构造整个 clip) */
@@ -1465,9 +1475,8 @@ interface QuickAuthorPayload {
     readonly shotSize: ShotSize;
     readonly move: MotionMove;
     readonly durationSeconds: number;
-    /** 环绕类语汇的转角(度) */
-    readonly degrees?: number;
-    readonly direction?: OrbitDirection;
+    /** 环绕/螺旋路径参数;省略时使用默认值。 */
+    readonly orbit?: OrbitMotionParametersInit;
     readonly easing?: EasingCurve;
     /** 非空即产出跟拍片段:关键帧落在主体跟随系里 */
     readonly follow?: QuickAuthorFollowRequest;
@@ -1576,8 +1585,7 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
             move: this.payload.move,
             subjectId: this.payload.subjectId,
             ...(this.payload.easing ? { easing: this.payload.easing } : {}),
-            ...(this.payload.degrees !== undefined ? { degrees: this.payload.degrees } : {}),
-            ...(this.payload.direction !== undefined ? { direction: this.payload.direction } : {}),
+            ...(this.payload.orbit ? { orbit: this.payload.orbit } : {}),
         };
         const end = range.startTimeSeconds + range.durationSeconds;
         return {

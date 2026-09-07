@@ -4,23 +4,32 @@ import type { CameraShotJSON } from "@/camera/CameraShot";
 import type { SceneObjectInit } from "@/core/SceneObject";
 import type { TimelineDocInit } from "@/timeline/TimelineDoc";
 import type { DirectorContext } from "@/command/DirectorCommand";
+import type { ActionLoopMode } from "@/assets/ActionAsset";
 import type { PosePresetJSON } from "@/pose/PosePreset";
 import type { LightingMode } from "@/store/SceneStore";
 
 /**
  * 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。
  * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
- * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档。
+ * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档;
+ * v10 起动作带循环语义与时间轴排期(开始时间/演出时长)。
  */
-export const DESK_DOCUMENT_VERSION = 9;
+export const DESK_DOCUMENT_VERSION = 10;
+
+export interface DeskDocumentActionMount {
+    readonly objectId: string;
+    readonly startTimeSeconds: number;
+    readonly durationSeconds: number;
+}
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
 export interface DeskDocumentAction {
     readonly name: string;
     readonly url: string;
     readonly clipName: string;
-    /** 挂载该动作的全部实体 id;空数组 = 已注册未挂载 */
-    readonly mountedOn: readonly string[];
+    readonly loopMode: ActionLoopMode;
+    /** 挂载该动作的全部实体及排期;空数组 = 已注册未挂载 */
+    readonly mountedOn: readonly DeskDocumentActionMount[];
 }
 
 /** 灯光模式(studio 兜底 / custom 自定义);灯本体是实体,走 entities 通道 */
@@ -64,7 +73,19 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
             name: action.name,
             url: action.url,
             clipName: ctx.animations.getClip(action.id)?.name ?? "",
-            mountedOn: entities.filter((entity) => entity.actionId === action.id).map((entity) => entity.id),
+            loopMode: action.loopMode,
+            mountedOn: entities.flatMap((entity) => {
+                const performance = entity.actionPerformance;
+                return performance?.actionId === action.id
+                    ? [
+                          {
+                              objectId: entity.id,
+                              startTimeSeconds: performance.startTimeSeconds,
+                              durationSeconds: performance.durationSeconds,
+                          },
+                      ]
+                    : [];
+            }),
         })),
         lighting: { mode: ctx.scene.lightingMode },
         posePresets: ctx.posePresets.customPresets().map((preset) => preset.toJSON()),

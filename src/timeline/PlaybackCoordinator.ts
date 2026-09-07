@@ -1,6 +1,7 @@
 import { reaction } from "mobx";
 
 import type { AnimationBinder } from "@/animation/AnimationBinder";
+import type { ActionPreviewController } from "@/animation/ActionPreviewController";
 import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
 import type { CameraMotionSink, MotionPreviewSource } from "@/camera/CameraMotionSampler";
 import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
@@ -54,6 +55,7 @@ export class PlaybackCoordinator {
         motion: CameraMotionStore,
         camera: CameraStore,
         private readonly binder: AnimationBinder,
+        private readonly actionPreview: ActionPreviewController,
         private readonly skeletons: SkeletonRuntimeRegistry,
         preview: MotionPreviewSource,
     ) {
@@ -123,6 +125,7 @@ export class PlaybackCoordinator {
         if (!runtime || !entity) return;
         this.skeletons.restoreRotations(targetId);
         this.binder.setTime(this.currentTime());
+        this.actionPreview.applyCurrentFrame();
         const transformTrack = this.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         if (!transformTrack || !this.sampler.evaluateTrack(transformTrack, this.currentTime(), runtime))
             this.restoreObject(targetId, false);
@@ -132,6 +135,7 @@ export class PlaybackCoordinator {
     restoreAll(): void {
         this.restorePoseBaselines();
         this.binder.setTime(this.currentTime());
+        this.actionPreview.applyCurrentFrame();
         this.scene.forEachEntity(this.applyPoseForEntity);
         this.motionSampler.restore();
         this.invalidate();
@@ -164,6 +168,7 @@ export class PlaybackCoordinator {
     private sample(timeSeconds: number): void {
         this.restorePoseBaselines();
         this.binder.setTime(timeSeconds);
+        this.actionPreview.applyCurrentFrame();
         this.sampleTimeSeconds = timeSeconds;
         this.scene.forEachEntity(this.sampleTransformForEntity);
         this.motionSampler.sampleCurrent(timeSeconds);

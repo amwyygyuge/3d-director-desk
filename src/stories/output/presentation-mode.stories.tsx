@@ -34,8 +34,7 @@ function seedPresentationMode(stores: DirectorDeskStores): void {
         shotSize: "medium",
         move: "orbit",
         durationSeconds: CLIP_DURATION_SECONDS,
-        degrees: 360,
-        direction: "ccw",
+        orbit: { degrees: 360, direction: "ccw" },
     });
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 未就位");
 
