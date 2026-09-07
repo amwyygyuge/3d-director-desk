@@ -124,6 +124,8 @@ export interface MotionPresetContext {
     readonly shot: CameraShot;
     /** 被摄体世界中心与包围球半径;无 subject 时为 null */
     readonly subject: { readonly center: Vec3; readonly radius: number } | null;
+    /** 项目输出的有效比例；落幅景别据此避免被中心裁切切出画面。 */
+    readonly outputAspectRatio: number | null;
 }
 
 /** 推拉幅度:一次推近吃掉四成距离,是常规单镜头的可读幅度 */
@@ -436,7 +438,13 @@ export class MotionPresetCompiler {
         if (!request.shotSize || !subject) return null;
         const offset = subtract(context.shot.position, subject.center);
         const azimuth = Math.atan2(offset[2], offset[0]);
-        const shot = shotSizePresets.resolve(request.shotSize, subject.center, subject.radius, azimuth);
+        const shot = shotSizePresets.resolve({
+            size: request.shotSize,
+            subjectCenter: subject.center,
+            subjectRadius: subject.radius,
+            azimuthRad: azimuth,
+            outputAspectRatio: context.outputAspectRatio,
+        });
         return { position: shot.position, target: shot.target, fov: shot.fov };
     }
 }

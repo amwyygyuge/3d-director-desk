@@ -39,6 +39,7 @@ import { MotionAuthoringStore } from "@/store/MotionAuthoringStore";
 import { SceneStore } from "@/store/SceneStore";
 import { SelectionStore } from "@/store/SelectionStore";
 import { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
+import { OutputSettings } from "@/output/OutputFormat";
 import { PlayheadDisplay } from "@/ui/timeline/PlayheadDisplay";
 import { UiStore } from "@/store/UiStore";
 import { TimelineStore } from "@/store/TimelineStore";
@@ -88,6 +89,8 @@ export interface DirectorDeskStores {
     camera: CameraStore;
     selection: SelectionStore;
     clock: TimeTransport;
+    /** 项目级最终输出画幅；只持有可序列化比例，不持有 canvas/Three 运行时。 */
+    output: OutputSettings;
     /** 真实 R3F render 的低频帧率读数；只作性能观测，绝不进入文档状态。 */
     frameRate: FrameRateMonitor;
     /** 可序列化 TimelineDoc 的每实例状态容器 */
@@ -206,6 +209,7 @@ export function createDirectorDeskStores(options?: {
     const motion = new CameraMotionStore();
     binder.bindTransport(clock);
     const camera = new CameraStore();
+    const output = new OutputSettings();
     const layout = new WorkbenchLayoutStore({ gridSizeMeters: options?.gridSizeMeters });
     const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
     const viewportCamera = new ViewportCameraAuthority(camera, motionAuthoring);
@@ -239,6 +243,7 @@ export function createDirectorDeskStores(options?: {
         motion,
         playback,
         camera,
+        output,
         clock,
         capture,
         videoExport,

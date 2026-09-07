@@ -31,15 +31,32 @@ export function azimuthAroundCenter(eye: Vec3, center: Vec3): number {
 const DEG_TO_RAD = Math.PI / 180;
 const DEFAULT_SHOT_FOV = 45;
 
+const REFERENCE_OUTPUT_ASPECT_RATIO = 16 / 9;
+
+interface ShotSizeRequest {
+    readonly size: ShotSize;
+    readonly subjectCenter: Vec3;
+    readonly subjectRadius: number;
+    readonly azimuthRad: number;
+    /** 窄幅中心裁切需增距，避免主体在完整工作区可见却在最终成片被切出。 */
+    readonly outputAspectRatio: number | null;
+}
+
+function outputWidthCompensation(outputAspectRatio: number | null): number {
+    return outputAspectRatio === null || outputAspectRatio >= REFERENCE_OUTPUT_ASPECT_RATIO
+        ? 1
+        : REFERENCE_OUTPUT_ASPECT_RATIO / outputAspectRatio;
+}
 /**
  * 景别预设(领域服务,纯函数查表):
  * 输入被摄体中心/半径与当前相机方位角 → 输出新机位;保持当前水平朝向,只按景别推距离与俯仰。
  * 纯数据进出(不碰 three),机位值对象直接可序列化。
  */
 export class ShotSizePresets {
-    resolve(size: ShotSize, subjectCenter: Vec3, subjectRadius: number, azimuthRad: number): CameraShot {
+    resolve({ size, subjectCenter, subjectRadius, azimuthRad, outputAspectRatio }: ShotSizeRequest): CameraShot {
         const { distanceFactor, elevationDeg } = SHOT_SIZE_PARAMS[size];
-        const distance = Math.max(subjectRadius, MIN_SUBJECT_RADIUS) * distanceFactor;
+        const distance =
+            Math.max(subjectRadius, MIN_SUBJECT_RADIUS) * distanceFactor * outputWidthCompensation(outputAspectRatio);
         const elevation = elevationDeg * DEG_TO_RAD;
         const horizontal = distance * Math.cos(elevation);
         return new CameraShot({

@@ -13,6 +13,7 @@ const CHECKLIST = [
     "「当前视角存为机位」→ 新增进列表;删除激活机位自动回导演视角",
     "选中狐狸 → 景别下拉逐档(大远景~大特写):自动生成并激活新机位",
     "激活机位后拖 FOV 滑杆实时生效;非法值被命令层拦截(0/200/NaN)",
+    "选择 1:1:中央安全框与三分格出现，框外压暗；截图产物应为正方形",
 ] as const;
 
 /** 预置狐狸 + 两个机位 */
@@ -24,6 +25,7 @@ export const CameraShots: StoryObj = {
                 onReady={(stores) => {
                     placeModel(stores, TEST_ASSETS.fox);
                     seedShots(stores);
+                    stores.dispatcher.dispatch({ type: "output.set-format", payload: { formatId: "1:1" } }, stores);
                 }}
             />
             <AcceptancePanel task="镜头 · 基础机位" items={CHECKLIST} />

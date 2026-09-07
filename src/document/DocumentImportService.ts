@@ -6,7 +6,12 @@ import { CameraShot } from "@/camera/CameraShot";
 import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
 import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/core/SceneObject";
-import type { DeskDocument, DeskDocumentAction, DeskDocumentLighting } from "@/document/DeskDocument";
+import type {
+    DeskDocument,
+    DeskDocumentAction,
+    DeskDocumentLighting,
+    DeskDocumentOutput,
+} from "@/document/DeskDocument";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import { isActionLoopMode } from "@/assets/ActionAsset";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
@@ -19,6 +24,7 @@ import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import { isActorProfileInit } from "@/actor/ActorProfile";
 import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import { isLightingMode } from "@/store/SceneStore";
+import { isOutputFormatId } from "@/output/OutputFormat";
 const SCENE_OBJECT_KIND_VALUES: readonly string[] = SCENE_OBJECT_KINDS;
 
 interface DocumentImportPlan {
@@ -30,6 +36,7 @@ interface DocumentImportPlan {
     readonly actions: readonly DeskDocumentAction[];
     readonly posePresets: readonly PosePreset[];
     readonly lighting: DeskDocumentLighting;
+    readonly output: DeskDocumentOutput;
 }
 
 interface DocumentImportPreparation {
@@ -193,6 +200,10 @@ function lightingIssues(value: unknown): readonly string[] {
     return isRecord(value) && isLightingMode(value.mode) ? [] : ["灯光模式无效"];
 }
 
+function outputIssues(value: unknown): readonly string[] {
+    return isRecord(value) && isOutputFormatId(value.formatId) ? [] : ["输出画幅无效"];
+}
+
 function posePresetIssues(value: unknown): readonly string[] {
     const preset = parsePosePreset(value);
     return preset?.custom ? [] : ["自建姿势预设参数无效"];
@@ -296,8 +307,13 @@ function preparePlan(document: unknown): DocumentImportPreparation {
     if (!isTimelineDocument(document.timeline)) {
         return { issues: ["文档时间轴无效"], plan: null };
     }
-    if (!isRecord(document.motion) || !Array.isArray(document.motion.clips) || !isRecord(document.motion.program)) {
-        return { issues: ["文档运镜数据无效"], plan: null };
+    if (
+        !isRecord(document.motion) ||
+        !Array.isArray(document.motion.clips) ||
+        !isRecord(document.motion.program) ||
+        !isRecord(document.output)
+    ) {
+        return { issues: ["文档运镜或输出数据无效"], plan: null };
     }
     const entityIdSet = new Set(
         document.entities.flatMap((entity) => (isRecord(entity) && typeof entity.id === "string" ? [entity.id] : [])),
@@ -312,6 +328,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
         ...document.posePresets.flatMap(posePresetIssues),
         ...duplicateFieldIssues(document.posePresets, "id", "姿势预设 id"),
         ...lightingIssues(document.lighting),
+        ...outputIssues(document.output),
     ];
     if (basicIssues.length > 0) return { issues: basicIssues, plan: null };
     try {
@@ -328,6 +345,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
                 return preset?.custom ? [preset] : [];
             }),
             lighting: typed.lighting,
+            output: typed.output,
         };
         const relationalIssues = [
             ...timelineIssues(plan.timeline, entityIdSet),
@@ -381,6 +399,7 @@ export class DocumentImportService {
             ctx.ui.setPosePicking(null, null);
             ctx.scene.setLightingMode(plan.lighting.mode);
             ctx.scene.replaceObjects(plan.entities);
+            ctx.output.setFormat(plan.output.formatId);
             ctx.camera.replaceShots(plan.shots);
             ctx.timeline.replaceDocument(plan.timeline);
             ctx.motion.restore(plan.motionClips, plan.program);

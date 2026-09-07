@@ -14,6 +14,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "object.remove": "删除对象;被运镜注视引用时会返回结构化选项",
     "object.place-relative": "语义摆位:以导演相机视线为参考系,把对象放到锚点的左/右/前/后(包围球表面间距)或面朝锚点",
     // 机位
+    "output.set-format": "设置项目最终输出画幅；预览安全框、PNG、MP4 与同框断言共用该中心裁切口径",
     "camera.set-shot": "保存或覆盖静态机位(position/target/fov);景别构图优先改用 camera.frame-subject",
     "camera.activate": "切入指定机位视角(机位须已存在)",
     "camera.deactivate": "退出机位视角,回导演自由视角",
@@ -117,6 +118,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "scene.describe": "场景全貌:每实体的 transform/装载态/世界包围盒/已挂载动作",
     "assets.list": "资产目录发现,可按 kind/category 过滤;条目带许可与骨骼家族",
     "camera.get-pose": "生效相机位姿:live 实际值与 motionSampled 运镜期望值并排,运镜断言用",
+    "output.get-format": "当前项目最终输出画幅比例",
     "camera.list-shots": "机位表与当前激活机位",
     "motion.get": "运镜编排全量:片段/关键帧/Program 排期/视图模式/预览态",
     "timeline.get-document": "时间轴文档:时长/轨道/关键帧全量",

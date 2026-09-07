@@ -272,7 +272,13 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
         const azimuth =
             this.payload.azimuth ??
             (eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS);
-        const shot = shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth);
+        const shot = shotSizePresets.resolve({
+            size: this.payload.shotSize,
+            subjectCenter: subject.center,
+            subjectRadius: subject.radius,
+            azimuthRad: azimuth,
+            outputAspectRatio: ctx.output.format.aspectRatio,
+        });
         ctx.camera.addShot(this.payload.shotId, shot);
     }
 
@@ -313,10 +319,11 @@ export class CameraCheckFramingQuery implements DirectorQuery<CheckFramingPayloa
         const pose = activeShot
             ? { position: activeShot.position, target: activeShot.target, fov: activeShot.fov }
             : undefined;
+        const outputFrame = ctx.output.frameFor(ctx.capture.size);
         return this.payload.subjectIds.map((id) => {
             const runtime = ctx.scene.manager.getRuntime(id);
             if (runtime) measureModelBox(runtime, TMP_FRAMING_BOX);
-            const measure = runtime ? ctx.capture.measureFraming(TMP_FRAMING_BOX, pose) : null;
+            const measure = runtime ? ctx.capture.measureFraming(TMP_FRAMING_BOX, pose, outputFrame) : null;
             return { id, inFrame: measure?.inFrame ?? false, marginNdc: measure?.marginNdc ?? null };
         });
     }

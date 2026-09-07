@@ -10,6 +10,7 @@ import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
+import type { OutputFrameGeometry } from "@/output/OutputFrameGeometry";
 
 interface CaptureFramePayload {
     /** AI 连发/重试时按 requestId 对账产物归属。 */
@@ -34,20 +35,25 @@ interface CaptureFrameRequest {
     readonly context: DirectorContext;
 }
 
+interface CaptureDimensions {
+    readonly width: number;
+    readonly height: number;
+}
+
 type CaptureDelivery =
-    | {
+    | ({
           readonly kind: typeof CAPTURE_PRODUCT_KIND.IMAGE;
           readonly blob: Blob;
           readonly requestId: string;
           readonly durationSeconds: null;
-      }
-    | {
+      } & CaptureDimensions)
+    | ({
           readonly kind: typeof CAPTURE_PRODUCT_KIND.VIDEO;
           readonly blob: Blob;
           readonly requestId: string;
           readonly durationSeconds: number;
           readonly source: VideoExportSource;
-      };
+      } & CaptureDimensions);
 
 const CAPTURE_FRAME_FAILURE_PREFIX = "截图被拒绝:";
 const CAPTURE_VERSION = "1" as const;
@@ -81,6 +87,24 @@ function captureCapability(type: string, payload: PayloadContract): CommandCapab
     };
 }
 
+const EMPTY_CAPTURE_DIMENSIONS: CaptureDimensions = { width: 0, height: 0 };
+
+function outputFrameFor(ctx: DirectorContext): OutputFrameGeometry | null {
+    return ctx.output.frameFor(ctx.capture.size);
+}
+
+function captureDimensionsFor(
+    ctx: DirectorContext,
+    outputFrame: OutputFrameGeometry | null,
+    kind: CaptureDelivery["kind"],
+): CaptureDimensions {
+    const size =
+        kind === CAPTURE_PRODUCT_KIND.IMAGE
+            ? ctx.capture.outputSize(outputFrame)
+            : ctx.capture.videoOutputSize(outputFrame);
+    return size ?? EMPTY_CAPTURE_DIMENSIONS;
+}
+
 /** 宿主回传失败由宿主反馈；组件隔离拒绝，避免 host 模式产生第二条桌内错误提示。 */
 async function reportCaptureToHost(ctx: DirectorContext, product: CaptureProduct): Promise<void> {
     try {
@@ -92,14 +116,13 @@ async function reportCaptureToHost(ctx: DirectorContext, product: CaptureProduct
 
 /** 截图与视频共用产品出口，保证宿主协议与桌内预览的产物身份一致。 */
 async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDelivery): Promise<void> {
-    const size = ctx.capture.size ?? { width: 0, height: 0 };
     const blobUrl = URL.createObjectURL(delivery.blob);
     const product: CaptureProduct = {
         kind: delivery.kind,
         mimeType: delivery.blob.type,
         blobUrl,
-        width: size.width,
-        height: size.height,
+        width: delivery.width,
+        height: delivery.height,
         requestId: delivery.requestId,
         durationSeconds: delivery.durationSeconds,
     };
@@ -119,7 +142,8 @@ async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDeli
                 timeSeconds: ctx.clock.time,
                 cameraPose: ctx.capture.readCameraPose(),
                 requestId: delivery.requestId,
-                ...size,
+                width: delivery.width,
+                height: delivery.height,
             });
             return;
         case CAPTURE_PRODUCT_KIND.VIDEO:
@@ -127,7 +151,8 @@ async function deliverCaptureProduct(ctx: DirectorContext, delivery: CaptureDeli
                 durationSeconds: delivery.durationSeconds,
                 requestId: delivery.requestId,
                 source: delivery.source,
-                ...size,
+                width: delivery.width,
+                height: delivery.height,
             });
     }
 }
@@ -147,13 +172,16 @@ export class CaptureFrameCommand extends DirectorCommand<CaptureFramePayload> {
 
     execute(ctx: DirectorContext): void {
         const requestId = this.payload.requestId ?? createId();
-        void ctx.capture.capture({ hideHelpers: this.payload.hideHelpers ?? true }).then(async (blob) => {
+        const outputFrame = outputFrameFor(ctx);
+        const dimensions = captureDimensionsFor(ctx, outputFrame, CAPTURE_PRODUCT_KIND.IMAGE);
+        void ctx.capture.capture({ hideHelpers: this.payload.hideHelpers ?? true, outputFrame }).then(async (blob) => {
             if (!blob) return;
             await deliverCaptureProduct(ctx, {
                 kind: CAPTURE_PRODUCT_KIND.IMAGE,
                 blob,
                 requestId,
                 durationSeconds: null,
+                ...dimensions,
             });
         });
     }
@@ -250,9 +278,10 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
         const source = this.payload.source ?? VIDEO_EXPORT_SOURCE.PROGRAM;
         const requestId = this.payload.requestId ?? createId();
         const range = videoRangeFor(ctx, this.payload);
-        void this.exportAndDeliver(ctx, { source, requestId, ...range });
+        const outputFrame = outputFrameFor(ctx);
+        const dimensions = captureDimensionsFor(ctx, outputFrame, CAPTURE_PRODUCT_KIND.VIDEO);
+        void this.exportAndDeliver(ctx, { source, requestId, outputFrame, ...dimensions, ...range });
     }
-
     private async exportAndDeliver(
         ctx: DirectorContext,
         options: {
@@ -260,7 +289,8 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
             readonly requestId: string;
             readonly startSeconds: number;
             readonly durationSeconds: number;
-        },
+            readonly outputFrame: OutputFrameGeometry | null;
+        } & CaptureDimensions,
     ): Promise<void> {
         const policy = videoExportPolicyFor(options.source);
         try {
@@ -273,6 +303,7 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
                 frameRate: ctx.timeline.document.frameRate.fps,
                 hideHelpers: options.source === VIDEO_EXPORT_SOURCE.PROGRAM,
                 renderFrame: (timeSeconds) => ctx.clock.seek(options.startSeconds + timeSeconds),
+                outputFrame: options.outputFrame,
             });
             if (!outcome) return;
             await deliverCaptureProduct(ctx, {
@@ -281,6 +312,8 @@ export class CaptureVideoCommand extends DirectorCommand<CaptureVideoPayload> {
                 requestId: options.requestId,
                 durationSeconds: outcome.durationSeconds,
                 source: options.source,
+                width: options.width,
+                height: options.height,
             });
         } catch {
             ctx.ui.setApplicationNotice(MP4_EXPORT_FAILURE_MESSAGE);

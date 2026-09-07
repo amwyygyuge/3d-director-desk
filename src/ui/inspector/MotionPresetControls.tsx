@@ -54,7 +54,13 @@ function landingPreviewFor(
     if (!shot || !shotSize || !subject) return null;
     const offsetX = shot.position[0] - subject.center[0];
     const offsetZ = shot.position[2] - subject.center[2];
-    const landing = shotSizePresets.resolve(shotSize, subject.center, subject.radius, Math.atan2(offsetZ, offsetX));
+    const landing = shotSizePresets.resolve({
+        size: shotSize,
+        subjectCenter: subject.center,
+        subjectRadius: subject.radius,
+        azimuthRad: Math.atan2(offsetZ, offsetX),
+        outputAspectRatio: stores.output.format.aspectRatio,
+    });
     return {
         shot: landing,
         distance: Math.hypot(

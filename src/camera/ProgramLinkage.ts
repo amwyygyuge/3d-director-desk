@@ -43,7 +43,12 @@ function resolveSlotKind(foreignCount: number, occupiedCount: number): ProgramSl
  * 哪条输出片段属于「跟随态」应当一并重定时(followingClip)。两处调用方共用同一判据。
  */
 export class ProgramLinkage {
-    slotFor(program: CameraProgramTrack, source: ProgramSource, startSeconds: number, durationSeconds: number): ProgramSlot {
+    slotFor(
+        program: CameraProgramTrack,
+        source: ProgramSource,
+        startSeconds: number,
+        durationSeconds: number,
+    ): ProgramSlot {
         const endSeconds = startSeconds + durationSeconds;
         const occupied = program.clips.filter((clip) => overlaps(clip, startSeconds, endSeconds));
         const foreign = occupied.filter((clip) => !sameProgramSource(clip.source, source));

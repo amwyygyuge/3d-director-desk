@@ -7,9 +7,11 @@ import type { DirectorContext } from "@/command/DirectorCommand";
 import type { ActionLoopMode } from "@/assets/ActionAsset";
 import type { PosePresetJSON } from "@/pose/PosePreset";
 import type { LightingMode } from "@/store/SceneStore";
+import type { OutputFormatId } from "@/output/OutputFormat";
 
 /**
- * 文档格式版本:功能未上线,不做跨版本迁移——版本不符即判不支持。
+ * v14 起项目级输出画幅进入文档；切换采用中心裁切，机位仍只保存位姿。
+ * 功能未上线,不做跨版本迁移——版本不符即判不支持。
  * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
  * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档;
  * v10 起动作带循环语义与时间轴排期(开始时间/演出时长);
@@ -17,7 +19,7 @@ import type { LightingMode } from "@/store/SceneStore";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 13;
+export const DESK_DOCUMENT_VERSION = 14;
 
 export interface DeskDocumentActionMount {
     readonly objectId: string;
@@ -49,6 +51,11 @@ export interface DeskDocumentMotion {
     readonly program: CameraProgramTrackJSON;
 }
 
+/** 成片输出格式：只持久化比例选择，实际像素尺寸由当前宿主 canvas 决定。 */
+export interface DeskDocumentOutput {
+    readonly formatId: OutputFormatId;
+}
+
 /**
  * 导演台文档:一个镜头工程的完整可序列化快照。机位、运镜和 Program 输出均为纯数据，
  * 运行时 Three 相机、辅助物和编辑器视口选择均不进入文档。
@@ -62,6 +69,7 @@ export interface DeskDocument {
     readonly actions: readonly DeskDocumentAction[];
     readonly posePresets: readonly PosePresetJSON[];
     readonly lighting: DeskDocumentLighting;
+    readonly output: DeskDocumentOutput;
 }
 
 /** 装配当前状态为文档(单一事实源:各域 toJSON) */
@@ -76,6 +84,7 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
             program: ctx.motion.program.toJSON(),
         },
         timeline: ctx.timeline.document.toJSON(),
+        output: { formatId: ctx.output.formatId },
         actions: ctx.animations.actions.map((action) => ({
             name: action.name,
             url: action.url,

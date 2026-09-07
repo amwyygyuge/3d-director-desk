@@ -23,6 +23,7 @@ import type { PlaybackCoordinator } from "@/timeline/PlaybackCoordinator";
 import type { TimelineStore } from "@/store/TimelineStore";
 import type { DocumentImportService } from "@/document/DocumentImportService";
 import type { DeskShellPresentation } from "@/ui/shell/DeskShellPresentation";
+import type { OutputSettings } from "@/output/OutputFormat";
 
 /**
  * DirectorDeskStores 在结构上天然满足本接口;仅暴露命令执行及移除后的选中态收敛所需依赖。
@@ -37,6 +38,8 @@ export interface DirectorContext {
     readonly camera: CameraStore;
     readonly clock: TimeTransport;
     readonly timeline: TimelineStore;
+    /** 项目级成片输出比例；纯数据聚合，所有写入经 output.* 命令。 */
+    readonly output: OutputSettings;
     readonly motion: CameraMotionStore;
     /** 运镜编排态:视口模式、预览片段(纯 UI 态,不入文档与撤销栈) */
     readonly motionAuthoring: MotionAuthoringStore;

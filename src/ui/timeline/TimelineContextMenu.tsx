@@ -24,7 +24,10 @@ const BIND_FOLLOW_LABEL = "跟拍选中模型";
 const FOLLOW_ANCHOR_ORIGIN = [0, 0, 0] as const;
 const SINGLE_SELECTION_COUNT = 1;
 
-function markerCommandAt(timeSeconds: number, template: MarkerTemplate): { readonly type: string; readonly payload: unknown } {
+function markerCommandAt(
+    timeSeconds: number,
+    template: MarkerTemplate,
+): { readonly type: string; readonly payload: unknown } {
     return {
         type: "timeline.add-marker",
         payload: {

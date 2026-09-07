@@ -8,11 +8,18 @@ import type { DeterministicMp4ExportResult } from "@/capture/DeterministicMp4Exp
 import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 import type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
 import type { Vec3 } from "@/core/SceneObject";
+import type {
+    OutputFrameGeometry,
+    OutputFrameNdcBounds,
+    OutputFrameRect,
+    OutputFrameSize,
+} from "@/output/OutputFrameGeometry";
 
 const PNG_MIME_TYPE = "image/png";
 const TMP_DIRECTION = new Vector3();
 const TMP_CORNER = new Vector3();
-const NDC_EDGE = 1;
+const NDC_MIN = -1;
+const NDC_MAX = 1;
 const TMP_SHOT_CAMERA = new PerspectiveCamera();
 /** 录制时长上限(秒):参考片段场景,防失控长录 */
 export const VIDEO_MAX_DURATION_SECONDS = 120;
@@ -69,6 +76,8 @@ export class CaptureService {
     private exporter: DeterministicMp4Exporter | null = null;
     private activeVideoExport: Promise<DeterministicMp4ExportResult | null> | null = null;
     private recordedMimeType: string | null = null;
+    /** 中心裁切导出画布：仅在采集期复用，绝不进入 observable。 */
+    private outputCanvas: HTMLCanvasElement | null = null;
 
     attach(handles: RenderHandles): void {
         this.handles = handles;
@@ -84,6 +93,7 @@ export class CaptureService {
         this.handles = null;
     }
     dispose(): void {
+        this.outputCanvas = null;
         this.exporter?.requestCancel();
         this.helpers.clear();
         this.masks.clear();
@@ -102,6 +112,20 @@ export class CaptureService {
     get size(): { width: number; height: number } | null {
         const canvas = this.handles?.gl.domElement;
         return canvas ? { width: canvas.width, height: canvas.height } : null;
+    }
+
+    /** 成片的实际尺寸：目标比例裁切后的 PNG 尺寸；未给画幅时保持完整 canvas。 */
+    outputSize(frame: OutputFrameGeometry | null): OutputFrameSize | null {
+        const canvas = this.size;
+        if (!canvas) return null;
+        return frame?.cropRect ?? canvas;
+    }
+
+    /** MP4 受 H.264 偶数边长约束，尺寸与导出裁切帧完全一致。 */
+    videoOutputSize(frame: OutputFrameGeometry | null): OutputFrameSize | null {
+        const canvas = this.size;
+        if (!canvas) return null;
+        return frame?.videoRect ?? canvas;
     }
     /** 当前生效相机位姿(R3F 默认相机,运镜 sink 写入的就是它);未 attach 返回 null */
     readCameraPose(): LiveCameraPose | null {
@@ -128,9 +152,10 @@ export class CaptureService {
      * pose 缺省读当前生效相机;传入机位位姿则按机位解析式测量——
      * camera.activate 的写入下一帧才到渲染相机,同任务内的「机位→同框断言」链必须用后者。
      */
-    measureFraming(box: Box3, pose?: ShotFramingPose): FramingMeasure | null {
+    measureFraming(box: Box3, pose?: ShotFramingPose, outputFrame?: OutputFrameGeometry | null): FramingMeasure | null {
         if (box.isEmpty()) return null;
         const canvas = this.handles?.gl.domElement;
+        const bounds = outputFrame?.ndcBounds;
         if (pose && canvas) {
             TMP_SHOT_CAMERA.position.set(...pose.position);
             TMP_SHOT_CAMERA.up.set(0, 1, 0);
@@ -139,14 +164,14 @@ export class CaptureService {
             TMP_SHOT_CAMERA.aspect = canvas.width / canvas.height;
             TMP_SHOT_CAMERA.updateProjectionMatrix();
             TMP_SHOT_CAMERA.updateMatrixWorld(true);
-            return this.measureFramingWith(TMP_SHOT_CAMERA, box);
+            return this.measureFramingWith(TMP_SHOT_CAMERA, box, bounds);
         }
         const camera = this.handles?.camera;
         if (!camera) return null;
-        return this.measureFramingWith(camera, box);
+        return this.measureFramingWith(camera, box, bounds);
     }
 
-    private measureFramingWith(camera: Camera, box: Box3): FramingMeasure {
+    private measureFramingWith(camera: Camera, box: Box3, outputBounds?: OutputFrameNdcBounds | null): FramingMeasure {
         const corners = [box.min.x, box.max.x].flatMap((x) =>
             [box.min.y, box.max.y].flatMap((y) => [box.min.z, box.max.z].map((z) => [x, y, z] as const)),
         );
@@ -162,11 +187,12 @@ export class CaptureService {
             },
             { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
         );
+        const bounds = outputBounds ?? { left: NDC_MIN, right: NDC_MAX, top: NDC_MAX, bottom: NDC_MIN };
         const marginNdc = Math.min(
-            extents.minX + NDC_EDGE,
-            NDC_EDGE - extents.maxX,
-            extents.minY + NDC_EDGE,
-            NDC_EDGE - extents.maxY,
+            extents.minX - bounds.left,
+            bounds.right - extents.maxX,
+            bounds.top - extents.maxY,
+            extents.minY - bounds.bottom,
         );
         return { inFrame: marginNdc >= 0, marginNdc };
     }
@@ -179,18 +205,22 @@ export class CaptureService {
         readonly durationSeconds: number;
         readonly frameRate: number;
         readonly hideHelpers?: boolean;
+        readonly outputFrame?: OutputFrameGeometry | null;
         readonly renderFrame: (timeSeconds: number) => void;
     }): Promise<DeterministicMp4ExportResult | null> {
         const handles = this.handles;
         if (!handles || this.exporter) return Promise.resolve(null);
+        const crop = options.outputFrame?.videoRect ?? null;
+        const outputCanvas = this.outputCanvasFor(handles.gl.domElement, crop);
         const handover = this.beginEditingVisualHandover({ shouldHide: options.hideHelpers === true });
         const exporter = new DeterministicMp4Exporter({
-            canvas: handles.gl.domElement,
+            canvas: outputCanvas,
             durationSeconds: options.durationSeconds,
             frameRate: options.frameRate,
             renderFrame: (timeSeconds) => {
                 options.renderFrame(timeSeconds);
                 handles.gl.render(handles.scene, handles.camera);
+                this.copyOutputFrame(handles.gl.domElement, outputCanvas, crop);
             },
         });
         this.exporter = exporter;
@@ -250,8 +280,28 @@ export class CaptureService {
         handles.gl.render(handles.scene, handles.camera);
     }
 
+    private outputCanvasFor(source: HTMLCanvasElement, crop: OutputFrameRect | null): HTMLCanvasElement {
+        if (!crop || this.isFullCanvasCrop(source, crop)) return source;
+        const canvas = this.outputCanvas ?? document.createElement("canvas");
+        canvas.width = crop.width;
+        canvas.height = crop.height;
+        this.outputCanvas = canvas;
+        return canvas;
+    }
+
+    private copyOutputFrame(source: HTMLCanvasElement, output: HTMLCanvasElement, crop: OutputFrameRect | null): void {
+        if (!crop || output === source) return;
+        const context = output.getContext("2d");
+        if (!context) throw new Error("无法创建成片裁切画布");
+        context.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    }
+
+    private isFullCanvasCrop(canvas: HTMLCanvasElement, crop: OutputFrameRect): boolean {
+        return crop.x === 0 && crop.y === 0 && crop.width === canvas.width && crop.height === canvas.height;
+    }
+
     /** 截取当前场景为 PNG blob;hideHelpers 默认开(gizmo/高亮框等编辑辅助物不入镜) */
-    async capture(options?: { hideHelpers?: boolean }): Promise<Blob | null> {
+    async capture(options?: { hideHelpers?: boolean; outputFrame?: OutputFrameGeometry | null }): Promise<Blob | null> {
         const handles = this.handles;
         if (!handles) return null;
         const { gl, scene, camera } = handles;
@@ -269,7 +319,9 @@ export class CaptureService {
         const handover = this.beginEditingVisualHandover({ shouldHide: options?.hideHelpers !== false });
         try {
             gl.render(scene, camera);
-            const dataUrl = gl.domElement.toDataURL(PNG_MIME_TYPE);
+            const outputCanvas = this.outputCanvasFor(gl.domElement, options?.outputFrame?.cropRect ?? null);
+            this.copyOutputFrame(gl.domElement, outputCanvas, options?.outputFrame?.cropRect ?? null);
+            const dataUrl = outputCanvas.toDataURL(PNG_MIME_TYPE);
             // toBlob 是异步的,读到的必是合成器残留帧;toDataURL 同步取值才满足单任务纪律
             return dataUrlToBlob(dataUrl);
         } finally {

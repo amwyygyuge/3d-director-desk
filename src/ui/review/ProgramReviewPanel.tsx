@@ -32,7 +32,10 @@ function reviewReportFor(stores: DirectorDeskStores): ProgramReviewReport | null
 }
 
 function locateAt(stores: DirectorDeskStores, timeSeconds: number): void {
-    reportCommandFailure(stores, stores.dispatcher.dispatch({ type: "transport.seek", payload: { time: timeSeconds } }, stores));
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch({ type: "transport.seek", payload: { time: timeSeconds } }, stores),
+    );
 }
 
 /** 左栏只读成片工作台：Program 聚合的镜头单和巡检结论来自同一查询，不复制时间轴规则。 */
@@ -57,7 +60,12 @@ export const ProgramReviewPanel = observer(function ProgramReviewPanel() {
             {hasIssues ? (
                 <Stack divider={<Divider flexItem />} spacing={ITEM_GAP}>
                     {report.issues.map((issue) => (
-                        <Stack direction="row" key={`${issue.kind}-${issue.startSeconds}`} spacing={ITEM_GAP} sx={{ alignItems: "center" }}>
+                        <Stack
+                            direction="row"
+                            key={`${issue.kind}-${issue.startSeconds}`}
+                            spacing={ITEM_GAP}
+                            sx={{ alignItems: "center" }}
+                        >
                             <Typography sx={{ flex: 1 }} variant="body2">
                                 {issue.message}
                             </Typography>

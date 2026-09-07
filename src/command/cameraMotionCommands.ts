@@ -1387,14 +1387,24 @@ export class RemoveMotionClipCommand extends DirectorCommand<RemoveMotionClipPay
  * 因此现有全部 MOVE_RESOLVERS 一行不用改就能产出跟拍版关键帧。
  * focus 仍绑世界系的主体,注视由它接管;keys 的 target 只是兜底。
  */
-function takeCommandFor(
-    request: MotionPresetRequest,
-    shot: CameraShot,
-    subject: SubjectFocusBounds | null,
-    takeId: string,
-    follow: CameraFollowTrackJSON | null = null,
-): CreateMotionTakeCommand {
-    const keys = presetCompiler.compile(request, { shot, subject });
+interface TakeCommandOptions {
+    readonly request: MotionPresetRequest;
+    readonly shot: CameraShot;
+    readonly subject: SubjectFocusBounds | null;
+    readonly takeId: string;
+    readonly follow?: CameraFollowTrackJSON | null;
+    readonly outputAspectRatio: number | null;
+}
+
+function takeCommandFor({
+    request,
+    shot,
+    subject,
+    takeId,
+    follow = null,
+    outputAspectRatio,
+}: TakeCommandOptions): CreateMotionTakeCommand {
+    const keys = presetCompiler.compile(request, { shot, subject, outputAspectRatio });
     return new CreateMotionTakeCommand({
         id: takeId,
         startTimeSeconds: request.startTimeSeconds,
@@ -1453,12 +1463,13 @@ export class AuthorMotionCommand extends DirectorCommand<AuthorMotionPayload> {
         const shot = ctx.camera.director.getShot(this.payload.cameraId);
         if (!shot) return null;
         const subject = this.payload.subjectId ? subjectBoundsFor(ctx, this.payload.subjectId) : null;
-        return takeCommandFor(
-            this.payload,
+        return takeCommandFor({
+            request: this.payload,
             shot,
             subject,
-            `take-${this.payload.cameraId}-${this.payload.move}-${this.payload.startTimeSeconds}`,
-        );
+            takeId: `take-${this.payload.cameraId}-${this.payload.move}-${this.payload.startTimeSeconds}`,
+            outputAspectRatio: ctx.output.format.aspectRatio,
+        });
     }
 }
 
@@ -1590,7 +1601,14 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
         const end = range.startTimeSeconds + range.durationSeconds;
         return {
             range,
-            take: takeCommandFor(request, framing.shot, framing.subject, range.id, framing.follow),
+            take: takeCommandFor({
+                request,
+                shot: framing.shot,
+                subject: framing.subject,
+                takeId: range.id,
+                follow: framing.follow,
+                outputAspectRatio: ctx.output.format.aspectRatio,
+            }),
             extendDuration:
                 end > ctx.timeline.document.duration ? new SetTimelineDurationCommand({ duration: end }) : null,
         };
@@ -1607,18 +1625,25 @@ export class QuickAuthorMotionCommand extends DirectorCommand<QuickAuthorPayload
             const eye = ctx.camera.lastDirectorPose;
             const azimuth = eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS;
             return {
-                shot: shotSizePresets.resolve(this.payload.shotSize, subject.center, subject.radius, azimuth),
+                shot: shotSizePresets.resolve({
+                    size: this.payload.shotSize,
+                    subjectCenter: subject.center,
+                    subjectRadius: subject.radius,
+                    azimuthRad: azimuth,
+                    outputAspectRatio: ctx.output.format.aspectRatio,
+                }),
                 subject,
                 follow: null,
             };
         }
         return {
-            shot: shotSizePresets.resolve(
-                this.payload.shotSize,
-                FOLLOW_FRAME_ORIGIN,
-                subject.radius,
-                FOLLOW_APPROACH_AZIMUTH[follow.approach],
-            ),
+            shot: shotSizePresets.resolve({
+                size: this.payload.shotSize,
+                subjectCenter: FOLLOW_FRAME_ORIGIN,
+                subjectRadius: subject.radius,
+                azimuthRad: FOLLOW_APPROACH_AZIMUTH[follow.approach],
+                outputAspectRatio: ctx.output.format.aspectRatio,
+            }),
             subject: { center: FOLLOW_FRAME_ORIGIN, radius: subject.radius, focusOffset: FOLLOW_FRAME_ORIGIN },
             follow: {
                 objectId: this.payload.subjectId,

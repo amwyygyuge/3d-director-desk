@@ -86,12 +86,12 @@ flowchart LR
 
 ## 四、清偿顺序
 
-| 债 | 状态 | 交付物 |
-| --- | --- | --- |
+| 债              | 状态   | 交付物                                  |
+| --------------- | ------ | --------------------------------------- |
 | D1 payload 契约 | 已修复 | `PayloadContract` + `CommandDispatcher` |
-| D4 运镜验收 | 已修复 | `camera-motion.stories.tsx` 运行时断言 |
-| D2 输入统一 | 已修复 | Pointer Events + Pointer Capture |
-| D3 轨道所有权 | 已修复 | `ViewportOrbitController` |
+| D4 运镜验收     | 已修复 | `camera-motion.stories.tsx` 运行时断言  |
+| D2 输入统一     | 已修复 | Pointer Events + Pointer Capture        |
+| D3 轨道所有权   | 已修复 | `ViewportOrbitController`               |
 
 ## 五、判定规则(以后自评用)
 

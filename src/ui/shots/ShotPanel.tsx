@@ -11,6 +11,7 @@ import { useState } from "react";
 import { SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
 import { SHOT_SIZE_LABELS } from "@/ui/shots/shotSizeLabels";
+import { OutputFormatSelector } from "@/ui/shots/OutputFormatSelector";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 
@@ -114,6 +115,8 @@ const ShotSizeControl = observer(function ShotSizeControl() {
 export const ShotPanel = observer(function ShotPanel() {
     return (
         <Box sx={{ p: 1.5 }}>
+            <OutputFormatSelector />
+            <Divider sx={{ my: PANEL_SECTION_GAP }} />
             <SaveCurrentViewControl />
             <Divider sx={{ my: PANEL_SECTION_GAP }} />
             <ShotSizeControl />

@@ -54,7 +54,7 @@ import { WalkDraftController } from "@/ui/viewport/scene/WalkDraftController";
 import type { MotionKeyContextRequest } from "@/ui/viewport/scene/MotionClipPathPreview";
 import { ShotCameraRig } from "@/ui/viewport/scene/ShotCameraRig";
 import { ShotMarkers } from "@/ui/viewport/scene/ShotMarkers";
-import { ShotFrameOverlay } from "@/ui/viewport/ShotFrameOverlay";
+import { OutputFrameOverlay } from "@/ui/viewport/OutputFrameOverlay";
 import { ViewportInteractionHints } from "@/ui/viewport/ViewportInteractionHints";
 import { useCaptureHelperRegistration } from "@/ui/viewport/scene/useCaptureHelperRegistration";
 
@@ -297,7 +297,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 <ShotNavigation />
                                 <LensNavigation />
                             </Canvas>
-                            <ShotFrameOverlay />
+                            <OutputFrameOverlay />
                             {stores.presentation.showsInternalCaptureProducts ? <CaptureProductDock /> : null}
                             <LoadingChip />
                             <FrameRateIndicator />

@@ -201,8 +201,19 @@ export {
     CaptureVideoCommand,
     registerCaptureCommands,
 } from "@/command/captureCommands";
+export { OutputGetFormatQuery, SetOutputFormatCommand, registerOutputCommands } from "@/command/outputCommands";
 export { ExportDocumentQuery, ImportDocumentCommand, registerDocumentCommands } from "@/command/documentCommands";
 export { assembleDeskDocument, DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
+export {
+    OutputFormat,
+    OutputSettings,
+    OUTPUT_FORMAT,
+    OUTPUT_FORMAT_ORDER,
+    outputFormatFor,
+} from "@/output/OutputFormat";
+export type { OutputFormatId } from "@/output/OutputFormat";
+export { OutputFrameGeometry } from "@/output/OutputFrameGeometry";
+export type { OutputFrameNdcBounds, OutputFrameRect, OutputFrameSize } from "@/output/OutputFrameGeometry";
 export { DOCUMENT_IMPORT_ISSUE_CODE, DocumentImportService } from "@/document/DocumentImportService";
 export { ProgramReviewQuery, registerReviewCommands } from "@/command/reviewCommands";
 export { PROGRAM_REVIEW_ISSUE_KIND, ProgramReviewService } from "@/review/ProgramReviewService";
@@ -228,6 +239,7 @@ export type {
     DeskDocumentAction,
     DeskDocumentActionMount,
     DeskDocumentMotion,
+    DeskDocumentOutput,
 } from "@/document/DeskDocument";
 export { FrameViewCommand, registerNavigationCommands } from "@/command/navigationCommands";
 export {

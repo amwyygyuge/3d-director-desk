@@ -41,9 +41,13 @@ interface ProgramReviewSource {
 
 function reviewShotFor(clip: CameraProgramClip, source: ProgramReviewSource): ProgramReviewShot {
     const staticShot =
-        clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT ? source.camera.director.getShot(clip.source.shotId) : null;
-    const motionClip = clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP ? source.motion.clip(clip.source.motionClipId) : null;
-    const sourceId = clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT ? clip.source.shotId : clip.source.motionClipId;
+        clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT
+            ? source.camera.director.getShot(clip.source.shotId)
+            : null;
+    const motionClip =
+        clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP ? source.motion.clip(clip.source.motionClipId) : null;
+    const sourceId =
+        clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT ? clip.source.shotId : clip.source.motionClipId;
     const isSourceAvailable = staticShot !== undefined || motionClip !== undefined;
     const sourceLabel = staticShot ? `机位 ${sourceId}` : motionClip ? `运镜 ${motionClip.id}` : `缺失来源 ${sourceId}`;
     return {
@@ -87,10 +91,13 @@ function gapIssuesFor(
         ];
     }
     const lastShot = shots.at(-1) ?? firstShot;
-    const leadingGap = firstShot.startSeconds > range.inSeconds ? [gapIssue(range.inSeconds, firstShot.startSeconds)] : [];
+    const leadingGap =
+        firstShot.startSeconds > range.inSeconds ? [gapIssue(range.inSeconds, firstShot.startSeconds)] : [];
     const internalGaps = shots.flatMap((shot, index) => {
         const previousShot = shots[index - 1];
-        return previousShot && previousShot.endSeconds < shot.startSeconds ? [gapIssue(previousShot.endSeconds, shot.startSeconds)] : [];
+        return previousShot && previousShot.endSeconds < shot.startSeconds
+            ? [gapIssue(previousShot.endSeconds, shot.startSeconds)]
+            : [];
     });
     const trailingGap = lastShot.endSeconds < range.outSeconds ? [gapIssue(lastShot.endSeconds, range.outSeconds)] : [];
     return [...leadingGap, ...internalGaps, ...trailingGap];

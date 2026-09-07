@@ -13,23 +13,26 @@ import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { VIEWPORT_TOAST_SLOT, ViewportToast } from "@/ui/workspace/ViewportToast";
 
 const FRAME_INSET_CLASS = "absolute inset-3";
-const GRID_LINE_CLASS = "border-white/25";
 const TAKE_DURATION_SECONDS = 1;
 const NO_CLIP_MESSAGE = "当前时间没有镜头片段";
 
-type FrameMode = "shot" | "lens" | "none";
+export type ShotFrameMode = "shot" | "lens" | "none";
 
 interface FrameStyle {
     readonly borderClassName: string;
     readonly labelClassName: string;
 }
 
-const FRAME_STYLE: Record<Exclude<FrameMode, "none">, FrameStyle> = {
+const FRAME_STYLE: Record<Exclude<ShotFrameMode, "none">, FrameStyle> = {
     shot: { borderClassName: "border-amber-200/70", labelClassName: "text-amber-200/90" },
     lens: { borderClassName: "border-indigo-300/90", labelClassName: "text-indigo-200" },
 };
 
-function resolveFrameMode(isProgramTakeover: boolean, lensViewActive: boolean, activeShotId: string | null): FrameMode {
+export function resolveShotFrameMode(
+    isProgramTakeover: boolean,
+    lensViewActive: boolean,
+    activeShotId: string | null,
+): ShotFrameMode {
     if (isProgramTakeover) return "none";
     if (lensViewActive) return "lens";
     return activeShotId === null ? "none" : "shot";
@@ -110,7 +113,7 @@ const LensNoClipToast = observer(function LensNoClipToast() {
 /** 三态视口取景框:掌镜写静态机位,镜头视角写当前 CameraKey,导演/全屏态不渲染。 */
 export const ShotFrameOverlay = observer(function ShotFrameOverlay() {
     const { camera, layout, motionAuthoring } = useDirectorDeskStores();
-    const mode = resolveFrameMode(layout.isProgramTakeover, motionAuthoring.lensViewActive, camera.activeShotId);
+    const mode = resolveShotFrameMode(layout.isProgramTakeover, motionAuthoring.lensViewActive, camera.activeShotId);
     if (mode === "none") return null;
     const style = FRAME_STYLE[mode];
     const isLens = mode === "lens";
@@ -118,22 +121,6 @@ export const ShotFrameOverlay = observer(function ShotFrameOverlay() {
         <>
             <div data-helper="shot-frame" className="pointer-events-none absolute inset-0 z-[1]">
                 <div className={`${FRAME_INSET_CLASS} border ${style.borderClassName}`} />
-                <div
-                    className={`absolute top-3 bottom-3 border-l ${GRID_LINE_CLASS}`}
-                    style={{ left: "calc(0.75rem + (100% - 1.5rem) / 3)" }}
-                />
-                <div
-                    className={`absolute top-3 bottom-3 border-l ${GRID_LINE_CLASS}`}
-                    style={{ left: "calc(0.75rem + (100% - 1.5rem) * 2 / 3)" }}
-                />
-                <div
-                    className={`absolute left-3 right-3 border-t ${GRID_LINE_CLASS}`}
-                    style={{ top: "calc(0.75rem + (100% - 1.5rem) / 3)" }}
-                />
-                <div
-                    className={`absolute left-3 right-3 border-t ${GRID_LINE_CLASS}`}
-                    style={{ top: "calc(0.75rem + (100% - 1.5rem) * 2 / 3)" }}
-                />
                 {isLens ? (
                     <LensFrameLabel />
                 ) : (
