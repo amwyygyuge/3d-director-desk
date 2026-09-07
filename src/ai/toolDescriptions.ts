@@ -74,9 +74,9 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "timeline.set-track-policies": "设走位轨朝向、贴地与步频策略",
     // 动作与播放
     "action.mount":
-        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/releaseSeconds 可选,缺省从当前播放头开始、按 clip 原始时长;骨骼兼容性预检不过返回结构化诊断与可用动作",
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 可选,缺省从当前播放头开始、按 clip 原始时长;骨骼兼容性预检不过返回结构化诊断与可用动作",
     "action.set-range":
-        "调整对象已挂载动作的开始时间、演出时长与回收时长;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
+        "调整对象已挂载动作的开始时间、演出时长、进入时长与回收时长;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
     "action.unmount": "卸载对象动作,骨骼回常驻基础姿势(未设置则回绑定姿态)",
     "action.preview.play": "局部预览指定对象的已挂载动作,不驱动全局 playhead",
     "action.preview.pause": "暂停局部动作预览",

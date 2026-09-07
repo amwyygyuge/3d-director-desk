@@ -89,7 +89,13 @@ export class ActionPreviewController {
             : nextTime >= this.durationSeconds
               ? nextTime % this.durationSeconds
               : nextTime;
-        if (isOnceFinished) this.isPlaying = false;
+        if (isOnceFinished) {
+            this.isPlaying = false;
+            this.binder.setClipTimeFor(this.activeObjectId, this.timeSeconds);
+            // 自然播完即归还时间轴;否则已结束预览会压住后续排期动作与常驻姿势。
+            this.activeObjectId = null;
+            return;
+        }
         this.binder.setClipTimeFor(this.activeObjectId, this.timeSeconds);
     }
 }

@@ -68,22 +68,24 @@ async function waitCatalogEntry(
 
 function assertUprightFirstFrame(stores: DirectorDeskStores, objectId: string): void {
     const actionId = stores.scene.manager.getEntity(objectId)?.actionId;
-    const clip = actionId ? stores.animations.getClip(actionId) : undefined;
-    const hipsTrack = clip?.tracks.find((track) => track.name === "mixamorigHips.quaternion");
-    const baseline = TARGET_HIPS_REST_QUATERNION;
-    assertAcceptance(clip !== undefined && hipsTrack !== undefined, "动作缺少 Hips 旋转轨道");
+    const clip = required(actionId ? stores.animations.getClip(actionId) : undefined, "动作缺少 clip");
     assertAcceptance(
         clip.tracks.every((track) => !track.name.endsWith(".position") && !track.name.endsWith(".scale")),
         "动作资产仍包含位置/缩放轨道",
     );
+    assertAcceptance(
+        clip.tracks.every((track) => track.name !== "mixamorigHips.quaternion"),
+        "动作资产仍写 Hips 朝向",
+    );
+    const hips = boneQuaternion(stores, objectId, "mixamorigHips");
     const firstDotBaseline = Math.abs(
-        required(hipsTrack.values[0], "Hips 首帧缺少 x") * baseline[0] +
-            required(hipsTrack.values[1], "Hips 首帧缺少 y") * baseline[1] +
-            required(hipsTrack.values[2], "Hips 首帧缺少 z") * baseline[2] +
-            required(hipsTrack.values[3], "Hips 首帧缺少 w") * baseline[3],
+        hips[0]! * TARGET_HIPS_REST_QUATERNION[0] +
+            hips[1]! * TARGET_HIPS_REST_QUATERNION[1] +
+            hips[2]! * TARGET_HIPS_REST_QUATERNION[2] +
+            hips[3]! * TARGET_HIPS_REST_QUATERNION[3],
     );
     const deltaDegrees = (2 * Math.acos(Math.min(1, firstDotBaseline)) * 180) / Math.PI;
-    assertAcceptance(deltaDegrees <= MAX_HIPS_FIRST_FRAME_DELTA_DEGREES, "动作首帧 Hips 朝向翻转");
+    assertAcceptance(deltaDegrees <= MAX_HIPS_FIRST_FRAME_DELTA_DEGREES, "动作改变了模型朝向");
 }
 
 function boneQuaternion(stores: DirectorDeskStores, objectId: string, boneName: string): readonly number[] {
@@ -133,6 +135,10 @@ function assertOnceTimelineSchedule(stores: DirectorDeskStores): void {
     assertAcceptance(!quaternionEquals(before, active), "动作排期开始后未驱动骨骼");
     assertAcceptance(!quaternionEquals(ended, base), "一次性动作末帧与常驻姿势相同,验收无效");
     assertAcceptance(quaternionEquals(released, base), "一次性动作回收后未回到常驻姿势");
+    const replayBefore = sampleTimelinePose(stores, 0);
+    const replayActive = sampleTimelinePose(stores, ONCE_ACTION_START_SECONDS + ONCE_ACTION_ACTIVE_SECONDS);
+    assertAcceptance(quaternionEquals(replayBefore, base), "一次性动作回放前未恢复常驻姿势");
+    assertAcceptance(quaternionEquals(replayActive, active), "一次性动作回到排期后未重新播放");
 }
 
 function assertPreviewPoseHoldsAfterGlobalSample(stores: DirectorDeskStores, objectId: string): void {
@@ -227,7 +233,7 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
         Math.abs(stores.actionPreview.timeSeconds - (onceAction?.duration ?? 0)) <= TIME_EPSILON_SECONDS,
         "一次性动作预览到尾仍回卷首帧",
     );
-    assertPreviewPoseHoldsAfterGlobalSample(stores, ACTOR_ID);
+    assertAcceptance(stores.actionPreview.activeObjectId === null, "一次性预览结束后未归还时间轴控制权");
 
     dispatchOk(stores, "assets.mount", { assetId: NOD_ASSET_ID, objectId: ACTOR_ID });
     await waitMountedActionName(stores, ACTOR_ID, "点头");

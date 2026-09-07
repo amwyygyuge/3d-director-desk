@@ -1,5 +1,5 @@
 import { AnimationMixer, LoopOnce, LoopRepeat, Quaternion } from "three";
-import type { AnimationClip, Object3D } from "three";
+import type { AnimationAction, AnimationClip, Object3D } from "three";
 
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionLoopMode } from "@/assets/ActionAsset";
@@ -10,10 +10,12 @@ import type { TimeTransport } from "@/time/TimeTransport";
 
 interface MountedAction {
     readonly mixer: AnimationMixer;
+    readonly action: AnimationAction;
     readonly clipDurationSeconds: number;
     readonly loopMode: ActionLoopMode;
     readonly boneKeys: readonly string[];
     performance: ActionPerformance;
+    isActive: boolean;
 }
 
 const RELEASE_TARGET_QUATERNION = new Quaternion();
@@ -54,10 +56,12 @@ export class AnimationBinder {
         action.play();
         const mounted: MountedAction = {
             mixer,
+            action,
             clipDurationSeconds: clip.duration,
             loopMode,
             boneKeys: [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean),
             performance,
+            isActive: false,
         };
         this.mounted.set(objectId, mounted);
         this.applyTimelineTime(mounted, this.transport?.time ?? 0);
@@ -82,15 +86,17 @@ export class AnimationBinder {
 
     /** 局部动作预览只推进目标 clip 的局部时间,不经过时间轴排期。 */
     setClipTimeFor(objectId: string, timeSeconds: number): void {
-        this.mounted.get(objectId)?.mixer.setTime(timeSeconds);
+        const mounted = this.mounted.get(objectId);
+        if (!mounted) return;
+        this.ensureActive(mounted);
+        mounted.mixer.setTime(timeSeconds);
     }
 
-    /** once 回收段:先钉住动作末帧,再把动作写过的骨骼确定性混回常驻姿势。 */
-    blendToBasePose(objectId: string, basePose: PoseSnapshot | null, progress: number): void {
+    /** 动作进入/回收共用:baseWeight=0 完全按动作,1 完全回常驻姿势。 */
+    blendActionWithBasePose(objectId: string, basePose: PoseSnapshot | null, baseWeight: number): void {
         const mounted = this.mounted.get(objectId);
-        if (!mounted || mounted.loopMode !== ACTION_LOOP_MODE.ONCE) return;
-        mounted.mixer.setTime(mounted.clipDurationSeconds);
-        const alpha = Math.min(Math.max(progress, 0), 1);
+        if (!mounted) return;
+        const alpha = Math.min(Math.max(baseWeight, 0), 1);
         for (const boneKey of mounted.boneKeys) {
             const bone = this.skeletons.getBone(objectId, boneKey);
             const target = basePose?.bones[boneKey] ?? this.skeletons.baselineRotationFor(objectId, boneKey);
@@ -117,6 +123,7 @@ export class AnimationBinder {
     setStridePhaseFor(objectId: string, phase: number): void {
         const mounted = this.mounted.get(objectId);
         if (!mounted || !Number.isFinite(phase)) return;
+        this.ensureActive(mounted);
         mounted.mixer.setTime(phase * mounted.clipDurationSeconds);
     }
 
@@ -135,7 +142,20 @@ export class AnimationBinder {
 
     private applyTimelineTime(mounted: MountedAction, timeSeconds: number): void {
         const clipTime = mounted.performance.clipTimeAt(timeSeconds, mounted.clipDurationSeconds, mounted.loopMode);
-        if (clipTime === null) return;
+        if (clipTime === null) {
+            mounted.isActive = false;
+            return;
+        }
+        this.ensureActive(mounted);
         mounted.mixer.setTime(clipTime);
+    }
+
+    /** LoopOnce 播完后会停在 finished 态;离开排期再回来时 reset 才能确定性重播。 */
+    private ensureActive(mounted: MountedAction): void {
+        if (mounted.isActive) return;
+        mounted.action.reset();
+        mounted.action.play();
+        mounted.mixer.setTime(0);
+        mounted.isActive = true;
     }
 }

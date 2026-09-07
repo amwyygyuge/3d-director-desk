@@ -1,6 +1,10 @@
 import { BONE_MATCH_THRESHOLD } from "@/animation/BoneCompatibilityChecker";
 import type { BoneCheckResult } from "@/animation/BoneCompatibilityChecker";
-import { ActionPerformance, DEFAULT_ACTION_RELEASE_SECONDS } from "@/animation/ActionPerformance";
+import {
+    ActionPerformance,
+    DEFAULT_ACTION_ATTACK_SECONDS,
+    DEFAULT_ACTION_RELEASE_SECONDS,
+} from "@/animation/ActionPerformance";
 import type { ActionAsset } from "@/assets/ActionAsset";
 import type { AnimationClip, Object3D } from "three";
 import { quantizeSeconds } from "@/command/timelineCommands";
@@ -62,6 +66,8 @@ interface ActionSchedulePayload {
     readonly startTimeSeconds?: number;
     /** 缺省 = clip 原始时长;排期时长按工程帧率量化 */
     readonly durationSeconds?: number;
+    /** 从常驻姿势进入动作的过渡时长;缺省 0.2s */
+    readonly attackSeconds?: number;
     /** once 结束后回常驻姿势的回收时长;缺省 0.25s */
     readonly releaseSeconds?: number;
 }
@@ -74,6 +80,7 @@ interface MountActionPayload extends ActionSchedulePayload {
 const ACTION_SCHEDULE_PROPERTIES = {
     startTimeSeconds: { type: "number" },
     durationSeconds: { type: "number" },
+    attackSeconds: { type: "number" },
     releaseSeconds: { type: "number" },
 } as const;
 
@@ -118,6 +125,10 @@ function scheduleIssues(
             : []),
         ...(payload.durationSeconds !== undefined && !Number.isFinite(payload.durationSeconds)
             ? ["动作时长必须是有限秒数"]
+            : []),
+        ...(payload.attackSeconds !== undefined &&
+        (!Number.isFinite(payload.attackSeconds) || payload.attackSeconds < 0)
+            ? ["动作进入时长必须是 ≥0 的有限秒数"]
             : []),
         ...(payload.releaseSeconds !== undefined &&
         (!Number.isFinite(payload.releaseSeconds) || payload.releaseSeconds < 0)
@@ -205,6 +216,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
             actionId: action.id,
             startTimeSeconds: schedule.startTimeSeconds,
             durationSeconds: schedule.durationSeconds,
+            attackSeconds: this.payload.attackSeconds ?? DEFAULT_ACTION_ATTACK_SECONDS,
             releaseSeconds: this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS,
         });
         ctx.binder.mount(this.payload.objectId, runtime, clip, performance, action.loopMode);
@@ -228,6 +240,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
                           actionId: previous.actionId,
                           startTimeSeconds: previous.startTimeSeconds,
                           durationSeconds: previous.durationSeconds,
+                          attackSeconds: previous.attackSeconds,
                           releaseSeconds: previous.releaseSeconds,
                       },
                   },
@@ -276,6 +289,7 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
                           actionId: performance.actionId,
                           startTimeSeconds: performance.startTimeSeconds,
                           durationSeconds: performance.durationSeconds,
+                          attackSeconds: performance.attackSeconds,
                           releaseSeconds: performance.releaseSeconds,
                       },
                   },
@@ -288,6 +302,7 @@ interface SetActionRangePayload {
     readonly objectId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
+    readonly attackSeconds?: number;
     readonly releaseSeconds?: number;
 }
 
@@ -321,11 +336,15 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         const current = entity?.actionPerformance;
         if (!current) return;
-        const released =
+        const transitioned = current.withTransitionSeconds(
+            this.payload.attackSeconds === undefined
+                ? current.attackSeconds
+                : quantizeSeconds(ctx, this.payload.attackSeconds),
             this.payload.releaseSeconds === undefined
-                ? current
-                : current.withReleaseSeconds(quantizeSeconds(ctx, this.payload.releaseSeconds));
-        const next = released.withRange(
+                ? current.releaseSeconds
+                : quantizeSeconds(ctx, this.payload.releaseSeconds),
+        );
+        const next = transitioned.withRange(
             quantizeSeconds(ctx, this.payload.startTimeSeconds),
             quantizeSeconds(ctx, this.payload.durationSeconds),
         );
@@ -344,6 +363,7 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
                           objectId: this.payload.objectId,
                           startTimeSeconds: current.startTimeSeconds,
                           durationSeconds: current.durationSeconds,
+                          attackSeconds: current.attackSeconds,
                           releaseSeconds: current.releaseSeconds,
                       },
                   },

@@ -60,6 +60,7 @@ const ASSETS_MOUNT_CONTRACT: PayloadContract = {
         objectId: { type: "string" },
         startTimeSeconds: { type: "number" },
         durationSeconds: { type: "number" },
+        attackSeconds: { type: "number" },
         releaseSeconds: { type: "number" },
     },
     required: ["assetId", "objectId"],
@@ -153,6 +154,7 @@ interface AssetsMountPayload {
     readonly objectId: string;
     readonly startTimeSeconds?: number;
     readonly durationSeconds?: number;
+    readonly attackSeconds?: number;
     readonly releaseSeconds?: number;
 }
 
@@ -197,6 +199,7 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                     ...(this.payload.durationSeconds !== undefined
                         ? { durationSeconds: this.payload.durationSeconds }
                         : {}),
+                    ...(this.payload.attackSeconds !== undefined ? { attackSeconds: this.payload.attackSeconds } : {}),
                     ...(this.payload.releaseSeconds !== undefined
                         ? { releaseSeconds: this.payload.releaseSeconds }
                         : {}),

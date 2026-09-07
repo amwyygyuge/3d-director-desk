@@ -79,7 +79,13 @@ export async function mountWhenReady(
     ctx: DirectorContext,
     objectId: string,
     actionId: string,
-    options?: { signal?: AbortSignal; startTimeSeconds?: number; durationSeconds?: number; releaseSeconds?: number },
+    options?: {
+        signal?: AbortSignal;
+        startTimeSeconds?: number;
+        durationSeconds?: number;
+        attackSeconds?: number;
+        releaseSeconds?: number;
+    },
 ): Promise<boolean> {
     for (let attempt = 0; attempt < MOUNT_RETRY_LIMIT; attempt++) {
         if (options?.signal?.aborted) return false;
@@ -91,6 +97,7 @@ export async function mountWhenReady(
                 actionId,
                 ...(options?.startTimeSeconds !== undefined ? { startTimeSeconds: options.startTimeSeconds } : {}),
                 ...(options?.durationSeconds !== undefined ? { durationSeconds: options.durationSeconds } : {}),
+                ...(options?.attackSeconds !== undefined ? { attackSeconds: options.attackSeconds } : {}),
                 ...(options?.releaseSeconds !== undefined ? { releaseSeconds: options.releaseSeconds } : {}),
             });
             if (mount.validate(ctx).length > 0) return false;

@@ -40,6 +40,8 @@ function normalizeOutputTrackName(name: string): string {
     return match?.[1] && match[2] ? `${match[1]}.${match[2]}` : name;
 }
 
+const TARGET_HIPS_TRACK_NAME = "mixamorigHips.quaternion";
+
 function retargetedTrackName(name: string): string {
     const [nodeName, ...propertyPath] = normalizeOutputTrackName(name).split(".");
     const boneName = nodeName ? normalizeMixamoBoneName(nodeName) : null;
@@ -51,7 +53,7 @@ function retargetedTrackName(name: string): string {
  *
  * 只改轨道名不足以跨 FBX 导出器:源/目标骨架的 armature 根方向、单位和 bind pose 都可能不同,
  * 直接写绝对四元数会把人偶放倒。这里用 SkeletonUtils 的世界矩阵重定向,再把轨道名收回到节点路径;
- * position/scale 不进入场景,实体 transform 仍是位置唯一权威。
+ * position/scale 不进入场景,Hips 朝向轨道也会移除;实体 transform 是位置与朝向的唯一权威。
  */
 export class MixamoActionRetargeter {
     normalize(clip: AnimationClip, options: MixamoActionRetargetOptions = {}): AnimationClip {
@@ -64,6 +66,8 @@ export class MixamoActionRetargeter {
             if (rotationOnly && !track.name.endsWith(".quaternion")) return [];
             const retargetedTrack = track.clone();
             retargetedTrack.name = retargetedTrackName(track.name);
+            // 实体 transform 是朝向唯一权威:外部动作不写 Hips 朝向,避免手势改变模型面向。
+            if (rotationOnly && retargetedTrack.name === TARGET_HIPS_TRACK_NAME) return [];
             return [retargetedTrack];
         });
         return new AnimationClip(retargeted.name, retargeted.duration, tracks);

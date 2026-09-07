@@ -357,6 +357,7 @@ interface SceneEntityDescription {
     readonly actionSchedule: {
         readonly startTimeSeconds: number;
         readonly durationSeconds: number;
+        readonly attackSeconds: number;
         readonly releaseSeconds: number;
     } | null;
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
@@ -400,6 +401,7 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
             ? {
                   startTimeSeconds: entity.actionPerformance.startTimeSeconds,
                   durationSeconds: entity.actionPerformance.durationSeconds,
+                  attackSeconds: entity.actionPerformance.attackSeconds,
                   releaseSeconds: entity.actionPerformance.releaseSeconds,
               }
             : null,
