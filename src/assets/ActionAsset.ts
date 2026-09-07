@@ -5,11 +5,6 @@ export const ACTION_LOOP_MODE = {
 } as const;
 export type ActionLoopMode = (typeof ACTION_LOOP_MODE)[keyof typeof ACTION_LOOP_MODE];
 
-export const ACTION_LOOP_MODE_LABEL: Record<ActionLoopMode, string> = {
-    [ACTION_LOOP_MODE.LOOP]: "循环",
-    [ACTION_LOOP_MODE.ONCE]: "一次性",
-};
-
 export function isActionLoopMode(value: unknown): value is ActionLoopMode {
     return value === ACTION_LOOP_MODE.LOOP || value === ACTION_LOOP_MODE.ONCE;
 }

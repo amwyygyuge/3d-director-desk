@@ -1,4 +1,3 @@
-import { ACTION_LOOP_MODE_LABEL } from "@/assets/ActionAsset";
 import type { AnimationLibrary } from "@/assets/AnimationLibrary";
 import type { TimelineViewport } from "@/authoring/TimelineViewport";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
@@ -205,7 +204,7 @@ export class TimelineLayout {
                         {
                             id: entity.id,
                             kind: TIMELINE_BAR_KIND.ACTION,
-                            label: `${action.name} · ${ACTION_LOOP_MODE_LABEL[action.loopMode]}`,
+                            label: action.name,
                             startSeconds: performance.startTimeSeconds,
                             durationSeconds: performance.durationSeconds,
                             startRatio: viewport.ratioAt(performance.startTimeSeconds),

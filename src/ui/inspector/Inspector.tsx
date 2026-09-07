@@ -34,7 +34,7 @@ import {
 import type { LightParams } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { ASSET_KIND } from "@/assets/catalog/AssetEntry";
-import { ACTION_LOOP_MODE, ACTION_LOOP_MODE_LABEL } from "@/assets/ActionAsset";
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { listActionClips, presentEmbeddedClip } from "@/pose/PosePresetCatalog";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { SCRUB_STEP } from "@/ui/controls/numberFieldConfig";
@@ -42,7 +42,7 @@ import type { ScrubKind } from "@/ui/controls/numberFieldConfig";
 import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { invalidInputNotice } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { PresetButtonGrid } from "@/ui/inspector/PresetButtonGrid";
+import { CategorizedPresetButtonGrid } from "@/ui/inspector/PresetButtonGrid";
 import { INSPECTOR_FIELD_SX, TransformFields } from "@/ui/inspector/TransformFields";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { WalkPolicySection } from "@/ui/inspector/WalkPolicyControls";
@@ -466,11 +466,12 @@ const ActionPresetSection = observer(function ActionPresetSection({ objectId, re
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
             <Typography variant="overline">动作（{actionPresets.length}）</Typography>
-            <PresetButtonGrid
-                items={actionPresets.map((preset) => {
-                    const loopMode = preset.loopMode ?? ACTION_LOOP_MODE.ONCE;
-                    return { id: preset.clipName, label: `${preset.labelZh} · ${ACTION_LOOP_MODE_LABEL[loopMode]}` };
-                })}
+            <CategorizedPresetButtonGrid
+                items={actionPresets.map((preset) => ({
+                    id: preset.clipName,
+                    label: preset.labelZh,
+                    loopMode: preset.loopMode ?? ACTION_LOOP_MODE.ONCE,
+                }))}
                 onApply={mountAction}
             />
         </Box>
@@ -496,11 +497,12 @@ const CatalogActionSection = observer(function CatalogActionSection({ objectId, 
     return (
         <Box sx={INSPECTOR_FIELD_SX}>
             <Typography variant="overline">动作资产（{actions.length}）</Typography>
-            <PresetButtonGrid
-                items={actions.map((action) => {
-                    const loopMode = action.loopMode ?? ACTION_LOOP_MODE.ONCE;
-                    return { id: action.id, label: `${action.name} · ${ACTION_LOOP_MODE_LABEL[loopMode]}` };
-                })}
+            <CategorizedPresetButtonGrid
+                items={actions.map((action) => ({
+                    id: action.id,
+                    label: action.name,
+                    loopMode: action.loopMode ?? ACTION_LOOP_MODE.ONCE,
+                }))}
                 onApply={mountAction}
             />
         </Box>
@@ -520,7 +522,7 @@ const PlaybackControls = observer(function PlaybackControls({ objectId, report }
         <Box sx={INSPECTOR_FIELD_SX}>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
                 <Typography variant="overline" sx={{ flex: 1 }}>
-                    {mountedAction.name} · {ACTION_LOOP_MODE_LABEL[mountedAction.loopMode]}
+                    {mountedAction.name}
                 </Typography>
                 <IconButton
                     size="small"
