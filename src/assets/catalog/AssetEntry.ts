@@ -18,13 +18,14 @@ export const ASSET_SOURCE = {
 } as const;
 export type AssetSource = (typeof ASSET_SOURCE)[keyof typeof ASSET_SOURCE];
 
-/** 资源分类(开放词表,常用先行):人/动物/植物/家具/道具/动作语义。 */
+/** 资源分类(开放词表,常用先行):人/动物/植物/家具/道具/布景/动作语义。 */
 export const ASSET_CATEGORY = {
     HUMAN: "character.human",
     ANIMAL: "character.animal",
     PLANT: "plant",
     FURNITURE: "furniture",
     PROP: "prop",
+    SCENERY: "scenery.geometry",
     ACTION_PERFORMANCE: "action.performance",
 } as const;
 
@@ -49,7 +50,7 @@ function isAssetActorDefaults(value: unknown): value is AssetActorDefaults {
 export interface AssetEntry {
     readonly id: string;
     readonly kind: AssetKind;
-    /** 分类词表:character.human / character.animal / plant / furniture / prop(动作资产按语义归类,如 action.combat) */
+    /** 分类词表:character.human / character.animal / plant / furniture / prop / scenery.geometry(动作资产按语义归类,如 action.combat) */
     readonly category: string;
     readonly name: string;
     readonly source: AssetSource;

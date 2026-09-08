@@ -13,9 +13,6 @@ function isStandardMaterial(material: Material): material is MeshStandardMateria
  * 必须克隆:ModelImporter 的实例克隆走 SkeletonUtils,几何与材质在同 URL 的所有实例间共享,
  * 直接改 uniform 会让全场同资产模型一起变,改缓存源还会跨桌泄漏。克隆体登记进本类的 DisposeBag,
  * 缓存源材质的释放权仍归 ModelImporter,两侧互不越界。
- *
- * 单一 owner 是硬约束:人偶画像(color/metalness/roughness)与选中辉光(emissive)是两个写入者,
- * 各自再克隆一次就会互相覆盖——谁后克隆谁生效,另一方的写入凭空消失。
  */
 export class ObjectMaterialRegistry {
     private readonly materialsByObject = new Map<string, readonly MeshStandardMaterial[]>();

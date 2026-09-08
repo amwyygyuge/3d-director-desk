@@ -104,7 +104,7 @@ export class ActorRuntime {
         this.rigMetrics.set(objectId, { heightPerScale, clearanceRatio: (lowest - originY) / span });
     }
 
-    /** 材质注册表由装配方(每桌 stores)释放:选中辉光与画像共用同一份,不能由单个写入者销毁。 */
+    /** 材质注册表由每桌 stores 的装配方统一释放，运行时不持有释放权。 */
     dispose(): void {
         this.shellsByObject.clear();
         this.buildBinder.dispose();

@@ -19,7 +19,6 @@ import { DeskShellPresentation } from "@/ui/shell/DeskShellPresentation";
 import type { DeskShellPresentationInit } from "@/ui/shell/DeskShellPresentation";
 import { FrameRateMonitor } from "@/core/FrameRateMonitor";
 import { ObjectMaterialRegistry } from "@/core/ObjectMaterialRegistry";
-import { SelectionTintBinder } from "@/core/SelectionTintBinder";
 import { CommandDispatcher } from "@/command/CommandDispatcher";
 import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "@/command/commands";
 import { CommandHistory } from "@/command/CommandHistory";
@@ -150,10 +149,8 @@ export interface DirectorDeskStores {
     poseGrounding: PoseGroundingService;
     /** 人偶外观/体型的 Three 运行时写方；每桌一套，绝不进 MobX。 */
     actorRuntime: ActorRuntime;
-    /** 模型实例克隆材质的唯一 owner：人偶画像与选中辉光共用这一份。 */
+    /** 模型实例克隆材质的唯一 owner：人偶画像通过它隔离每个实例的材质写入。 */
     materials: ObjectMaterialRegistry;
-    /** 选中辉光的 Three 写方；只写 emissive，采集期跟随 hideHelpers 让位。 */
-    selectionTint: SelectionTintBinder;
     /** 姿势预设注册表：内置预设 + 工程自建预设（MobX 可观察，面板直读）。 */
     posePresets: PosePresetLibrary;
     /** 工程快照替换应用服务：管理候选聚合提交与动作恢复取消域。 */
@@ -198,9 +195,7 @@ export function createDirectorDeskStores(options?: {
     const scene = new SceneStore();
     const materials = new ObjectMaterialRegistry();
     const actorRuntime = new ActorRuntime(scene.manager, materials);
-    const selectionTint = new SelectionTintBinder(materials);
     const capture = new CaptureService();
-    capture.registerMask(selectionTint);
     const poseGrounding = new PoseGroundingService(scene.manager, actorRuntime);
     const skeletons = new SkeletonRuntimeRegistry();
     const binder = new AnimationBinder(skeletons);
@@ -270,7 +265,6 @@ export function createDirectorDeskStores(options?: {
         poseGrounding,
         actorRuntime,
         materials,
-        selectionTint,
         posePresets,
         binder,
         actionPreview,

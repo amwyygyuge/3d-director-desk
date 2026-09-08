@@ -1,17 +1,15 @@
 import ChairIcon from "@mui/icons-material/Chair";
-import DownloadIcon from "@mui/icons-material/Download";
+import CropSquareIcon from "@mui/icons-material/CropSquare";
 import GestureIcon from "@mui/icons-material/Gesture";
 import GrassIcon from "@mui/icons-material/Grass";
 import PersonIcon from "@mui/icons-material/Person";
 import PetsIcon from "@mui/icons-material/Pets";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
@@ -27,6 +25,7 @@ const CATEGORY_PRESENTATION: Record<string, { icon: ReactNode; label: string }> 
     [ASSET_CATEGORY.PLANT]: { icon: <GrassIcon fontSize="small" />, label: "植物" },
     [ASSET_CATEGORY.FURNITURE]: { icon: <ChairIcon fontSize="small" />, label: "家具" },
     [ASSET_CATEGORY.PROP]: { icon: <GestureIcon fontSize="small" />, label: "道具" },
+    [ASSET_CATEGORY.SCENERY]: { icon: <CropSquareIcon fontSize="small" />, label: "布景" },
 };
 const FALLBACK_PRESENTATION = { icon: <GestureIcon fontSize="small" />, label: "其他" };
 
@@ -56,26 +55,8 @@ export const AssetLibraryPanel = observer(function AssetLibraryPanel() {
                     {entries.map((entry) => {
                         const presentation = presentationOf(entry);
                         return (
-                            <ListItem
-                                key={entry.id}
-                                disablePadding
-                                secondaryAction={
-                                    <Tooltip title={`放置 · ${entry.license}`}>
-                                        <IconButton
-                                            size="small"
-                                            aria-label={`放置 ${entry.name}`}
-                                            onClick={() => place(entry)}
-                                        >
-                                            <DownloadIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                }
-                            >
-                                <ListItemButton
-                                    className="pr-12"
-                                    aria-label={`资源 ${entry.name}`}
-                                    onClick={() => place(entry)}
-                                >
+                            <ListItem key={entry.id} disablePadding>
+                                <ListItemButton aria-label={`放置 ${entry.name}`} onClick={() => place(entry)}>
                                     <ListItemIcon className="min-w-8">{presentation.icon}</ListItemIcon>
                                     <ListItemText
                                         primary={entry.name}

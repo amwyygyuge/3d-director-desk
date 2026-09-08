@@ -33,6 +33,66 @@
             "tags": ["human", "generic", "animated", "humanoid", "pose-presets"]
         },
         {
+            "id": "builtin.scenery.cube",
+            "kind": "model",
+            "category": "scenery.geometry",
+            "name": "基础方块",
+            "source": "builtin",
+            "url": "/builtin-assets/scenery/cube.gltf",
+            "format": "gltf",
+            "license": "项目自制基础几何体",
+            "skeletonFamily": null,
+            "tags": ["scenery", "geometry", "block"]
+        },
+        {
+            "id": "builtin.scenery.platform",
+            "kind": "model",
+            "category": "scenery.geometry",
+            "name": "台阶平台",
+            "source": "builtin",
+            "url": "/builtin-assets/scenery/platform.gltf",
+            "format": "gltf",
+            "license": "项目自制基础几何体",
+            "skeletonFamily": null,
+            "tags": ["scenery", "geometry", "platform"]
+        },
+        {
+            "id": "builtin.scenery.wall",
+            "kind": "model",
+            "category": "scenery.geometry",
+            "name": "背景墙",
+            "source": "builtin",
+            "url": "/builtin-assets/scenery/wall.gltf",
+            "format": "gltf",
+            "license": "项目自制基础几何体",
+            "skeletonFamily": null,
+            "tags": ["scenery", "geometry", "wall"]
+        },
+        {
+            "id": "builtin.scenery.column",
+            "kind": "model",
+            "category": "scenery.geometry",
+            "name": "圆柱立柱",
+            "source": "builtin",
+            "url": "/builtin-assets/scenery/column.gltf",
+            "format": "gltf",
+            "license": "项目自制基础几何体",
+            "skeletonFamily": null,
+            "tags": ["scenery", "geometry", "column"]
+        },
+        {
+            "id": "builtin.scenery.pyramid",
+            "kind": "model",
+            "category": "scenery.geometry",
+            "name": "四棱锥",
+            "source": "builtin",
+            "url": "/builtin-assets/scenery/pyramid.gltf",
+            "format": "gltf",
+            "license": "项目自制基础几何体",
+            "skeletonFamily": null,
+            "tags": ["scenery", "geometry", "pyramid"]
+        },
+        {
             "id": "builtin.action.wave",
             "kind": "action",
             "category": "action.performance",

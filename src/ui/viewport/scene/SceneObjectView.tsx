@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import type { Group, Object3D } from "three";
-import { Box3, BufferGeometry, Matrix4 } from "three";
+import { Box3, BufferGeometry, Matrix4, SkinnedMesh } from "three";
 
 import type { SceneObject, SceneObjectKind } from "@/core/SceneObject";
 import { SELECTION_ROLE } from "@/core/SelectionRole";
@@ -24,14 +24,30 @@ class LocalBoundsIndex {
         this.inverseRoot.copy(root.matrixWorld).invert();
         this.bounds.makeEmpty();
         root.traverse((candidate) => {
-            const geometry = (candidate as Object3D & { geometry?: unknown }).geometry;
-            if (!(geometry instanceof BufferGeometry) || candidate.userData.helper) return;
-            geometry.computeBoundingBox();
-            if (!geometry.boundingBox) return;
+            const localBounds = this.contentBounds(candidate);
+            if (!localBounds) return;
             this.relativeChild.multiplyMatrices(this.inverseRoot, candidate.matrixWorld);
-            this.transformedBounds.copy(geometry.boundingBox).applyMatrix4(this.relativeChild);
+            this.transformedBounds.copy(localBounds).applyMatrix4(this.relativeChild);
             this.bounds.union(this.transformedBounds);
         });
+    }
+
+    /** 蒙皮顶点留在 bind space，必须由 SkinnedMesh 结合骨骼矩阵计算真实包围盒。 */
+    private contentBounds(candidate: Object3D): Box3 | null {
+        const geometry = (candidate as Object3D & { geometry?: unknown }).geometry;
+        const isRenderableContent = geometry instanceof BufferGeometry && candidate.userData.helper !== true;
+        if (!isRenderableContent) return null;
+        return candidate instanceof SkinnedMesh ? this.skinnedBounds(candidate) : this.geometryBounds(geometry);
+    }
+
+    private skinnedBounds(mesh: SkinnedMesh): Box3 | null {
+        mesh.computeBoundingBox();
+        return mesh.boundingBox;
+    }
+
+    private geometryBounds(geometry: BufferGeometry): Box3 | null {
+        geometry.computeBoundingBox();
+        return geometry.boundingBox;
     }
 }
 
@@ -94,20 +110,18 @@ const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject 
  * - 外层 group 承载 transform + 运行时绑定(ref 回调);
  * - ref 回调完成 three 运行时 ↔ SceneManager 的绑定/解绑(运行时永不进 observable);
  * - 渲染体内禁止写场景 store;点选写 SelectionStore(纯 UI 态,不走命令层);
- * - 选中态优先走辉光(SelectionTintBinder 写 emissive):模型本体发亮,人偶远近都可辨;
- *   材质不可着色(OBJ/FBX 的共享 Phong/Basic)时回退包围框,两者互斥不并存;
- *   包围框挂在 group 之下,位移随父级免费更新,帧内仅在内容签名变化时重算一次局部包围盒;
- *   灯光的选中态由灯光 helper 表达,既不着色也不叠框。
+ * - 选中模型一律显示包围框;包围框挂在 group 之下,位移随父级免费更新;
+ * - 帧内仅在内容签名变化时重算一次局部包围盒;
+ * - 灯光的选中态由灯光 helper 表达,不叠包围框。
  */
 export const SceneObjectView = observer(function SceneObjectView({ entity }: { entity: SceneObject }) {
-    const { capture, scene, selection, playback, selectionTint } = useDirectorDeskStores();
+    const { capture, scene, selection, playback } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     const groupRef = useRef<Group | null>(null);
     const registerCaptureHelper = useCaptureHelperRegistration<Group>(capture.helpers);
     const boundsIndex = useMemo(() => new LocalBoundsIndex(), []);
     const signature = useMemo(() => new ContentSignature(), []);
     const [highlight, setHighlight] = useState<SelectionBoxHighlight | null>(null);
-    const [isTinted, setIsTinted] = useState(false);
 
     // 依赖实体实例而非 id:文档导入用同 id 的新实体整体替换,只有回调标识变化才能让 React 重新绑定运行时
     const bindRuntime = useCallback(
@@ -126,32 +140,24 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
 
     const hasHighlight = selection.isSelected(entity.id) && entity.kind !== "light";
     const role = selection.primaryId === entity.id ? SELECTION_ROLE.PRIMARY : SELECTION_ROLE.SECONDARY;
-    // 着色成功即不挂框;模型尚未加载完时材质未就位,先落框,加载后由帧内重试切换
+    // 模型选中始终走包围框；生命周期全在 effect 内，StrictMode 重放不会漏掉 GL 资源。
     useEffect(() => {
         if (!hasHighlight) return;
-        setIsTinted(selectionTint.apply(entity.id, role));
-        signature.invalidate();
-        invalidate();
-        return () => {
-            selectionTint.clear(entity.id);
-            setIsTinted(false);
-            invalidate();
-        };
-    }, [hasHighlight, role, entity.id, selectionTint, signature, invalidate]);
-
-    // 生命周期全在 effect 内:StrictMode 重放不会漏掉一份未释放的 GL 资源
-    useEffect(() => {
-        if (!hasHighlight || isTinted) return;
         const created = new SelectionBoxHighlight(role);
-        signature.invalidate();
         setHighlight(created);
-        invalidate();
         return () => {
             setHighlight(null);
             created.dispose();
             invalidate();
         };
-    }, [hasHighlight, isTinted, role, signature, invalidate]);
+    }, [hasHighlight, role, invalidate]);
+
+    // demand 模式下，线框 primitive 提交后再补帧，保证首帧已挂载才消费内容签名。
+    useEffect(() => {
+        if (!highlight) return;
+        signature.invalidate();
+        invalidate();
+    }, [highlight, signature, invalidate]);
 
     // 渲染期直读实体 transform(observer 细粒度订阅);applyTransform 整体替换,引用变化即触发
     const transform = entity.transform;
@@ -161,11 +167,7 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
     useFrame(() => {
         const object = groupRef.current;
         if (!hasHighlight || !object) return;
-        if (!signature.refresh(object)) return;
-        // 内容换过(壳层挂载、归一化、换模型重挂):旧克隆材质已作废,必须重绑辉光目标再判定回退
-        selectionTint.clear(entity.id);
-        setIsTinted(selectionTint.apply(entity.id, role));
-        if (!highlight) return;
+        if (!highlight || !signature.refresh(object)) return;
         boundsIndex.updateLocal(object);
         highlight.applyBounds(boundsIndex.bounds);
     });
