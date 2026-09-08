@@ -22,6 +22,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "camera.frame-subject": "按景别(大远景~大特写七档)为一个或多个被摄体生成同框机位(联合包围球定距)",
     "camera.check-framing": "视锥同框断言:逐被摄体返回 inFrame 与 NDC 边距,负值即出画——布景验收不截图",
     "scene.stage": "布景配方一键成组:对峙/并肩/三角/纵深,槽位绑定实体即可,距离按包围球半径自适应尺度",
+    "scene.set-identity": "为场景实体设或清除叙事身份(主角/反派/配角/道具/布景 + 稳定标签)，让后续自然语言引用可消歧",
     // 运镜
     "motion.create-clip": "创建运镜片段(完整 CameraKey 序列,不落 Program)；时间落点按工程帧率量化",
     "motion.create-take":
@@ -53,6 +54,8 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "view.set-mode": "切换导演视角/镜头视角",
     "view.set-sweep-path": "开关跟拍片段的世界扫掠路径预览(排查用,默认关)",
     "view.frame": "导演视角取景到场景内容(无内容时回默认位姿)",
+    "view.set-shell-mode": "切换导演台壳层显示模式(编辑/演示等瞬态视图状态)",
+    "view.set-shell-hidden": "显隐导演台编辑壳层,不改变场景或成片数据",
     "view.reset": "复位导演视角到初始位姿",
     // 时间轴
     "timeline.add-key": "时间轴加走位关键帧(轨道不存在则按 targetId 创建)；时间落点按工程帧率量化",
@@ -72,6 +75,9 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
         "设播放/循环/缺省导出的入出点，必须在工程时长内且至少覆盖一帧；时间落点按工程帧率量化",
     "timeline.set-frame-rate": "设工程帧率(1 至 240 fps),只影响后续时间落点，不重排既有节奏",
     "timeline.restore-tracks": "整体恢复时间轴轨道(撤销删除/文档导入的配套回放)；时间落点按工程帧率量化",
+    "timeline.add-marker": "在时间轴新增章节或注释标记；时间落点按工程帧率量化",
+    "timeline.move-marker": "移动时间轴标记时刻；时间落点按工程帧率量化",
+    "timeline.remove-marker": "删除时间轴标记",
     "timeline.set-track-policies": "设走位轨朝向、贴地与步频策略",
     // 动作与播放
     "action.mount":
@@ -101,6 +107,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "pose.clear": "清除常驻基础姿势,回绑定姿态",
     // 灯光
     "scene.set-lighting-mode": "切灯光模式:studio 兜底布光 / custom 自定义",
+    "light.adjust": "更新自定义灯光的可序列化参数;先用 lighting.get/list 读取对象和灯型",
     // 采集
     "capture.frame": "截图当前预演画面(保留地板网格，编辑辅助物不入镜);异步产物按 requestId 对账",
     "capture.video":
@@ -131,5 +138,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "actor.get": "人偶画像:外观与体型参数",
     "actor.presets.list": "体型预设目录",
     "desk.export-document": "导出整桌 JSON 文档(存档/接管/全量感知兜底)",
+    "desk.inspect":
+        "低上下文导演台感知：brief 返回角色/量纲索引，focused 返回指定对象的几何状态，full 才返回完整工程；度量默认不用截图",
     "program.review": "成片巡检与镜头单:返回播放范围内的 Program 空档、缺失机位/运镜来源及可定位镜头列表",
 };

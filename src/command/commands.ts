@@ -1,10 +1,9 @@
 import { toJS } from "mobx";
-import { Box3, Vector3 } from "three";
 
-import { measureModelBox } from "@/core/measureModelBox";
-import type { SceneObject } from "@/core/SceneObject";
 import type { CommandCapability, DirectorQuery } from "@/command/CommandDispatcher";
 import { registerPoseCommands } from "@/command/poseCommands";
+import { SceneInspectionService } from "@/command/SceneInspectionService";
+import { registerPerceptionCommands } from "@/command/perceptionCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "@/camera/CameraShot";
 import { registerKeyframeCodec } from "@/timeline/keyframeCodecs";
@@ -21,6 +20,7 @@ import { isLightParams, normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "@/core/SceneObject";
+import type { SceneNarrativeIdentityInit, SceneSpatialScaleInit } from "@/core/SceneSemantics";
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
 import { registerActorCommands } from "@/command/actorCommands";
 import { registerActionCommands } from "@/command/actionCommands";
@@ -39,8 +39,7 @@ import { registerReviewCommands } from "@/command/reviewCommands";
 import { registerPlacementCommands } from "@/command/placementCommands";
 import { registerStageCommands } from "@/command/stageCommands";
 import { registerOutputCommands } from "@/command/outputCommands";
-import { entityLoadState } from "@/command/subjectBounds";
-import type { EntityLoadState } from "@/command/subjectBounds";
+import { registerSceneIdentityCommands } from "@/command/sceneIdentityCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
@@ -83,6 +82,8 @@ interface PlaceObjectPayload {
     /** 撤销回放/文档还原的实体快照字段(SceneObject.toJSON 携带);常规放置不带 */
     pose?: PoseSnapshotInit | null;
     actor?: ActorProfileInit | null;
+    narrativeIdentity?: SceneNarrativeIdentityInit | null;
+    spatialScale?: SceneSpatialScaleInit | null;
 }
 
 const PLACE_OBJECT_CONTRACT: PayloadContract = {
@@ -93,9 +94,11 @@ const PLACE_OBJECT_CONTRACT: PayloadContract = {
         transform: TRANSFORM_SCHEMA,
         format: nullable({ type: "string", enum: Object.values(MODEL_FORMAT) }),
         name: { type: "string" },
-        // 撤销回放带实体全快照:pose/actor 必须进契约,否则 redo/undo 删除在闸门处崩
+        // 撤销回放带实体全快照:字段必须进契约,否则 redo/undo 删除在闸门处崩。
         pose: nullable({ type: "object" }),
         actor: nullable({ type: "object" }),
+        narrativeIdentity: nullable({ type: "object" }),
+        spatialScale: nullable({ type: "object" }),
         light: nullable(LIGHT_PARAMS_SCHEMA),
     },
     required: ["id", "kind"],
@@ -345,30 +348,6 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
     }
 }
 
-/** 场景实体的 agent 可读描述(验收断言的数据面) */
-interface SceneEntityDescription {
-    readonly id: string;
-    readonly kind: SceneObjectKind;
-    readonly name: string;
-    readonly transform: Transform;
-    /** none=非模型无装载;loading/loaded/failed 由 UiStore 装载结果表与运行时绑定共同判定 */
-    readonly loadState: EntityLoadState;
-    /** 挂载的 AnimationLibrary action id；未挂载为 null。 */
-    readonly mountedActionId: string | null;
-    /** 动作时间轴排期;未挂载为 null。 */
-    readonly actionSchedule: {
-        readonly startTimeSeconds: number;
-        readonly durationSeconds: number;
-        readonly attackSeconds: number;
-        readonly releaseSeconds: number;
-    } | null;
-    readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
-}
-
-const TMP_DESCRIBE_BOX = new Box3();
-const TMP_DESCRIBE_SIZE = new Vector3();
-const TMP_DESCRIBE_CENTER = new Vector3();
-
 const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     type: "scene.describe",
     version: "1",
@@ -378,39 +357,6 @@ const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     payload: EMPTY_PAYLOAD_CONTRACT,
 };
 
-function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityDescription {
-    const runtime = ctx.scene.manager.getRuntime(entity.id);
-    let bounds: SceneEntityDescription["bounds"] = null;
-    if (runtime) {
-        measureModelBox(runtime, TMP_DESCRIBE_BOX);
-        if (!TMP_DESCRIBE_BOX.isEmpty()) {
-            TMP_DESCRIBE_BOX.getSize(TMP_DESCRIBE_SIZE);
-            TMP_DESCRIBE_BOX.getCenter(TMP_DESCRIBE_CENTER);
-            bounds = {
-                size: TMP_DESCRIBE_SIZE.toArray() as Vec3,
-                center: TMP_DESCRIBE_CENTER.toArray() as Vec3,
-            };
-        }
-    }
-    return {
-        id: entity.id,
-        kind: entity.kind,
-        name: entity.name,
-        transform: toJS(entity.transform),
-        loadState: entityLoadState(ctx, entity),
-        mountedActionId: entity.actionId,
-        actionSchedule: entity.actionPerformance
-            ? {
-                  startTimeSeconds: entity.actionPerformance.startTimeSeconds,
-                  durationSeconds: entity.actionPerformance.durationSeconds,
-                  attackSeconds: entity.actionPerformance.attackSeconds,
-                  releaseSeconds: entity.actionPerformance.releaseSeconds,
-              }
-            : null,
-        bounds,
-    };
-}
-
 /**
  * 场景全貌查询(agent 的「眼睛」主通道):每个实体的变换/加载态/世界包围盒。
  * 断言用途:装载是否成功(loadState)、尺度是否符合预期(bounds.size)、相对位置(transform)。
@@ -418,15 +364,15 @@ function describeEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityD
 export class SceneDescribeQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "scene.describe";
     readonly type = SceneDescribeQuery.TYPE;
+    private readonly inspection = new SceneInspectionService();
 
     constructor(readonly payload: Record<string, never> = {}) {}
 
     validate(): readonly string[] {
         return [];
     }
-
     execute(ctx: DirectorContext): unknown {
-        return ctx.scene.manager.list().map((entity) => describeEntity(ctx, entity));
+        return this.inspection.inspect(ctx);
     }
 }
 
@@ -475,6 +421,8 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
         (payload: Record<string, never>) => new SceneDescribeQuery(payload),
         SCENE_DESCRIBE_CAPABILITY,
     );
+    registerSceneIdentityCommands(dispatcher);
+    registerPerceptionCommands(dispatcher);
     registerActionCommands(dispatcher);
     registerCameraCommands(dispatcher);
     registerCaptureCommands(dispatcher);

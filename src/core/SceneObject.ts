@@ -6,6 +6,14 @@ import type { ActionPerformance } from "@/animation/ActionPerformance";
 import type { ModelFormat } from "@/assets/ModelAsset";
 import { normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
+import {
+    ACTOR_METERS_SCALE,
+    RELATIVE_SPATIAL_SCALE,
+    SCENE_SPATIAL_SCALE_KIND,
+    SceneNarrativeIdentity,
+    SceneSpatialScale,
+} from "@/core/SceneSemantics";
+import type { SceneNarrativeIdentityInit, SceneSpatialScaleInit } from "@/core/SceneSemantics";
 import { PoseSnapshot } from "@/pose/PoseSnapshot";
 import type { PoseSnapshotInit } from "@/pose/PoseSnapshot";
 
@@ -35,6 +43,21 @@ export const IDENTITY_TRANSFORM: Transform = Object.freeze({
     scale: Object.freeze([1, 1, 1] as const),
 });
 
+function narrativeIdentityFor(
+    identity: SceneNarrativeIdentity | SceneNarrativeIdentityInit | null | undefined,
+): SceneNarrativeIdentity | null {
+    if (identity === null || identity === undefined) return null;
+    return identity instanceof SceneNarrativeIdentity ? identity : new SceneNarrativeIdentity(identity);
+}
+
+function spatialScaleFor(
+    scale: SceneSpatialScale | SceneSpatialScaleInit | null | undefined,
+    actor: ActorProfile | null,
+): SceneSpatialScale {
+    if (scale instanceof SceneSpatialScale) return scale;
+    if (scale) return new SceneSpatialScale(scale);
+    return actor ? ACTOR_METERS_SCALE : RELATIVE_SPATIAL_SCALE;
+}
 export type SceneObjectKind = "model" | "camera" | "light";
 export const SCENE_OBJECT_KINDS: readonly SceneObjectKind[] = ["model", "camera", "light"];
 
@@ -74,6 +97,10 @@ export interface SceneObjectInit {
     readonly pose?: PoseSnapshot | PoseSnapshotInit | null;
     /** 人偶画像；仅模型可用，纯数据(骨架家族 + 外观 + 体型)，是「这是个人偶」的显式凭据。 */
     readonly actor?: ActorProfile | ActorProfileInit | null;
+    /** AI/导演共用的稳定叙事引用；不以模型文件名推断主角或道具。 */
+    readonly narrativeIdentity?: SceneNarrativeIdentity | SceneNarrativeIdentityInit | null;
+    /** 长度量纲：演员与标定资产可解释为米，未知来源保持相对单位。 */
+    readonly spatialScale?: SceneSpatialScale | SceneSpatialScaleInit | null;
 }
 
 export class SceneObject {
@@ -91,6 +118,8 @@ export class SceneObject {
     private currentLight: LightParams | null;
     private currentPose: PoseSnapshot | null;
     private currentActor: ActorProfile | null;
+    private currentNarrativeIdentity: SceneNarrativeIdentity | null;
+    private currentSpatialScale: SceneSpatialScale;
 
     constructor(init: SceneObjectInit) {
         this.id = init.id;
@@ -108,13 +137,22 @@ export class SceneObject {
             init.pose instanceof PoseSnapshot ? init.pose : init.pose ? new PoseSnapshot(init.pose) : null;
         this.currentActor =
             init.actor instanceof ActorProfile ? init.actor : init.actor ? new ActorProfile(init.actor) : null;
+        this.currentNarrativeIdentity = narrativeIdentityFor(init.narrativeIdentity);
+        this.currentSpatialScale = spatialScaleFor(init.spatialScale, this.currentActor);
+        if (this.currentActor && this.currentSpatialScale.kind !== SCENE_SPATIAL_SCALE_KIND.ACTOR_METERS) {
+            throw new Error("SceneObject: 人偶必须使用 actor-meters 量纲");
+        }
         if (this.currentActor && init.kind !== "model") {
             throw new Error("SceneObject: 只有模型实体可以持有人偶画像");
         }
-        makeAutoObservable<SceneObject, "currentLight" | "currentPose" | "currentActor" | "mountedAction">(this, {
+        makeAutoObservable<
+            SceneObject,
+            "currentLight" | "currentPose" | "currentActor" | "currentNarrativeIdentity" | "mountedAction"
+        >(this, {
             currentLight: observableRef,
             currentPose: observableRef,
             currentActor: observableRef,
+            currentNarrativeIdentity: observableRef,
             mountedAction: observableRef,
         });
     }
@@ -154,7 +192,19 @@ export class SceneObject {
         this.currentActor = next;
     }
 
-    /** JSON 往返保留 kind/light 的双向不变量，且不泄露 Three 运行时。 */
+    get narrativeIdentity(): SceneNarrativeIdentity | null {
+        return this.currentNarrativeIdentity;
+    }
+
+    applyNarrativeIdentity(next: SceneNarrativeIdentity | null): void {
+        this.currentNarrativeIdentity = next;
+    }
+
+    get spatialScale(): SceneSpatialScale {
+        return this.currentSpatialScale;
+    }
+
+    /** JSON 往返保留领域值对象，且不泄露 Three 运行时。 */
     toJSON(): SceneObjectInit {
         return {
             id: this.id,
@@ -166,6 +216,8 @@ export class SceneObject {
             light: this.currentLight,
             pose: this.currentPose?.toJSON() ?? null,
             actor: this.currentActor?.toJSON() ?? null,
+            narrativeIdentity: this.currentNarrativeIdentity?.toJSON() ?? null,
+            spatialScale: this.currentSpatialScale.toJSON(),
         };
     }
 

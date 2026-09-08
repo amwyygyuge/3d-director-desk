@@ -5,6 +5,7 @@ import { DEFAULT_ACTION_RELEASE_SECONDS, MINIMUM_ACTION_DURATION_SECONDS } from 
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import { createId } from "@/core/createId";
 import { finiteTransform } from "@/core/SceneObject";
+import { scaleForReferenceMaxDimension } from "@/core/SceneSemantics";
 import type { Transform } from "@/core/SceneObject";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
@@ -134,6 +135,9 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
         const entry = ctx.catalog.get(this.payload.assetId);
         if (!entry) return;
         const actor = actorProfileInitFor(entry);
+        const spatialScale = entry.physicalMaxDimensionMeters
+            ? scaleForReferenceMaxDimension(entry.physicalMaxDimensionMeters).toJSON()
+            : undefined;
         ctx.scene.addObject({
             id: this.payload.id,
             kind: "model",
@@ -142,6 +146,7 @@ export class AssetsPlaceCommand extends DirectorCommand<AssetsPlacePayload> {
             name: entry.name,
             ...(this.payload.transform ? { transform: this.payload.transform } : {}),
             ...(actor ? { actor } : {}),
+            ...(spatialScale ? { spatialScale } : {}),
         });
     }
 

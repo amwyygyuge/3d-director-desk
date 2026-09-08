@@ -5,6 +5,7 @@ import type { ActionPerformance } from "@/animation/ActionPerformance";
 import { SceneManager } from "@/core/SceneManager";
 import { SceneObject } from "@/core/SceneObject";
 import type { LightParams } from "@/core/LightParams";
+import type { SceneNarrativeIdentity } from "@/core/SceneSemantics";
 import type { PoseSnapshot } from "@/pose/PoseSnapshot";
 import type { SceneObjectInit, Transform } from "@/core/SceneObject";
 
@@ -87,6 +88,12 @@ export class SceneStore {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
         entity.applyActor(actor);
+    }
+
+    setObjectNarrativeIdentity(id: string, identity: SceneNarrativeIdentity | null): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyNarrativeIdentity(identity);
     }
 
     get objectCount(): number {

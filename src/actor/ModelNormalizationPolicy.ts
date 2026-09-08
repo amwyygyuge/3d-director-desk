@@ -4,6 +4,7 @@ import type { Group } from "three";
 import { boneSpanY } from "@/actor/rigMetrics";
 import { measureModelBox } from "@/core/measureModelBox";
 import type { SceneObject } from "@/core/SceneObject";
+import { SCENE_SPATIAL_SCALE_KIND } from "@/core/SceneSemantics";
 
 /** 通用模型归一化目标:最大边缩放到 2 个场景单位——游戏模型单位各异(cm/m),裸放会糊满屏。 */
 const MODEL_TARGET_MAX_DIM = 2;
@@ -18,15 +19,17 @@ export interface ShellNormalization {
     normalize(shell: Group): void;
 }
 
-/** 通用模型:包围盒等比缩放 + 水平居中 + 底面贴地;只在挂载后执行一次(测量口径不可重入)。 */
-class UnitBoxNormalization implements ShellNormalization {
+/** 已知最大边的资产按米制落尺；未知来源仍使用 2 单位视觉归一化。 */
+class MaxDimensionNormalization implements ShellNormalization {
+    constructor(private readonly targetMaxDimension: number) {}
+
     normalize(shell: Group): void {
         measureModelBox(shell, TMP_BOX);
         if (TMP_BOX.isEmpty()) return;
         TMP_BOX.getSize(TMP_SIZE);
         TMP_BOX.getCenter(TMP_CENTER);
         const maxDim = Math.max(TMP_SIZE.x, TMP_SIZE.y, TMP_SIZE.z);
-        const factor = maxDim > 0 ? MODEL_TARGET_MAX_DIM / maxDim : NO_SCALE_FACTOR;
+        const factor = maxDim > 0 ? this.targetMaxDimension / maxDim : NO_SCALE_FACTOR;
         shell.scale.setScalar(factor);
         shell.position.set(-TMP_CENTER.x * factor, -TMP_BOX.min.y * factor, -TMP_CENTER.z * factor);
     }
@@ -62,10 +65,14 @@ export function measureHeightPerScale(shell: Group): number {
     return scale > 0 ? boneSpanY(shell) / scale : 0;
 }
 
-const UNIT_BOX_NORMALIZATION = new UnitBoxNormalization();
+const UNIT_BOX_NORMALIZATION = new MaxDimensionNormalization(MODEL_TARGET_MAX_DIM);
 
 /** 人偶落尺需要 rest 姿态标定量;缺标定(骨架未就绪)时退化为不改变壳层。 */
 export function normalizationFor(entity: SceneObject, heightPerScale = 0): ShellNormalization {
     const actor = entity.actor;
-    return actor ? new ActorHeightNormalization(actor.build.heightMeters, heightPerScale) : UNIT_BOX_NORMALIZATION;
+    if (actor) return new ActorHeightNormalization(actor.build.heightMeters, heightPerScale);
+    const { kind, referenceMaxDimensionMeters } = entity.spatialScale;
+    return kind === SCENE_SPATIAL_SCALE_KIND.REFERENCE_METERS && referenceMaxDimensionMeters !== null
+        ? new MaxDimensionNormalization(referenceMaxDimensionMeters)
+        : UNIT_BOX_NORMALIZATION;
 }

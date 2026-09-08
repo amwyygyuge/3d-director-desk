@@ -335,7 +335,14 @@ export type { CommandCapability, DirectorQuery, QueryResult } from "@/command/Co
 export type { DispatchOptions } from "@/command/CommandDispatcher";
 export { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
 export { AgentBridge } from "@/ai/AgentBridge";
-export type { AgentToolInputSchema, AgentToolSchema } from "@/ai/AgentBridge";
+export type {
+    AgentBridgeOptions,
+    AgentToolFailure,
+    AgentToolInputSchema,
+    AgentToolInvocation,
+    AgentToolInvocationResult,
+    AgentToolSchema,
+} from "@/ai/AgentBridge";
 export type { ContractViolation, PayloadContract, PayloadFieldSchema } from "@/command/PayloadContract";
 export {
     PLACEMENT_RELATION,
@@ -346,6 +353,8 @@ export {
 export type { PlacementRelation } from "@/command/placementCommands";
 export { registerStageCommands, STAGE_PRESET, StagePresetCompiler, StageSceneCommand } from "@/command/stageCommands";
 export type { StagePresetId, StageSlotBinding, StageSlotSpec } from "@/command/stageCommands";
+export { registerSceneIdentityCommands, SetSceneIdentityCommand } from "@/command/sceneIdentityCommands";
+export { InspectDeskQuery, registerPerceptionCommands } from "@/command/perceptionCommands";
 export {
     ApplyPosePresetCommand,
     ClearPoseCommand,
@@ -359,6 +368,29 @@ export { DisposeBag } from "@/core/DisposeBag";
 export { SceneManager } from "@/core/SceneManager";
 export { IDENTITY_TRANSFORM, SceneObject } from "@/core/SceneObject";
 export type { SceneObjectInit, SceneObjectKind, Transform, Vec3 } from "@/core/SceneObject";
+export {
+    ACTOR_METERS_SCALE,
+    RELATIVE_SPATIAL_SCALE,
+    SCENE_NARRATIVE_ROLE,
+    SCENE_SPATIAL_SCALE_KIND,
+    SceneNarrativeIdentity,
+    SceneSpatialScale,
+    scaleForReferenceMaxDimension,
+} from "@/core/SceneSemantics";
+export type {
+    SceneNarrativeIdentityInit,
+    SceneNarrativeRole,
+    SceneSpatialScaleInit,
+    SceneSpatialScaleKind,
+} from "@/core/SceneSemantics";
+export { DirectorDeskPerceptionService, DESK_PERCEPTION_DETAIL } from "@/perception/DirectorDeskPerceptionService";
+export type {
+    DeskPerceptionCoordinateSystem,
+    DeskPerceptionDetail,
+    DeskPerceptionRequest,
+} from "@/perception/DirectorDeskPerceptionService";
+export { SceneInspectionService } from "@/command/SceneInspectionService";
+export type { SceneEntityInspection } from "@/command/SceneInspectionService";
 export {
     createDefaultLightParams,
     isLightColor,

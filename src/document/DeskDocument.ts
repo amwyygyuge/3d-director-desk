@@ -10,8 +10,8 @@ import type { LightingMode } from "@/store/SceneStore";
 import type { OutputFormatId } from "@/output/OutputFormat";
 
 /**
+ * v15 起实体持久化叙事身份与量纲模式；旧档不迁移，版本不符即判不支持。
  * v14 起项目级输出画幅进入文档；切换采用中心裁切，机位仍只保存位姿。
- * 功能未上线,不做跨版本迁移——版本不符即判不支持。
  * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
  * v9 起动作挂载按实体数组记录(同一动作可挂多个实体),灯光模式进文档;
  * v10 起动作带循环语义与时间轴排期(开始时间/演出时长);
@@ -19,7 +19,7 @@ import type { OutputFormatId } from "@/output/OutputFormat";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 14;
+export const DESK_DOCUMENT_VERSION = 15;
 
 export interface DeskDocumentActionMount {
     readonly objectId: string;

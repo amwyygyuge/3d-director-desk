@@ -6,6 +6,7 @@ import { CameraShot } from "@/camera/CameraShot";
 import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
 import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/core/SceneObject";
+import { isSceneNarrativeIdentityInit, isSceneSpatialScaleInit } from "@/core/SceneSemantics";
 import type {
     DeskDocument,
     DeskDocumentAction,
@@ -103,6 +104,10 @@ function entityIssues(value: unknown): readonly string[] {
     if (value.actor !== undefined && value.actor !== null && !isActorProfileInit(value.actor)) {
         return [`实体 "${value.id}" 的人偶画像无效`];
     }
+    if (value.narrativeIdentity !== null && !isSceneNarrativeIdentityInit(value.narrativeIdentity)) {
+        return [`实体 "${value.id}" 的叙事身份无效`];
+    }
+    if (!isSceneSpatialScaleInit(value.spatialScale)) return [`实体 "${value.id}" 的量纲模式无效`];
     return finiteTransform(value.transform) ? [] : [`实体 "${value.id}" 的 transform 含非法数值`];
 }
 

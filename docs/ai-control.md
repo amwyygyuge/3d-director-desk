@@ -1,6 +1,6 @@
-# AI 语言控制导演台 — 方案设计(未来铺垫)
+# AI 语言控制导演台 — 方案设计
 
-> 状态:命令层 70 命令 + 16 查询全部落地并携带 payload 契约(`PayloadContract`,债 D1 已清);语义编译三落地——运镜 `MotionPresetCompiler`、摆位 `PlacementCompiler`、布景 `StagePresetCompiler`(`scene.stage`,间距按包围球半径和自适应);装载闸门拒绝未就绪实体的间距语义命令(`wait-for-model` 结构化重试);`camera.frame-subject` 多被摄体联合取景 + `camera.check-framing` 视锥断言使布景全程零截图;`listCapabilities()` 即 AI tool schema 真相源。
+> 状态:命令/查询均携带 payload 契约；`AgentBridge` 已从能力清单派生工具 schema，并以 `invoke({ invocationId, toolName, payload })` 经 `CommandDispatcher` 执行。`desk.inspect` 提供 brief/focused/full 三档结构化感知；`scene.set-identity` 持久化主角、反派、配角、道具、布景等叙事身份。截图只用于美学终审。
 
 ## 场景分级
 
@@ -87,19 +87,54 @@ LLM 不擅长数值、擅长语义。禁止 LLM 直接输出世界坐标。运�
 
 失败路径返回结构化错误(如 `{error:"bone-incompatible", availableActions:[...]}`),让 LLM 换方案而非终止。
 
+## AI 布景 SOP 与空间口径
+
+```mermaid
+flowchart LR
+    B[desk.inspect brief] --> A[assets.list / 发现资产]
+    A --> L[assets.place 后等待 loaded]
+    L --> I[scene.set-identity]
+    I --> F[desk.inspect focused]
+    F --> S[scene.stage / object.place-relative]
+    S --> C[camera.frame-subject]
+    C --> V[camera.check-framing]
+    V -->|全部 inFrame| R[scene.describe / 数据验收]
+    V -->|构图美学需要判断| P[capture.frame]
+    R --> P
+```
+
+1. 先调用 `desk.inspect { detail: "brief" }`：只取实体 id、叙事身份、装载态与量纲模式，不把整桌工程塞进上下文。
+2. 用 `assets.list` 发现资产、`assets.place` 放置；每个模型必须在 `scene.describe` 中变为 `loaded` 才能进入摆位。
+3. 用 `scene.set-identity` 写入 `{ role, label }`，例如 `{ role: "protagonist", label: "林夏" }`；AI 从此按稳定身份引用实体，不猜文件名。
+4. 仅对候选对象调用 `desk.inspect { detail: "focused", entityIds: [...] }`；语义摆位优先 `scene.stage`、`object.place-relative`，不手算世界坐标。
+5. `camera.frame-subject` 后必须以 `camera.check-framing` 断言所有主体 `inFrame: true`。`marginNdc < 0` 是可执行的出画证据，不截图排查。
+6. 只有需要评估色彩、材质、遮挡观感或电影美学时才 `capture.frame`；截图不作为位置、尺寸、同框或装载态的默认信息源。
+
+### 坐标与量纲
+
+- 世界坐标为右手系，`Y` 向上，`X/Z` 为地面平面；`rotation: [rx, ry, rz]` 单位为弧度。
+- 「左/右/前/后」统一以导演相机水平视线解释。AI 应调用 `object.place-relative` / `scene.stage`，不得把固定世界轴当作导演语言。
+- `spatialScale.kind = "actor-meters"`：人偶以 `heightMeters` 落尺，场景单位可解释为米。
+- `spatialScale.kind = "reference-meters"`：目录的 `physicalMaxDimensionMeters` 已标定，模型按该最大边等比落尺，场景单位可解释为米。
+- `spatialScale.kind = "relative"`：来源没有可信物理尺寸，模型只按最大边 `2` 个场景单位视觉归一化；可做相对构图与包围盒间距，**不得**把数值宣称为真实米数。
+
+`desk.inspect` 会回传上述量纲。跨量纲组合场景仍可用 `scene.stage` 的包围球自适应配方；涉及「相距两米」的物理约束时，所有参与实体必须为米制。
+
 ## AI 的「眼睛」与「手」
 
-| 能力     | 机制                                                                                                                                                                                                                   | 现状                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| 眼睛     | 注册查询(16 条:scene.describe/camera.get-pose/camera.list-shots/camera.check-framing/motion.get/timeline.get-document/transport.get-state/lighting.×2/pose.×3/actor.×2/assets.list/desk.export-document)+ 截图喂多模态 | 已就位;布景验收零截图,截图只留美学终审    |
-| 手       | tool call → 语义编译 → 命令层                                                                                                                                                                                          | 运镜/摆位双编译器 + 命令层已就位          |
-| 资产目录 | `assets.list`/`assets.place`/`assets.mount`(内置目录已入库,宿主注入经 register-assets)                                                                                                                                 | 已就位                                    |
-| 撤销     | 一批 AI 命令 = Monet undoManager 一个 record                                                                                                                                                                           | 命令层逆命令历史已就位;Monet 侧归口待集成 |
+| 能力         | 机制                                                                                               | 现状                   |
+| ------------ | -------------------------------------------------------------------------------------------------- | ---------------------- |
+| 低上下文感知 | `desk.inspect`: brief 索引、focused 指定对象几何、full 整桌工程；`scene.describe` 保留为验收读模型 | 已落地                 |
+| 几何验收     | `camera.get-pose` / `camera.check-framing` / `scene.describe` / `program.review`                   | 布景全程零截图         |
+| 叙事消歧     | `scene.set-identity` 把角色与标签写入可序列化实体                                                  | 已落地                 |
+| 手           | tool call → 语义编译 → 命令层                                                                      | 已落地                 |
+| 资产目录     | `assets.list`/`assets.place`/`assets.mount`                                                        | 已落地                 |
+| 美学反馈     | 截图回传多模态                                                                                     | 仅终审或不可数值化问题 |
 
-## 接入路线(2026-09-02 定稿)
+## 接入路线
 
-已定:**Monet 同页 npm 包嵌入**(非 iframe——HostBridge 命令通道不建);**权限全开**(`AgentBridge.fullPermissions` 直传 dispatch);**AI 桥独立模块**(`src/ai/AgentBridge`,功能模块零感知)。
+已定:**Monet 同页 npm 包嵌入**(非 iframe——HostBridge 命令通道不建);**AI 桥独立模块**(`src/ai/AgentBridge`,功能模块零感知)。
 
-1. 本仓(已落地):`AgentBridge.listToolSchemas()` 由能力契约派生工具组(描述缺登记 dev 即抛);`awaitFrameCapture/awaitVideoCapture` 按 requestId 对账异步产物;契约/权限闸门在 dispatcher。
-2. Monet 侧(待排期):agent 工具组注册 + 前端中继(tool call → `dispatcher.dispatch(cmd, stores, { permissions })`;一次 tool call 的命令序列收口为 undoManager 一个 record),跑通 S1~S6。
-3. 阶段三:截图产物经 `capture-produced → OSS → 画布节点` 回 agent 多模态,S7 闭环。
+1. 本仓: `AgentBridge.listToolSchemas()` 从 capability 派生工具 schema；`invoke()` 按工具 kind 分发 query/command、强制 payload/权限闸门，并以 `invocationId` 缓存写调用结果，网络重试不重复写场景。
+2. Monet: 每个 `DirectorDesk` 实例在就绪后构造一座 `AgentBridge`；将 `listToolSchemas()` 注册给 Agent，把每次 tool call 映射为 `invoke({ invocationId, toolName, payload })`。一次 Agent 复合意图若包含多条命令，Monet 仍需收口为一个 undo record。
+3. 视频模型交接: 待把分叉提交的 prompt/交接包能力按当前 master 选择性移植；该能力是视频模型条件包，不替代 `desk.inspect` 的现场感知。

@@ -71,6 +71,8 @@ export interface AssetEntry {
     readonly embeddedClips?: readonly string[];
     /** 人偶资产:放置时注入默认画像;缺省即普通模型,不具备外观/体型/姿势能力 */
     readonly actor?: AssetActorDefaults | null;
+    /** 已标定通用模型的最大边真实长度(米);缺省则按视觉单位盒归一化且不得声称物理距离。 */
+    readonly physicalMaxDimensionMeters?: number | null;
     readonly tags: readonly string[];
 }
 
@@ -84,6 +86,10 @@ const MODEL_FORMATS: readonly string[] = Object.values(MODEL_FORMAT);
 /** 外部输入(宿主注入/catalog.json)的条目校验;不合格条目丢弃并计数 */
 function isNonNegativeFinite(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isPositiveFinite(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 export function parseAssetEntry(value: unknown): AssetEntry | null {
@@ -103,6 +109,10 @@ export function parseAssetEntry(value: unknown): AssetEntry | null {
     if (!Array.isArray(entry.tags)) return null;
     if (
         (entry.actor !== undefined && entry.actor !== null && !isAssetActorDefaults(entry.actor)) ||
+        (entry.actor !== undefined && entry.actor !== null && entry.physicalMaxDimensionMeters !== undefined) ||
+        (entry.physicalMaxDimensionMeters !== undefined &&
+            entry.physicalMaxDimensionMeters !== null &&
+            !isPositiveFinite(entry.physicalMaxDimensionMeters)) ||
         (entry.loopMode !== undefined && entry.loopMode !== null && !isActionLoopMode(entry.loopMode)) ||
         (entry.trimStartSeconds !== undefined &&
             entry.trimStartSeconds !== null &&
