@@ -1,4 +1,5 @@
 import { ActionPerformance } from "@/animation/ActionPerformance";
+import { resolveActionRange } from "@/animation/ActionAlignment";
 import { TimelineContentSpan } from "@/authoring/TimelineContentSpan";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -480,6 +481,7 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             this.payload.targetId,
             new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -539,6 +541,7 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
                 time: quantizeSeconds(ctx, this.payload.time),
             }),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -582,6 +585,7 @@ export class RemoveTimelineKeyCommand extends DirectorCommand<RemoveKeyPayload> 
         ctx.timeline.removeKey(this.payload.trackId, this.payload.keyframeId);
         ctx.timelineSelection.forget(this.payload.keyframeId);
         if (targetId) ctx.playback.restoreObject(targetId);
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -736,21 +740,53 @@ export class FitTimelineDurationCommand extends DirectorCommand<Record<string, n
 }
 
 function actionScheduleSnapshots(ctx: DirectorContext): readonly ActionScheduleSnapshot[] {
-    return ctx.scene.manager.list().flatMap((entity) => {
-        const performance = entity.actionPerformance;
-        return performance
-            ? [
-                  {
-                      objectId: entity.id,
-                      actionId: performance.actionId,
-                      startTimeSeconds: performance.startTimeSeconds,
-                      durationSeconds: performance.durationSeconds,
-                      attackSeconds: performance.attackSeconds,
-                      releaseSeconds: performance.releaseSeconds,
-                  },
-              ]
-            : [];
-    });
+    // 整轴缩放要带走整个动作序列,漏掉后续段会让「走完倒地」在缩放后错位
+    return ctx.scene.manager.list().flatMap((entity) =>
+        entity.actionPerformances.map((performance) => ({
+            objectId: entity.id,
+            actionId: performance.actionId,
+            startTimeSeconds: performance.startTimeSeconds,
+            durationSeconds: performance.durationSeconds,
+            attackSeconds: performance.attackSeconds,
+            releaseSeconds: performance.releaseSeconds,
+        })),
+    );
+}
+
+/**
+ * 走位轨变动后重解算对齐排期(声明式对齐的兑现点)。
+ *
+ * 任何改到关键帧时刻的命令(add/move/remove-key、set-key、set-track、retime-track)执行后都要调它:
+ * 声明了 alignToTrack 的动作排期由轨道区间派生,轨道一动排期必须跟着动,
+ * 否则「走路动作」会与走位区间错位——这正是让作者手填两份时间必然漂的那个问题。
+ * 未声明对齐的排期一律不碰(作者显式给的时段胜过任何推断)。
+ */
+export function reresolveAlignedActions(ctx: DirectorContext): void {
+    for (const entity of ctx.scene.manager.list()) {
+        const performances = entity.actionPerformances;
+        if (performances.length === 0) continue;
+        let hasChange = false;
+        const next = performances.map((performance) => {
+            const alignment = performance.alignment;
+            if (!alignment) return performance;
+            const track = ctx.timeline.document.tracks.find((candidate) => candidate.id === alignment.trackId) ?? null;
+            const range = resolveActionRange(alignment, track);
+            if (!range) return performance;
+            const startTimeSeconds = quantizeSeconds(ctx, range.startTimeSeconds);
+            const durationSeconds = quantizeSeconds(ctx, range.durationSeconds);
+            if (
+                startTimeSeconds === performance.startTimeSeconds &&
+                durationSeconds === performance.durationSeconds
+            ) {
+                return performance;
+            }
+            hasChange = true;
+            return performance.withAlignedRange(startTimeSeconds, durationSeconds);
+        });
+        if (!hasChange) continue;
+        ctx.scene.setObjectActions(entity.id, next);
+        for (const performance of next) ctx.binder.setScheduleFor(entity.id, performance);
+    }
 }
 
 function snapshotFor(ctx: DirectorContext): TimelineScaleSnapshot {
@@ -871,12 +907,22 @@ function applySnapshot(ctx: DirectorContext, snapshot: TimelineScaleSnapshot): v
         snapshot.motionClips.map((clip) => new CameraMotionClip(clip)),
         new CameraProgramTrack(snapshot.program),
     );
+    // 按实体聚合后整表写入:序列语义下必须一次写全,逐条 set 会互相覆盖
+    const schedulesByObject = new Map<string, ActionPerformance[]>();
     for (const schedule of snapshot.actionSchedules) {
         const entity = ctx.scene.manager.getEntity(schedule.objectId);
-        if (!entity || entity.actionId !== schedule.actionId) continue;
-        const performance = new ActionPerformance(schedule);
-        ctx.scene.setObjectAction(schedule.objectId, performance);
-        ctx.binder.setScheduleFor(schedule.objectId, performance);
+        if (!entity) continue;
+        const isKnownAction = entity.actionPerformances.some(
+            (performance) => performance.actionId === schedule.actionId,
+        );
+        if (!isKnownAction) continue;
+        const performances = schedulesByObject.get(schedule.objectId) ?? [];
+        performances.push(new ActionPerformance(schedule));
+        schedulesByObject.set(schedule.objectId, performances);
+    }
+    for (const [objectId, performances] of schedulesByObject) {
+        ctx.scene.setObjectActions(objectId, performances);
+        for (const performance of performances) ctx.binder.setScheduleFor(objectId, performance);
     }
     ctx.clock.seek(ctx.clock.time);
     ctx.playback.sampleCurrent();
@@ -1044,6 +1090,7 @@ export class RestoreTimelineTracksCommand extends DirectorCommand<RestoreTracksP
                     }),
             ),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 }
@@ -1111,6 +1158,7 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
             if (required > ctx.timeline.document.duration) ctx.timeline.setDuration(quantizeSeconds(ctx, required));
         }
         convergeWalkSelection(ctx, this.payload);
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -1209,6 +1257,7 @@ export class RetimeTimelineTrackCommand extends DirectorCommand<RetimeTrackPaylo
         const track = ctx.timeline.document.track(this.payload.trackId);
         if (!track) return;
         ctx.timeline.replaceTrack(retimedTrack(ctx, track, this.payload));
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -1302,6 +1351,7 @@ export class SetTimelineKeyCommand extends DirectorCommand<SetKeyPayload> {
             this.payload.trackId,
             new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 

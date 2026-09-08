@@ -24,6 +24,16 @@ export interface SceneEntityInspection {
         readonly attackSeconds: number;
         readonly releaseSeconds: number;
     } | null;
+    /** 完整动作序列(按起始升序);多动作表演读这里,actionSchedule 只是首条的兼容投影。 */
+    readonly actionSequence: readonly {
+        readonly actionId: string;
+        readonly startTimeSeconds: number;
+        readonly durationSeconds: number;
+        readonly attackSeconds: number;
+        readonly releaseSeconds: number;
+        /** 非空 = 时段对齐到该走位轨区间,轨道重定时后自动跟随。 */
+        readonly alignedToTrackId: string | null;
+    }[];
     readonly bounds: { readonly size: Vec3; readonly center: Vec3 } | null;
 }
 
@@ -63,6 +73,14 @@ export class SceneInspectionService {
                       releaseSeconds: performance.releaseSeconds,
                   }
                 : null,
+            actionSequence: entity.actionPerformances.map((entry) => ({
+                actionId: entry.actionId,
+                startTimeSeconds: entry.startTimeSeconds,
+                durationSeconds: entry.durationSeconds,
+                attackSeconds: entry.attackSeconds,
+                releaseSeconds: entry.releaseSeconds,
+                alignedToTrackId: entry.alignment?.trackId ?? null,
+            })),
             bounds: this.boundsFor(ctx.scene.manager.getRuntime(entity.id)),
         };
     }

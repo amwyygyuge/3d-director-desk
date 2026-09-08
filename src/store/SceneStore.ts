@@ -72,10 +72,11 @@ export class SceneStore {
         this.revision += 1;
     }
 
-    setObjectAction(id: string, action: ActionPerformance | null): void {
+    /** 整表写入动作排期序列;null / 空数组 = 清空。命令层负责排序与重叠校验。 */
+    setObjectActions(id: string, actions: readonly ActionPerformance[] | null): void {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
-        entity.applyAction(action);
+        entity.applyActions(actions);
     }
 
     setObjectPose(id: string, pose: PoseSnapshot | null): void {

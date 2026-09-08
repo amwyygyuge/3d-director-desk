@@ -1,5 +1,7 @@
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionLoopMode } from "@/assets/ActionAsset";
+import { ActionAlignment } from "@/animation/ActionAlignment";
+import type { ActionAlignmentInit } from "@/animation/ActionAlignment";
 
 export const MINIMUM_ACTION_DURATION_SECONDS = 1 / 240;
 export const DEFAULT_ACTION_ATTACK_SECONDS = 0.2;
@@ -13,6 +15,11 @@ export interface ActionPerformanceInit {
     readonly attackSeconds?: number;
     /** once 结束后回到常驻姿势的回收时长;0 = 直接切换。 */
     readonly releaseSeconds?: number;
+    /**
+     * 可选的走位轨对齐:非空时 startTime/duration 由它派生,轨道重定时后自动跟随。
+     * 落账的 startTime/duration 仍是解析后的具体值——采样期不再查表,且解析失败可回退。
+     */
+    readonly alignment?: ActionAlignmentInit | ActionAlignment | null;
 }
 
 /**
@@ -25,6 +32,8 @@ export class ActionPerformance {
     readonly durationSeconds: number;
     readonly attackSeconds: number;
     readonly releaseSeconds: number;
+    /** 非空 = 时段由走位轨区间派生;命令层在轨道变动后据此重解算。 */
+    readonly alignment: ActionAlignment | null;
 
     constructor(init: ActionPerformanceInit) {
         const attackSeconds = init.attackSeconds ?? DEFAULT_ACTION_ATTACK_SECONDS;
@@ -46,6 +55,12 @@ export class ActionPerformance {
         this.durationSeconds = init.durationSeconds;
         this.attackSeconds = attackSeconds;
         this.releaseSeconds = releaseSeconds;
+        this.alignment =
+            init.alignment instanceof ActionAlignment
+                ? init.alignment
+                : init.alignment
+                  ? new ActionAlignment(init.alignment)
+                  : null;
         Object.freeze(this);
     }
 
@@ -83,7 +98,13 @@ export class ActionPerformance {
         return (timeSeconds - this.endTimeSeconds) / this.releaseSeconds;
     }
 
+    /** 手动重定时:显式给时段即解除对齐(作者的直接操作胜过声明式派生)。 */
     withRange(startTimeSeconds: number, durationSeconds: number): ActionPerformance {
+        return this.replicate({ startTimeSeconds, durationSeconds, alignment: null });
+    }
+
+    /** 对齐重解算:轨道区间变了,时段跟着走,对齐声明保留。 */
+    withAlignedRange(startTimeSeconds: number, durationSeconds: number): ActionPerformance {
         return this.replicate({ startTimeSeconds, durationSeconds });
     }
 
@@ -98,6 +119,7 @@ export class ActionPerformance {
             durationSeconds: this.durationSeconds,
             attackSeconds: this.attackSeconds,
             releaseSeconds: this.releaseSeconds,
+            alignment: this.alignment?.toJSON() ?? null,
         };
     }
 
@@ -108,6 +130,7 @@ export class ActionPerformance {
             durationSeconds: this.durationSeconds,
             attackSeconds: this.attackSeconds,
             releaseSeconds: this.releaseSeconds,
+            alignment: this.alignment,
             ...overrides,
         });
     }

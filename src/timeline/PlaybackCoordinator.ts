@@ -50,11 +50,12 @@ export class PlaybackCoordinator {
     };
 
     private readonly blendActionForEntity = (entity: SceneObject): void => {
-        const performance = entity.actionPerformance;
+        // 按采样时刻选中生效排期:多动作序列下 entity.actionPerformance(首个)不再等于当前生效的那个
+        const performance = entity.actionPerformanceAt(this.sampleTimeSeconds);
         if (!performance) return;
         const attackProgress = performance.attackProgressAt(this.sampleTimeSeconds);
         const releaseProgress =
-            this.binder.loopModeFor(entity.id) === ACTION_LOOP_MODE.ONCE
+            this.binder.loopModeAt(entity.id, performance.actionId) === ACTION_LOOP_MODE.ONCE
                 ? performance.releaseProgressAt(this.sampleTimeSeconds)
                 : null;
         const baseWeight = attackProgress !== null ? 1 - attackProgress : releaseProgress;
@@ -195,9 +196,18 @@ export class PlaybackCoordinator {
         this.invalidate();
     }
 
-    /** 步频同步:动作相位由本帧已走弧长决定,未开启同步的对象保持墙钟对齐。 */
+    /**
+     * 步频同步:动作相位由本帧已走弧长决定,未开启同步的对象保持墙钟对齐。
+     *
+     * 只对当前生效的**循环**动作生效:一次性动作(倒地/受击)有自己的时间语义,
+     * 被步频改写会让它跟着位移倒放。走位轨可以横跨整段,动作序列各段各自表演。
+     */
     private syncLocomotion(targetId: string, track: TimelineTrack): void {
         if (!track.policies.isLocomotionSynced) return;
+        const entity = this.scene.getEntity(targetId);
+        const performance = entity?.actionPerformanceAt(this.sampleTimeSeconds);
+        if (!performance) return;
+        if (this.binder.loopModeAt(targetId, performance.actionId) !== ACTION_LOOP_MODE.LOOP) return;
         this.binder.setStridePhaseFor(targetId, track.policies.stridePhaseAt(this.sampler.lastArcLengthMeters));
     }
 

@@ -191,11 +191,13 @@ function actionMountIssues(plan: DocumentImportPlan): readonly string[] {
         ];
         const mountIssues = action.mountedOn.flatMap((mount) => {
             const entity = entitiesById.get(mount.objectId);
-            const duplicate = mountedObjectIds.has(mount.objectId);
-            mountedObjectIds.add(mount.objectId);
+            // v16:同一实体可有多段排期,重复判定收紧到「同实体 + 同起点」而不是「同实体」
+            const mountKey = `${mount.objectId}@${mount.startTimeSeconds}`;
+            const duplicate = mountedObjectIds.has(mountKey);
+            mountedObjectIds.add(mountKey);
             return [
                 ...(entity?.kind !== "model" ? [`动作 "${action.name}" 的挂载对象不是模型: ${mount.objectId}`] : []),
-                ...(duplicate ? [`多个动作重复挂载对象: ${mount.objectId}`] : []),
+                ...(duplicate ? [`对象 ${mount.objectId} 在 ${mount.startTimeSeconds}s 有重复动作排期` ] : []),
             ];
         });
         return [...issues, ...mountIssues];
@@ -469,6 +471,7 @@ export class DocumentImportService {
                 durationSeconds: mount.durationSeconds,
                 attackSeconds: mount.attackSeconds,
                 releaseSeconds: mount.releaseSeconds,
+                ...(mount.alignment ? { alignToTrack: mount.alignment } : {}),
             });
             if (!isMounted && !signal.aborted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
         }

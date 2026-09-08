@@ -96,6 +96,8 @@ export async function mountWhenReady(
         durationSeconds?: number;
         attackSeconds?: number;
         releaseSeconds?: number;
+        alignToTrack?: { trackId: string; fromKeyframeId?: string | null; toKeyframeId?: string | null };
+        replace?: boolean;
     },
 ): Promise<boolean> {
     for (let attempt = 0; attempt < MOUNT_RETRY_LIMIT; attempt++) {
@@ -110,6 +112,8 @@ export async function mountWhenReady(
                 ...(options?.durationSeconds !== undefined ? { durationSeconds: options.durationSeconds } : {}),
                 ...(options?.attackSeconds !== undefined ? { attackSeconds: options.attackSeconds } : {}),
                 ...(options?.releaseSeconds !== undefined ? { releaseSeconds: options.releaseSeconds } : {}),
+                ...(options?.alignToTrack ? { alignToTrack: options.alignToTrack } : {}),
+                ...(options?.replace === undefined ? {} : { replace: options.replace }),
             });
             if (mount.validate(ctx).length > 0) return false;
             mount.execute(ctx);
