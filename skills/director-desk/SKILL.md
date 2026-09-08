@@ -130,6 +130,42 @@ dispatch({ type: "action.preview.play", payload: { objectId: "mecha" } });
 dispatch({ type: "action.preview.pause", payload: {} });
 ```
 
+#### 多段动作序列(一次性 → 循环 → 一次性)
+
+一个实体可以在一条时间线上依次表演多个动作。`action.mount` / `assets.mount` **默认追加**,
+传 `replace: true` 才是整表替换(旧的单动作行为)。
+
+```js
+// 1) 一次性:被驱赶的反应
+dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin.action.hands-on-head", startTimeSeconds: 0, durationSeconds: 2.8 } });
+// 2) 循环:走路 —— 时段声明为「对齐到走位轨的某个关键帧区间」,不手填时间
+dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin.action.walking",
+    alignToTrack: { trackId: "walk-actor", fromKeyframeId: "k-turn-out", toKeyframeId: "k-walk-end" } } });
+// 3) 一次性:收尾
+dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin.action.thumbs-down", startTimeSeconds: 10.3, durationSeconds: 2.5 } });
+```
+
+读回:`scene.describe` 的 `actionSequence`(按起始升序,含 `alignedToTrackId`)。
+`mountedActionId` / `actionSchedule` 只是**首条**的兼容投影,多动作场景别用它们判断「当前在演什么」。
+
+**`alignToTrack` 是自动对齐的入口,优先用它而不是手填两份时间。** 走路动作必须与走位区间同起同止,
+手填的排期在轨道重定时(拖关键帧 / `retime-track` / `timeline.scale`)后不会跟着动,必然漂;
+声明对齐后时段是走位轨的派生量,轨道一动排期自动跟随。实测:把终点关键帧从 10s 拖到 8s,
+对齐的走路排期自动从 4→10 收缩为 4→8;整轨 retime 后变 2→5,对齐关系保留。
+
+踩坑清单:
+
+- **排期不得交叠,但首尾相接允许**("走完立刻倒地"正是相接)。交叠返回结构化
+  `action-overlapping-performance` 并报出已占区间。
+- **一次性动作的实际占用含 release 尾巴**:`[start, start + duration + releaseSeconds]`。
+  走位段 4→10s 的动作实际占到 10.25s,在 10s 挂下一段会被拒——从 `releaseEndTimeSeconds` 之后接。
+- **循环动作才吃步频同步**:`locomotion: "sync"` 只驱动当前生效的 `loop` 动作;
+  一次性动作有自己的时间语义,不会被位移改写。
+- **走路资产**:`builtin.action.walking` / `builtin.action.running`(loop)。其余 21 个内置动作都是手势,
+  只有 `挥手`/`左侧移步`/`催促离开` 是 loop,其余全 `once`——`assets.list` 的 `loopMode` 字段可查。
+- **`action.set-range` 在多动作下要带 `actionId`** 定位改哪一段,缺省改首条。显式改时段会**解除对齐**
+  (作者的直接操作胜过声明式派生),想保留对齐就别用它。
+
 ### 时间轴（走位关键帧）
 
 ```js
@@ -151,6 +187,17 @@ dispatch({
 ```
 
 easing 只有两档:`"linear"` / `"smooth"`。运镜的 easing 是**整段时间曲线**(clip 级,`motion.set-clip-easing`):smooth = 起落加减速,linear = 全程匀速;**段与段之间的快慢由关键帧的 `progress` 分布表达**,不要给每个关键帧单独设缓动——那会让每过一枚关键帧就停顿一次。
+
+走位轨的三个实测陷阱:
+
+- **走位轨驱动的是运行时,不是实体 `transform`**:`scene.describe` 的 `transform` 是**作者态**(你 place/move 写进去的值),
+  时间轴采样把位姿写到 Three 运行时。所以 seek 到走路中段时 `transform.position` 仍是 `[0,0,0]`,
+  别据此判断"走位没生效"。要断言实际位姿,读 `bounds.center`(它测的是运行时包围盒),
+  或在页面里读 `desk.scene.manager.getRuntime(id).position`。
+- **`orientation` 默认 `path`(朝向锁死轨迹切线),原地转身无效**:切线为零时朝向不变,
+  「调头」必须显式 `policies: { orientation: "keyed" }` 并用关键帧 `rotation.y` 表达(差 π 即 180°)。
+- **关键帧轨迹是样条,首尾同值也会过冲**:`auto` handle 下"走到 -7 停住"会在末段冲到 -7.49 再回弹。
+  与动作序列无关(卸掉动作曲线一致),介意就改 `handleMode: "manual"` 压平 handle。
 
 ### 机位与运镜
 
