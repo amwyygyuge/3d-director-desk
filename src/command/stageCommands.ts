@@ -9,6 +9,7 @@ import {
     horizontalForward,
     MOVE_OBJECT_COMMAND_TYPE,
     rightFor,
+    yawFacing,
 } from "@/command/placementCommands";
 import { entityReadinessIssue, subjectBoundsFor } from "@/command/subjectBounds";
 import type { Transform, Vec3 } from "@/core/SceneObject";
@@ -87,11 +88,6 @@ export interface StageRequest {
     readonly forward: Vec3;
 }
 
-/** +Z 朝向目标的偏航角(与 place-relative 的 facing 同一惯例,glTF 角色面朝 +Z) */
-function yawToward(from: Vec3, to: Vec3): number {
-    return Math.atan2(to[0] - from[0], to[2] - from[2]);
-}
-
 /**
  * 布景配方编译器(领域服务,纯函数):槽位偏移 × 半径和 → 各槽位目标 Transform。
  * 参考系与 place-relative 一致(导演相机水平视线);原点槽不动位置。
@@ -152,12 +148,13 @@ export class StagePresetCompiler {
             if (!position) continue;
             const anchorPosition = slotSpec.anchorSlot === null ? undefined : positions.get(slotSpec.anchorSlot);
             if (slotSpec.facing === STAGE_FACING.FORWARD) {
+                // 面朝观众:目标点取视线反方向上的一点(相机侧)
                 yaws.set(
                     slotSpec.slot,
-                    yawToward(position, [position[0] - forward[0], position[1], position[2] - forward[2]]),
+                    yawFacing(position, [position[0] - forward[0], position[1], position[2] - forward[2]]),
                 );
             } else if (anchorPosition) {
-                yaws.set(slotSpec.slot, yawToward(position, anchorPosition));
+                yaws.set(slotSpec.slot, yawFacing(position, anchorPosition));
             }
         }
         // 互朝第二遍:锚槽朝向改指向伙伴,覆盖其自身 forward 朝向(对峙的「面对面」由此成立)
@@ -165,7 +162,7 @@ export class StagePresetCompiler {
             if (slotSpec.facing !== STAGE_FACING.MUTUAL || slotSpec.anchorSlot === null) continue;
             const position = positions.get(slotSpec.slot);
             const anchorPosition = positions.get(slotSpec.anchorSlot);
-            if (position && anchorPosition) yaws.set(slotSpec.anchorSlot, yawToward(anchorPosition, position));
+            if (position && anchorPosition) yaws.set(slotSpec.anchorSlot, yawFacing(anchorPosition, position));
         }
         return yaws;
     }

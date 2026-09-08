@@ -65,6 +65,9 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 坐标系:右手系，`Y` 向上，`X/Z` 是地面平面；transform = `{ position:[x,y,z], rotation:[rx,ry,rz](弧度), scale:[sx,sy,sz] }`。导演语言的左/右/前/后**永远以当前导演相机水平视线解释**，用语义摆位命令，不把固定世界轴当成画面语义。长度仅在 `spatialScale.kind` 为 `actor-meters` 或 `reference-meters` 时可解释为米；`relative` 资产只能做相对构图。
 
+**朝向约定(人偶正面是 -Z)**:rotation.y = 0 时人偶正面朝 **-Z**,即 yaw 的朝向向量是 `(-sin yaw, 0, -cos yaw)`(与 `TimelineSampler` 的切线朝向、`yawFacing` 同一约定)。要判断"A 是否面朝 B",算 `dot(朝向向量, 归一化(B.pos - A.pos))`,≈ `+1` 才是面对面,`-1` 是背对背。这条断言是精确的,**别用截图判断朝向**——视觉复核对人偶正背面的判读会反复摇摆。
+`camera.frame-subject` 的 `azimuth` 是另一套参数化:`atan2(z, x)`,从 **+X** 起量的水平方位角(不是 yaw)。要把相机放到主体正面,传 `azimuth = atan2(-cos yaw, -sin yaw)`;再 `+0.5~0.7` 弧度得到三四分之侧面(比正面或 90° 侧面都更立体,侧面还会让手臂与大腿轮廓糊在一起)。
+
 ### 布景
 
 ```js
@@ -248,12 +251,26 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 ## 工作流配方(标准成片路径)
 
 1. **感知**:`desk.inspect brief` → 对候选实体 `focused`；先读取身份、装载态、量纲，不截屏。
-2. **布景**:放模型 → 等 `loaded` → `scene.set-identity` → `scene.stage` / `object.place-relative` → `camera.frame-subject` → `camera.check-framing`;
+2. **布景**:放模型 → 等 `loaded` → `scene.set-identity` → **摆自然初始姿态(见下)** → `scene.stage` / `object.place-relative` → 朝向点积断言 → `camera.frame-subject` → `camera.check-framing`;
 3. **动作**:挂 clip → 骨骼不兼容会收到 `bone-incompatible` 类 issue,换一个动作或换模型,别硬试;
 4. **时间轴与运镜**:set-duration → 打关键帧（仅走位使用 timeline）；优先 `motion.create-take` 一次创建片段和 Program 输出;
 5. **灯光**:studio 兜底,custom 微调;
 6. **验收**:以 `scene.describe`、`camera.get-pose`、`camera.check-framing` 做位置/尺寸/同框断言；只有美学终审才截图;
 7. **导出**:capture.frame 逐时间点 seek + 截图 = 参考帧序列。
+
+### 初始姿态:人偶落地就是 T-pose,必须摆
+
+`assets.place` 的人偶默认停在 **T-pose(侧平举)**,任何场景下都出戏。放完模型、在 stage 之前先摆一个该场景下的自然姿态:
+
+```js
+// 两段式:下半身定站/坐/跪,上半身定手臂。merge 才能分别叠加,replace 会互相覆盖。
+dispatch({ type: "pose.apply-preset", payload: { objectId: "hero", presetId: "lower-stand", mode: "merge" } });
+dispatch({ type: "pose.apply-preset", payload: { objectId: "hero", presetId: "upper-stand-arms-down", mode: "merge" } });
+```
+
+`pose.presets.list` 读全表(23 项,分 `lower` / `upper` 两部位)。常用上半身:`upper-stand-arms-down`(垂臂,对峙/待场默认)、`upper-stand-natural`(站姿·自然)、`upper-idle`(待机)。下半身:`lower-stand` / `lower-crouch` / `lower-kneel` / `lower-sit-chair` 等。
+
+注意姿态与动作的关系:挂了 `action.mount` 的实体在**动作窗口内**由动作驱动(`scene.describe` 的 `actionSchedule` 给出 `startTimeSeconds`/`durationSeconds`),窗口外才回落到这个基础姿态。所以 t=1 看到手臂张开可能是动作正在演,不是 T-pose 没摆——查 `actionSchedule` 再判断,或取动作结束后的时刻复核。
 
 ## 运镜语言速查(语义 → 命令)
 
@@ -276,6 +293,9 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 
 - **非安全上下文(http 非 localhost)**:旧部署里 `crypto.randomUUID` 不存在,`desk.animations.register`、文档导入的动作恢复、检查器动作置备全部抛 `crypto.randomUUID is not a function`(导入侧表现为 toast「动作 "X" 恢复失败」)。先用 `crypto.getRandomValues` 注入 UUIDv4 polyfill 再操作。源码已修(统一 `createId` 兜底,getRandomValues 优先),重新部署后不再需要 polyfill。
 - **浏览器驱动**:页面 JS 必须在 `tab.evaluate` 里执行(工具运行域没有 `window`);等句柄用 `wait(() => tab.evaluate(...))` 轮询,`tab.waitForFunction` 不存在。Chrome 已有实例在跑时 spawn 会 CDP 超时,加 `--user-data-dir` 隔离配置重试。
+- **有头浏览器观测**:`browser.open` 走 relay/`app.path` 都可能失败(relay 扩展未连、spawn 后无 page target)。可靠路径是自己起 Chrome 再 CDP 附着:`"/Applications/Google Chrome.app/.../Google Chrome" --remote-debugging-port=9333 --user-data-dir=/tmp/xxx <url> &`,然后 `browser.open({ app: { cdp_url: "http://127.0.0.1:9333" } })`。
+- **`tab.evaluate` 有 30s 硬上限**:每次 capture 约需 1s 沉降,多时间点/多实体的循环审计务必拆成一次一个探针的多次调用,否则整段超时且 VM 状态被重置。
+- **`tab.screenshot()` 拿不到 WebGL 画面**:返回的是页面截图文件路径(webp),画布内容可能全黑;同理在页面里 `createImageBitmap(canvas)` 读回可能全 0。要看渲染结果只信 `capture.frame` 的产物(`desk.ui.lastCaptureUrl`,blob URL,每次 capture 换新)。
 
 ### 契约偏差(以实测为准)
 
@@ -283,11 +303,28 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 - `scene.describe` 的 `value` 是实体数组本体,不是 `{ entities: [...] }`——轮询 loadState 别取错层。
 - `actor.build.set` / `actor.build.apply-preset`:播放期拒改,issue `transport-playing` 自带 `pause-transport` 选项——先暂停→改→恢复播放。`actor.appearance.set`(上色)不受播放限制。
 - `light.adjust`:intensity 围栏 0~100,超了报 `lighting.invalid-payload` 并指名 `light.intensity`。物理衰减下嫌暗优先降 `decay`、拉近灯距,别硬堆强度。
+- `motion.get` 的 clip **不带 `cameraId` 字段**(只有 id/startTimeSeconds/durationSeconds/keys/focus/follow/easing)。按机位找片段要匹配 `id`(`motion.author` 生成的 id 形如 `take-<机位名>-<move>-<start>`),不要读 `c.cameraId` —— 会得到 undefined 然后炸在 `.keys`。
+- `timeline.set-duration` **不联动播放范围**:`program.review` 的 `range.outSeconds` 仍是旧值。改时长后补一条 `timeline.set-playback-range { inSeconds, outSeconds }`,否则录制/输出按旧范围截断。
+- `capture.video` 的产物在当前环境是 **MP4/h264**(`ftypisom` 头),不是 WebM/EBML。验收查 `lastVideoMeta.durationSeconds` + `ffprobe`,不要断言 EBML 魔数。
+- `motion.set-focus` 的 `worldOffset` 是**注视点相对主体原点的偏移**,不是"抬高一点"的微调量:人偶(1.75m)给 `[0,1.4,0]` 会瞄到头顶以上,把主体挤出画。胸腹高度 `[0,0.9,0]` 才稳。
 
 ### 运镜与验收
 
 - `motion.author { move: "orbit" }` 只生成约 90° 弧段(4 枚 key),不是整圈。要无缝 360° 环绕:从首 key 反解圆心(target)、半径、起始角,`motion.replace-clip` 重写 5 枚 key(0/0.25/0.5/0.75/1,首尾同位),easing 必须 `linear`——`smooth` 会在循环接缝处减速,每圈卡顿一次。
 - `camera.get-pose` 的 `live ≈ motionSampled` 断言只在镜头视角(`view.set-mode { mode: "lens" }`)下成立;导演视角的 live 是自由相机,poseDist 大是预期、不是运镜没生效。
+- **`camera.check-framing` 只测视锥包含,不测遮挡也不测可读性**:全部 `inFrame: true` 的镜头里,主体可能被立柱挡住、可能只有十几像素、也可能与背景同色糊成一片。它是必要条件不是充分条件。
+- **`camera.frame-subject` 按主体联合包围球定距,`shotSize` 越紧越容易把单个主体挤出画**:人偶 `close-up`/`medium` 常直接 `marginNdc < 0`。收尾特写从 `medium-long` 起步,想更近就改 key 位置(把末 key 往首 key 方向 lerp 0.3~0.4),别硬调 `shotSize`。
+- **改了机位定义,已有运镜片段不会跟着变**:`camera.frame-subject` 重设机位后必须 `motion.remove-clip` + 重新 `motion.author`,否则片段还在放旧 key。
+- **人偶默认肤色 `#d8d3ca` 和内置几何体(墙/柱)几乎同色**,贴在一起时画面上完全糊掉。多人布景先 `actor.appearance.set` 给对立双方分色(如主角 `#e8dcc0` sheen / 对手 `#8c2f2a` matte),再把 scenery 往深处推(墙 z ≤ -10、柱子挪出主体横向车道),否则后面所有"看不见人"的排查都是在追这个色差。
+- **`scene.stage` / `place-relative facing` 的 180° 朝向 bug(已修)**:`yawToward` 原按"角色面朝 +Z"算,把人偶的**后背**对准目标——`face-off` 的"互朝"实际是背对背,`VIEW_DIRECTION.FRONT` 的"正视图"实际是背影。已统一到 `placementCommands.yawFacing`(-Z 正面约定),`FramingService` 的 `front` 改为 `[0,0,-1]`。若在旧版本上工作,朝向点积断言会给 `-1`,自己补 `+π`。
+
+### 美学终审不能省(断言全绿 ≠ 画面成立)
+
+断言驱动只覆盖度量。**每个机位至少取一帧交给视觉复核**,问的问题要具体到能否证伪:"两个人偶是否都完整可见、有无物体从前面横穿、是否同一地平面、有无裁切、手臂是否自然"。实测里断言全绿而视觉发现的真问题:立柱横穿主角躯干、两人踩在不同高度、收尾镜头切掉头顶、人偶还停在 T-pose。
+
+**但朝向不要问截图。** 视觉复核对人偶正面/背面的判读会在同一场景的不同帧之间自相矛盾(实测同一组已验证面对面的人偶,一帧答"面对面"、另一帧答"都朝向镜头")。朝向用上面的点积断言,它是精确的。分工:**能算的用算的,只把"好不好看"留给眼睛。**
+
+捞帧姿势(避开上面所有坑):`capture.frame` → `fetch(desk.ui.lastCaptureUrl)` → 页面内 `OffscreenCanvas` 缩到 1400px 宽 → base64 回传落盘 → 用带具体问题的图像复核。缩图是必要的:原图 2833×1783 直接复核容易把 200px 高的人偶读成"圆柱"。
 
 ## 纪律
 

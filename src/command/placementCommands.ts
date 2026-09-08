@@ -84,6 +84,17 @@ export function rightFor(forward: Vec3): Vec3 {
     return [forwardY * upZ - forwardZ * upY, forwardZ * upX - forwardX * upZ, forwardX * upY - forwardY * upX];
 }
 
+/**
+ * 「面朝目标」的偏航角(scene.stage 配方与 place-relative 的 facing 共用)。
+ *
+ * 模型正面是 -Z(three 惯例:lookAt 让 -Z 指向目标,人偶资产同此朝向,与
+ * TimelineSampler 的切线朝向同一约定)。令 -Z 转到目标方向即 yaw = atan2(-dx, -dz);
+ * 写成 atan2(dx, dz) 会把角色的**后背**对准目标——「面对面」会变成「背对背」。
+ */
+export function yawFacing(from: Vec3, to: Vec3): number {
+    return Math.atan2(-(to[0] - from[0]), -(to[2] - from[2]));
+}
+
 function spacingFor(request: PlacementRequest): number {
     return request.anchor.radius + request.subject.radius + request.distance;
 }
@@ -117,12 +128,10 @@ function behind(request: PlacementRequest): Transform {
 }
 
 function facing(request: PlacementRequest): Transform {
-    const [subjectX, , subjectZ] = request.subject.transform.position;
-    const [anchorX, , anchorZ] = request.anchor.center;
     const [rotationX, , rotationZ] = request.subject.transform.rotation;
     return {
         position: request.subject.transform.position,
-        rotation: [rotationX, Math.atan2(anchorX - subjectX, anchorZ - subjectZ), rotationZ],
+        rotation: [rotationX, yawFacing(request.subject.transform.position, request.anchor.center), rotationZ],
         scale: request.subject.transform.scale,
     };
 }
