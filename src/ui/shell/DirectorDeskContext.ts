@@ -23,6 +23,9 @@ import { CommandDispatcher } from "@/command/CommandDispatcher";
 import { registerBuiltinCommands, registerBuiltinKeyframeCodecs } from "@/command/commands";
 import { CommandHistory } from "@/command/CommandHistory";
 import { DocumentImportService } from "@/document/DocumentImportService";
+import { DocumentCompatibilityService } from "@/document/compatibility/DocumentCompatibilityService";
+import { createBuiltinDocumentMigrationRegistry } from "@/document/compatibility/builtinMigrations";
+import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import { ModelImporter } from "@/loaders/ModelImporter";
 import { ShortcutRegistry } from "@/shortcuts/ShortcutRegistry";
 import { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
@@ -153,6 +156,8 @@ export interface DirectorDeskStores {
     materials: ObjectMaterialRegistry;
     /** 姿势预设注册表：内置预设 + 工程自建预设（MobX 可观察，面板直读）。 */
     posePresets: PosePresetLibrary;
+    /** 历史工程文档的单向版本升级；每桌一份注册表，禁全局可变单例。 */
+    documentCompatibility: DocumentCompatibilityService;
     /** 工程快照替换应用服务：管理候选聚合提交与动作恢复取消域。 */
     documentImports: DocumentImportService;
     /** 生命周期守卫与异步工作取消域 */
@@ -222,7 +227,11 @@ export function createDirectorDeskStores(options?: {
     );
     const catalog = new AssetCatalog();
     const lifecycle = new DeskLifecycleGuard();
-    const documentImports = new DocumentImportService();
+    const documentCompatibility = new DocumentCompatibilityService(
+        createBuiltinDocumentMigrationRegistry(),
+        DESK_DOCUMENT_VERSION,
+    );
+    const documentImports = new DocumentImportService(documentCompatibility);
     const playheadDisplay = new PlayheadDisplay(clock);
     const videoExport = new VideoExportSession(playheadDisplay);
     const animations = new AnimationLibrary();
@@ -270,6 +279,7 @@ export function createDirectorDeskStores(options?: {
         actionPreview,
         catalog,
         lifecycle,
+        documentCompatibility,
         documentImports,
     };
 }

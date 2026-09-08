@@ -6,7 +6,7 @@ import { provisionAction } from "@/command/actionProvisioning";
 import { ProgramReviewQuery } from "@/command/reviewCommands";
 import type { DeskDocument } from "@/document/DeskDocument";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
-import { DOCUMENT_IMPORT_ISSUE_CODE } from "@/document/DocumentImportService";
+import { DOCUMENT_COMPATIBILITY_ISSUE_CODE } from "@/document/compatibility/DeskDocumentMigration";
 import { PROGRAM_REVIEW_ISSUE_KIND } from "@/review/ProgramReviewService";
 import type { ProgramReviewReport } from "@/review/ProgramReviewService";
 import { LIGHTING_MODE } from "@/store/SceneStore";
@@ -42,7 +42,8 @@ const LIGHT_PARAMS = {
 const CHECKLIST = [
     "项目菜单「导出工程」下载 JSON;「导入工程…」选该文件 → 对象/机位/运镜/时长全还原",
     "同文档二次导入幂等,不产生重复对象",
-    "手工把 JSON 的 version 改成未知值 → 导入被结构化拒绝(零兼容纪律:旧格式直接判不支持)",
+    "手工把 JSON 的 version 改成未知值 → 导入被结构化拒绝(未发布,迁移注册表为空:旧格式一律判不支持)",
+    "拒绝路径不清空、不改动当前场景;失败只回结构化 issue",
     "播种已断言:导出 → 清空 → 导入后场景快照逐字节一致,机位/Program/时长还原",
     "同一动作挂在多个实体上,导入后全部恢复挂载且共享同一动作实例",
     "自定义灯光模式与灯光实体随文档还原,不回退演播室",
@@ -135,18 +136,43 @@ async function reimportAndAssert(stores: DirectorDeskStores, document: DeskDocum
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 输出未还原");
 }
 
+/** 兼容层拒绝路径:注册表为空(未发布),因此一切非当前版本都被结构化拒绝,且当前场景不受影响。 */
 function assertStructuredRejections(stores: DirectorDeskStores): void {
-    const incompatibleVersion = stores.dispatcher.dispatch(
+    const sceneBefore = sceneFingerprint(stores);
+    const futureVersion = stores.dispatcher.dispatch(
         { type: "desk.import-document", payload: { document: { version: DESK_DOCUMENT_VERSION + 1 } } },
         stores,
     );
     assertAcceptance(
-        !incompatibleVersion.ok &&
-            incompatibleVersion.issueDetails?.some(
-                (issue) => issue.code === DOCUMENT_IMPORT_ISSUE_CODE.UNSUPPORTED_VERSION,
+        !futureVersion.ok &&
+            futureVersion.issueDetails?.some(
+                (issue) => issue.code === DOCUMENT_COMPATIBILITY_ISSUE_CODE.VERSION_TOO_NEW,
             ) === true,
-        "未知文档版本未被结构化拒绝",
+        "更高版本文档未被结构化拒绝",
     );
+    const legacyVersion = stores.dispatcher.dispatch(
+        { type: "desk.import-document", payload: { document: { version: DESK_DOCUMENT_VERSION - 1 } } },
+        stores,
+    );
+    assertAcceptance(
+        !legacyVersion.ok &&
+            legacyVersion.issueDetails?.some(
+                (issue) => issue.code === DOCUMENT_COMPATIBILITY_ISSUE_CODE.VERSION_TOO_OLD,
+            ) === true,
+        "发布前的旧版本文档未被结构化拒绝(零兼容纪律)",
+    );
+    const brokenEnvelope = stores.dispatcher.dispatch(
+        { type: "desk.import-document", payload: { document: { entities: [] } } },
+        stores,
+    );
+    assertAcceptance(
+        !brokenEnvelope.ok &&
+            brokenEnvelope.issueDetails?.some(
+                (issue) => issue.code === DOCUMENT_COMPATIBILITY_ISSUE_CODE.INVALID_ENVELOPE,
+            ) === true,
+        "缺少 version 的文档未被结构化拒绝",
+    );
+    assertAcceptance(sceneFingerprint(stores) === sceneBefore, "拒绝路径污染了当前场景");
     const missingShot = stores.dispatcher.dispatch(
         { type: "camera.activate", payload: { id: MISSING_SHOT_ID } },
         stores,

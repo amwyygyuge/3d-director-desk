@@ -19,7 +19,26 @@
 8. **命令层收口(AI 地基)**:一切改变场景/机位状态的写操作——UI 交互、HostBridge 消息、未来 AI 工具调用——必须收敛为 `DirectorCommand` 经 `CommandDispatcher` 分发;**禁止组件/适配器直写 store**。命令 payload 必须纯数据可序列化。
 9. **禁止裸数值入口**:来自 AI/宿主的坐标、fov 等数值必须经命令 `validate()` 的有限性/范围检查(空间幻觉围栏),LLM 输出不直接触达领域类。
 10. **许可纪律**:可参考 `xiaozangao/3d-director-desk`(MIT)的思路,禁止整段搬运代码;awplanet(非商用)/ CozyClay(AGPL)/ shotblock(无许可)的代码一行都不许进本仓。
-11. **零兼容纪律(功能未上线)**:本产品尚未正式上线,**不存在任何线上数据与历史版本**。因此严禁编写迁移代码、版本分支、字段兜底、别名/re-export、`legacy*` 类型与「读旧档」路径;领域模型演进一律**清洁切换**——改结构就直接改,旧格式档案由版本号直接判不支持。遇到既有兼容代码立即删除,不得沿用。
+11. **文档版本与兼容纪律**:`DeskDocument.version` 只描述**持久化工程 JSON 的结构与语义**,与 npm 包版本、宿主协议版本(`PROTOCOL_VERSION`)、命令能力契约版本(`CommandCapability.version`)、资产目录版本各自独立演进,**永不复用**——混用会让「工程打不开」失去可定位性。
+
+    **当前阶段(未上线,零兼容)**:不存在线上数据与历史存档。`MINIMUM_SUPPORTED_DESK_DOCUMENT_VERSION === DESK_DOCUMENT_VERSION`,`createBuiltinDocumentMigrationRegistry()` 出厂为空注册表。因此严禁编写迁移器、版本分支、字段兜底、别名/re-export、`legacy*` 类型与「读旧档」路径;领域模型演进一律**清洁切换**——改结构就直接改,旧格式档案由 `DocumentCompatibilityService` 按版本号判不支持。遇到既有兼容代码立即删除,不得沿用。
+
+    **改 schema 的动作(现在就必须做)**:任何改变工程 JSON 结构或语义的变更,**必须同批升 `DESK_DOCUMENT_VERSION`**。不升版本号 = 新旧文档共用同一版本号却语义不同,兼容层再也无法分辨,是不可挽回的错误。升版本号本身不需要写迁移器(未上线)。
+
+    **首个正式发布时(一次性动作)**:把 `MINIMUM_SUPPORTED_DESK_DOCUMENT_VERSION` **冻结**为该刻版本号,不再跟随 `DESK_DOCUMENT_VERSION` 移动——它一动,已发布存档的支持承诺就悄悄失效。冻结后 `builtinMigrations.ts` 的链路断言开始咬人:升版本却漏写迁移器,构造导演台即抛错。
+
+    **发布之后(必须评估兼容)**:每次 schema 变更在 `src/document/compatibility/` 增加**一条相邻迁移**(`vN → vN+1`,大跨度由注册表串联),与新领域模型、历史 fixture 恢复验收**同批交付**。迁移器纪律:不改入参、输出可 JSON 往返且 `version === toVersion`、不碰 MobX/Three/DOM、只补**有确定历史含义**的默认值。新模型需要历史文档从未表达过的信息时,返回 `MIGRATION_SEMANTICS_UNRECOVERABLE` **结构化拒绝,禁止编造用户意图**——「导入成功但场景变样」比显式失败危险得多。只做**旧 → 新单向**升级:旧客户端读新档只能丢字段或伪造语义,那不是兼容而是静默损坏。
+
+    **增量字段不等于免兼容(判据在读取方,不在变更形状)**:「只加字段」**不能**推出「不需要迁移」。唯一判据是**当前读取方能否容忍该字段缺失**:
+
+    | 读取方行为                                                   | 旧档结果   | 结论                 |
+    | ------------------------------------------------------------ | ---------- | -------------------- |
+    | 构造期 `?? 默认值`,且校验器不校验其存在                      | 可打开     | 免迁移(仍须升版本号) |
+    | 校验器 `required` / 类型守卫要求存在(即使领域类自己有默认值) | **打不开** | **必须迁移**         |
+    | 字段可选但缺失会改变行为(默认值 ≠ 旧档隐含语义)              | 静默变样   | **必须迁移**         |
+
+    本仓实测:`entity.pose` / `timeline.frameRate` / `timeline.markers` 缺失被容忍;而 `entity.spatialScale` / `entity.narrativeIdentity` / `document.output` / `document.lighting` / `document.posePresets` 缺失**直接判文档无效**——`spatialScale` 尤其说明问题:`SceneObject` 有可用默认值,但 `DocumentImportService` 的 `isSceneSpatialScaleInit` 先行硬拒。**决定权在校验器,不在实体默认值。** 所以加字段时必须同时决定:进 `required`(要迁移)还是保持真正可选(免迁移),并在验收里用「删掉该字段的旧档」实测,而非凭「这是增量」推断。
+
 12. **状态管理纪律(MobX 单轨)**:一切共享/领域状态必须是 `makeAutoObservable` 类实体;React 组件一律 `observer`(具名 function,来自 `mobx-react-lite`)渲染期直读。**禁止手搓响应式**:版本号计数器与 `void x.revision` 锚定、自建 `listeners`/`subscribe`/`emit` pub/sub、`useState` 镜像 observable、`useEffect` 把 observable 同步进本地 state、渲染外快照缓存集合。`createContext` 唯一合法用途是 `DirectorDeskContext` 每实例注入(value 必须稳定引用,禁放变化状态);禁全局单例,禁 mobx-react 的 `Provider`/`inject`。`useState` 白名单仅限局部瞬时 UI 态(输入草稿、开关、Snackbar)。集合消费统一 `values`/`entries`/`get`,禁手搓展开。惰性副作用统一 `onBecomeObserved`/`onBecomeUnobserved`,disposer 进 dispose 链;观察者常驻的 observable 禁挂 lazy。渲染纪律:传引用晚解引用、列表渲染独立组件、禁 index 作 key、`observer` 已含 `memo` 勿重复包裹、非 observer 第三方组件经 function props 或 `<Observer>` 桥接。高频(帧级)observable 禁渲染期直读,经 `reaction`/`autorun`/`useFrame` 消费;UI 显示值用 lazy 低频派生(见 `ui/PlayheadDisplay`)。细则与正误对照见 `docs/state-management.md`。
 13. **props 边界纪律(值型状态禁下传)**:组件一律 `useDirectorDeskStores()` **自取**状态。props 只准装三类东西——**身份 id**(`shotId`/`objectId`/`section`)、**回调**(`onCommit`/`onClose`/`report`)、**DOM ref / children**。数字、布尔、数组、快照对象一律禁止下传(`duration`/`playhead`/`objectCount`/`programClips`/`actionId`/`fov`/`shot` 全部自取)。理由:值型 props 把子组件的重渲染绑到父组件的读集合上,`observer` 的细粒度追踪当场失效;父组件一旦读了帧级 observable 再下传,整棵子树跟着它的频率重建。唯一例外是**无领域身份的叶子控件**(通用数值输入如 `ShotNumberField`),判据是「能用 id 换到状态的一律自取,换不到的才允许收值」。细则与正误对照见 `docs/state-management.md` 的「props 边界纪律」。
 14. **画布之上的渲染性能红线(踩过的坑,禁重演)**:悬浮壳层压在活动的 WebGL 画布上,以下四条已造成过实测掉帧,**禁止再次引入**:
@@ -45,6 +64,9 @@
 2. **边界与命令（MUST）**：必须明确权限与校验边界；读/查询与写/命令必须分离。所有改变场景或机位状态的 UI、HostBridge 与 AI 路径必须复用同一领域命令/应用服务路径，**禁止** AI 或适配器直接读写 store、持有 Three 对象/引用、调用 UI 内部实现或绕过 `CommandDispatcher`。
 3. **执行语义（MUST）**：对可重试或异步能力，必须定义确定性的幂等键、重试/去重语义、生命周期、取消方式与异步结果所有权；未定义时**禁止**发布为 AI 能力。
 4. **演进与验收（MUST）**：必须评估协议/版本迁移、兼容与回滚影响；交付前必须具备覆盖真实 UI 与 AI 集成的验收场景，验证发现、权限拒绝、校验失败、命令执行、取消/重试与结构化失败路径。
+
+    触发本项评估的变更（命中任一即须在交付说明中给出兼容结论，**禁止跳过**）：改动 `DeskDocument` 或其任一嵌套 `*Init` / `*JSON` 结构；改动实体、时间轴、机位、运镜、动作、姿势预设的 `toJSON()` 输出；收紧 `DocumentImportService` 的校验（新增 `required`、新增类型守卫、加严数值区间）；改动 `HostBridge` 消息 payload 或 `PROTOCOL_VERSION`；改动 `CommandCapability` 的 payload 契约。
+    结论只允许三种：**免迁移**（须说明读取方如何容忍缺失，并已用「删掉该字段的旧档」实测）、**需迁移**（迁移器与历史 fixture 验收同批交付）、**判不支持**（仅未上线阶段可选，须同批升 `DESK_DOCUMENT_VERSION`）。红线 11 是判据来源。
 
 ## 兼容矩阵(不可单方面升级)
 

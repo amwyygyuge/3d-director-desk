@@ -213,6 +213,25 @@ export type { OutputFormatId } from "@/output/OutputFormat";
 export { OutputFrameGeometry } from "@/output/OutputFrameGeometry";
 export type { OutputFrameNdcBounds, OutputFrameRect, OutputFrameSize } from "@/output/OutputFrameGeometry";
 export { DOCUMENT_IMPORT_ISSUE_CODE, DocumentImportService } from "@/document/DocumentImportService";
+export {
+    DOCUMENT_COMPATIBILITY_ISSUE_CODE,
+    DOCUMENT_COMPATIBILITY_PATH,
+    MINIMUM_SUPPORTED_DESK_DOCUMENT_VERSION,
+    readDocumentVersion,
+} from "@/document/compatibility/DeskDocumentMigration";
+export type {
+    DeskDocumentMigration,
+    DocumentCompatibilityIssueCode,
+    DocumentMigrationResult,
+} from "@/document/compatibility/DeskDocumentMigration";
+export { DocumentMigrationRegistry } from "@/document/compatibility/DocumentMigrationRegistry";
+export type { DocumentMigrationPath } from "@/document/compatibility/DocumentMigrationRegistry";
+export { DocumentCompatibilityService } from "@/document/compatibility/DocumentCompatibilityService";
+export type {
+    DocumentCompatibilityResult,
+    DocumentMigrationReport,
+} from "@/document/compatibility/DocumentCompatibilityService";
+export { createBuiltinDocumentMigrationRegistry } from "@/document/compatibility/builtinMigrations";
 export { ProgramReviewQuery, registerReviewCommands } from "@/command/reviewCommands";
 export { PROGRAM_REVIEW_ISSUE_KIND, ProgramReviewService } from "@/review/ProgramReviewService";
 export type {

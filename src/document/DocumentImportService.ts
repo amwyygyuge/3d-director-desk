@@ -14,6 +14,7 @@ import type {
     DeskDocumentOutput,
 } from "@/document/DeskDocument";
 import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
+import type { DocumentCompatibilityService } from "@/document/compatibility/DocumentCompatibilityService";
 import { isActionLoopMode } from "@/assets/ActionAsset";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
@@ -296,6 +297,7 @@ function motionIssues(plan: DocumentImportPlan): readonly string[] {
     return [...clipIssues, ...programIssues];
 }
 
+/** 只接受已经升级到当前版本的文档；历史版本的宽松结构只存在于对应迁移器内。 */
 function preparePlan(document: unknown): DocumentImportPreparation {
     if (!isRecord(document)) return { issues: ["文档缺失"], plan: null };
     if (document.version !== DESK_DOCUMENT_VERSION) {
@@ -364,24 +366,41 @@ function preparePlan(document: unknown): DocumentImportPreparation {
     }
 }
 
-/** 工程快照替换应用服务：候选聚合先完整构造，提交后只保留新工程的运行时与读模型。 */
+/**
+ * 工程快照替换应用服务：候选聚合先完整构造，提交后只保留新工程的运行时与读模型。
+ *
+ * 版本兼容不属于本服务：历史文档先由 DocumentCompatibilityService 单向升级到当前版本，
+ * 本服务只认识当前 schema——否则版本分支会扩散进 SceneObject / TimelineDoc / CameraMotionClip。
+ */
 export class DocumentImportService {
     private restoreController: AbortController | null = null;
     private disposed = false;
 
+    constructor(private readonly compatibility: DocumentCompatibilityService) {}
+
     validate(document: unknown): readonly CommandIssue[] {
-        const preparation = preparePlan(document);
-        return validationIssuesFor(document, preparation.issues);
+        const upgraded = this.compatibility.prepare(document);
+        if (!upgraded.ok) return upgraded.issues;
+        const preparation = preparePlan(upgraded.document);
+        return validationIssuesFor(upgraded.document, preparation.issues);
     }
 
     import(document: unknown, ctx: DirectorContext): void {
-        const preparation = preparePlan(document);
+        const upgraded = this.compatibility.prepare(document);
+        if (!upgraded.ok) throw new Error(upgraded.issues.map((issue) => issue.message).join(";"));
+        const preparation = preparePlan(upgraded.document);
         if (!preparation.plan) throw new Error(preparation.issues.join(";"));
         if (this.disposed) throw new Error("DocumentImportService 已释放");
         this.restoreController?.abort();
         const restoreController = new AbortController();
         this.restoreController = restoreController;
         this.commit(preparation.plan, ctx);
+        // 旧工程只在内存中升级；宿主保存的原文件保持不动，作为回滚锚点。
+        if (upgraded.report.appliedSteps.length > 0) {
+            ctx.ui.setApplicationNotice(
+                `工程已从 v${upgraded.report.sourceVersion} 升级到 v${upgraded.report.targetVersion}，保存后写入新版本`,
+            );
+        }
         void this.restoreActions({ ctx, actions: preparation.plan.actions, signal: restoreController.signal });
     }
 
