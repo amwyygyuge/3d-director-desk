@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
 
-import { CHROME } from "@/ui/shell/theme";
+import { CHROME, SELECTABLE_ATTRIBUTE } from "@/ui/shell/theme";
 
 const TOAST_MAX_WIDTH_PX = 560;
 const TOAST_PADDING_X = 3;
@@ -93,7 +93,14 @@ export const ViewportToast = observer(function ViewportToast({
                 }}
             >
                 {isError ? <ErrorOutlineIcon color="error" fontSize="small" sx={{ mr: 1 }} /> : null}
-                <Typography component="div" variant="body1" sx={{ textAlign: "center" }}>
+                {/* 错误文案要能复制去排查:整体禁选后需显式还原,并把指针事件收回来
+                    (提示条整体 pointerEvents: none 是为了不挡视口,选中文本是唯一的例外) */}
+                <Typography
+                    component="div"
+                    variant="body1"
+                    sx={{ textAlign: "center", ...(isError ? { pointerEvents: "auto" } : {}) }}
+                    {...(isError ? { [SELECTABLE_ATTRIBUTE]: "" } : {})}
+                >
                     {children}
                 </Typography>
                 {closeToast ? (

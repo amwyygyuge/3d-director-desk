@@ -18,7 +18,7 @@ import { inspectorTabs } from "@/ui/inspector/inspectorTabs";
 import { TabbedSections } from "@/ui/patterns/TabbedSections";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
-import { CHROME, reviewInspectorBottomOffsetPx, sidePanelBottomOffset } from "@/ui/shell/theme";
+import { CHROME, reviewInspectorBottomOffsetPx, SELECTABLE_ATTRIBUTE, sidePanelBottomOffset } from "@/ui/shell/theme";
 
 const HEADER_BACKGROUND = "rgba(0,0,0,0.22)";
 const HEADER_PADDING_X = 1.5;
@@ -205,9 +205,13 @@ export const InspectorSheet = observer(function InspectorSheet() {
                     <Typography variant="overline" color="primary">
                         {INSPECTOR_SELECTION_LABEL[selected.kind]}
                     </Typography>
-                    <Typography variant="subtitle2" noWrap title={selected.name}>
-                        {selected.name}
-                    </Typography>
+                    {/* 原生 title 会弹浏览器那只灰框(延迟与样式都跟 MUI Tooltip 撞脸),统一走 Tooltip。
+                        名字是正文性文本,允许选中复制 */}
+                    <Tooltip title={selected.name}>
+                        <Typography variant="subtitle2" noWrap {...{ [SELECTABLE_ATTRIBUTE]: "" }}>
+                            {selected.name}
+                        </Typography>
+                    </Tooltip>
                 </Box>
 
                 <Tooltip title={`清除选中 (${formatShortcutHint(SHORTCUT_ID.CLEAR_SELECTION)})`}>

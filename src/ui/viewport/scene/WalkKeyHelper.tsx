@@ -196,7 +196,7 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
         (event: ThreeEvent<MouseEvent>): void => {
             if (!keyframe) return;
             event.stopPropagation();
-            event.nativeEvent.preventDefault();
+            // 原生菜单已由 NativeChromeGuard 在导演台根节点统一拦掉
             submitKeyframe(stores, trackId, {
                 ...keyframe.toJSON(),
                 inHandle: [0, 0, 0],

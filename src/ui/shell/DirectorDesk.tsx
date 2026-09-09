@@ -41,7 +41,14 @@ import { Hotkeys } from "@/ui/shell/Hotkeys";
 import { FrameRateIndicator } from "@/ui/viewport/FrameRateIndicator";
 import { placementFor } from "@/ui/assets/importFiles";
 import { LoadingChip } from "@/ui/viewport/LoadingChip";
-import { directorDeskTheme, SCROLLBAR_SX, TIMELINE_HEIGHT_VAR, VIEWPORT_BACKGROUND } from "@/ui/shell/theme";
+import { NativeChromeGuard } from "@/ui/shell/NativeChromeGuard";
+import {
+    directorDeskTheme,
+    SCROLLBAR_SX,
+    TIMELINE_HEIGHT_VAR,
+    TOOL_CHROME_SX,
+    VIEWPORT_BACKGROUND,
+} from "@/ui/shell/theme";
 import { SceneRoot } from "@/ui/viewport/scene/SceneRoot";
 import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
 import { StudioRig } from "@/ui/viewport/scene/StudioRig";
@@ -171,17 +178,14 @@ export const DirectorDesk = observer(function DirectorDesk({
         };
     }, [stores]);
 
-    // React 18 把 wheel 以 passive 挂在根容器,onWheel 里的 preventDefault 是静默无效调用;
-    // 触控板捏合(ctrl+wheel)因此会穿透成浏览器页面缩放。在导演台根节点用原生非 passive
-    // 监听拦掉缩放手势——只拦 ctrl+wheel,普通滚动与面板的 overflow 滚动不受影响。
+    // 浏览器原生行为一律经 NativeChromeGuard 收口(右键菜单/原生拖拽/文件拖放/捏合缩放)。
+    // 每实例一套,随根节点挂卸;拦截清单与理由见该类文档。
     useEffect(() => {
         const element = deskRef.current;
         if (!element) return;
-        const blockPageZoom = (event: WheelEvent): void => {
-            if (event.ctrlKey) event.preventDefault();
-        };
-        element.addEventListener("wheel", blockPageZoom, { passive: false });
-        return () => element.removeEventListener("wheel", blockPageZoom);
+        const guard = new NativeChromeGuard();
+        guard.attach(element);
+        return () => guard.dispose();
     }, []);
 
     // 宿主入站:import-model → 命令层;ready 握手(adapter 内部决定是否有意义)
@@ -220,7 +224,7 @@ export const DirectorDesk = observer(function DirectorDesk({
 
     return (
         <ThemeProvider theme={theme ?? directorDeskTheme}>
-            <ScopedCssBaseline className="h-full" sx={SCROLLBAR_SX}>
+            <ScopedCssBaseline className="h-full" sx={{ ...SCROLLBAR_SX, ...TOOL_CHROME_SX }}>
                 <DirectorDeskProvider value={stores}>
                     <div
                         ref={deskRef}
@@ -236,6 +240,10 @@ export const DirectorDesk = observer(function DirectorDesk({
                         }
                         tabIndex={-1}
                         onPointerDown={(event) => event.currentTarget.focus()}
+                        // 输入类原生属性挂根节点由 DOM 继承:组件自带的 inputProps 会整体覆盖
+                        // theme defaultProps 里的同名项,放这里才对每个输入框都生效
+                        autoCorrect="off"
+                        autoCapitalize="off"
                     >
                         {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
                         <div className="absolute inset-0">
