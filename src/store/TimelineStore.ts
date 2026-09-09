@@ -4,6 +4,7 @@ import { TimelineDoc, DEFAULT_TIMELINE_DURATION_SECONDS } from "@/timeline/Timel
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import type { TimelineMarker } from "@/timeline/TimelineMarker";
+import type { TimelineTrackKind } from "@/timeline/TimelineTrack";
 
 /**
  * 每个 DirectorDesk 实例各自拥有的时间轴状态。仅保存 TimelineDoc 纯数据；
@@ -73,11 +74,18 @@ export class TimelineStore {
                 : this.currentDocument.withTrack(nextTrack);
     }
 
-    removeObjectTracks(targetId: string): readonly TimelineTrack[] {
-        const removed = this.currentDocument.tracks.filter((track) => track.targetId === targetId);
+    /**
+     * 移除对象的轨道并返回被移除者(供撤销快照)。
+     * `kind` 缺省 = 该对象全部轨道(删对象);给了 kind 只动那一种——
+     * 重画走位不该顺手清掉同一对象上别种轨道。
+     */
+    removeObjectTracks(targetId: string, kind?: TimelineTrackKind): readonly TimelineTrack[] {
+        const matches = (track: TimelineTrack): boolean =>
+            track.targetId === targetId && (kind === undefined || track.kind === kind);
+        const removed = this.currentDocument.tracks.filter(matches);
         if (removed.length === 0) return removed;
         this.currentDocument = this.currentDocument.withTracks(
-            this.currentDocument.tracks.filter((track) => track.targetId !== targetId),
+            this.currentDocument.tracks.filter((track) => !matches(track)),
         );
         return removed;
     }

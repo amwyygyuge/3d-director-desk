@@ -10,6 +10,11 @@ import type { LightingMode } from "@/store/SceneStore";
 import type { OutputFormatId } from "@/output/OutputFormat";
 
 /**
+ * v18 起走位轨持久化 `policies.extrapolation`:轨道时间跨度之外钳到首/末关键帧(hold,默认)
+ *     还是交还实体权威变换(rest)。旧档缺该字段时构造期取 hold,与旧档 rest 语义不同,
+ *     故必须换版本号——同一份 JSON 在两版里表现不同,是兼容层再也分辨不出的那类变更。
+ * v17 起动作排期段持久化稳定 `id`:同一实体可对同一动作有多段排期,
+ *     时间轴段条、选中态与运行时 clip 全按段 id 定位;旧档缺少该 id 无法还原段身份。
  * v16 起同一实体可持久化**多段动作排期**(一次性 → 循环 → 一次性),
  *     且排期可声明对齐到某条走位轨的关键帧区间(轨道重定时后排期自动跟随);
  * v15 起实体持久化叙事身份与量纲模式；旧档不迁移，版本不符即判不支持。
@@ -21,7 +26,7 @@ import type { OutputFormatId } from "@/output/OutputFormat";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 16;
+export const DESK_DOCUMENT_VERSION = 18;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {
@@ -31,6 +36,8 @@ export interface DeskDocumentActionAlignment {
 }
 
 export interface DeskDocumentActionMount {
+    /** 排期段身份;时间轴段条与运行时 clip 均按它定位,导入后必须原样恢复。 */
+    readonly id: string;
     readonly objectId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
@@ -108,6 +115,7 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
                 entity.actionPerformances
                     .filter((performance) => performance.actionId === action.id)
                     .map((performance) => ({
+                        id: performance.id,
                         objectId: entity.id,
                         startTimeSeconds: performance.startTimeSeconds,
                         durationSeconds: performance.durationSeconds,

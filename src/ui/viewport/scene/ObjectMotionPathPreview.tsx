@@ -8,6 +8,7 @@ import type { Mesh } from "three";
 
 import { createPositionSample } from "@/motion/MotionTrajectory";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import { createTransformSample, evaluateTransformTrack } from "@/timeline/TimelineSampler";
 import type { TransformSample } from "@/timeline/TimelineSampler";
@@ -179,9 +180,11 @@ export const ObjectMotionPathPreview = observer(function ObjectMotionPathPreview
     if (!motionAuthoring.pathHelpersVisible) return null;
     return (
         <group userData={{ helper: true }}>
-            {timeline.document.tracks.map((track) => (
-                <ObjectTrackPath key={track.id} trackId={track.id} />
-            ))}
+            {timeline.document.tracks
+                .filter((track) => track.kind === TIMELINE_TRACK_KIND.TRANSFORM)
+                .map((track) => (
+                    <ObjectTrackPath key={track.id} trackId={track.id} />
+                ))}
         </group>
     );
 });

@@ -243,10 +243,11 @@ const clipDragResolver = new TimelineClipDragResolver();
 
 function clipDragCandidates(stores: DirectorDeskStores, bar: TimelineBar): SnapCandidates {
     const rows = stores.timelineLayout.project(motionViewport(stores));
+    // 吸附吸到实际占用末端(含一次性动作的 release 尾巴),否则贴到视觉末端会被重叠围栏拒掉
     const edges = rows
         .flatMap((row) => row.bars)
         .filter((candidate) => candidate.id !== bar.id || candidate.kind !== bar.kind)
-        .flatMap((candidate) => [candidate.startSeconds, candidate.startSeconds + candidate.durationSeconds]);
+        .flatMap((candidate) => [candidate.startSeconds, candidate.occupancyEndSeconds]);
     const keys = rows
         .flatMap((row) => row.marks)
         .filter((mark) => mark.kind !== TIMELINE_MARK_KIND.MARKER)
@@ -483,9 +484,10 @@ function rangeCommandFor(
                 ? PROGRAM_RANGE_COMMAND[clip.source.kind]({ clipId: clip.id, source: clip.source, range })
                 : null;
         },
+        // 段条 id 是排期段 id,ownerId 才是实体:两者都要带上,否则会改到同实体的另一段
         [TIMELINE_BAR_KIND.ACTION]: () => ({
             type: "action.set-range",
-            payload: { objectId: bar.id, ...range },
+            payload: { objectId: bar.ownerId, performanceId: bar.id, ...range },
         }),
         [TIMELINE_BAR_KIND.TRANSFORM]: () => ({
             type: "timeline.retime-track",
@@ -500,7 +502,8 @@ const BAR_SELECTION: Record<TimelineBarKind, (stores: DirectorDeskStores, bar: T
     [TIMELINE_BAR_KIND.MOTION]: (stores, bar) => stores.timelineSelection.select(TimelineSelection.motionClip(bar.id)),
     [TIMELINE_BAR_KIND.PROGRAM]: (stores, bar) =>
         stores.timelineSelection.select(TimelineSelection.programClip(bar.id)),
-    [TIMELINE_BAR_KIND.ACTION]: (stores, bar) => stores.timelineSelection.select(TimelineSelection.actionClip(bar.id)),
+    [TIMELINE_BAR_KIND.ACTION]: (stores, bar) =>
+        stores.timelineSelection.select(TimelineSelection.actionClip(bar.ownerId, bar.id)),
     [TIMELINE_BAR_KIND.TRANSFORM]: (stores, bar) =>
         stores.timelineSelection.select(TimelineSelection.walkTrack(bar.id)),
 };

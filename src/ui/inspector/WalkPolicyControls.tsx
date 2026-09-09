@@ -9,7 +9,7 @@ import { observer } from "mobx-react-lite";
 import { useState } from "react";
 
 import { SetTimelineTrackPoliciesCommand } from "@/command/timelineCommands";
-import { GROUNDING_MODE, LOCOMOTION_MODE, ORIENTATION_MODE } from "@/timeline/TrackPolicies";
+import { EXTRAPOLATION_MODE, GROUNDING_MODE, LOCOMOTION_MODE, ORIENTATION_MODE } from "@/timeline/TrackPolicies";
 import type { OrientationMode, TrackPoliciesInit } from "@/timeline/TrackPolicies";
 import type { ReportCommandResult } from "@/ui/inspector/Inspector";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -102,6 +102,25 @@ export const WalkPolicySection = observer(function WalkPolicySection({
                 }
                 label="动作跟随步幅"
             />
+            <FormControlLabel
+                control={
+                    <Switch
+                        checked={policies.holdsOutsideSpan}
+                        onChange={(event) =>
+                            commit({
+                                extrapolation: event.target.checked ? EXTRAPOLATION_MODE.HOLD : EXTRAPOLATION_MODE.REST,
+                            })
+                        }
+                        size="small"
+                    />
+                }
+                label="走完停在终点"
+            />
+            {!policies.holdsOutsideSpan && (
+                <Typography color="text.secondary" variant="caption">
+                    关闭后对象在轨迹时段外回到自身变换（可用坐标轴摆放），播放到时段外会弹回该位置
+                </Typography>
+            )}
             {policies.isLocomotionSynced && (
                 <TextField
                     fullWidth

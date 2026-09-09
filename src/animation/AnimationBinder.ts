@@ -9,6 +9,8 @@ import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import type { TimeTransport } from "@/time/TimeTransport";
 
 interface MountedClip {
+    /** 排期段身份;同一 actionId 可有多段,故 clip 按段 id 索引而非 actionId。 */
+    readonly performanceId: string;
     readonly actionId: string;
     readonly mixer: AnimationMixer;
     readonly action: AnimationAction;
@@ -22,8 +24,8 @@ interface MountedClip {
 /** 每个对象的动作序列:按 startTimeSeconds 升序,同一时刻至多一个 clip 生效。 */
 interface MountedSequence {
     clips: MountedClip[];
-    /** 上一帧生效的 clip,用于切换时把旧 clip 停到零权重(避免两个 mixer 同时写骨骼)。 */
-    activeActionId: string | null;
+    /** 上一帧生效的段 id,用于切换时把旧 clip 停到零权重(避免两个 mixer 同时写骨骼)。 */
+    activePerformanceId: string | null;
 }
 
 const RELEASE_TARGET_QUATERNION = new Quaternion();
@@ -48,7 +50,7 @@ export class AnimationBinder {
         this.transport = transport;
     }
 
-    /** 追加一个 clip 到对象的动作序列;同 actionId 且同排期起点的重复挂载会被替换而不是叠加。 */
+    /** 追加一个 clip 到对象的动作序列;同一段 id 的重复挂载会被替换而不是叠加。 */
     mount(
         objectId: string,
         root: Object3D,
@@ -65,6 +67,7 @@ export class AnimationBinder {
         action.clampWhenFinished = true;
         action.play();
         const mountedClip: MountedClip = {
+            performanceId: performance.id,
             actionId: performance.actionId,
             mixer,
             action,
@@ -74,21 +77,15 @@ export class AnimationBinder {
             performance,
             isActive: false,
         };
-        const sequence = this.mounted.get(objectId) ?? { clips: [], activeActionId: null };
-        const existingIndex = sequence.clips.findIndex(
-            (candidate) =>
-                candidate.actionId === performance.actionId &&
-                candidate.performance.startTimeSeconds === performance.startTimeSeconds,
-        );
+        const sequence = this.mounted.get(objectId) ?? { clips: [], activePerformanceId: null };
+        const existingIndex = sequence.clips.findIndex((candidate) => candidate.performanceId === performance.id);
         if (existingIndex >= 0) {
             sequence.clips[existingIndex]?.mixer.stopAllAction();
             sequence.clips[existingIndex] = mountedClip;
         } else {
             sequence.clips.push(mountedClip);
         }
-        sequence.clips.sort(
-            (left, right) => left.performance.startTimeSeconds - right.performance.startTimeSeconds,
-        );
+        sequence.clips.sort((left, right) => left.performance.startTimeSeconds - right.performance.startTimeSeconds);
         this.mounted.set(objectId, sequence);
         this.applySequenceTime(sequence, this.transport?.time ?? 0);
     }
@@ -101,17 +98,15 @@ export class AnimationBinder {
         this.mounted.delete(objectId);
     }
 
-    /** 卸载序列中的一个动作(按 actionId + 排期起点定位);序列空了即整体卸载。 */
-    unmountPerformance(objectId: string, actionId: string, startTimeSeconds: number): void {
+    /** 卸载序列中的一段排期(按段 id 定位);序列空了即整体卸载。 */
+    unmountPerformance(objectId: string, performanceId: string): void {
         const sequence = this.mounted.get(objectId);
         if (!sequence) return;
-        const index = sequence.clips.findIndex(
-            (candidate) =>
-                candidate.actionId === actionId && candidate.performance.startTimeSeconds === startTimeSeconds,
-        );
+        const index = sequence.clips.findIndex((candidate) => candidate.performanceId === performanceId);
         if (index < 0) return;
         sequence.clips[index]?.mixer.stopAllAction();
         sequence.clips.splice(index, 1);
+        if (sequence.activePerformanceId === performanceId) sequence.activePerformanceId = null;
         if (sequence.clips.length === 0) this.mounted.delete(objectId);
     }
 
@@ -149,12 +144,11 @@ export class AnimationBinder {
         }
     }
 
-    /** 排期拖动/重定时后立即换表;下一次全局采样按新时段取值。 */
+    /** 排期拖动/重定时后立即换表;下一次全局采样按新时段取值。按段 id 定位,不再猜首条。 */
     setScheduleFor(objectId: string, performance: ActionPerformance): void {
         const sequence = this.mounted.get(objectId);
         if (!sequence) return;
-        const clip =
-            sequence.clips.find((candidate) => candidate.actionId === performance.actionId) ?? sequence.clips[0];
+        const clip = sequence.clips.find((candidate) => candidate.performanceId === performance.id);
         if (!clip) return;
         clip.performance = performance;
         sequence.clips.sort((left, right) => left.performance.startTimeSeconds - right.performance.startTimeSeconds);
@@ -184,10 +178,10 @@ export class AnimationBinder {
         return (this.activeClipFor(objectId) ?? this.firstClipFor(objectId))?.loopMode ?? null;
     }
 
-    /** 某时刻生效动作的循环语义;PlaybackCoordinator 按采样时刻判 release 段用它。 */
-    loopModeAt(objectId: string, actionId: string): ActionLoopMode | null {
+    /** 某段排期的循环语义;PlaybackCoordinator 按采样时刻选出段后用它判 release。 */
+    loopModeAt(objectId: string, performanceId: string): ActionLoopMode | null {
         const sequence = this.mounted.get(objectId);
-        return sequence?.clips.find((candidate) => candidate.actionId === actionId)?.loopMode ?? null;
+        return sequence?.clips.find((candidate) => candidate.performanceId === performanceId)?.loopMode ?? null;
     }
 
     get isEmpty(): boolean {
@@ -206,9 +200,9 @@ export class AnimationBinder {
     private activeClipFor(objectId: string): MountedClip | null {
         const sequence = this.mounted.get(objectId);
         if (!sequence) return null;
-        const activeId = sequence.activeActionId;
+        const activeId = sequence.activePerformanceId;
         if (activeId === null) return null;
-        return sequence.clips.find((candidate) => candidate.actionId === activeId) ?? null;
+        return sequence.clips.find((candidate) => candidate.performanceId === activeId) ?? null;
     }
 
     /**
@@ -236,12 +230,12 @@ export class AnimationBinder {
                 clip.isActive = false;
             }
         }
-        sequence.activeActionId = active?.actionId ?? null;
+        sequence.activePerformanceId = active?.performanceId ?? null;
         if (!active) return;
         const clipTime = active.performance.clipTimeAt(timeSeconds, active.clipDurationSeconds, active.loopMode);
         if (clipTime === null) {
             active.isActive = false;
-            sequence.activeActionId = null;
+            sequence.activePerformanceId = null;
             return;
         }
         this.ensureActive(active);

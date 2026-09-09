@@ -339,6 +339,7 @@ export {
     TransportPlayCommand,
     TransportSeekCommand,
     UnmountActionCommand,
+    UnmountActionPerformanceCommand,
     TransportStopCommand,
     TransportGetStateQuery,
 } from "@/command/actionCommands";
@@ -494,13 +495,20 @@ export type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 export { buildTransformTrajectory } from "@/timeline/transformTrajectory";
 export {
     TrackPolicies,
+    EXTRAPOLATION_MODE,
     GROUNDING_MODE,
     GROUND_HEIGHT_METERS,
     LOCOMOTION_MODE,
     ORIENTATION_MODE,
     DEFAULT_STRIDE_METERS,
 } from "@/timeline/TrackPolicies";
-export type { GroundingMode, LocomotionMode, OrientationMode, TrackPoliciesInit } from "@/timeline/TrackPolicies";
+export type {
+    ExtrapolationMode,
+    GroundingMode,
+    LocomotionMode,
+    OrientationMode,
+    TrackPoliciesInit,
+} from "@/timeline/TrackPolicies";
 export {
     TimelineSampler,
     createTransformSample,

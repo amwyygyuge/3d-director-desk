@@ -4,6 +4,7 @@ import type { AssetEntry } from "@/assets/catalog/AssetEntry";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { TimelineViewport } from "@/authoring/TimelineViewport";
 import { TIMELINE_BAR_KIND } from "@/authoring/TimelineLayout";
+import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { waitMs } from "@/core/waitMs";
 import type { DeskDocument } from "@/document/DeskDocument";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
@@ -18,6 +19,8 @@ const THUMBS_UP_ASSET_ID = "builtin.action.thumbs-up";
 const NOD_ASSET_ID = "builtin.action.nod-yes";
 const CELEBRATE_ALT_ASSET_ID = "builtin.action.celebrate-alt";
 const EXPECTED_ACTION_COUNT = 21;
+/** 走查里该实体依次挂了「挥手(循环)」与「赞许(一次性)」两段排期,故段条应为两条。 */
+const EXPECTED_ACTION_BAR_COUNT = 2;
 const ONCE_ACTION_START_SECONDS = 1.2;
 const ONCE_ACTION_DURATION_SECONDS = 2;
 const RETIMED_ACTION_START_SECONDS = 2.4;
@@ -39,19 +42,35 @@ const CHECKLIST = [
     "资源目录含 21 个内置动作资产(点头/摇头已回归);人偶检查器「动作资产」区按骨架族列出",
     "先选常驻姿势「垂臂」,再依次挂「挥手/赞许/点头/庆祝·二」:动作与常驻姿势分层共存",
     "一次性动作带明确时间轴排期;结束后经回收段自动回垂臂,不会停在动作末帧",
-    "播种已断言:目录发现、四次挂载、排期段条、常驻姿势恢复、预览播放/暂停、文档导出动作定位符",
+    "时间轴动作行里**每段排期各自一条段条**(挂了几段就有几条);拖任一条只改那一段,不影响邻段",
+    "选中某一段按 Delete 只删该段,其余段保留;撤销后该段按原位复原",
+    "播种已断言:目录发现、四次挂载、逐段段条投影、段级重定时/删除/撤销、常驻姿势恢复、预览播放/暂停、文档导出动作定位符",
 ] as const;
 
+/**
+ * 等某个动作出现在实体的**动作序列**里。
+ *
+ * 不能只看 `entity.actionId`(首段):追加语义下首段永远是最早挂的那个,
+ * 之后每一次挂载都会在这里永久超时。
+ */
 async function waitMountedActionName(
     stores: DirectorDeskStores,
     objectId: string,
     name: string,
     remainingAttempts = WAIT_ATTEMPT_LIMIT,
 ): Promise<void> {
-    const actionId = stores.scene.manager.getEntity(objectId)?.actionId;
-    const mounted = stores.animations.actions.find((action) => action.id === actionId);
-    if (mounted?.name === name) return;
-    if (remainingAttempts === 0) throw new Error(`验收断言失败: 动作 ${name} 超时未挂载`);
+    const performances = stores.scene.manager.getEntity(objectId)?.actionPerformances ?? [];
+    const isMounted = performances.some(
+        (performance) => stores.animations.actions.find((action) => action.id === performance.actionId)?.name === name,
+    );
+    if (isMounted) return;
+    if (remainingAttempts === 0) {
+        const mountedNames = performances.map(
+            (performance) =>
+                stores.animations.actions.find((action) => action.id === performance.actionId)?.name ?? "?",
+        );
+        throw new Error(`验收断言失败: 动作 ${name} 超时未挂载(当前序列: ${mountedNames.join(", ") || "空"})`);
+    }
     await waitMs(WAIT_INTERVAL_MS);
     await waitMountedActionName(stores, objectId, name, remainingAttempts - 1);
 }
@@ -117,7 +136,7 @@ function basePoseBone(stores: DirectorDeskStores): readonly number[] {
 function assertLoopTimelinePlays(stores: DirectorDeskStores): void {
     assertAcceptance(stores.actionPreview.activeObjectId === null, "挂载动作后未播放的预览仍抢占时间轴");
     const performance = required(
-        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance ?? undefined,
+        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformances[0],
         "循环动作缺少时间轴排期",
     );
     const before = sampleTimelinePose(stores, performance.startTimeSeconds);
@@ -158,6 +177,34 @@ function assertPreviewPoseHoldsAfterGlobalSample(stores: DirectorDeskStores, obj
     );
 }
 
+/**
+ * 段级删除:选中某一段按 Delete 只删那一段,其余段完好。
+ *
+ * 这条是多段序列的核心回归——此前时间轴选中态按实体寻址,Delete 走 `action.unmount`,
+ * 会把该实体全部动作一起抹掉。
+ */
+function assertSegmentScopedDelete(stores: DirectorDeskStores): void {
+    const before = stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformances ?? [];
+    assertAcceptance(before.length >= 2, "段级删除验收需要至少两段排期");
+    const target = required(before[0], "缺少待删排期段");
+    const survivorIds = before.filter((entry) => entry.id !== target.id).map((entry) => entry.id);
+    stores.timelineSelection.select(TimelineSelection.actionClip(ACTOR_ID, target.id));
+    const remove = required(stores.timelineSelection.current.deleteCommand() ?? undefined, "动作段选中未给出删除命令");
+    assertAcceptance(remove.type === "action.unmount-performance", "动作段 Delete 仍走整体卸载");
+    assertAcceptance(stores.dispatcher.dispatch(remove, stores).ok, "动作段删除命令执行失败");
+    const after = stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformances ?? [];
+    assertAcceptance(
+        after.length === before.length - 1 && survivorIds.every((id) => after.some((entry) => entry.id === id)),
+        "删除一段动作时误伤了其余段",
+    );
+    assertAcceptance(stores.history.undo(stores).ok, "动作段删除撤销失败");
+    const restored = stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformances ?? [];
+    assertAcceptance(
+        restored.length === before.length && restored.some((entry) => entry.id === target.id),
+        "动作段删除撤销未按原段 id 复原",
+    );
+}
+
 async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
     await waitCatalogEntry(stores, HUMANOID_ASSET_ID);
     dispatchOk(stores, "assets.place", { assetId: HUMANOID_ASSET_ID, id: ACTOR_ID });
@@ -190,42 +237,61 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
         durationSeconds: ONCE_ACTION_DURATION_SECONDS,
     });
     await waitMountedActionName(stores, ACTOR_ID, "赞许");
-    const onceActionId = stores.scene.manager.getEntity(ACTOR_ID)?.actionId;
+    const onceActionId = required(
+        stores.animations.actions.find((action) => action.name === "赞许")?.id,
+        "动作库缺少赞许动作",
+    );
     const onceAction = stores.animations.actions.find((action) => action.id === onceActionId);
+    // 多段序列下按段定位:此时实体已有「挥手(循环)」+「赞许(一次性)」两段
     const performance = required(
-        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance ?? undefined,
+        stores.scene.manager
+            .getEntity(ACTOR_ID)
+            ?.actionPerformances.find((candidate) => candidate.actionId === onceActionId),
         "一次性动作缺少时间轴排期",
     );
+    const oncePerformanceId = performance.id;
     assertAcceptance(onceAction?.loopMode === ACTION_LOOP_MODE.ONCE, "一次性动作未携带 once 策略");
     assertAcceptance(
         Math.abs(performance.startTimeSeconds - ONCE_ACTION_START_SECONDS) <= TIME_EPSILON_SECONDS &&
             Math.abs(performance.durationSeconds - ONCE_ACTION_DURATION_SECONDS) <= TIME_EPSILON_SECONDS,
         "一次性动作未按指定开始时间与时长排期",
     );
+    // 每段排期各自成条:两段动作必须都在时间轴上可见,段条 id 即段 id
+    const actionBars = stores.timelineLayout
+        .project(TimelineViewport.full(stores.timeline.document.duration))
+        .flatMap((row) => row.bars)
+        .filter((bar) => bar.kind === TIMELINE_BAR_KIND.ACTION);
+    assertAcceptance(actionBars.length === EXPECTED_ACTION_BAR_COUNT, "多段动作排期未逐段投影为段条");
     const actionBar = required(
-        stores.timelineLayout
-            .project(TimelineViewport.full(stores.timeline.document.duration))
-            .flatMap((row) => row.bars)
-            .find((bar) => bar.kind === TIMELINE_BAR_KIND.ACTION && bar.id === ACTOR_ID),
-        "时间轴缺少动作排期段条",
+        actionBars.find((bar) => bar.id === oncePerformanceId),
+        "时间轴缺少该段动作排期段条",
     );
+    assertAcceptance(actionBar.ownerId === ACTOR_ID, "动作段条未带出所属实体");
     assertAcceptance(
         actionBar.startSeconds === performance.startTimeSeconds &&
             actionBar.durationSeconds === performance.durationSeconds,
         "动作排期段条与实体排期不一致",
     );
+    // 一次性动作的占用含 release 尾巴:吸附吸这里,贴段才不会被重叠围栏拒掉
+    assertAcceptance(
+        Math.abs(actionBar.occupancyEndSeconds - performance.releaseEndTimeSeconds) <= TIME_EPSILON_SECONDS,
+        "一次性动作段条未把 release 回收段计入占用末端",
+    );
     dispatchOk(stores, "action.set-range", {
         objectId: ACTOR_ID,
+        performanceId: oncePerformanceId,
         startTimeSeconds: RETIMED_ACTION_START_SECONDS,
         durationSeconds: RETIMED_ACTION_DURATION_SECONDS,
     });
     assertAcceptance(
-        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance?.startTimeSeconds === RETIMED_ACTION_START_SECONDS,
+        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance(oncePerformanceId)?.startTimeSeconds ===
+            RETIMED_ACTION_START_SECONDS,
         "动作排期重定时未生效",
     );
     assertAcceptance(stores.history.undo(stores).ok, "动作排期撤销失败");
     assertAcceptance(
-        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance?.startTimeSeconds === ONCE_ACTION_START_SECONDS,
+        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance(oncePerformanceId)?.startTimeSeconds ===
+            ONCE_ACTION_START_SECONDS,
         "动作排期撤销未恢复原时段",
     );
     assertAcceptance(stores.history.redo(stores).ok, "动作排期重做失败");
@@ -233,7 +299,7 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
     assertOnceTimelineSchedule(stores);
     dispatchOk(stores, "timeline.scale", { factor: TIMELINE_SCALE_FACTOR });
     const scaledPerformance = required(
-        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance ?? undefined,
+        stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformance(oncePerformanceId) ?? undefined,
         "整轴缩放后动作排期丢失",
     );
     assertAcceptance(
@@ -262,6 +328,8 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
     dispatchOk(stores, "assets.mount", { assetId: CELEBRATE_ALT_ASSET_ID, objectId: ACTOR_ID });
     await waitMountedActionName(stores, ACTOR_ID, "庆祝·二");
 
+    assertSegmentScopedDelete(stores);
+
     dispatchOk(stores, "action.preview.play", { objectId: ACTOR_ID });
     assertAcceptance(stores.actionPreview.isPlaying, "动作资产预览未播放");
     dispatchOk(stores, "action.preview.pause", {});
@@ -278,6 +346,16 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
     );
 
     stores.selection.select(ACTOR_ID);
+    // 段条可见性是本轮的主要交付,做成硬断言而不是靠肉眼:投影必须给出动作行且逐段成条
+    const finalPerformances = stores.scene.manager.getEntity(ACTOR_ID)?.actionPerformances ?? [];
+    const finalActionRow = stores.timelineLayout
+        .project(TimelineViewport.full(stores.timeline.document.duration))
+        .find((row) => row.id === `action:${ACTOR_ID}`);
+    assertAcceptance(finalPerformances.length > 0, "走查终态应保留动作排期");
+    assertAcceptance(
+        finalActionRow?.bars.length === finalPerformances.length,
+        `时间轴动作行段条数应等于排期段数(行=${String(finalActionRow?.bars.length)} 段=${finalPerformances.length})`,
+    );
 }
 
 const meta: Meta<typeof DirectorDesk> = { title: "演员/动作资产", component: DirectorDesk };

@@ -274,12 +274,16 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
         if (ctx.binder.isEmpty) ctx.clock.pause();
     }
 
-    /** 实体与时间轴轨道快照必须同次回放恢复，确保对象删除的轨道清理可撤销。 */
+    /**
+     * 实体与时间轴轨道快照必须同次回放恢复，确保对象删除的轨道清理可撤销。
+     * 只快照 transform 轨:RestoreTimelineTracksCommand 目前只接受这一种,
+     * 塞入别种会让整条撤销被校验拒掉(新增轨道种类须同批扩两处)。
+     */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.id);
         if (!entity) return null;
         const tracks = ctx.timeline.document.tracks
-            .filter((track) => track.targetId === entity.id)
+            .filter((track) => track.targetId === entity.id && track.kind === TIMELINE_TRACK_KIND.TRANSFORM)
             .map((track) => track.toJSON());
         const restoreObject: SerializedCommand = {
             type: PlaceObjectCommand.TYPE,

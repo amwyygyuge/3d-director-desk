@@ -244,14 +244,18 @@ export class SceneObject {
         return null;
     }
 
-    /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
-    get actionId(): string | null {
-        return this.mountedActions[0]?.actionId ?? null;
+    /** 按段 id 取排期:时间轴段条、选中态与 action.* 命令的唯一定位口。 */
+    actionPerformance(performanceId: string): ActionPerformance | null {
+        return this.mountedActions.find((performance) => performance.id === performanceId) ?? null;
     }
 
-    /** 首个动作排期。多动作序列请用 actionPerformances / actionPerformanceAt。 */
-    get actionPerformance(): ActionPerformance | null {
-        return this.mountedActions[0] ?? null;
+    /**
+     * 已挂载动作(AnimationLibrary 的 action id)。
+     * 多段序列下这只是「首段演的是哪个动作」,不代表当前生效者——
+     * 生效者随时刻变化,读 actionPerformanceAt。
+     */
+    get actionId(): string | null {
+        return this.mountedActions[0]?.actionId ?? null;
     }
 
     /** 整表替换(命令层已排序去重);null / 空数组 = 清空全部动作。 */

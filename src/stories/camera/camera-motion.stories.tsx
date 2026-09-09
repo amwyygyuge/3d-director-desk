@@ -9,6 +9,7 @@ import type { FocusTargetJSON } from "@/camera/CameraFocusTrack";
 import type { ViewportPoseSource } from "@/camera/ViewportPoseSource";
 import { isCommandIssue } from "@/authoring/KeyframeAuthoringService";
 import { VIEW_MODE } from "@/store/MotionAuthoringStore";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { TEST_ASSETS } from "@/stories/seeds";
 import { assertAcceptance, dispatchOk as dispatch, required } from "@/stories/harness";
@@ -212,6 +213,14 @@ function verifyKeyframeClosureAndWriteTarget(stores: DirectorDeskStores): void {
     assertAcceptance(
         !isCommandIssue(directorResult) && directorResult.type === TIMELINE_ADD_KEY_TYPE,
         "导演视角未产出 timeline.add-key",
+    );
+    // 只断言「产出了命令」不够:payload 缺字段时命令会被校验拒掉,
+    // 打了关键帧时间轴上什么也不出现,而这条断言依然通过(实测漏过 keyframe.value 缺失)
+    if (isCommandIssue(directorResult)) return;
+    assertAcceptance(stores.dispatcher.dispatch(directorResult, stores).ok, "导演视角打关键帧命令被拒");
+    assertAcceptance(
+        stores.timeline.document.trackForTarget(FOCUS_OBJECT_ID, TIMELINE_TRACK_KIND.TRANSFORM)?.keyframes.length === 1,
+        "打关键帧后走位轨未出现在时间轴文档里",
     );
 }
 

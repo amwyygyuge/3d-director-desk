@@ -92,6 +92,8 @@ export async function mountWhenReady(
     actionId: string,
     options?: {
         signal?: AbortSignal;
+        /** 文档恢复必须原样传回段 id:重新生成会让持久化的段身份在导入后漂移。 */
+        performanceId?: string;
         startTimeSeconds?: number;
         durationSeconds?: number;
         attackSeconds?: number;
@@ -108,6 +110,7 @@ export async function mountWhenReady(
             const mount = new MountActionCommand({
                 objectId,
                 actionId,
+                ...(options?.performanceId !== undefined ? { performanceId: options.performanceId } : {}),
                 ...(options?.startTimeSeconds !== undefined ? { startTimeSeconds: options.startTimeSeconds } : {}),
                 ...(options?.durationSeconds !== undefined ? { durationSeconds: options.durationSeconds } : {}),
                 ...(options?.attackSeconds !== undefined ? { attackSeconds: options.attackSeconds } : {}),

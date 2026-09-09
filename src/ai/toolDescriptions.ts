@@ -78,13 +78,17 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "timeline.add-marker": "在时间轴新增章节或注释标记；时间落点按工程帧率量化",
     "timeline.move-marker": "移动时间轴标记时刻；时间落点按工程帧率量化",
     "timeline.remove-marker": "删除时间轴标记",
-    "timeline.set-track-policies": "设走位轨朝向、贴地与步频策略",
+    "timeline.set-track-policies":
+        "设走位轨朝向、贴地、步频与跨度外取值策略;extrapolation: hold(默认,走完停在终点、开演前站在起点)/ rest(时段外回到对象自身变换)",
     // 动作与播放
     "action.mount":
         "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
     "action.set-range":
-        "调整对象已挂载动作的开始时间、演出时长、进入时长与回收时长;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
-    "action.unmount": "卸载对象动作,骨骼回常驻基础姿势(未设置则回绑定姿态)",
+        "调整对象某段动作排期的开始时间、演出时长、进入时长与回收时长;多段序列下传 performanceId 定位改哪一段(缺省改首段),段 id 见 scene.describe 的 actionSequence.performanceId;显式改时段会解除走位轨对齐;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
+    "action.unmount":
+        "卸载对象**全部**动作,骨骼回常驻基础姿势(未设置则回绑定姿态);只删一段请用 action.unmount-performance",
+    "action.unmount-performance":
+        "卸载对象的**一段**动作排期(按 performanceId 定位),其余段不受影响;段 id 见 scene.describe 的 actionSequence.performanceId",
     "action.preview.play": "局部预览指定对象的已挂载动作,不驱动全局 playhead",
     "action.preview.pause": "暂停局部动作预览",
     "action.preview.seek": "定位指定对象局部动作到指定秒",

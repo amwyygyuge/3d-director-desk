@@ -55,7 +55,7 @@ export class PlaybackCoordinator {
         if (!performance) return;
         const attackProgress = performance.attackProgressAt(this.sampleTimeSeconds);
         const releaseProgress =
-            this.binder.loopModeAt(entity.id, performance.actionId) === ACTION_LOOP_MODE.ONCE
+            this.binder.loopModeAt(entity.id, performance.id) === ACTION_LOOP_MODE.ONCE
                 ? performance.releaseProgressAt(this.sampleTimeSeconds)
                 : null;
         const baseWeight = attackProgress !== null ? 1 - attackProgress : releaseProgress;
@@ -207,7 +207,7 @@ export class PlaybackCoordinator {
         const entity = this.scene.getEntity(targetId);
         const performance = entity?.actionPerformanceAt(this.sampleTimeSeconds);
         if (!performance) return;
-        if (this.binder.loopModeAt(targetId, performance.actionId) !== ACTION_LOOP_MODE.LOOP) return;
+        if (this.binder.loopModeAt(targetId, performance.id) !== ACTION_LOOP_MODE.LOOP) return;
         this.binder.setStridePhaseFor(targetId, track.policies.stridePhaseAt(this.sampler.lastArcLengthMeters));
     }
 

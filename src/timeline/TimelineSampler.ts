@@ -134,7 +134,12 @@ function applyPolicies({
 
 /**
  * Pure transform-track evaluator. It writes a caller-provided buffer and has no Three dependency.
- * `false` means the requested time falls outside the track's authored span.
+ * `false` means the requested time falls outside the track's authored span **and** the track's
+ * extrapolation policy hands those times back to the entity transform (`rest`).
+ *
+ * 默认 `hold`:跨度之外钳到首/末关键帧——走完停在终点,开演前站在起点。
+ * 返回 false 会让 PlaybackCoordinator 调 restoreObject 把对象弹回实体变换,
+ * 那正是「走完弹回原位」与「起点瞬移」的来源,故只在作者显式选 rest 时才这么做。
  */
 export function evaluateTransformTrack(track: TimelineTrack, timeSeconds: number, output: TransformSample): boolean {
     if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) return false;
@@ -142,14 +147,19 @@ export function evaluateTransformTrack(track: TimelineTrack, timeSeconds: number
     const lastIndex = keyframes.length - 1;
     const first = keyframes[0];
     const last = keyframes[lastIndex];
-    if (!first || !last || timeSeconds < first.time || timeSeconds > last.time) return false;
+    if (!first || !last) return false;
+    const isBeforeSpan = timeSeconds < first.time;
+    const isAfterSpan = timeSeconds > last.time;
+    if ((isBeforeSpan || isAfterSpan) && !track.policies.holdsOutsideSpan) return false;
     const lastSegmentIndex = Math.max(0, (track.trajectory?.segmentCount ?? 1) - 1);
-    if (timeSeconds === first.time || keyframes.length === 1) {
+    // 钳位分支与端点分支同一套输出:段内参数取 0 / 1,path 朝向因此读到首/末段的切线,
+    // 而不是一个越界段(会让角色在停住的瞬间转向一个无意义的方向)
+    if (isBeforeSpan || timeSeconds === first.time || keyframes.length === 1) {
         copyTransformToSample(first.value, output);
         applyPolicies({ track, segmentIndex: 0, localProgress: 0, output });
         return true;
     }
-    if (timeSeconds === last.time) {
+    if (isAfterSpan || timeSeconds === last.time) {
         copyTransformToSample(last.value, output);
         applyPolicies({ track, segmentIndex: lastSegmentIndex, localProgress: 1, output });
         return true;
@@ -168,8 +178,9 @@ export function evaluateTransformTrack(track: TimelineTrack, timeSeconds: number
 }
 
 /**
- * Pure document evaluator for domain queries. Outside an authored transform span it returns
- * the authoritative entity transform, matching playback's restore semantics.
+ * Pure document evaluator for domain queries. It mirrors playback exactly: inside the authored
+ * span (and, under the default `hold` policy, outside it too) the track wins; only a `rest`
+ * track hands times outside its span back to the supplied entity transform.
  */
 export function evaluateTimelineTransform(
     document: TimelineDoc,
@@ -200,8 +211,9 @@ export class TimelineSampler {
         }
     }
 
+    /** 按对象求值走位:必须带 kind——同一对象将来会同时持有别种轨道,不限定就会采到非位姿轨。 */
     evaluateTarget(document: TimelineDoc, targetId: string, timeSeconds: number, runtime: Object3D): boolean {
-        const track = document.trackForTarget(targetId);
+        const track = document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         return track ? this.evaluateTrack(track, timeSeconds, runtime) : false;
     }
 

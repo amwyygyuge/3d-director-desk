@@ -26,6 +26,11 @@ export interface SceneEntityInspection {
     } | null;
     /** 完整动作序列(按起始升序);多动作表演读这里,actionSchedule 只是首条的兼容投影。 */
     readonly actionSequence: readonly {
+        /**
+         * 排期段 id:`action.set-range` / `action.unmount-performance` 定位「改哪一段」的入参。
+         * 多段序列下 actionId 不足以定位——同一动作可以演多次。
+         */
+        readonly performanceId: string;
         readonly actionId: string;
         readonly startTimeSeconds: number;
         readonly durationSeconds: number;
@@ -55,7 +60,8 @@ export class SceneInspectionService {
 
     private inspectEntity(ctx: DirectorContext, entity: SceneObject): SceneEntityInspection {
         const serialized = entity.toJSON();
-        const performance = entity.actionPerformance;
+        // 兼容投影仍取首段;多段表演的真相在 actionSequence
+        const performance = entity.actionPerformances[0] ?? null;
         return {
             id: entity.id,
             kind: entity.kind,
@@ -74,6 +80,7 @@ export class SceneInspectionService {
                   }
                 : null,
             actionSequence: entity.actionPerformances.map((entry) => ({
+                performanceId: entry.id,
                 actionId: entry.actionId,
                 startTimeSeconds: entry.startTimeSeconds,
                 durationSeconds: entry.durationSeconds,

@@ -19,7 +19,7 @@ export type TimelineSelectionKind = (typeof TIMELINE_SELECTION_KIND)[keyof typeo
 const REMOVE_COMMAND_TYPE = {
     PROGRAM_CLIP: "program.remove-clip",
     MOTION_CLIP: "motion.remove-clip",
-    ACTION_CLIP: "action.unmount",
+    ACTION_CLIP: "action.unmount-performance",
     MOTION_KEY: "motion.remove-key",
     WALK_KEY: "timeline.remove-key",
     MARKER: "timeline.remove-marker",
@@ -47,9 +47,13 @@ const DELETE_COMMAND: Record<TimelineSelectionKind, (identity: SelectionIdentity
         type: REMOVE_COMMAND_TYPE.MOTION_CLIP,
         payload: { id: ownerId },
     }),
-    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: ({ ownerId }) => ({
+    /**
+     * 段删除,不是整体卸载:owner 是实体 id、member 是排期段 id。
+     * 走 action.unmount 会把该实体其余几段动作一并抹掉——多段序列下这是数据损坏级的误删。
+     */
+    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: ({ ownerId, memberId }) => ({
         type: REMOVE_COMMAND_TYPE.ACTION_CLIP,
-        payload: { objectId: ownerId },
+        payload: { objectId: ownerId, performanceId: memberId },
     }),
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: ({ ownerId, memberId }) => ({
         type: REMOVE_COMMAND_TYPE.MOTION_KEY,
@@ -125,8 +129,9 @@ export class TimelineSelection {
         return new TimelineSelection(TIMELINE_SELECTION_KIND.MOTION_CLIP, clipId, null);
     }
 
-    static actionClip(objectId: string): TimelineSelection {
-        return new TimelineSelection(TIMELINE_SELECTION_KIND.ACTION_CLIP, objectId, null);
+    /** 动作段选中:实体 id 定位行,排期段 id 定位行内那一条。 */
+    static actionClip(objectId: string, performanceId: string): TimelineSelection {
+        return new TimelineSelection(TIMELINE_SELECTION_KIND.ACTION_CLIP, objectId, performanceId);
     }
 
     static motionKey(clipId: string, keyId: string): TimelineSelection {
@@ -163,6 +168,16 @@ export class TimelineSelection {
 
     get walkKeyframeId(): string | null {
         return this.kind === TIMELINE_SELECTION_KIND.WALK_KEY ? this.memberId : null;
+    }
+
+    /** 动作段所属实体 id */
+    get actionObjectId(): string | null {
+        return this.kind === TIMELINE_SELECTION_KIND.ACTION_CLIP ? this.ownerId : null;
+    }
+
+    /** 选中的排期段 id */
+    get actionPerformanceId(): string | null {
+        return this.kind === TIMELINE_SELECTION_KIND.ACTION_CLIP ? this.memberId : null;
     }
 
     get programClipId(): string | null {

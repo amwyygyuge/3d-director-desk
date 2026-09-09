@@ -137,15 +137,28 @@ dispatch({ type: "action.preview.pause", payload: {} });
 
 ```js
 // 1) 一次性:被驱赶的反应
-dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin.action.hands-on-head", startTimeSeconds: 0, durationSeconds: 2.8 } });
+dispatch({
+    type: "assets.mount",
+    payload: { objectId: "actor", assetId: "builtin.action.hands-on-head", startTimeSeconds: 0, durationSeconds: 2.8 },
+});
 // 2) 循环:走路 —— 时段声明为「对齐到走位轨的某个关键帧区间」,不手填时间
-dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin.action.walking",
-    alignToTrack: { trackId: "walk-actor", fromKeyframeId: "k-turn-out", toKeyframeId: "k-walk-end" } } });
+dispatch({
+    type: "assets.mount",
+    payload: {
+        objectId: "actor",
+        assetId: "builtin.action.walking",
+        alignToTrack: { trackId: "walk-actor", fromKeyframeId: "k-turn-out", toKeyframeId: "k-walk-end" },
+    },
+});
 // 3) 一次性:收尾
-dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin.action.thumbs-down", startTimeSeconds: 10.3, durationSeconds: 2.5 } });
+dispatch({
+    type: "assets.mount",
+    payload: { objectId: "actor", assetId: "builtin.action.thumbs-down", startTimeSeconds: 10.3, durationSeconds: 2.5 },
+});
 ```
 
-读回:`scene.describe` 的 `actionSequence`(按起始升序,含 `alignedToTrackId`)。
+读回:`scene.describe` 的 `actionSequence`(按起始升序,含 `performanceId` 与 `alignedToTrackId`)。
+`performanceId` 是**段身份**——改某一段、删某一段都用它定位。
 `mountedActionId` / `actionSchedule` 只是**首条**的兼容投影,多动作场景别用它们判断「当前在演什么」。
 
 **`alignToTrack` 是自动对齐的入口,优先用它而不是手填两份时间。** 走路动作必须与走位区间同起同止,
@@ -163,8 +176,12 @@ dispatch({ type: "assets.mount", payload: { objectId: "actor", assetId: "builtin
   一次性动作有自己的时间语义,不会被位移改写。
 - **走路资产**:`builtin.action.walking` / `builtin.action.running`(loop)。其余 21 个内置动作都是手势,
   只有 `挥手`/`左侧移步`/`催促离开` 是 loop,其余全 `once`——`assets.list` 的 `loopMode` 字段可查。
-- **`action.set-range` 在多动作下要带 `actionId`** 定位改哪一段,缺省改首条。显式改时段会**解除对齐**
-  (作者的直接操作胜过声明式派生),想保留对齐就别用它。
+- **`action.set-range` 在多段下要带 `performanceId`** 定位改哪一段,缺省改首段。显式改时段会**解除对齐**
+  (作者的直接操作胜过声明式派生),想保留对齐就别用它。拖到与邻段交叠会被
+  `action-overlapping-performance` 拒下。
+- **删一段用 `action.unmount-performance { objectId, performanceId }`**;`action.unmount` 是清空该实体
+  **全部**动作,多段序列下用错会把其余几段一起抹掉。
+- **每段排期在时间轴上各自成条**,段条 id 即 `performanceId`;拖条、选中、Delete 都按段生效。
 
 ### 时间轴（走位关键帧）
 
@@ -312,7 +329,10 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 ```js
 // 两段式:下半身定站/坐/跪,上半身定手臂。merge 才能分别叠加,replace 会互相覆盖。
 dispatch({ type: "pose.apply-preset", payload: { objectId: "hero", presetId: "lower-stand", mode: "merge" } });
-dispatch({ type: "pose.apply-preset", payload: { objectId: "hero", presetId: "upper-stand-arms-down", mode: "merge" } });
+dispatch({
+    type: "pose.apply-preset",
+    payload: { objectId: "hero", presetId: "upper-stand-arms-down", mode: "merge" },
+});
 ```
 
 `pose.presets.list` 读全表(23 项,分 `lower` / `upper` 两部位)。常用上半身:`upper-stand-arms-down`(垂臂,对峙/待场默认)、`upper-stand-natural`(站姿·自然)、`upper-idle`(待机)。下半身:`lower-stand` / `lower-crouch` / `lower-kneel` / `lower-sit-chair` 等。
