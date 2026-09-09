@@ -447,6 +447,13 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
     }, [handle]);
     const fittedRef = useRef(false);
     const shellFramesRef = useRef(0);
+    // 文档导入换新实体实例但 id/url/format 不变,壳层沿用旧的:落尺必须按新实体的量纲重跑一次。
+    // 否则壳层保留上一份归一化结果,与新实体 transform 的配比错位(实测背景墙因此不可见)。
+    useEffect(() => {
+        fittedRef.current = false;
+        shellFramesRef.current = 0;
+        invalidate();
+    }, [entity, shell, invalidate]);
     useFrame(() => {
         if (fittedRef.current || !shell) return;
         // useFrame 在渲染前触发;首帧渲染才初始化骨架矩阵 → 第二帧再测量

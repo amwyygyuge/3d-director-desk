@@ -40,9 +40,17 @@ export async function provisionAction(
     const handle = await ctx.models.acquire(init.url, format, options?.signal ? { signal: options.signal } : {});
     try {
         if (options?.signal?.aborted) throw new DOMException("Action provisioning was cancelled", "AbortError");
-        const clip =
-            (init.clipName ? handle.animations.find((candidate) => candidate.name === init.clipName) : undefined) ??
-            handle.animations[0];
+        // clipName 有值却找不到:资产里的 clip 被改名/重排,或文档被手改。
+        // 此时绝不能回落到第一个 clip——骨骼校验对着错的 clip 也能通过,结果是静默播错动作。
+        // 只有 clipName 缺省(单 clip 文件,见字段注释)才用索引 0。
+        const namedClip = init.clipName
+            ? handle.animations.find((candidate) => candidate.name === init.clipName)
+            : undefined;
+        if (init.clipName && !namedClip) {
+            const available = handle.animations.map((candidate) => candidate.name).join(", ");
+            throw new Error(`资产内找不到动作 clip "${init.clipName}": ${init.url};可用 clip: [${available}]`);
+        }
+        const clip = namedClip ?? handle.animations[0];
         if (!clip) throw new Error(`资产无动作 clip: ${init.url}`);
         const retargetedClip = actionRetargeter.normalize(clip, {
             channels: needsRetarget ? ACTION_CHANNEL_POLICY.ROTATION_ONLY : ACTION_CHANNEL_POLICY.PRESERVE,

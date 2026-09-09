@@ -368,6 +368,23 @@ dispatch({
 - **有头浏览器观测**:`browser.open` 走 relay/`app.path` 都可能失败(relay 扩展未连、spawn 后无 page target)。可靠路径是自己起 Chrome 再 CDP 附着:`"/Applications/Google Chrome.app/.../Google Chrome" --remote-debugging-port=9333 --user-data-dir=/tmp/xxx <url> &`,然后 `browser.open({ app: { cdp_url: "http://127.0.0.1:9333" } })`。
 - **`tab.evaluate` 有 30s 硬上限**:每次 capture 约需 1s 沉降,多时间点/多实体的循环审计务必拆成一次一个探针的多次调用,否则整段超时且 VM 状态被重置。
 - **`tab.screenshot()` 拿不到 WebGL 画面**:返回的是页面截图文件路径(webp),画布内容可能全黑;同理在页面里 `createImageBitmap(canvas)` 读回可能全 0。要看渲染结果只信 `capture.frame` 的产物(`desk.ui.lastCaptureUrl`,blob URL,每次 capture 换新)。
+- **`capture.video` 在非安全上下文静默失败(必踩)**:远程 http 源(如 `http://10.226.102.153:4000`)下 `dispatch` 返回 `ok: true`,但 `videoExport.currentState` 一直停在 `"idle"`,`ui.lastVideoUrl` / `lastVideoMeta` 永远是 `null`,**页面上没有任何 toast**。真实原因只在 console 里:`[capture] MP4 export failed Error: VideoEncoder is not available in this environment; this may be because this page is running in an insecure context.` —— WebCodecs 的 `VideoEncoder` 是 secure-context-only API,`MediaRecorder` 存在也没用(它只报 webm,导出走的是 MP4/h264 编码路径)。
+  - **先诊断,别瞎试**:`dispatch` 的 ok 无意义。判定录制真的起来了要看 `desk.videoExport.currentState` 是否离开 `idle`。要拿到根因就在页面里 hook console(工具侧的 `page.on("console")` 抓不到这个 frame):
+    ```js
+    // 在 tab.evaluate 里装一次
+    window.__logs = [];
+    const oe = console.error; console.error = (...a) => { window.__logs.push(a.map(String).join(" ")); oe(...a); };
+    // 然后 dispatch capture.video,等几秒读 window.__logs
+    ```
+  - **解决方案:让浏览器把该源当成安全上下文重开**(不需要证书、不改代码、不改部署):
+    ```bash
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      --remote-debugging-port=9444 --user-data-dir=/tmp/dd-chrome-secure --no-first-run \
+      --unsafely-treat-insecure-origin-as-secure=http://10.226.102.153:4000 \
+      "http://10.226.102.153:4000/" &
+    ```
+    `--user-data-dir` 必须给一个**新目录**(该 flag 只在全新 profile 的进程上生效);源串要精确到 `scheme://host:port`,不带路径、不带尾斜杠。附着后断言 `window.isSecureContext === true && typeof VideoEncoder !== "undefined"`,两者都为真才录。其它可行路径:把页面挂到 `localhost`(端口转发 `ssh -L 4000:10.226.102.153:4000`,localhost 天然是安全上下文)或给部署上 HTTPS。
+  - **换窗口重录不要用 `desk.export-document` → `desk.import-document` 搬场景**:实测导入后动作恢复是异步流水线,会卡在「动作挂载等待运行时超时:hero / aide」,`scene.describe` 的 `actionSequence` 长期停在 0(只有部分实体恢复),而且 `actor.appearance` / `build` 不随文档往返。补挂 `assets.mount` 也不生效。可靠做法是在新窗口**按命令重放布景脚本**(place → identity → appearance/build → pose → timeline → mount → shots → motion → lights),重放是幂等且快的。
 
 ### 契约偏差(以实测为准)
 
@@ -377,7 +394,11 @@ dispatch({
 - `light.adjust`:intensity 围栏 0~100,超了报 `lighting.invalid-payload` 并指名 `light.intensity`。物理衰减下嫌暗优先降 `decay`、拉近灯距,别硬堆强度。
 - `motion.get` 的 clip **不带 `cameraId` 字段**(只有 id/startTimeSeconds/durationSeconds/keys/focus/follow/easing)。按机位找片段要匹配 `id`(`motion.author` 生成的 id 形如 `take-<机位名>-<move>-<start>`),不要读 `c.cameraId` —— 会得到 undefined 然后炸在 `.keys`。
 - `timeline.set-duration` **不联动播放范围**:`program.review` 的 `range.outSeconds` 仍是旧值。改时长后补一条 `timeline.set-playback-range { inSeconds, outSeconds }`,否则录制/输出按旧范围截断。
-- `capture.video` 的产物在当前环境是 **MP4/h264**(`ftypisom` 头),不是 WebM/EBML。验收查 `lastVideoMeta.durationSeconds` + `ffprobe`,不要断言 EBML 魔数。
+- `capture.video` 的产物在当前环境是 **MP4/h264**(`ftypisom` 头),不是 WebM/EBML。验收查 `lastVideoMeta.durationSeconds` + `ffprobe`,不要断言 EBML 魔数。**前提是安全上下文**,否则永远拿不到产物(见「页面环境」)。
+- `motion.create-take` **不吃 `cameraId`**(手册示例里的 `cameraId` 会被 `payload-contract-violation` 拦下,报 `payload.cameraId 为未知字段`)。片段身份只有 `id`;要绑机位就先 `camera.frame-subject` 建机位,再用同名前缀的 clip id 自己记账。`motion.author` 反过来**必须**带 `cameraId`。
+- `timeline.add-marker` 的字段是 **`{ id, timeSeconds, label }` 平铺**,不是 `{ marker: {...} }`。
+- `assets.mount` 的排期含 release 尾巴,**超出时间轴时长会被拒**(`动作时段和回收不能超出时间轴时长`)。收尾动作排到接近 `duration` 时先 `timeline.set-duration` 留出 1~2s 余量,再挂。
+- `scene.describe` 的 `bounds`(size/center)对 scenery **在 `object.move` 改 scale 后不刷新**,读到的是旧包围盒。要算遮挡/间距请用 `transform.position × transform.scale × 资产基础尺寸`(wall `2×1.5×0.1`、column `0.7×2×0.7`、platform `2×0.2×2`),或读 `desk.scene.manager.getRuntime(id)`。
 - `motion.set-focus` 的 `worldOffset` 是**注视点相对主体原点的偏移**,不是"抬高一点"的微调量:人偶(1.75m)给 `[0,1.4,0]` 会瞄到头顶以上,把主体挤出画。胸腹高度 `[0,0.9,0]` 才稳。
 
 ### 运镜与验收
@@ -397,6 +418,16 @@ dispatch({
 **但朝向不要问截图。** 视觉复核对人偶正面/背面的判读会在同一场景的不同帧之间自相矛盾(实测同一组已验证面对面的人偶,一帧答"面对面"、另一帧答"都朝向镜头")。朝向用上面的点积断言,它是精确的。分工:**能算的用算的,只把"好不好看"留给眼睛。**
 
 捞帧姿势(避开上面所有坑):`capture.frame` → `fetch(desk.ui.lastCaptureUrl)` → 页面内 `OffscreenCanvas` 缩到 1400px 宽 → base64 回传落盘 → 用带具体问题的图像复核。缩图是必要的:原图 2833×1783 直接复核容易把 200px 高的人偶读成"圆柱"。
+
+**"断言全绿但视觉说只看到一个人"时,用像素探针定位,不要靠反复问截图。** 实测里三个人偶全部 `inFrame: true`,视觉却只认出一个——真因是 scenery 挡在主体前面且被主光打到接近纯白(采样 RGB `[240,242,245]`),人偶贴在上面等于消失。诊断链路(每步都是可证伪的数值):
+
+1. 从 `camera.get-pose` 的 `live`(position + direction + fov)自己算主体的屏幕坐标:构相机基 `r = normalize(dir × [0,1,0])`、`u = r × dir`,投影 `nx = (x/z)/(tan(fov/2)·aspect)`、`ny = (y/z)/tan(fov/2)`,再映射到像素。
+2. `capture.frame` 后把产物画进 `OffscreenCanvas`,在每个主体的像素位置 `getImageData` 取 25×25 均值。**同色即消失**:主体与近邻背景 RGB 差 < ~20 就是画面上糊掉了,和构图无关。
+3. 疑似遮挡就做射线-AABB 相交:相机 → 主体中心的线段对每个 scenery 盒求交(盒子按 `transform × 基础尺寸` 算,别用 `bounds`)。命中即遮挡。
+4. 想确认视觉复核有没有漏读,把投影点画成彩色圆圈叠在截图上再送去问"哪个圈里有人"——比开放式提问可靠得多。
+5. 验证假设最快的办法是**临时把 scenery `object.move` 到 y = -200**(撤销一步即回),再取一帧:三个人立刻都认出来了 → 遮挡/同色成立。
+
+修法优先级:scenery 往深处推(墙 z ≤ -20、柱子挪出主体横向车道)→ 降主光 `intensity` / 提 `decay` 压掉过曝 → 最后才动机位。**另外补一块实心地面**(`builtin.scenery.platform` scale 到 `[22, 0.8, 26]`、y 略低于 0)能消掉"人偶悬在网格虚空里"的观感,这是视觉复核最常提的意见。
 
 ## 纪律
 

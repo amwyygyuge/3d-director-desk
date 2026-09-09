@@ -32,8 +32,12 @@ export class ExportDocumentQuery implements DirectorQuery<Record<string, never>>
 
     constructor(readonly payload: Record<string, never> = EMPTY_PAYLOAD) {}
 
-    validate(): readonly string[] {
-        return [];
+    /**
+     * 恢复在途期间拒绝导出。动作置备与挂载不在导入的原子提交里,此时动作库仍是空的,
+     * 装配出的文档「实体齐全、动作全无」——结构合法、能通过校验、能再导入,动作却永久丢失。
+     */
+    validate(ctx: DirectorContext): readonly string[] {
+        return ctx.documentImports.isRestoring ? ["动作正在恢复,请等恢复完成后再导出工程"] : [];
     }
 
     execute(ctx: DirectorContext): unknown {
@@ -63,7 +67,21 @@ export class ImportDocumentCommand extends DirectorCommand<ImportDocumentPayload
         return this.validateIssues(ctx).map((issue) => issue.message);
     }
 
+    /**
+     * 前一次恢复在途时拒绝再次导入。`invert` 在 `execute` 之前装配当前状态作为撤销锚点,
+     * 而恢复未完成时动作库仍是空的——此刻撤销点会被记成「动作全无」的残档,
+     * 撤销回去就再也拿不回动作。
+     */
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        if (ctx.documentImports.isRestoring) {
+            return [
+                {
+                    code: "document-restore-in-flight",
+                    path: "document",
+                    message: "上一份工程的动作仍在恢复,请等恢复完成后再导入",
+                },
+            ];
+        }
         return ctx.documentImports.validate(this.payload.document);
     }
 

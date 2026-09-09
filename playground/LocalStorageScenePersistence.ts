@@ -57,11 +57,23 @@ export class LocalStorageScenePersistence {
         this.reportFailure(STORAGE_ERROR.RESTORE);
     }
 
+    /**
+     * 自动存档。
+     *
+     * 反应必须把 `isRestoring` 读进依赖:导入的动作恢复是异步的,恢复窗口内 `animations.push`
+     * 与 `applyActions` 每次都会触发本反应,于是「动作 0 → 逐条补齐」的中间态会被逐次落盘
+     * (实测一次导入产生 23 次写入,首次即 actions:0)。任何一次中间写入若恰好是最后一次
+     * ——刷新、关标签、或某条动作恢复失败——存档就永久停在残档上。
+     * 恢复期间跳过落盘,`isRestoring` 转 false 时反应会再触发一次,补上完整快照。
+     */
     start(): void {
         this.stopReaction?.();
         this.stopReaction = reaction(
-            () => this.exportDocument(),
-            (document) => this.persistDocument(document),
+            () => (this.stores.documentImports.isRestoring ? null : this.exportDocument()),
+            (document) => {
+                if (document === null) return;
+                this.persistDocument(document);
+            },
         );
     }
 

@@ -1,4 +1,4 @@
-import { runInAction } from "mobx";
+import { makeAutoObservable, runInAction } from "mobx";
 
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { CameraProgramTrack, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
@@ -45,6 +45,9 @@ interface DocumentImportPreparation {
     readonly issues: readonly string[];
     readonly plan: DocumentImportPlan | null;
 }
+
+/** 文档里的一条动作排期(挂载阶段按目标实体重新分组,故单独取别名)。 */
+type MountRequest = DeskDocumentAction["mountedOn"][number];
 
 interface ActionRestoreRequest {
     readonly ctx: DirectorContext;
@@ -384,8 +387,27 @@ function preparePlan(document: unknown): DocumentImportPreparation {
 export class DocumentImportService {
     private restoreController: AbortController | null = null;
     private disposed = false;
+    /**
+     * 动作恢复是否在途。
+     *
+     * 动作置备与挂载不在 `commit()` 的原子事务里(见 restoreActions),所以 `commit()` 返回后
+     * 有一段窗口:实体已就位,但动作库仍是空的。此窗口内装配文档会产出「实体齐全、动作全无」
+     * 的残档——结构合法、能通过校验、能再导入,只是动作永久丢失。导出查询与宿主自动存档
+     * 必须据此设闸,而不是各自去猜恢复进度。
+     */
+    private restoring = false;
 
-    constructor(private readonly compatibility: DocumentCompatibilityService) {}
+    constructor(private readonly compatibility: DocumentCompatibilityService) {
+        makeAutoObservable<DocumentImportService, "compatibility" | "restoreController">(this, {
+            compatibility: false,
+            restoreController: false,
+        });
+    }
+
+    /** 恢复在途期间文档不完整:导出与持久化必须先读这里。 */
+    get isRestoring(): boolean {
+        return this.restoring;
+    }
 
     validate(document: unknown): readonly CommandIssue[] {
         const upgraded = this.compatibility.prepare(document);
@@ -403,6 +425,11 @@ export class DocumentImportService {
         this.restoreController?.abort();
         const restoreController = new AbortController();
         this.restoreController = restoreController;
+        // 闸门必须在 commit 之前落下:commit 会清空动作库并触发 MobX 反应,
+        // 晚一步就会有一次「动作全无」的快照逃出去。
+        runInAction(() => {
+            this.restoring = true;
+        });
         this.commit(preparation.plan, ctx);
         // 旧工程只在内存中升级；宿主保存的原文件保持不动，作为回滚锚点。
         if (upgraded.report.appliedSteps.length > 0) {
@@ -417,6 +444,9 @@ export class DocumentImportService {
         this.disposed = true;
         this.restoreController?.abort();
         this.restoreController = null;
+        runInAction(() => {
+            this.restoring = false;
+        });
     }
 
     private commit(plan: DocumentImportPlan, ctx: DirectorContext): void {
@@ -440,37 +470,69 @@ export class DocumentImportService {
         ctx.playback.sampleCurrent();
     }
 
+    /**
+     * 置备并行、同实体挂载串行。
+     *
+     * 置备(取 clip + FBX 重定向)彼此独立,且每个 FBX 都要各自等目标骨架就绪(上限 10s);串行时
+     * 这份等待预算逐个累加——导入后模型正在重新加载,前几个动作就把预算烧光,余下的全部判恢复失败。
+     * ModelImporter 按 URL 合并 inflight 请求,并行置备不会重复解析同一资产。
+     *
+     * 挂载按目标实体分组:组间并行(不同实体的排期互不可见),组内保持文档顺序串行——
+     * MountActionCommand 的重叠围栏要读同一实体的现有排期,同实体并发会让校验读到未定的中间态。
+     * 全局串行则让每个 mountWhenReady 的 10s 预算按挂载总数累加,大场景必然拖满。
+     */
     private async restoreActions({ ctx, actions, signal }: ActionRestoreRequest): Promise<void> {
-        for (const action of actions) {
+        try {
+            const provisioned = await Promise.all(
+                actions.map(async (action) => {
+                    try {
+                        const targetObjectId = action.mountedOn[0]?.objectId;
+                        const registered = await provisionAction(ctx, action, {
+                            signal,
+                            ...(targetObjectId ? { targetObjectId } : {}),
+                        });
+                        return { action, actionId: registered.id };
+                    } catch {
+                        if (!signal.aborted) {
+                            ctx.ui.setApplicationNotice(`动作 "${action.name}" 恢复失败:${action.url}`);
+                        }
+                        return { action, actionId: null };
+                    }
+                }),
+            );
             if (signal.aborted) return;
-            try {
-                const targetObjectId = action.mountedOn[0]?.objectId;
-                const registered = await provisionAction(ctx, action, {
-                    signal,
-                    ...(targetObjectId ? { targetObjectId } : {}),
+            const queuesByObject = new Map<string, { readonly actionId: string; readonly mount: MountRequest }[]>();
+            for (const { action, actionId } of provisioned) {
+                if (actionId === null) continue;
+                for (const mount of action.mountedOn) {
+                    const queue = queuesByObject.get(mount.objectId) ?? [];
+                    queue.push({ actionId, mount });
+                    queuesByObject.set(mount.objectId, queue);
+                }
+            }
+            await Promise.all([...queuesByObject.values()].map((queue) => this.mountQueue({ ctx, queue, signal })));
+            if (!signal.aborted) ctx.playback.sampleCurrent();
+        } finally {
+            // 只有仍属自己的恢复才落闸:被新导入取代时新一轮已把 restoring 置为 true。
+            if (!signal.aborted) {
+                runInAction(() => {
+                    this.restoring = false;
                 });
-                if (signal.aborted) return;
-                await this.mountOnEntities({ ctx, action, actionId: registered.id, signal });
-            } catch {
-                if (!signal.aborted) ctx.ui.setApplicationNotice(`动作 "${action.name}" 恢复失败:${action.url}`);
             }
         }
-        if (!signal.aborted) ctx.playback.sampleCurrent();
     }
 
-    /** 同一动作依次挂回全部实体;单个超时只通知,不阻断后续实体与动作 */
-    private async mountOnEntities({
+    /** 单实体的挂载队列:保持文档顺序,单个超时只通知,不阻断同队列后续。 */
+    private async mountQueue({
         ctx,
-        action,
-        actionId,
+        queue,
         signal,
     }: {
         readonly ctx: DirectorContext;
-        readonly action: DeskDocumentAction;
-        readonly actionId: string;
+        readonly queue: readonly { readonly actionId: string; readonly mount: MountRequest }[];
         readonly signal: AbortSignal;
     }): Promise<void> {
-        for (const mount of action.mountedOn) {
+        for (const { actionId, mount } of queue) {
             if (signal.aborted) return;
             const isMounted = await mountWhenReady(ctx, mount.objectId, actionId, {
                 signal,
@@ -481,7 +543,10 @@ export class DocumentImportService {
                 releaseSeconds: mount.releaseSeconds,
                 ...(mount.alignment ? { alignToTrack: mount.alignment } : {}),
             });
-            if (!isMounted && !signal.aborted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
+            if (!isMounted && !signal.aborted) {
+                ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
+            }
         }
     }
+
 }

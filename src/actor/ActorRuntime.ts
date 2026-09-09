@@ -59,10 +59,20 @@ export class ActorRuntime {
         this.buildBinder.detach(objectId);
     }
 
-    /** 实体画像 → 运行时的全量同步(挂载、撤销、文档导入后的唯一入口)。 */
+    /**
+     * 实体画像 → 运行时的全量同步(挂载、撤销、文档导入后的唯一入口)。
+     *
+     * 缺标定则先补采一次:`recordRigMetrics` 原先只在首次 attach 跑,而文档导入换新实体实例时
+     * 若 id/sourceUrl/format 未变,壳层沿用旧的、attach 不重跑。此时若新实体带上了 actor 画像,
+     * `heightPerScale` 永远缺失,`ActorHeightNormalization` 静默 early-return,人偶就永久停在
+     * 通用模型的单位盒尺寸上(实测 1.74m 人偶落到 0.3958 而非 1.029)。
+     * 仍然只在「缺」时采,不覆盖已有标定——重复采会把当前姿势当成 rest。
+     */
     sync(objectId: string): void {
         const actor = this.scene.getEntity(objectId)?.actor;
         if (!actor) return;
+        const shell = this.shellsByObject.get(objectId);
+        if (shell && !this.rigMetrics.has(objectId)) this.recordRigMetrics(objectId, shell);
         this.paint(objectId, actor.appearance);
         this.shape(objectId, actor.build);
     }

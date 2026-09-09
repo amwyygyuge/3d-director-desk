@@ -24,7 +24,10 @@ class MaxDimensionNormalization implements ShellNormalization {
     constructor(private readonly targetMaxDimension: number) {}
 
     normalize(shell: Group): void {
-        measureModelBox(shell, TMP_BOX);
+        // 按壳层自身坐标系测量:壳挂在承载实体 transform 的 group 之下,世界口径会把实体 scale
+        // 读进尺寸,落尺系数就恰好抵消实体缩放(scale 14 的墙被压回单位盒,看起来"消失")。
+        // 同时这也让落尺可重入:实体缩放变化不再反馈进测量。
+        measureModelBox(shell, TMP_BOX, shell);
         if (TMP_BOX.isEmpty()) return;
         TMP_BOX.getSize(TMP_SIZE);
         TMP_BOX.getCenter(TMP_CENTER);
@@ -59,10 +62,15 @@ class ActorHeightNormalization implements ShellNormalization {
     }
 }
 
-/** rest 姿态下「身高 ÷ 壳缩放」:落尺的唯一标定量,只在挂载时量一次。 */
+/**
+ * rest 姿态下「身高 ÷ 壳缩放」:落尺的唯一标定量。
+ *
+ * 跨度按壳层自身坐标系量:分母只有壳层的 scale,若分子用世界口径就会把承载实体 transform
+ * 的父级 scale 一并算进去,标定量随实体缩放漂移(实测 scale.y=2.6 的实体偏大 2.6 倍)。
+ */
 export function measureHeightPerScale(shell: Group): number {
     const scale = shell.scale.y;
-    return scale > 0 ? boneSpanY(shell) / scale : 0;
+    return scale > 0 ? boneSpanY(shell, shell) / scale : 0;
 }
 
 const UNIT_BOX_NORMALIZATION = new MaxDimensionNormalization(MODEL_TARGET_MAX_DIM);
