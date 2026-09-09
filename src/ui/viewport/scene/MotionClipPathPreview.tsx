@@ -640,7 +640,7 @@ const MotionKeyHelper = observer(function MotionKeyHelper({ clipId, keyId, onCon
                 }}
                 onContextMenu={(event) => {
                     event.stopPropagation();
-                    event.nativeEvent.preventDefault();
+                    // 原生菜单已由 NativeChromeGuard 在导演台根节点统一拦掉,此处不再各自 preventDefault
                     selectMotionKey(stores, clipId, keyId);
                     onContextMenu({ clientX: event.nativeEvent.clientX, clientY: event.nativeEvent.clientY });
                 }}

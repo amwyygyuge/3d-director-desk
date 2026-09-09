@@ -110,6 +110,38 @@ export const SCROLLBAR_SX = {
     "& *::-webkit-scrollbar-thumb:hover": { background: SCROLLBAR_THUMB_HOVER_COLOR },
 } as const;
 
+/** 可选中/可编辑区的白名单:整体禁选后靠它还原。标记属性对外可见,业务组件按需贴。 */
+export const SELECTABLE_ATTRIBUTE = "data-desk-selectable";
+/** 需要浏览器原生右键菜单的区域(如宿主嵌入的富文本):标了它 NativeChromeGuard 放行 */
+export const NATIVE_MENU_ATTRIBUTE = "data-desk-native-menu";
+
+/**
+ * 「去 web 味」的壳层材质:桌面工具的默认态是不可选、不可拖、不橡皮筋。
+ *
+ * 为什么默认全禁而非逐个禁:导演台的绝大多数表面是操作面(轨道、药丸、图标、读数),
+ * 拖拽期选出一片蓝色高亮是纯粹的干扰;正文性文本是少数,交给白名单还原成本更低,
+ * 也不会随新面板增加而漏掉。可选区一律贴 SELECTABLE_ATTRIBUTE,别在组件里写裸 userSelect。
+ *
+ * 按钮光标保留 pointer(已决策):手型是可点性最直白的提示,牺牲它换来的工具味不值得。
+ * 经 ScopedCssBaseline 的 sx 注入,选择器限定在导演台根节点内,不外泄宿主页面。
+ */
+export const TOOL_CHROME_SX = {
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    // 长按不弹 iOS/macOS 的原生气泡菜单
+    WebkitTouchCallout: "none",
+    // 面板滚到底不再把滚动链传给宿主页面(橡皮筋/连带滚动)
+    overscrollBehavior: "none",
+    // 缩略图/画像按住会拖出半透明图片幽灵,原生拖拽在导演台没有任何用途
+    "& img, & svg, & canvas": { WebkitUserDrag: "none", userDrag: "none" },
+    [`& input, & textarea, & [contenteditable='true'], & [${SELECTABLE_ATTRIBUTE}]`]: {
+        userSelect: "text",
+        WebkitUserSelect: "text",
+    },
+    // 白名单里仍可选的文本用品牌色高亮,不落回系统蓝
+    "& ::selection": { background: "rgba(99,102,241,0.40)" },
+} as const;
+
 declare module "@mui/material/Paper" {
     interface PaperPropsVariantOverrides {
         pill: true;
@@ -142,6 +174,10 @@ export const directorDeskTheme = createTheme({
         MuiButton: { defaultProps: { size: "small", disableElevation: true } },
         MuiSlider: { defaultProps: { size: "small" } },
         MuiTooltip: { defaultProps: { enterDelay: 400 } },
+        // 工程里的名字大量是中文与专业术语,浏览器拼写检查一律画红波浪线——最露馅的一条 web 味。
+        // autoCorrect/autoCapitalize 不放这里:defaultProps 的 inputProps 会被组件自带的
+        // inputProps 整体覆盖(时间码与时长输入都传),改为在导演台根节点上声明由 DOM 继承。
+        MuiInputBase: { defaultProps: { spellCheck: false, autoComplete: "off" } },
         MuiPaper: {
             variants: [
                 {
