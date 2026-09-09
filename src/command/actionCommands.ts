@@ -8,6 +8,7 @@ import {
 import { ActionAlignment, resolveActionRange } from "@/animation/ActionAlignment";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionAsset } from "@/assets/ActionAsset";
+import { Bone } from "three";
 import type { AnimationClip, Object3D } from "three";
 import { createId } from "@/core/createId";
 import { quantizeSeconds } from "@/command/timelineCommands";
@@ -16,15 +17,33 @@ import type { DirectorContext, SerializedCommand } from "@/command/DirectorComma
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
+/**
+ * 骨骼兼容预检缓存。
+ *
+ * 缓存键除了 root 本身还带「骨骼数」指纹:同一 root 在骨架绑定前后、
+ * 或被换掉底下的 SkinnedMesh 时,缓存结果必须作废。只用 root 做键会把
+ * 一次错误判定永久固化(表现为该实体此后永远报匹配率 0%)。
+ *
+ * 注意:这只是缓存自洽,**不是**「骨架是否就绪」的判据。调用方必须先用
+ * `entityLoadState` 确认装载完成再来预检 —— 内容加载前的外层组骨骼数为 0,
+ * 对它做检查得到的 0% 是无意义的(真实骨架其实 100% 匹配)。
+ */
 class BoneCompatibilityIndex {
-    private readonly nodeNamesByRoot = new WeakMap<Object3D, ReadonlySet<string>>();
-    private readonly resultsByRoot = new WeakMap<Object3D, Map<AnimationClip, BoneCheckResult>>();
+    private readonly nodeNamesByRoot = new WeakMap<
+        Object3D,
+        { readonly names: ReadonlySet<string>; readonly bones: number }
+    >();
+    private readonly resultsByRoot = new WeakMap<
+        Object3D,
+        Map<AnimationClip, { readonly result: BoneCheckResult; readonly bones: number }>
+    >();
 
     check(root: Object3D, clip: AnimationClip): BoneCheckResult {
+        const bones = boneCount(root);
         const cached = this.resultsByRoot.get(root)?.get(clip);
-        if (cached) return cached;
+        if (cached && cached.bones === bones) return cached.result;
 
-        const nodeNames = this.nodeNamesByRoot.get(root) ?? this.indexNodeNames(root);
+        const nodeNames = this.nodeNames(root, bones);
         const targets = [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean);
         const missingTargets = targets.filter((name) => !nodeNames.has(name));
         const result = {
@@ -32,20 +51,32 @@ class BoneCompatibilityIndex {
             missingTargets,
             ok: targets.length > 0 && (targets.length - missingTargets.length) / targets.length >= BONE_MATCH_THRESHOLD,
         };
-        const results = this.resultsByRoot.get(root) ?? new Map<AnimationClip, BoneCheckResult>();
-        results.set(clip, result);
+        const results =
+            this.resultsByRoot.get(root) ?? new Map<AnimationClip, { result: BoneCheckResult; bones: number }>();
+        results.set(clip, { result, bones });
         this.resultsByRoot.set(root, results);
         return result;
     }
 
-    private indexNodeNames(root: Object3D): ReadonlySet<string> {
-        const nodeNames = new Set<string>();
+    private nodeNames(root: Object3D, bones: number): ReadonlySet<string> {
+        const cached = this.nodeNamesByRoot.get(root);
+        if (cached && cached.bones === bones) return cached.names;
+        const names = new Set<string>();
         root.traverse((node) => {
-            if (node.name) nodeNames.add(node.name);
+            if (node.name) names.add(node.name);
         });
-        this.nodeNamesByRoot.set(root, nodeNames);
-        return nodeNames;
+        this.nodeNamesByRoot.set(root, { names, bones });
+        return names;
     }
+}
+
+/** 缓存指纹:骨骼数。骨架绑定完成后由 0 变为实际值,用于判定缓存是否过期。 */
+function boneCount(root: Object3D): number {
+    let count = 0;
+    root.traverse((node) => {
+        if (node instanceof Bone) count++;
+    });
+    return count;
 }
 
 const boneCompatibilityIndex = new BoneCompatibilityIndex();
