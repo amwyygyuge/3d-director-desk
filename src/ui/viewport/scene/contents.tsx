@@ -386,7 +386,7 @@ export function ModelContent({ entity }: { entity: SceneObject }) {
 }
 
 function ModelRequestContent({ entity }: { entity: SceneObject }) {
-    const { actorRuntime, models, playback, ui, skeletons } = useDirectorDeskStores();
+    const { actorRuntime, binder, models, playback, scene, ui, skeletons } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
     const sourceUrl = entity.sourceUrl;
@@ -484,8 +484,13 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
         if (!shell) return;
         if (!skeletons.discover(entity.id).ready) skeletons.register(entity.id, shell);
         actorRuntime.sync(entity.id);
+        // 壳换新体(画质档切换重建 Canvas → R3F 整树重挂载)时,已落账的动作排期仍在实体上,
+        // 但 mixer 还绑着旧克隆体的骨骼。不重绑就是「时间轴有段条、播放无动作」。
+        // 根取 SceneManager 运行时(与 action.mount 同一个),两处根一致才能靠身份比较判断换体。
+        const runtime = scene.manager.getRuntime(entity.id);
+        if (runtime) binder.rebindRuntime(entity.id, runtime);
         playback.sampleObject(entity.id);
-    }, [actorRuntime, skeletons, playback, entity, shell]);
+    }, [actorRuntime, skeletons, binder, playback, scene, entity, shell]);
     if (shell) return <primitive object={shell} />;
     return (
         <mesh>

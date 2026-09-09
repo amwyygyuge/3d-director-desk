@@ -12,6 +12,11 @@ interface MountedClip {
     /** 排期段身份;同一 actionId 可有多段,故 clip 按段 id 索引而非 actionId。 */
     readonly performanceId: string;
     readonly actionId: string;
+    /**
+     * 建立 mixer 时的运行时根。画质档切换会重建 Canvas,模型壳整体换成新克隆体,
+     * 旧 mixer 绑的是已脱离场景树的骨骼——据此判断是否需要重绑。
+     */
+    readonly root: Object3D;
     readonly mixer: AnimationMixer;
     readonly action: AnimationAction;
     readonly clipDurationSeconds: number;
@@ -58,25 +63,7 @@ export class AnimationBinder {
         performance: ActionPerformance,
         loopMode: ActionLoopMode,
     ): void {
-        const mixer = new AnimationMixer(root);
-        const action = mixer.clipAction(clip);
-        action.setLoop(
-            loopMode === ACTION_LOOP_MODE.LOOP ? LoopRepeat : LoopOnce,
-            loopMode === ACTION_LOOP_MODE.LOOP ? Infinity : 1,
-        );
-        action.clampWhenFinished = true;
-        action.play();
-        const mountedClip: MountedClip = {
-            performanceId: performance.id,
-            actionId: performance.actionId,
-            mixer,
-            action,
-            clipDurationSeconds: clip.duration,
-            loopMode,
-            boneKeys: [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean),
-            performance,
-            isActive: false,
-        };
+        const mountedClip = this.createClip(root, clip, performance, loopMode);
         const sequence = this.mounted.get(objectId) ?? { clips: [], activePerformanceId: null };
         const existingIndex = sequence.clips.findIndex((candidate) => candidate.performanceId === performance.id);
         if (existingIndex >= 0) {
@@ -87,6 +74,25 @@ export class AnimationBinder {
         }
         sequence.clips.sort((left, right) => left.performance.startTimeSeconds - right.performance.startTimeSeconds);
         this.mounted.set(objectId, sequence);
+        this.applySequenceTime(sequence, this.transport?.time ?? 0);
+    }
+
+    /**
+     * 运行时换体后的重绑:画质档切换会重建 WebGL 上下文,R3F 整棵场景树重挂载,
+     * 模型壳是新克隆体,而排期落账在实体上(不会重放 action.mount)。
+     * 旧 mixer 仍绑着已弃用的骨骼节点,于是「时间轴有段条、播放无动作」。
+     * 已绑同一根时直接返回:每帧/每次采样调用都必须是零分配空操作。
+     */
+    rebindRuntime(objectId: string, root: Object3D): void {
+        const sequence = this.mounted.get(objectId);
+        if (!sequence) return;
+        if (sequence.clips.every((candidate) => candidate.root === root)) return;
+        sequence.clips = sequence.clips.map((stale) => {
+            if (stale.root === root) return stale;
+            stale.mixer.stopAllAction();
+            return this.createClip(root, stale.action.getClip(), stale.performance, stale.loopMode);
+        });
+        sequence.activePerformanceId = null;
         this.applySequenceTime(sequence, this.transport?.time ?? 0);
     }
 
@@ -195,6 +201,35 @@ export class AnimationBinder {
 
     private firstClipFor(objectId: string): MountedClip | null {
         return this.mounted.get(objectId)?.clips[0] ?? null;
+    }
+
+    /** mixer/action 的唯一建立处:首次挂载与运行时换体后的重绑共用同一套循环与钳制语义。 */
+    private createClip(
+        root: Object3D,
+        clip: AnimationClip,
+        performance: ActionPerformance,
+        loopMode: ActionLoopMode,
+    ): MountedClip {
+        const mixer = new AnimationMixer(root);
+        const action = mixer.clipAction(clip);
+        action.setLoop(
+            loopMode === ACTION_LOOP_MODE.LOOP ? LoopRepeat : LoopOnce,
+            loopMode === ACTION_LOOP_MODE.LOOP ? Infinity : 1,
+        );
+        action.clampWhenFinished = true;
+        action.play();
+        return {
+            performanceId: performance.id,
+            actionId: performance.actionId,
+            root,
+            mixer,
+            action,
+            clipDurationSeconds: clip.duration,
+            loopMode,
+            boneKeys: [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean),
+            performance,
+            isActive: false,
+        };
     }
 
     private activeClipFor(objectId: string): MountedClip | null {

@@ -369,22 +369,26 @@ dispatch({
 - **`tab.evaluate` 有 30s 硬上限**:每次 capture 约需 1s 沉降,多时间点/多实体的循环审计务必拆成一次一个探针的多次调用,否则整段超时且 VM 状态被重置。
 - **`tab.screenshot()` 拿不到 WebGL 画面**:返回的是页面截图文件路径(webp),画布内容可能全黑;同理在页面里 `createImageBitmap(canvas)` 读回可能全 0。要看渲染结果只信 `capture.frame` 的产物(`desk.ui.lastCaptureUrl`,blob URL,每次 capture 换新)。
 - **`capture.video` 在非安全上下文静默失败(必踩)**:远程 http 源(如 `http://10.226.102.153:4000`)下 `dispatch` 返回 `ok: true`,但 `videoExport.currentState` 一直停在 `"idle"`,`ui.lastVideoUrl` / `lastVideoMeta` 永远是 `null`,**页面上没有任何 toast**。真实原因只在 console 里:`[capture] MP4 export failed Error: VideoEncoder is not available in this environment; this may be because this page is running in an insecure context.` —— WebCodecs 的 `VideoEncoder` 是 secure-context-only API,`MediaRecorder` 存在也没用(它只报 webm,导出走的是 MP4/h264 编码路径)。
-  - **先诊断,别瞎试**:`dispatch` 的 ok 无意义。判定录制真的起来了要看 `desk.videoExport.currentState` 是否离开 `idle`。要拿到根因就在页面里 hook console(工具侧的 `page.on("console")` 抓不到这个 frame):
-    ```js
-    // 在 tab.evaluate 里装一次
-    window.__logs = [];
-    const oe = console.error; console.error = (...a) => { window.__logs.push(a.map(String).join(" ")); oe(...a); };
-    // 然后 dispatch capture.video,等几秒读 window.__logs
-    ```
-  - **解决方案:让浏览器把该源当成安全上下文重开**(不需要证书、不改代码、不改部署):
-    ```bash
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-      --remote-debugging-port=9444 --user-data-dir=/tmp/dd-chrome-secure --no-first-run \
-      --unsafely-treat-insecure-origin-as-secure=http://10.226.102.153:4000 \
-      "http://10.226.102.153:4000/" &
-    ```
-    `--user-data-dir` 必须给一个**新目录**(该 flag 只在全新 profile 的进程上生效);源串要精确到 `scheme://host:port`,不带路径、不带尾斜杠。附着后断言 `window.isSecureContext === true && typeof VideoEncoder !== "undefined"`,两者都为真才录。其它可行路径:把页面挂到 `localhost`(端口转发 `ssh -L 4000:10.226.102.153:4000`,localhost 天然是安全上下文)或给部署上 HTTPS。
-  - **换窗口重录不要用 `desk.export-document` → `desk.import-document` 搬场景**:实测导入后动作恢复是异步流水线,会卡在「动作挂载等待运行时超时:hero / aide」,`scene.describe` 的 `actionSequence` 长期停在 0(只有部分实体恢复),而且 `actor.appearance` / `build` 不随文档往返。补挂 `assets.mount` 也不生效。可靠做法是在新窗口**按命令重放布景脚本**(place → identity → appearance/build → pose → timeline → mount → shots → motion → lights),重放是幂等且快的。
+    - **先诊断,别瞎试**:`dispatch` 的 ok 无意义。判定录制真的起来了要看 `desk.videoExport.currentState` 是否离开 `idle`。要拿到根因就在页面里 hook console(工具侧的 `page.on("console")` 抓不到这个 frame):
+        ```js
+        // 在 tab.evaluate 里装一次
+        window.__logs = [];
+        const oe = console.error;
+        console.error = (...a) => {
+            window.__logs.push(a.map(String).join(" "));
+            oe(...a);
+        };
+        // 然后 dispatch capture.video,等几秒读 window.__logs
+        ```
+    - **解决方案:让浏览器把该源当成安全上下文重开**(不需要证书、不改代码、不改部署):
+        ```bash
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+          --remote-debugging-port=9444 --user-data-dir=/tmp/dd-chrome-secure --no-first-run \
+          --unsafely-treat-insecure-origin-as-secure=http://10.226.102.153:4000 \
+          "http://10.226.102.153:4000/" &
+        ```
+        `--user-data-dir` 必须给一个**新目录**(该 flag 只在全新 profile 的进程上生效);源串要精确到 `scheme://host:port`,不带路径、不带尾斜杠。附着后断言 `window.isSecureContext === true && typeof VideoEncoder !== "undefined"`,两者都为真才录。其它可行路径:把页面挂到 `localhost`(端口转发 `ssh -L 4000:10.226.102.153:4000`,localhost 天然是安全上下文)或给部署上 HTTPS。
+    - **换窗口重录不要用 `desk.export-document` → `desk.import-document` 搬场景**:实测导入后动作恢复是异步流水线,会卡在「动作挂载等待运行时超时:hero / aide」,`scene.describe` 的 `actionSequence` 长期停在 0(只有部分实体恢复),而且 `actor.appearance` / `build` 不随文档往返。补挂 `assets.mount` 也不生效。可靠做法是在新窗口**按命令重放布景脚本**(place → identity → appearance/build → pose → timeline → mount → shots → motion → lights),重放是幂等且快的。
 
 ### 契约偏差(以实测为准)
 
