@@ -558,6 +558,45 @@ JSON.parse(await tab.evaluate(`JSON.stringify(window.__audit.all({ step: 0.1 }))
 
 修法优先级:scenery 往深处推(墙 z ≤ -20、柱子挪出主体横向车道)→ 降主光 `intensity` / 提 `decay` 压掉过曝 → 最后才动机位。**另外补一块实心地面**(`builtin.scenery.platform` scale 到 `[22, 0.8, 26]`、y 略低于 0)能消掉"人偶悬在网格虚空里"的观感,这是视觉复核最常提的意见。
 
+#### 离线分析(第一梯队:能算的一律离线算)
+
+`skills/director-desk/analysis/` 是采样器的离线镜像:`dd_sampler.py` 逐行复刻
+`MotionTrajectory` / `TimelineSampler` / `CameraMotionClip` / `SubjectFrameResolver`,
+同一工程 JSON 喂进去,走位与运镜求值与运行时逐点一致(关键帧处误差 0)。
+
+页内探针只负责采集:`probes/collect.js` 调 `desk.export-document` 把当前工程导成 JSON,
+**只读、不判定**。所有数学在 Python 侧:
+
+```bash
+.venv-analysis/bin/python skills/director-desk/analysis/analyze.py "scene.json"
+```
+
+四项第一梯队判定(都不渲染):
+
+| 判定 | 口径 | 这个场景实测 |
+| --- | --- | --- |
+| 光照前向模型 | 复刻 three 的 `getDistanceAttenuation`/`getSpotAttenuation`,对路径采样点逐灯求辐照度 | 照度 CV 0.028(极均匀,9 盏 spot 几乎全朝下) |
+| 光照反解 | `scipy.optimize.lsq_linear` 反解一组强度命中目标剖面(directional 不动,只调 point/spot) | 解出一组可落地的强度 |
+| 相机 jerk | savgol 平滑求三阶导;`take-chase-01` 在 t=5.03s 出现 252 m/s³ 尖峰(p=0.4/0.6/0.8/1.0 四帧来回振荡) | 真实顿点,视觉可感知 |
+| 180°/30° | 相邻镜头切点的动作轴方位 | chase→wide 越轴(axis_crossed=true),方位差 177° |
+
+**光照前向模型的价值:它不渲染就给出整条跑道的照度剖面。** 现有 `exposure` 探针靠渲染后读直方图,
+被深色背景带偏(暗部恒 80%),前向模型直接在「采样点 × 灯」矩阵上算,一次向量化得到全剖面,
+还能反解强度。这是第一梯队里唯一从「检查」升级成「求解」的项。
+
+**相机 jerk 是「晃不晃」的正确口径,不是速度。** `speedProfile` 只测人物走位的 |v| CV,
+运镜完全没测。角速度均值 0.8 deg/s 属舒适区,但 jerk 尖峰 252 m/s³ 来自关键帧来回振荡——
+运镜 keys 里 p=0.4 与 p=1.0 位置完全相同,中间 0.6/0.8 又偏出去,曲线被迫快速折返。
+这类缺陷视觉复核看单帧发现不了,看轨迹立刻现形。
+
+**景别阶梯:** `subjectHeightPercent` 映射成 ECU/CU/MCU/MS/MLS/LS/ELS。
+这个场景 chase 是 MLS(22.3%),wide 也是 MLS(13.2%)——wide 机位 17~18m 太远,
+「wide」之名与「ELS」之实不符,主体在画面里会偏小。这是不调机位就能发现的构图问题。
+
+**180° 规则是纯几何,视觉复核原理上看不到。** chase 在主体后方跟拍,wide 在正前方俯瞰,
+两镜头分处动作轴两侧,切镜瞬间左右互换——连续性错误,一个叉积判定。
+
+
 ## 纪律
 
 - 一切数值先过脑子再过围栏:NaN/Infinity 必被拦;id 不存在必被拦——先 `list()` 确认。
