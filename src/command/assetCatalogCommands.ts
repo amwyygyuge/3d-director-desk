@@ -256,7 +256,7 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                     },
                     { signal, targetObjectId: this.payload.objectId },
                 );
-                const mounted = await mountWhenReady(ctx, this.payload.objectId, action.id, {
+                const outcome = await mountWhenReady(ctx, this.payload.objectId, action.id, {
                     signal,
                     ...(this.payload.startTimeSeconds !== undefined
                         ? { startTimeSeconds: this.payload.startTimeSeconds }
@@ -272,8 +272,14 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                     ...(this.payload.replace === undefined ? {} : { replace: this.payload.replace }),
                 });
                 if (!signal.aborted) {
-                    const timeoutNotice = mounted ? null : `动作挂载等待运行时超时:${this.payload.objectId}`;
-                    if (timeoutNotice) ctx.ui.setApplicationNotice(timeoutNotice);
+                    // 校验拒绝要原样透出 issues:与超时共用一句提示会把「骨骼不兼容」说成「等待超时」
+                    if (!outcome.ok) {
+                        ctx.ui.setApplicationNotice(
+                            outcome.reason === "rejected"
+                                ? `动作挂载被拒:${this.payload.objectId} — ${outcome.issues.join(";")}`
+                                : `动作挂载等待运行时超时:${this.payload.objectId}`,
+                        );
+                    }
                     ctx.playback.sampleCurrent();
                 }
             } catch {

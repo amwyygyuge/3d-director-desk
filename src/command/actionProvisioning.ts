@@ -1,9 +1,11 @@
+import { SkinnedMesh } from "three";
 import type { Object3D } from "three";
 
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ActionAsset, ActionLoopMode } from "@/assets/ActionAsset";
 import { ACTION_CHANNEL_POLICY, MixamoActionRetargeter } from "@/animation/MixamoActionRetargeter";
 import { MountActionCommand } from "@/command/actionCommands";
+import { entityLoadState } from "@/command/subjectBounds";
 import { waitMs } from "@/core/waitMs";
 import type { DirectorContext } from "@/command/DirectorCommand";
 
@@ -87,13 +89,43 @@ async function targetRuntimeAttempt(
     signal?: AbortSignal,
 ): Promise<Object3D | null> {
     if (remainingAttempts === 0 || signal?.aborted) return null;
+    const entity = ctx.scene.manager.getEntity(objectId);
+    // 同 mountWhenReady:重定向要拿真实骨架做世界空间对位,
+    // 内容加载前的外层组会让 MixamoActionRetargeter 对着空骨架算,结果是错的 clip。
+    // 判据同样取「结局表」与「骨架实测」的并集,避免结局表未落账时永久等待。
+    const ready = entity ? entityLoadState(ctx, entity) : "loading";
+    if (ready === "failed") return null;
     const runtime = ctx.scene.manager.getRuntime(objectId);
-    if (runtime) return runtime;
+    if (runtime && (ready === "loaded" || ready === "none" || hasBoundSkeleton(runtime))) return runtime;
     await waitMs(MOUNT_RETRY_INTERVAL_MS);
     return targetRuntimeAttempt(ctx, objectId, remainingAttempts - 1, signal);
 }
 
-/** 等目标模型运行时就绪后挂载;超时返回 false(调用方决定上报口径) */
+/**
+ * 骨架实测就绪:存在已绑定 skeleton 的 SkinnedMesh。
+ * 装载结局表未落账时用它兜底——空壳 root 没有 SkinnedMesh,不会误判。
+ */
+function hasBoundSkeleton(root: Object3D): boolean {
+    let bound = false;
+    root.traverse((node) => {
+        if (node instanceof SkinnedMesh && node.skeleton && node.skeleton.bones.length > 0) bound = true;
+    });
+    return bound;
+}
+/**
+ * 等目标模型运行时就绪后挂载。
+ *
+ * 返回值区分两种失败,不能合并成一个 boolean:
+ *  - `reason: "timeout"` 运行时或 clip 始终没就绪;
+ *  - `reason: "rejected"` 命令层校验拒绝(骨骼不兼容、时段交叠……),`issues` 带原文。
+ * 旧实现两者都返回 false,调用方一律当超时上报,真实校验错误被伪装成「等待超时」——
+ * 实测表现为 dispatch 返回 ok、动作没挂上、且提示词完全指错方向。
+ */
+export type MountOutcome =
+    | { readonly ok: true }
+    | { readonly ok: false; readonly reason: "timeout" }
+    | { readonly ok: false; readonly reason: "rejected"; readonly issues: readonly string[] };
+
 export async function mountWhenReady(
     ctx: DirectorContext,
     objectId: string,
@@ -109,12 +141,26 @@ export async function mountWhenReady(
         alignToTrack?: { trackId: string; fromKeyframeId?: string | null; toKeyframeId?: string | null };
         replace?: boolean;
     },
-): Promise<boolean> {
+): Promise<MountOutcome> {
     for (let attempt = 0; attempt < MOUNT_RETRY_LIMIT; attempt++) {
-        if (options?.signal?.aborted) return false;
+        if (options?.signal?.aborted) return { ok: false, reason: "timeout" };
+        const entity = ctx.scene.manager.getEntity(objectId);
+        if (!entity) return { ok: false, reason: "rejected", issues: [`对象 "${objectId}" 不存在`] };
+        const loadState = entityLoadState(ctx, entity);
+        if (loadState === "failed") {
+            return { ok: false, reason: "rejected", issues: [`对象 "${objectId}" 模型装载失败,无法挂载动作`] };
+        }
         const runtime = ctx.scene.manager.getRuntime(objectId);
         const clip = ctx.animations.getClip(actionId);
-        if (runtime && clip) {
+        // 就绪判据不能只看 getRuntime() 非空:runtime 外层组在内容加载前就绑定
+        // (见 subjectBounds.entityLoadState 的注释),导入清空重建期间还会被整体替换。
+        // 拿这种空壳 root 做骨骼预检会得到「匹配率 0%」并被 validate 当成
+        // bone-incompatible 拒下——真实骨架其实 100% 匹配。
+        //
+        // 但也不能只信 loadState:结局表未落账时它默认返回 "loading"(见同处第 14 行),
+        // 而「从未发起加载」与「正在加载」在该表里不可区分。只等 loadState 会让
+        // 前者永久静默等待。故两条判据取并集——骨架实测就绪即可挂载。
+        if (runtime && clip && (loadState === "loaded" || loadState === "none" || hasBoundSkeleton(runtime))) {
             const mount = new MountActionCommand({
                 objectId,
                 actionId,
@@ -126,11 +172,12 @@ export async function mountWhenReady(
                 ...(options?.alignToTrack ? { alignToTrack: options.alignToTrack } : {}),
                 ...(options?.replace === undefined ? {} : { replace: options.replace }),
             });
-            if (mount.validate(ctx).length > 0) return false;
+            const issues = mount.validate(ctx);
+            if (issues.length > 0) return { ok: false, reason: "rejected", issues };
             mount.execute(ctx);
-            return true;
+            return { ok: true };
         }
         await waitMs(MOUNT_RETRY_INTERVAL_MS);
     }
-    return false;
+    return { ok: false, reason: "timeout" };
 }
