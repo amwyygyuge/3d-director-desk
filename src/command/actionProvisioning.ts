@@ -93,7 +93,21 @@ async function targetRuntimeAttempt(
     return targetRuntimeAttempt(ctx, objectId, remainingAttempts - 1, signal);
 }
 
-/** 等目标模型运行时就绪后挂载;超时返回 false(调用方决定上报口径) */
+/**
+ * 等目标模型运行时就绪后挂载。
+ *
+ * 返回值必须区分两种失败,不能合并成一个 boolean:
+ *  - `reason: "timeout"` 运行时或 clip 始终没就绪;
+ *  - `reason: "rejected"` 命令层校验拒绝(骨骼不兼容、时段交叠……),`issues` 带原文。
+ *
+ * 旧实现两者都返回 `false`,调用方一律上报「动作挂载等待运行时超时」——真实的
+ * 骨骼不兼容 / 排期交叠因此被伪装成超时,提示把排查方向指向完全错误的地方。
+ */
+export type MountOutcome =
+    | { readonly ok: true }
+    | { readonly ok: false; readonly reason: "timeout" }
+    | { readonly ok: false; readonly reason: "rejected"; readonly issues: readonly string[] };
+
 export async function mountWhenReady(
     ctx: DirectorContext,
     objectId: string,
@@ -109,9 +123,9 @@ export async function mountWhenReady(
         alignToTrack?: { trackId: string; fromKeyframeId?: string | null; toKeyframeId?: string | null };
         replace?: boolean;
     },
-): Promise<boolean> {
+): Promise<MountOutcome> {
     for (let attempt = 0; attempt < MOUNT_RETRY_LIMIT; attempt++) {
-        if (options?.signal?.aborted) return false;
+        if (options?.signal?.aborted) return { ok: false, reason: "timeout" };
         const runtime = ctx.scene.manager.getRuntime(objectId);
         const clip = ctx.animations.getClip(actionId);
         if (runtime && clip) {
@@ -126,11 +140,12 @@ export async function mountWhenReady(
                 ...(options?.alignToTrack ? { alignToTrack: options.alignToTrack } : {}),
                 ...(options?.replace === undefined ? {} : { replace: options.replace }),
             });
-            if (mount.validate(ctx).length > 0) return false;
+            const issues = mount.validate(ctx);
+            if (issues.length > 0) return { ok: false, reason: "rejected", issues };
             mount.execute(ctx);
-            return true;
+            return { ok: true };
         }
         await waitMs(MOUNT_RETRY_INTERVAL_MS);
     }
-    return false;
+    return { ok: false, reason: "timeout" };
 }

@@ -544,7 +544,7 @@ export class DocumentImportService {
     }): Promise<void> {
         for (const { actionId, mount } of queue) {
             if (signal.aborted) return;
-            const isMounted = await mountWhenReady(ctx, mount.objectId, actionId, {
+            const outcome = await mountWhenReady(ctx, mount.objectId, actionId, {
                 signal,
                 performanceId: mount.id,
                 startTimeSeconds: mount.startTimeSeconds,
@@ -553,8 +553,12 @@ export class DocumentImportService {
                 releaseSeconds: mount.releaseSeconds,
                 ...(mount.alignment ? { alignToTrack: mount.alignment } : {}),
             });
-            if (!isMounted && !signal.aborted) {
-                ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
+            if (!outcome.ok && !signal.aborted) {
+                ctx.ui.setApplicationNotice(
+                    outcome.reason === "rejected"
+                        ? `动作恢复被拒:${mount.objectId} — ${outcome.issues.join(";")}`
+                        : `动作挂载等待运行时超时:${mount.objectId}`,
+                );
             }
         }
     }
