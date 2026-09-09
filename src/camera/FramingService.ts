@@ -15,9 +15,14 @@ export const VIEW_DIRECTION = {
 } as const;
 export type ViewDirection = (typeof VIEW_DIRECTION)[keyof typeof VIEW_DIRECTION];
 
-/** 方位 → 从目标指向相机的单位方向;+Z 正视(three 模型惯例面朝 +Z),顶视沿 +Y */
+/**
+ * 方位 → 从目标指向相机的单位方向;顶视沿 +Y。
+ *
+ * 正视是 -Z:模型正面朝 -Z(three 惯例,与 TimelineSampler / yawFacing 同一约定),
+ * 相机要落在主体正面一侧才看得到脸,写成 +Z 会得到一张背影。
+ */
 const VIEW_DIRECTION_VECTORS: Record<ViewDirection, Vec3> = {
-    front: [0, 0, 1],
+    front: [0, 0, -1],
     top: [0, 1, 0],
     right: [1, 0, 0],
 };

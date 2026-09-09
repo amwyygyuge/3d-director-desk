@@ -106,6 +106,34 @@
             "loopMode": "loop"
         },
         {
+            "id": "builtin.action.walking",
+            "kind": "action",
+            "category": "action.performance",
+            "name": "走路",
+            "source": "builtin",
+            "url": "/builtin-assets/humanoid-generic.glb",
+            "format": "gltf",
+            "clipName": "Walking",
+            "license": "TapNow 内部资产",
+            "skeletonFamily": "mixamo",
+            "tags": ["locomotion", "walk", "loop"],
+            "loopMode": "loop"
+        },
+        {
+            "id": "builtin.action.running",
+            "kind": "action",
+            "category": "action.performance",
+            "name": "奔跑",
+            "source": "builtin",
+            "url": "/builtin-assets/humanoid-generic.glb",
+            "format": "gltf",
+            "clipName": "Running",
+            "license": "TapNow 内部资产",
+            "skeletonFamily": "mixamo",
+            "tags": ["locomotion", "run", "loop"],
+            "loopMode": "loop"
+        },
+        {
             "id": "builtin.action.side-step-left",
             "kind": "action",
             "category": "action.performance",

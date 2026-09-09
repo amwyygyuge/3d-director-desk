@@ -1,4 +1,5 @@
 import { ActionPerformance } from "@/animation/ActionPerformance";
+import { resolveActionRange } from "@/animation/ActionAlignment";
 import { TimelineContentSpan } from "@/authoring/TimelineContentSpan";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
@@ -15,8 +16,11 @@ import { TimelineDoc } from "@/timeline/TimelineDoc";
 import type { TimelineDocJSON } from "@/timeline/TimelineDoc";
 import { TimelineMarker } from "@/timeline/TimelineMarker";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import { keyframeCodecFor } from "@/timeline/keyframeCodecs";
 import type { TimelineTrackInit } from "@/timeline/TimelineTrack";
 import {
+    isExtrapolationMode,
+    EXTRAPOLATION_MODE,
     GROUNDING_MODE,
     LOCOMOTION_MODE,
     ORIENTATION_MODE,
@@ -95,6 +99,8 @@ interface SetPlaybackRangePayload {
 }
 
 interface ActionScheduleSnapshot {
+    /** 段身份:整轴缩放后必须原样写回,否则段条与 binder clip 会指向旧 id。 */
+    readonly id: string;
     readonly objectId: string;
     readonly actionId: string;
     readonly startTimeSeconds: number;
@@ -176,6 +182,7 @@ const POLICIES_SCHEMA: PayloadFieldSchema = {
         grounding: { type: "string", enum: Object.values(GROUNDING_MODE) },
         locomotion: { type: "string", enum: Object.values(LOCOMOTION_MODE) },
         strideMeters: { type: "number" },
+        extrapolation: { type: "string", enum: Object.values(EXTRAPOLATION_MODE) },
     },
 };
 
@@ -294,6 +301,11 @@ function policiesIssues(value: Record<string, unknown>): readonly CommandIssue[]
         ["grounding", value.grounding === undefined || isGroundingMode(value.grounding), "贴地策略无效"],
         ["locomotion", value.locomotion === undefined || isLocomotionMode(value.locomotion), "步频策略无效"],
         ["strideMeters", value.strideMeters === undefined || isStrideMeters(value.strideMeters), "步幅必须是正数米"],
+        [
+            "extrapolation",
+            value.extrapolation === undefined || isExtrapolationMode(value.extrapolation),
+            "跨度外取值策略无效",
+        ],
     ];
     const failed = checks.find(([, valid]) => !valid);
     return failed ? [issue(ISSUE_CODE.PAYLOAD, `policies.${failed[0]}`, failed[2])] : [];
@@ -361,6 +373,13 @@ function keyframeListIssues(
     return duplicate ? [issue(ISSUE_CODE.DUPLICATE_TIME, path, "关键帧 id 或时间重复")] : [];
 }
 
+/**
+ * 轨道恢复的逐条校验(删对象的撤销路径)。
+ *
+ * 目前只接受 transform 轨:下方 `keyframeListIssues` 校验的是位姿关键帧形状。
+ * 新增轨道种类时必须同批扩这里 + `RemoveObjectCommand.invert` 的快照,
+ * 否则「删对象 → 撤销」会在这条校验上被拒,新种类的轨道再也回不来。
+ */
 function restoreTrackIssue(
     value: unknown,
     index: number,
@@ -480,6 +499,7 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             this.payload.targetId,
             new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -539,6 +559,7 @@ export class MoveTimelineKeyCommand extends DirectorCommand<MoveKeyPayload> {
                 time: quantizeSeconds(ctx, this.payload.time),
             }),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -582,6 +603,7 @@ export class RemoveTimelineKeyCommand extends DirectorCommand<RemoveKeyPayload> 
         ctx.timeline.removeKey(this.payload.trackId, this.payload.keyframeId);
         ctx.timelineSelection.forget(this.payload.keyframeId);
         if (targetId) ctx.playback.restoreObject(targetId);
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -736,21 +758,51 @@ export class FitTimelineDurationCommand extends DirectorCommand<Record<string, n
 }
 
 function actionScheduleSnapshots(ctx: DirectorContext): readonly ActionScheduleSnapshot[] {
-    return ctx.scene.manager.list().flatMap((entity) => {
-        const performance = entity.actionPerformance;
-        return performance
-            ? [
-                  {
-                      objectId: entity.id,
-                      actionId: performance.actionId,
-                      startTimeSeconds: performance.startTimeSeconds,
-                      durationSeconds: performance.durationSeconds,
-                      attackSeconds: performance.attackSeconds,
-                      releaseSeconds: performance.releaseSeconds,
-                  },
-              ]
-            : [];
-    });
+    // 整轴缩放要带走整个动作序列,漏掉后续段会让「走完倒地」在缩放后错位
+    return ctx.scene.manager.list().flatMap((entity) =>
+        entity.actionPerformances.map((performance) => ({
+            id: performance.id,
+            objectId: entity.id,
+            actionId: performance.actionId,
+            startTimeSeconds: performance.startTimeSeconds,
+            durationSeconds: performance.durationSeconds,
+            attackSeconds: performance.attackSeconds,
+            releaseSeconds: performance.releaseSeconds,
+        })),
+    );
+}
+
+/**
+ * 走位轨变动后重解算对齐排期(声明式对齐的兑现点)。
+ *
+ * 任何改到关键帧时刻的命令(add/move/remove-key、set-key、set-track、retime-track)执行后都要调它:
+ * 声明了 alignToTrack 的动作排期由轨道区间派生,轨道一动排期必须跟着动,
+ * 否则「走路动作」会与走位区间错位——这正是让作者手填两份时间必然漂的那个问题。
+ * 未声明对齐的排期一律不碰(作者显式给的时段胜过任何推断)。
+ */
+export function reresolveAlignedActions(ctx: DirectorContext): void {
+    for (const entity of ctx.scene.manager.list()) {
+        const performances = entity.actionPerformances;
+        if (performances.length === 0) continue;
+        let hasChange = false;
+        const next = performances.map((performance) => {
+            const alignment = performance.alignment;
+            if (!alignment) return performance;
+            const track = ctx.timeline.document.tracks.find((candidate) => candidate.id === alignment.trackId) ?? null;
+            const range = resolveActionRange(alignment, track);
+            if (!range) return performance;
+            const startTimeSeconds = quantizeSeconds(ctx, range.startTimeSeconds);
+            const durationSeconds = quantizeSeconds(ctx, range.durationSeconds);
+            if (startTimeSeconds === performance.startTimeSeconds && durationSeconds === performance.durationSeconds) {
+                return performance;
+            }
+            hasChange = true;
+            return performance.withAlignedRange(startTimeSeconds, durationSeconds);
+        });
+        if (!hasChange) continue;
+        ctx.scene.setObjectActions(entity.id, next);
+        for (const performance of next) ctx.binder.setScheduleFor(entity.id, performance);
+    }
 }
 
 function snapshotFor(ctx: DirectorContext): TimelineScaleSnapshot {
@@ -791,12 +843,14 @@ function scaledDocument(ctx: DirectorContext, factor: number): TimelineDoc {
         duration,
         frameRate: document.frameRate.fps,
         tracks: document.tracks.map((track) => {
-            const keyframes = track.keyframes.map(
-                (keyframe) =>
-                    new TransformKeyframe({
-                        ...keyframe.toJSON(),
-                        time: quantizeSeconds(ctx, keyframe.time * factor),
-                    }),
+            // 经 codec 重建而非硬编码 TransformKeyframe:轨道种类扩张后,
+            // 改帧率不该在别种轨道上把关键帧塞成位姿形状
+            const codec = keyframeCodecFor(track.kind);
+            const keyframes = track.keyframes.map((keyframe) =>
+                codec.fromInit({
+                    ...keyframe.toJSON(),
+                    time: quantizeSeconds(ctx, keyframe.time * factor),
+                }),
             );
             if (new Set(keyframes.map((keyframe) => keyframe.time)).size !== keyframes.length) {
                 throw new Error("scaled keyframes must stay on distinct frames");
@@ -871,12 +925,20 @@ function applySnapshot(ctx: DirectorContext, snapshot: TimelineScaleSnapshot): v
         snapshot.motionClips.map((clip) => new CameraMotionClip(clip)),
         new CameraProgramTrack(snapshot.program),
     );
+    // 按实体聚合后整表写入:序列语义下必须一次写全,逐条 set 会互相覆盖
+    const schedulesByObject = new Map<string, ActionPerformance[]>();
     for (const schedule of snapshot.actionSchedules) {
         const entity = ctx.scene.manager.getEntity(schedule.objectId);
-        if (!entity || entity.actionId !== schedule.actionId) continue;
-        const performance = new ActionPerformance(schedule);
-        ctx.scene.setObjectAction(schedule.objectId, performance);
-        ctx.binder.setScheduleFor(schedule.objectId, performance);
+        if (!entity) continue;
+        // 按段 id 认领:同一动作可有多段,按 actionId 判定会让第二段起认不出来
+        if (!entity.actionPerformance(schedule.id)) continue;
+        const performances = schedulesByObject.get(schedule.objectId) ?? [];
+        performances.push(new ActionPerformance(schedule));
+        schedulesByObject.set(schedule.objectId, performances);
+    }
+    for (const [objectId, performances] of schedulesByObject) {
+        ctx.scene.setObjectActions(objectId, performances);
+        for (const performance of performances) ctx.binder.setScheduleFor(objectId, performance);
     }
     ctx.clock.seek(ctx.clock.time);
     ctx.playback.sampleCurrent();
@@ -1044,6 +1106,7 @@ export class RestoreTimelineTracksCommand extends DirectorCommand<RestoreTracksP
                     }),
             ),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 }
@@ -1095,7 +1158,8 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
     execute(ctx: DirectorContext): void {
         const keyframes = this.payload.keyframes.map((keyframe) => quantizedKeyframe(ctx, keyframe));
         const previous = ctx.timeline.document.trackForTarget(this.payload.targetId, TIMELINE_TRACK_KIND.TRANSFORM);
-        ctx.timeline.removeObjectTracks(this.payload.targetId);
+        // 只清走位轨:同一对象上别种轨道不该被一次重画顺手抹掉
+        ctx.timeline.removeObjectTracks(this.payload.targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         if (keyframes.length > 0) {
             ctx.timeline.restoreTracks([
                 new TimelineTrack({
@@ -1111,6 +1175,7 @@ export class SetTimelineTrackCommand extends DirectorCommand<SetTrackPayload> {
             if (required > ctx.timeline.document.duration) ctx.timeline.setDuration(quantizeSeconds(ctx, required));
         }
         convergeWalkSelection(ctx, this.payload);
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -1209,6 +1274,7 @@ export class RetimeTimelineTrackCommand extends DirectorCommand<RetimeTrackPaylo
         const track = ctx.timeline.document.track(this.payload.trackId);
         if (!track) return;
         ctx.timeline.replaceTrack(retimedTrack(ctx, track, this.payload));
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -1302,6 +1368,7 @@ export class SetTimelineKeyCommand extends DirectorCommand<SetKeyPayload> {
             this.payload.trackId,
             new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
         );
+        reresolveAlignedActions(ctx);
         ctx.playback.sampleCurrent();
     }
 
@@ -1412,6 +1479,9 @@ export function transformKeyCommandFor(ctx: DirectorContext, objectId: string): 
             keyframe: {
                 id: `${TRANSFORM_KEY_PREFIX}${createId()}`,
                 time: quantizeSeconds(ctx, ctx.clock.time),
+                // 关键帧的值就是实体此刻的权威变换;漏了它 payload 校验会判「变换含非法数值」,
+                // 命令被拒 → 轨道从未建立 → 打了关键帧时间轴上什么也不出现
+                value: entity.transform,
                 easing: EASING.LINEAR,
             },
         },

@@ -10,6 +10,13 @@ import type { LightingMode } from "@/store/SceneStore";
 import type { OutputFormatId } from "@/output/OutputFormat";
 
 /**
+ * v18 起走位轨持久化 `policies.extrapolation`:轨道时间跨度之外钳到首/末关键帧(hold,默认)
+ *     还是交还实体权威变换(rest)。旧档缺该字段时构造期取 hold,与旧档 rest 语义不同,
+ *     故必须换版本号——同一份 JSON 在两版里表现不同,是兼容层再也分辨不出的那类变更。
+ * v17 起动作排期段持久化稳定 `id`:同一实体可对同一动作有多段排期,
+ *     时间轴段条、选中态与运行时 clip 全按段 id 定位;旧档缺少该 id 无法还原段身份。
+ * v16 起同一实体可持久化**多段动作排期**(一次性 → 循环 → 一次性),
+ *     且排期可声明对齐到某条走位轨的关键帧区间(轨道重定时后排期自动跟随);
  * v15 起实体持久化叙事身份与量纲模式；旧档不迁移，版本不符即判不支持。
  * v14 起项目级输出画幅进入文档；切换采用中心裁切，机位仍只保存位姿。
  * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
@@ -19,14 +26,25 @@ import type { OutputFormatId } from "@/output/OutputFormat";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 15;
+export const DESK_DOCUMENT_VERSION = 18;
+
+/** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
+export interface DeskDocumentActionAlignment {
+    readonly trackId: string;
+    readonly fromKeyframeId: string | null;
+    readonly toKeyframeId: string | null;
+}
 
 export interface DeskDocumentActionMount {
+    /** 排期段身份;时间轴段条与运行时 clip 均按它定位,导入后必须原样恢复。 */
+    readonly id: string;
     readonly objectId: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
     readonly attackSeconds: number;
     readonly releaseSeconds: number;
+    /** 非空 = 该段排期对齐到走位轨区间;导入后恢复对齐声明,重定时继续自动跟随。 */
+    readonly alignment?: DeskDocumentActionAlignment | null;
 }
 
 /** 动作资产引用(clip 本体是运行时资源,文档只存 URL;clipName 用于多 clip 文件内定位) */
@@ -92,20 +110,20 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
             loopMode: action.loopMode,
             trimStartSeconds: action.trimStartSeconds,
             trimEndSeconds: action.trimEndSeconds,
-            mountedOn: entities.flatMap((entity) => {
-                const performance = entity.actionPerformance;
-                return performance?.actionId === action.id
-                    ? [
-                          {
-                              objectId: entity.id,
-                              startTimeSeconds: performance.startTimeSeconds,
-                              durationSeconds: performance.durationSeconds,
-                              attackSeconds: performance.attackSeconds,
-                              releaseSeconds: performance.releaseSeconds,
-                          },
-                      ]
-                    : [];
-            }),
+            // 同一实体可能对同一动作有多段排期(如走→停→走),故逐条导出而不是只取首条
+            mountedOn: entities.flatMap((entity) =>
+                entity.actionPerformances
+                    .filter((performance) => performance.actionId === action.id)
+                    .map((performance) => ({
+                        id: performance.id,
+                        objectId: entity.id,
+                        startTimeSeconds: performance.startTimeSeconds,
+                        durationSeconds: performance.durationSeconds,
+                        attackSeconds: performance.attackSeconds,
+                        releaseSeconds: performance.releaseSeconds,
+                        alignment: performance.alignment?.toJSON() ?? null,
+                    })),
+            ),
         })),
         lighting: { mode: ctx.scene.lightingMode },
         posePresets: ctx.posePresets.customPresets().map((preset) => preset.toJSON()),

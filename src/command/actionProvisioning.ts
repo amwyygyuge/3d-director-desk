@@ -92,10 +92,14 @@ export async function mountWhenReady(
     actionId: string,
     options?: {
         signal?: AbortSignal;
+        /** 文档恢复必须原样传回段 id:重新生成会让持久化的段身份在导入后漂移。 */
+        performanceId?: string;
         startTimeSeconds?: number;
         durationSeconds?: number;
         attackSeconds?: number;
         releaseSeconds?: number;
+        alignToTrack?: { trackId: string; fromKeyframeId?: string | null; toKeyframeId?: string | null };
+        replace?: boolean;
     },
 ): Promise<boolean> {
     for (let attempt = 0; attempt < MOUNT_RETRY_LIMIT; attempt++) {
@@ -106,10 +110,13 @@ export async function mountWhenReady(
             const mount = new MountActionCommand({
                 objectId,
                 actionId,
+                ...(options?.performanceId !== undefined ? { performanceId: options.performanceId } : {}),
                 ...(options?.startTimeSeconds !== undefined ? { startTimeSeconds: options.startTimeSeconds } : {}),
                 ...(options?.durationSeconds !== undefined ? { durationSeconds: options.durationSeconds } : {}),
                 ...(options?.attackSeconds !== undefined ? { attackSeconds: options.attackSeconds } : {}),
                 ...(options?.releaseSeconds !== undefined ? { releaseSeconds: options.releaseSeconds } : {}),
+                ...(options?.alignToTrack ? { alignToTrack: options.alignToTrack } : {}),
+                ...(options?.replace === undefined ? {} : { replace: options.replace }),
             });
             if (mount.validate(ctx).length > 0) return false;
             mount.execute(ctx);

@@ -146,6 +146,10 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
     const missing = mounts.filter(
         (mount: unknown) => !isRecord(mount) || typeof mount.objectId !== "string" || !entityIds.has(mount.objectId),
     );
+    // 段 id 是 v17 的硬要求:缺了它导入后段身份不可还原(段条、选中态、binder clip 全指不到)
+    const missingId = mounts.filter(
+        (mount: unknown) => !isRecord(mount) || typeof mount.id !== "string" || mount.id.length === 0,
+    );
     const invalidSchedule = mounts.filter(
         (mount: unknown) =>
             !isRecord(mount) ||
@@ -159,6 +163,7 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
             (mount.durationSeconds as number) < MINIMUM_ACTION_DURATION_SECONDS,
     );
     if (missing.length > 0) return [`动作 "${value.name}" 的挂载对象不存在`];
+    if (missingId.length > 0) return [`动作 "${value.name}" 的排期缺少段 id`];
     if (invalidSchedule.length > 0) return [`动作 "${value.name}" 的排期无效`];
     return value.url.length > 0 ? [] : [`动作 "${value.name}" 的 url 无效`];
 }
@@ -176,7 +181,7 @@ function actionScheduleIssues(plan: DocumentImportPlan): readonly string[] {
 
 function actionMountIssues(plan: DocumentImportPlan): readonly string[] {
     const entitiesById = new Map(plan.entities.map((entity) => [entity.id, entity]));
-    const mountedObjectIds = new Set<string>();
+    const seenPerformanceIds = new Set<string>();
     return plan.actions.flatMap((action) => {
         const isFbxAction = formatFromUrl(action.url) === MODEL_FORMAT.FBX;
         const targets = action.mountedOn.map((mount) => entitiesById.get(mount.objectId));
@@ -191,11 +196,12 @@ function actionMountIssues(plan: DocumentImportPlan): readonly string[] {
         ];
         const mountIssues = action.mountedOn.flatMap((mount) => {
             const entity = entitiesById.get(mount.objectId);
-            const duplicate = mountedObjectIds.has(mount.objectId);
-            mountedObjectIds.add(mount.objectId);
+            // v17:段 id 全局唯一,重复判定按它——同实体同起点是合法的(两段不同动作首尾相接)
+            const duplicate = seenPerformanceIds.has(mount.id);
+            seenPerformanceIds.add(mount.id);
             return [
                 ...(entity?.kind !== "model" ? [`动作 "${action.name}" 的挂载对象不是模型: ${mount.objectId}`] : []),
-                ...(duplicate ? [`多个动作重复挂载对象: ${mount.objectId}`] : []),
+                ...(duplicate ? [`动作排期段 id 重复: ${mount.id}`] : []),
             ];
         });
         return [...issues, ...mountIssues];
@@ -217,8 +223,8 @@ function posePresetIssues(value: unknown): readonly string[] {
 
 function timelineIssues(timeline: TimelineDoc, entityIds: ReadonlySet<string>): readonly string[] {
     const trackIds = new Set<string>();
-    const targetIds = new Set<string>();
-    return timeline.tracks.flatMap((track) => trackIssues(track, timeline.duration, entityIds, trackIds, targetIds));
+    const targetKinds = new Set<string>();
+    return timeline.tracks.flatMap((track) => trackIssues(track, timeline.duration, entityIds, trackIds, targetKinds));
 }
 
 function trackIssues(
@@ -226,12 +232,15 @@ function trackIssues(
     durationSeconds: number,
     entityIds: ReadonlySet<string>,
     trackIds: Set<string>,
-    targetIds: Set<string>,
+    targetKinds: Set<string>,
 ): readonly string[] {
     if (!entityIds.has(track.targetId)) return [`时间轴轨道 "${track.id}" 引用不存在的对象: ${track.targetId}`];
-    if (trackIds.has(track.id) || targetIds.has(track.targetId)) return [`时间轴轨道 id 或目标重复: ${track.id}`];
+    // 查重键带 kind:同一实体可以同时持有不同种类的轨道(走位 + 未来的动作轨),
+    // 只按 targetId 判重会让第二种轨道一进文档就打不开
+    const targetKey = `${track.targetId}:${track.kind}`;
+    if (trackIds.has(track.id) || targetKinds.has(targetKey)) return [`时间轴轨道 id 或目标重复: ${track.id}`];
     trackIds.add(track.id);
-    targetIds.add(track.targetId);
+    targetKinds.add(targetKey);
     const keyIds = new Set<string>();
     const keyTimes = new Set<number>();
     return track.keyframes.flatMap((keyframe) => {
@@ -465,10 +474,12 @@ export class DocumentImportService {
             if (signal.aborted) return;
             const isMounted = await mountWhenReady(ctx, mount.objectId, actionId, {
                 signal,
+                performanceId: mount.id,
                 startTimeSeconds: mount.startTimeSeconds,
                 durationSeconds: mount.durationSeconds,
                 attackSeconds: mount.attackSeconds,
                 releaseSeconds: mount.releaseSeconds,
+                ...(mount.alignment ? { alignToTrack: mount.alignment } : {}),
             });
             if (!isMounted && !signal.aborted) ctx.ui.setApplicationNotice(`动作挂载等待运行时超时:${mount.objectId}`);
         }

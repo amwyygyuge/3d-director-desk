@@ -30,6 +30,14 @@ export const LOCOMOTION_MODE = {
 } as const;
 export type LocomotionMode = (typeof LOCOMOTION_MODE)[keyof typeof LOCOMOTION_MODE];
 
+export const EXTRAPOLATION_MODE = {
+    /** 跨度之外钳到首/末关键帧:走完停在终点,开演前站在起点(默认,符合 DCC 常量外插惯例) */
+    HOLD: "hold",
+    /** 跨度之外交还实体权威变换:对象可在轨道时段外被 gizmo 自由摆放 */
+    REST: "rest",
+} as const;
+export type ExtrapolationMode = (typeof EXTRAPOLATION_MODE)[keyof typeof EXTRAPOLATION_MODE];
+
 /** 地面高度:多层场景是后续能力,当前全场统一 y=0。 */
 export const GROUND_HEIGHT_METERS = 0;
 /** 缺省步幅(米/循环):成年人行走一个动作循环大致推进的距离,作者可按动作改。 */
@@ -42,6 +50,8 @@ export interface TrackPoliciesInit {
     readonly grounding?: GroundingMode;
     readonly locomotion?: LocomotionMode;
     readonly strideMeters?: number;
+    /** 轨道时间跨度之外如何取值;缺省 hold(走完停在终点)。 */
+    readonly extrapolation?: ExtrapolationMode;
 }
 
 export function isOrientationMode(value: unknown): value is OrientationMode {
@@ -56,13 +66,17 @@ export function isLocomotionMode(value: unknown): value is LocomotionMode {
     return value === LOCOMOTION_MODE.FREE || value === LOCOMOTION_MODE.SYNC;
 }
 
+export function isExtrapolationMode(value: unknown): value is ExtrapolationMode {
+    return value === EXTRAPOLATION_MODE.HOLD || value === EXTRAPOLATION_MODE.REST;
+}
+
 export function isStrideMeters(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value) && value >= MINIMUM_STRIDE_METERS;
 }
 
 /**
  * 走位策略集合(不可变值对象)。
- * 默认取「面朝前进方向 + 贴地 + 动作自由」:画一条线就能得到一段站得住的走位,
+ * 默认取「面朝前进方向 + 贴地 + 动作自由 + 跨度外保持」:画一条线就能得到一段站得住的走位,
  * 步频同步需要作者提供步幅,故不做默认。
  */
 export class TrackPolicies {
@@ -70,12 +84,14 @@ export class TrackPolicies {
     readonly grounding: GroundingMode;
     readonly locomotion: LocomotionMode;
     readonly strideMeters: number;
+    readonly extrapolation: ExtrapolationMode;
 
     constructor(init: TrackPoliciesInit = {}) {
         this.orientation = isOrientationMode(init.orientation) ? init.orientation : ORIENTATION_MODE.PATH;
         this.grounding = isGroundingMode(init.grounding) ? init.grounding : GROUNDING_MODE.GROUND;
         this.locomotion = isLocomotionMode(init.locomotion) ? init.locomotion : LOCOMOTION_MODE.FREE;
         this.strideMeters = isStrideMeters(init.strideMeters) ? init.strideMeters : DEFAULT_STRIDE_METERS;
+        this.extrapolation = isExtrapolationMode(init.extrapolation) ? init.extrapolation : EXTRAPOLATION_MODE.HOLD;
         Object.freeze(this);
     }
 
@@ -89,6 +105,14 @@ export class TrackPolicies {
 
     get isLocomotionSynced(): boolean {
         return this.locomotion === LOCOMOTION_MODE.SYNC;
+    }
+
+    /**
+     * 跨度之外是否钳到首/末帧。
+     * false(rest)= 交还实体权威变换,对象在轨道时段外可被 gizmo 自由摆放。
+     */
+    get holdsOutsideSpan(): boolean {
+        return this.extrapolation === EXTRAPOLATION_MODE.HOLD;
     }
 
     /** 已走弧长 → 动作循环相位(走了几个步幅);纯函数,scrub/倒放同样成立。 */
@@ -106,6 +130,7 @@ export class TrackPolicies {
             grounding: this.grounding,
             locomotion: this.locomotion,
             strideMeters: this.strideMeters,
+            extrapolation: this.extrapolation,
         };
     }
 }

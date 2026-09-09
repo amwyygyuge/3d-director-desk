@@ -3,6 +3,7 @@ import type { AnimationLibrary } from "@/assets/AnimationLibrary";
 import type { SceneManager } from "@/core/SceneManager";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 
 export const TIMELINE_CONTENT_BLOCKER_KIND = {
     WALK_TRACK: "walk-track",
@@ -40,7 +41,7 @@ export class TimelineContentSpan {
         animations: AnimationLibrary,
     ): TimelineContentSpan {
         const walkTracks = timeline.document.tracks.flatMap((track) =>
-            track.keyframes.length === 0
+            track.kind !== TIMELINE_TRACK_KIND.TRANSFORM || track.keyframes.length === 0
                 ? []
                 : [
                       {
@@ -63,25 +64,25 @@ export class TimelineContentSpan {
             label: `Program 片段 ${clip.id}`,
             endSeconds: clip.endTimeSeconds,
         }));
-        const actionPerformances = scene.list().flatMap((entity) => {
-            const performance = entity.actionPerformance;
-            const action = performance
-                ? animations.actions.find((candidate) => candidate.id === performance.actionId)
-                : undefined;
-            if (!performance || !action) return [];
-            const endSeconds =
-                action.loopMode === ACTION_LOOP_MODE.ONCE
-                    ? performance.releaseEndTimeSeconds
-                    : performance.endTimeSeconds;
-            return [
-                {
-                    kind: TIMELINE_CONTENT_BLOCKER_KIND.ACTION_PERFORMANCE,
-                    id: entity.id,
-                    label: `动作 ${entity.name}`,
-                    endSeconds,
-                },
-            ];
-        });
+        // 逐段计价:动作序列的内容下界是**最后一段**的收尾,只看首条会让 fit-duration 把后续段截掉
+        const actionPerformances = scene.list().flatMap((entity) =>
+            entity.actionPerformances.flatMap((performance) => {
+                const action = animations.actions.find((candidate) => candidate.id === performance.actionId);
+                if (!action) return [];
+                const endSeconds =
+                    action.loopMode === ACTION_LOOP_MODE.ONCE
+                        ? performance.releaseEndTimeSeconds
+                        : performance.endTimeSeconds;
+                return [
+                    {
+                        kind: TIMELINE_CONTENT_BLOCKER_KIND.ACTION_PERFORMANCE,
+                        id: performance.id,
+                        label: `动作 ${entity.name} · ${action.name}`,
+                        endSeconds,
+                    },
+                ];
+            }),
+        );
         return new TimelineContentSpan([...walkTracks, ...motionClips, ...programClips, ...actionPerformances]);
     }
 }

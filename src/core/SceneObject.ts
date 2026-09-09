@@ -113,7 +113,8 @@ export class SceneObject {
     /** 显示名(Outliner/Inspector);缺省按 kind + id 尾缀派生(确定性,undo/redo 回放不漂移) */
     readonly name: string;
     private currentTransform: Transform;
-    private mountedAction: ActionPerformance | null = null;
+    /** 动作排期序列(按 startTimeSeconds 升序);同一时刻至多一个动作生效,重叠由命令层拦截。 */
+    private mountedActions: readonly ActionPerformance[] = [];
     /** 灯光参数值对象；仅 light 实体有值，Three 光源仍由运行时树拥有。 */
     private currentLight: LightParams | null;
     private currentPose: PoseSnapshot | null;
@@ -147,13 +148,13 @@ export class SceneObject {
         }
         makeAutoObservable<
             SceneObject,
-            "currentLight" | "currentPose" | "currentActor" | "currentNarrativeIdentity" | "mountedAction"
+            "currentLight" | "currentPose" | "currentActor" | "currentNarrativeIdentity" | "mountedActions"
         >(this, {
             currentLight: observableRef,
             currentPose: observableRef,
             currentActor: observableRef,
             currentNarrativeIdentity: observableRef,
-            mountedAction: observableRef,
+            mountedActions: observableRef,
         });
     }
 
@@ -221,17 +222,46 @@ export class SceneObject {
         };
     }
 
-    /** 已挂载动作(AnimationLibrary 的 action id);可序列化纪律:只存引用 id,不存 clip */
+    /**
+     * 动作排期序列(按 startTimeSeconds 升序,只读)。
+     * 一个实体可以在一条时间线上依次表演多个动作(一次性 → 循环 → 一次性),
+     * 这是走位与表演能对齐的前提;同一时刻至多一个动作生效。
+     */
+    get actionPerformances(): readonly ActionPerformance[] {
+        return this.mountedActions;
+    }
+
+    /** 命中某时刻的动作排期(含 release 回收段);无命中返回 null。 */
+    actionPerformanceAt(timeSeconds: number): ActionPerformance | null {
+        // 倒序扫:排期按起始升序,最后一个「已开始」的才是当前生效的那个
+        for (let index = this.mountedActions.length - 1; index >= 0; index -= 1) {
+            const performance = this.mountedActions[index];
+            if (!performance) continue;
+            if (timeSeconds >= performance.startTimeSeconds && timeSeconds <= performance.releaseEndTimeSeconds) {
+                return performance;
+            }
+        }
+        return null;
+    }
+
+    /** 按段 id 取排期:时间轴段条、选中态与 action.* 命令的唯一定位口。 */
+    actionPerformance(performanceId: string): ActionPerformance | null {
+        return this.mountedActions.find((performance) => performance.id === performanceId) ?? null;
+    }
+
+    /**
+     * 已挂载动作(AnimationLibrary 的 action id)。
+     * 多段序列下这只是「首段演的是哪个动作」,不代表当前生效者——
+     * 生效者随时刻变化,读 actionPerformanceAt。
+     */
     get actionId(): string | null {
-        return this.mountedAction?.actionId ?? null;
+        return this.mountedActions[0]?.actionId ?? null;
     }
 
-    /** 动作演出排期:开始时间与时长属于实体状态,文档从它派生。 */
-    get actionPerformance(): ActionPerformance | null {
-        return this.mountedAction;
-    }
-
-    applyAction(action: ActionPerformance | null): void {
-        this.mountedAction = action;
+    /** 整表替换(命令层已排序去重);null / 空数组 = 清空全部动作。 */
+    applyActions(actions: readonly ActionPerformance[] | null): void {
+        this.mountedActions = actions
+            ? [...actions].sort((left, right) => left.startTimeSeconds - right.startTimeSeconds)
+            : [];
     }
 }

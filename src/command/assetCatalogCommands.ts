@@ -64,6 +64,16 @@ const ASSETS_MOUNT_CONTRACT: PayloadContract = {
         durationSeconds: { type: "number" },
         attackSeconds: { type: "number" },
         releaseSeconds: { type: "number" },
+        alignToTrack: {
+            type: "object",
+            properties: {
+                trackId: { type: "string" },
+                fromKeyframeId: { anyOf: [{ type: "string" }, { type: "null" }] },
+                toKeyframeId: { anyOf: [{ type: "string" }, { type: "null" }] },
+            },
+            required: ["trackId"],
+        },
+        replace: { type: "boolean" },
     },
     required: ["assetId", "objectId"],
 };
@@ -162,6 +172,14 @@ interface AssetsMountPayload {
     readonly durationSeconds?: number;
     readonly attackSeconds?: number;
     readonly releaseSeconds?: number;
+    /** 声明式对齐:时段绑到走位轨区间,轨道重定时后自动跟随(给了它就不必给 start/duration)。 */
+    readonly alignToTrack?: {
+        readonly trackId: string;
+        readonly fromKeyframeId?: string | null;
+        readonly toKeyframeId?: string | null;
+    };
+    /** true = 替换该实体全部动作;缺省 false = 追加到动作序列。 */
+    readonly replace?: boolean;
 }
 
 function assetsMountScheduleIssues(
@@ -215,6 +233,8 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
         if (!entry) return [`资源 "${this.payload.assetId}" 不在目录(先 assets.list 发现)`];
         if (entry.kind !== ASSET_KIND.ACTION) return [`资源 "${this.payload.assetId}" 不是动作(模型用 assets.place)`];
         if (!ctx.scene.manager.getEntity(this.payload.objectId)) return [`对象 "${this.payload.objectId}" 不存在`];
+        // 对齐模式下时段由走位轨派生,显式排期校验不适用(真正的解析失败由 action.mount 报结构化 issue)
+        if (this.payload.alignToTrack) return [];
         return [...assetsMountScheduleIssues(ctx, this.payload, entry)];
     }
 
@@ -248,6 +268,8 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                     ...(this.payload.releaseSeconds !== undefined
                         ? { releaseSeconds: this.payload.releaseSeconds }
                         : {}),
+                    ...(this.payload.alignToTrack ? { alignToTrack: this.payload.alignToTrack } : {}),
+                    ...(this.payload.replace === undefined ? {} : { replace: this.payload.replace }),
                 });
                 if (!signal.aborted) {
                     const timeoutNotice = mounted ? null : `动作挂载等待运行时超时:${this.payload.objectId}`;

@@ -1,9 +1,11 @@
+import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { AnimationLibrary } from "@/assets/AnimationLibrary";
 import type { TimelineViewport } from "@/authoring/TimelineViewport";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import type { SceneManager } from "@/core/SceneManager";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
 import type { TimelineStore } from "@/store/TimelineStore";
+import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 
 export const TIMELINE_ROW_KIND = {
     MARKER: "marker",
@@ -35,11 +37,23 @@ export type TimelineMarkKind = (typeof TIMELINE_MARK_KIND)[keyof typeof TIMELINE
 export interface TimelineBar {
     readonly id: string;
     readonly kind: TimelineBarKind;
+    /**
+     * 段条所属者 id。动作段条的 id 是排期段 id,改时段/删除都要同时知道是哪个实体的段,
+     * 故投影期一并带出;其余种类的段条自身即所属者。
+     */
+    readonly ownerId: string;
     readonly label: string;
     readonly startSeconds: number;
     readonly durationSeconds: number;
     readonly startRatio: number;
     readonly widthRatio: number;
+    /**
+     * 段条实际占用的结束时刻。一次性动作在演出结束后还有 release 回收段,
+     * 占用到 `releaseEndTimeSeconds`;吸附必须吸到这里,否则作者把下一段贴到
+     * 视觉末端就会被重叠围栏拒掉(release 尾巴造成的「假重叠」)。
+     * 无尾巴的种类等于 startSeconds + durationSeconds。
+     */
+    readonly occupancyEndSeconds: number;
     /** Program 片段直接引用运镜 = 时段联动态,重定时时一并移动 */
     readonly linked: boolean;
     /** 运镜片段的跟拍主体;非运镜条恒为 null。 */
@@ -135,6 +149,7 @@ export class TimelineLayout {
     private programRow(viewport: TimelineViewport): TimelineRow {
         const bars = this.motion.program.clips.map((clip) => ({
             id: clip.id,
+            ownerId: clip.id,
             kind: TIMELINE_BAR_KIND.PROGRAM,
             label:
                 clip.source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT
@@ -144,6 +159,7 @@ export class TimelineLayout {
             durationSeconds: clip.durationSeconds,
             startRatio: viewport.ratioAt(clip.startTimeSeconds),
             widthRatio: clip.durationSeconds / viewport.visibleSeconds,
+            occupancyEndSeconds: clip.endTimeSeconds,
             linked: clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP,
             followSubjectId: null,
         }));
@@ -159,12 +175,14 @@ export class TimelineLayout {
             label: MOTION_ROW_LABEL,
             bars: clips.map((clip) => ({
                 id: clip.id,
+                ownerId: clip.id,
                 kind: TIMELINE_BAR_KIND.MOTION,
                 label: `${MOTION_LABEL_PREFIX}${clip.id}`,
                 startSeconds: clip.startTimeSeconds,
                 durationSeconds: clip.durationSeconds,
                 startRatio: viewport.ratioAt(clip.startTimeSeconds),
                 widthRatio: clip.durationSeconds / viewport.visibleSeconds,
+                occupancyEndSeconds: clip.endTimeSeconds,
                 linked: this.motion.program.clips.some(
                     (programClip) =>
                         programClip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP &&
@@ -187,72 +205,90 @@ export class TimelineLayout {
         };
     }
 
-    /** 已挂载动作按实体成行:开始时间与演出时长就是条块几何。 */
+    /**
+     * 动作排期按实体成行,行内**每一段排期各自成条**。
+     *
+     * 段条 id 用排期段 id(而非实体 id):一个实体可以依次表演多段动作
+     * (被驱赶 → 调头 → 走路 → 倒地),按实体寻址只能表达第一段,
+     * 拖拽与删除也会误伤其余段。
+     */
     private actionRows(viewport: TimelineViewport): readonly TimelineRow[] {
         return this.scene.list().flatMap((entity) => {
-            const performance = entity.actionPerformance;
-            const action = performance
-                ? this.animations.actions.find((candidate) => candidate.id === performance.actionId)
-                : undefined;
-            if (!performance || !action) return [];
+            const bars = entity.actionPerformances.flatMap((performance) => {
+                const action = this.animations.actions.find((candidate) => candidate.id === performance.actionId);
+                if (!action) return [];
+                return [
+                    {
+                        id: performance.id,
+                        ownerId: entity.id,
+                        kind: TIMELINE_BAR_KIND.ACTION,
+                        label: action.name,
+                        startSeconds: performance.startTimeSeconds,
+                        durationSeconds: performance.durationSeconds,
+                        startRatio: viewport.ratioAt(performance.startTimeSeconds),
+                        widthRatio: performance.durationSeconds / viewport.visibleSeconds,
+                        // 一次性动作的占用含 release 回收段;循环动作没有尾巴
+                        occupancyEndSeconds:
+                            action.loopMode === ACTION_LOOP_MODE.ONCE
+                                ? performance.releaseEndTimeSeconds
+                                : performance.endTimeSeconds,
+                        linked: performance.alignment !== null,
+                        followSubjectId: null,
+                    },
+                ];
+            });
+            if (bars.length === 0) return [];
             return [
                 {
                     kind: TIMELINE_ROW_KIND.ACTION,
                     id: `action:${entity.id}`,
                     label: `${ACTION_ROW_PREFIX}${entity.name}`,
-                    bars: [
-                        {
-                            id: entity.id,
-                            kind: TIMELINE_BAR_KIND.ACTION,
-                            label: action.name,
-                            startSeconds: performance.startTimeSeconds,
-                            durationSeconds: performance.durationSeconds,
-                            startRatio: viewport.ratioAt(performance.startTimeSeconds),
-                            widthRatio: performance.durationSeconds / viewport.visibleSeconds,
-                            linked: false,
-                            followSubjectId: null,
-                        },
-                    ],
+                    bars,
                     marks: [],
                 },
             ];
         });
     }
 
+    /** 只投影走位轨:轨道种类将来会扩张,不按 kind 过滤会让别的轨凭空多出一条空走位行。 */
     private transformRows(viewport: TimelineViewport): readonly TimelineRow[] {
-        return this.timeline.document.tracks.map((track) => {
-            const firstKeyframe = track.keyframes[0];
-            const lastKeyframe = track.keyframes.at(-1);
-            const hasEditableRange = track.keyframes.length >= MINIMUM_TRANSFORM_KEYS_FOR_BAR;
-            const bars =
-                hasEditableRange && firstKeyframe && lastKeyframe
-                    ? [
-                          {
-                              id: track.id,
-                              kind: TIMELINE_BAR_KIND.TRANSFORM,
-                              label: TRANSFORM_BAR_LABEL,
-                              startSeconds: firstKeyframe.time,
-                              durationSeconds: lastKeyframe.time - firstKeyframe.time,
-                              startRatio: viewport.ratioAt(firstKeyframe.time),
-                              widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
-                              linked: false,
-                              followSubjectId: null,
-                          },
-                      ]
-                    : [];
-            return {
-                kind: TIMELINE_ROW_KIND.TRANSFORM,
-                id: track.id,
-                label: track.targetId,
-                bars,
-                marks: track.keyframes.map((keyframe) => ({
-                    id: keyframe.id,
-                    kind: TIMELINE_MARK_KIND.TRANSFORM_KEY,
-                    ownerId: track.id,
-                    timeSeconds: keyframe.time,
-                    ratio: viewport.ratioAt(keyframe.time),
-                })),
-            };
-        });
+        return this.timeline.document.tracks
+            .filter((track) => track.kind === TIMELINE_TRACK_KIND.TRANSFORM)
+            .map((track) => {
+                const firstKeyframe = track.keyframes[0];
+                const lastKeyframe = track.keyframes.at(-1);
+                const hasEditableRange = track.keyframes.length >= MINIMUM_TRANSFORM_KEYS_FOR_BAR;
+                const bars =
+                    hasEditableRange && firstKeyframe && lastKeyframe
+                        ? [
+                              {
+                                  id: track.id,
+                                  ownerId: track.id,
+                                  kind: TIMELINE_BAR_KIND.TRANSFORM,
+                                  label: TRANSFORM_BAR_LABEL,
+                                  startSeconds: firstKeyframe.time,
+                                  durationSeconds: lastKeyframe.time - firstKeyframe.time,
+                                  startRatio: viewport.ratioAt(firstKeyframe.time),
+                                  widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
+                                  occupancyEndSeconds: lastKeyframe.time,
+                                  linked: false,
+                                  followSubjectId: null,
+                              },
+                          ]
+                        : [];
+                return {
+                    kind: TIMELINE_ROW_KIND.TRANSFORM,
+                    id: track.id,
+                    label: track.targetId,
+                    bars,
+                    marks: track.keyframes.map((keyframe) => ({
+                        id: keyframe.id,
+                        kind: TIMELINE_MARK_KIND.TRANSFORM_KEY,
+                        ownerId: track.id,
+                        timeSeconds: keyframe.time,
+                        ratio: viewport.ratioAt(keyframe.time),
+                    })),
+                };
+            });
     }
 }

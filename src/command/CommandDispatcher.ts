@@ -178,7 +178,12 @@ export class CommandDispatcher {
                 const inverse = options?.record === false ? null : (command.invert?.(ctx) ?? null);
                 command.execute(ctx);
                 if (inverse && inverse.length > 0) {
-                    this.history?.record({ label: serialized.type, undo: inverse, redo: [serialized] });
+                    // 重做回放的是 payload,不是本命令实例:自行生成过 id 的命令要用
+                    // replayPayload 把 id 补回去,否则重做会换 id 并让既有引用全部失效
+                    const replayed = command.replayPayload?.();
+                    const redo: SerializedCommand =
+                        replayed === undefined ? serialized : { type: serialized.type, payload: replayed };
+                    this.history?.record({ label: serialized.type, undo: inverse, redo: [redo] });
                 }
                 return { ok: true };
             } catch {

@@ -5,9 +5,11 @@ import {
     DEFAULT_ACTION_ATTACK_SECONDS,
     DEFAULT_ACTION_RELEASE_SECONDS,
 } from "@/animation/ActionPerformance";
+import { ActionAlignment, resolveActionRange } from "@/animation/ActionAlignment";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionAsset } from "@/assets/ActionAsset";
 import type { AnimationClip, Object3D } from "three";
+import { createId } from "@/core/createId";
 import { quantizeSeconds } from "@/command/timelineCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
@@ -76,6 +78,22 @@ interface ActionSchedulePayload {
 interface MountActionPayload extends ActionSchedulePayload {
     objectId: string;
     actionId: string;
+    /**
+     * 排期段 id。缺省时命令自行生成——但撤销/重做与文档恢复必须显式传入,
+     * 否则重放会换一个 id,时间轴选中态与 binder 里的 clip 会指向已消失的段。
+     */
+    readonly performanceId?: string;
+    /**
+     * 声明式对齐:把本动作的时段绑到某条走位轨的关键帧区间。
+     * 给了它就不用给 startTimeSeconds/durationSeconds——轨道重定时后排期自动跟随。
+     */
+    readonly alignToTrack?: {
+        readonly trackId: string;
+        readonly fromKeyframeId?: string | null;
+        readonly toKeyframeId?: string | null;
+    };
+    /** true = 替换该实体的全部动作(旧行为);缺省 false = 追加到动作序列。 */
+    readonly replace?: boolean;
 }
 
 const ACTION_SCHEDULE_PROPERTIES = {
@@ -85,11 +103,24 @@ const ACTION_SCHEDULE_PROPERTIES = {
     releaseSeconds: { type: "number" },
 } as const;
 
+const ALIGN_TO_TRACK_PROPERTY = {
+    type: "object",
+    properties: {
+        trackId: { type: "string" },
+        fromKeyframeId: { anyOf: [{ type: "string" }, { type: "null" }] },
+        toKeyframeId: { anyOf: [{ type: "string" }, { type: "null" }] },
+    },
+    required: ["trackId"],
+} as const;
+
 const MOUNT_ACTION_CONTRACT: PayloadContract = {
     properties: {
         objectId: { type: "string" },
         actionId: { type: "string" },
+        performanceId: { type: "string" },
         ...ACTION_SCHEDULE_PROPERTIES,
+        alignToTrack: ALIGN_TO_TRACK_PROPERTY,
+        replace: { type: "boolean" },
     },
     required: ["objectId", "actionId"],
 };
@@ -111,6 +142,44 @@ function scheduleValuesFor(
         payload.startTimeSeconds === undefined ? Math.min(ctx.clock.time, latestStart) : payload.startTimeSeconds,
     );
     return { startTimeSeconds, durationSeconds };
+}
+
+/**
+ * 对齐 → 排期时段。返回 null 表示对齐解析不出时段(轨道/关键帧不存在,或区间零长),
+ * 调用方据此报结构化 issue,而不是悄悄退回一个猜的时段。
+ */
+function alignedScheduleFor(ctx: DirectorContext, alignment: ActionAlignment): ActionScheduleValues | null {
+    const track = ctx.timeline.document.tracks.find((candidate) => candidate.id === alignment.trackId) ?? null;
+    const range = resolveActionRange(alignment, track);
+    if (!range) return null;
+    return {
+        startTimeSeconds: quantizeSeconds(ctx, range.startTimeSeconds),
+        durationSeconds: quantizeSeconds(ctx, range.durationSeconds),
+    };
+}
+
+/**
+ * 序列重叠检查:同一实体的动作排期不得在时间上交叠(含 release 回收段)。
+ * 允许首尾相接——「走完立刻倒地」正是相接,不是重叠。
+ *
+ * `selfPerformanceId` 是正在写入的那一段,必须排除:重挂同一段(撤销重放、改时段)
+ * 否则会与自己的旧时段判定为交叠而被拒。
+ */
+function overlappingPerformance(
+    existing: readonly ActionPerformance[],
+    selfPerformanceId: string | null,
+    candidate: { readonly startTimeSeconds: number; readonly endTimeSeconds: number },
+): ActionPerformance | null {
+    for (const performance of existing) {
+        if (performance.id === selfPerformanceId) continue;
+        if (
+            candidate.startTimeSeconds < performance.releaseEndTimeSeconds &&
+            performance.startTimeSeconds < candidate.endTimeSeconds
+        ) {
+            return performance;
+        }
+    }
+    return null;
 }
 
 function scheduleIssues(
@@ -175,13 +244,30 @@ function previewTargetFor(
     return action ? { objectId, durationSeconds: action.duration, loopMode: action.loopMode } : null;
 }
 
-/** 动作挂载:骨骼预检不过 → 结构化诊断(匹配率/缺失轨道/可用动作清单),AI 可据此重试 */
+/**
+ * 动作挂载:骨骼预检不过 → 结构化诊断(匹配率/缺失轨道/可用动作清单),AI 可据此重试。
+ *
+ * 默认**追加**到该实体的动作序列(`replace: true` 回到整表替换)。
+ * 序列让「一次性 → 循环 → 一次性」这类表演可编排;同一实体的排期不得交叠(首尾相接允许)。
+ */
 export class MountActionCommand extends DirectorCommand<MountActionPayload> {
     static readonly TYPE = "action.mount";
     readonly type = MountActionCommand.TYPE;
 
+    /**
+     * 段 id 在构造期定下(而非 execute 内),因为 validate 的重叠围栏也要用它排除自己;
+     * payload 显式给了就用它——撤销/重做与文档恢复靠这条保持段身份稳定。
+     */
+    private readonly performanceId: string;
+
     constructor(readonly payload: MountActionPayload) {
         super();
+        this.performanceId = payload.performanceId ?? `action-performance-${createId()}`;
+    }
+
+    /** 重做必须复用同一段 id:换 id 会让选中态与 AI 手上的 performanceId 全部指空。 */
+    override replayPayload(): MountActionPayload {
+        return { ...this.payload, performanceId: this.performanceId };
     }
 
     validate(ctx: DirectorContext): string[] {
@@ -194,19 +280,33 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
         if (!runtime) return [`对象 "${this.payload.objectId}" 运行时未就绪(模型加载中?)`];
         const releaseSeconds = this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS;
-        const scheduleIssuesFound = scheduleIssues(
-            ctx,
-            this.payload,
-            scheduleValuesFor(
-                ctx,
-                this.payload,
-                action,
-                action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0,
-            ),
-            action.loopMode,
-            releaseSeconds,
-        );
+        const trailingSeconds = action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0;
+        if (this.payload.alignToTrack) {
+            const alignment = new ActionAlignment(this.payload.alignToTrack);
+            if (!alignedScheduleFor(ctx, alignment)) {
+                return [
+                    `action-alignment-unresolved: 走位轨 "${alignment.trackId}" 不存在、关键帧 id 不匹配,` +
+                        `或区间时长为零;先确认 timeline.get-document 里的 trackId 与关键帧 id`,
+                ];
+            }
+        }
+        const schedule = this.scheduleFor(ctx, action, trailingSeconds);
+        if (!schedule) return ["action-alignment-unresolved: 对齐解析失败"];
+        const scheduleIssuesFound = scheduleIssues(ctx, this.payload, schedule, action.loopMode, releaseSeconds);
         if (scheduleIssuesFound.length > 0) return [...scheduleIssuesFound];
+        if (this.payload.replace !== true) {
+            const conflict = overlappingPerformance(entity.actionPerformances, this.performanceId, {
+                startTimeSeconds: schedule.startTimeSeconds,
+                endTimeSeconds: schedule.startTimeSeconds + schedule.durationSeconds + trailingSeconds,
+            });
+            if (conflict) {
+                return [
+                    `action-overlapping-performance: 该时段与已有动作排期交叠` +
+                        `(已有 ${conflict.startTimeSeconds.toFixed(2)}s → ${conflict.releaseEndTimeSeconds.toFixed(2)}s);` +
+                        `改时段、或传 replace: true 覆盖全部动作`,
+                ];
+            }
+        }
 
         const check = boneCompatibilityIndex.check(runtime, clip);
         if (check.ok) return [];
@@ -224,27 +324,31 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
     }
 
     execute(ctx: DirectorContext): void {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
         const action = ctx.animations.actions.find((candidate) => candidate.id === this.payload.actionId);
         const clip = ctx.animations.getClip(this.payload.actionId);
-        if (!runtime || !action || !clip) return;
-        const schedule = scheduleValuesFor(
-            ctx,
-            this.payload,
-            action,
-            action.loopMode === ACTION_LOOP_MODE.ONCE
-                ? (this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS)
-                : 0,
-        );
+        if (!entity || !runtime || !action || !clip) return;
+        const releaseSeconds = this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS;
+        const schedule = this.scheduleFor(ctx, action, action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0);
+        if (!schedule) return;
         const performance = new ActionPerformance({
+            id: this.performanceId,
             actionId: action.id,
             startTimeSeconds: schedule.startTimeSeconds,
             durationSeconds: schedule.durationSeconds,
             attackSeconds: this.payload.attackSeconds ?? DEFAULT_ACTION_ATTACK_SECONDS,
-            releaseSeconds: this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS,
+            releaseSeconds,
+            alignment: this.payload.alignToTrack ? new ActionAlignment(this.payload.alignToTrack) : null,
         });
+        const isReplacing = this.payload.replace === true;
+        if (isReplacing) ctx.binder.unmount(this.payload.objectId);
+        // 同段 id 重放(撤销/重做)即替换那一段,不叠加
+        const nextPerformances = isReplacing
+            ? [performance]
+            : [...entity.actionPerformances.filter((candidate) => candidate.id !== performance.id), performance];
         ctx.binder.mount(this.payload.objectId, runtime, clip, performance, action.loopMode);
-        ctx.scene.setObjectAction(this.payload.objectId, performance);
+        ctx.scene.setObjectActions(this.payload.objectId, nextPerformances);
         ctx.actionPreview.prepare({
             objectId: this.payload.objectId,
             durationSeconds: clip.duration,
@@ -253,24 +357,50 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         ctx.playback.sampleCurrent();
     }
 
-    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
-        const previous = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformance;
-        return previous
-            ? [
-                  {
-                      type: MountActionCommand.TYPE,
-                      payload: {
-                          objectId: this.payload.objectId,
-                          actionId: previous.actionId,
-                          startTimeSeconds: previous.startTimeSeconds,
-                          durationSeconds: previous.durationSeconds,
-                          attackSeconds: previous.attackSeconds,
-                          releaseSeconds: previous.releaseSeconds,
-                      },
-                  },
-              ]
-            : [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
+    /** 对齐优先于显式排期:两者都给时以对齐为准(声明式意图更稳)。 */
+    private scheduleFor(
+        ctx: DirectorContext,
+        action: ActionAsset,
+        trailingSeconds: number,
+    ): ActionScheduleValues | null {
+        if (this.payload.alignToTrack) {
+            return alignedScheduleFor(ctx, new ActionAlignment(this.payload.alignToTrack));
+        }
+        return scheduleValuesFor(ctx, this.payload, action, trailingSeconds);
     }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const previous = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformances ?? [];
+        // 追加的逆是「整表还原到追加前」:用 replace 重放首个 + 依次追加其余,避免逆命令自身触发重叠校验
+        if (previous.length === 0) {
+            return [{ type: UnmountActionCommand.TYPE, payload: { objectId: this.payload.objectId } }];
+        }
+        return previous.map((performance, index) => remountCommandFor(this.payload.objectId, performance, index === 0));
+    }
+}
+
+/**
+ * 重挂命令序列化(撤销/重做共用)。
+ * 必须带上 alignment:否则撤销会把「对齐到走位轨」的排期悄悄降级成固定时段,
+ * 之后再改轨道就不跟随了——一个只在 undo 之后才显形的静默退化。
+ * 必须带上 performanceId:段 id 是时间轴选中态与 binder clip 的定位键,
+ * 重放换 id 会让撤销后的段条指向不存在的段。
+ */
+function remountCommandFor(objectId: string, performance: ActionPerformance, isFirst: boolean): SerializedCommand {
+    return {
+        type: MountActionCommand.TYPE,
+        payload: {
+            objectId,
+            actionId: performance.actionId,
+            performanceId: performance.id,
+            startTimeSeconds: performance.startTimeSeconds,
+            durationSeconds: performance.durationSeconds,
+            attackSeconds: performance.attackSeconds,
+            releaseSeconds: performance.releaseSeconds,
+            ...(performance.alignment ? { alignToTrack: performance.alignment.toJSON() } : {}),
+            ...(isFirst ? { replace: true } : {}),
+        },
+    };
 }
 
 interface UnmountActionPayload {
@@ -297,29 +427,78 @@ export class UnmountActionCommand extends DirectorCommand<UnmountActionPayload> 
     execute(ctx: DirectorContext): void {
         ctx.binder.unmount(this.payload.objectId);
         ctx.actionPreview.clear(this.payload.objectId);
-        ctx.scene.setObjectAction(this.payload.objectId, null);
+        ctx.scene.setObjectActions(this.payload.objectId, null);
         ctx.timelineSelection.forget(this.payload.objectId);
         if (ctx.binder.isEmpty) ctx.clock.pause();
         ctx.playback.sampleCurrent();
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const performance = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformance;
-        return performance
-            ? [
-                  {
-                      type: MountActionCommand.TYPE,
-                      payload: {
-                          objectId: this.payload.objectId,
-                          actionId: performance.actionId,
-                          startTimeSeconds: performance.startTimeSeconds,
-                          durationSeconds: performance.durationSeconds,
-                          attackSeconds: performance.attackSeconds,
-                          releaseSeconds: performance.releaseSeconds,
-                      },
-                  },
-              ]
-            : null;
+        const performances = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformances ?? [];
+        if (performances.length === 0) return null;
+        // 整表还原:首条带 replace 清干净,其余依次追加
+        return performances.map((performance, index) =>
+            remountCommandFor(this.payload.objectId, performance, index === 0),
+        );
+    }
+}
+
+interface UnmountActionPerformancePayload {
+    readonly objectId: string;
+    readonly performanceId: string;
+}
+
+const UNMOUNT_ACTION_PERFORMANCE_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        performanceId: { type: "string" },
+    },
+    required: ["objectId", "performanceId"],
+};
+
+/**
+ * 卸载**一段**动作排期(时间轴上选中某个动作段按 Delete 的落点)。
+ *
+ * 与 `action.unmount` 的分工:后者清空该实体全部动作。多段序列下按段删除是常态操作,
+ * 走整体卸载会把作者其余几段一并抹掉。
+ */
+export class UnmountActionPerformanceCommand extends DirectorCommand<UnmountActionPerformancePayload> {
+    static readonly TYPE = "action.unmount-performance";
+    readonly type = UnmountActionPerformanceCommand.TYPE;
+
+    constructor(readonly payload: UnmountActionPerformancePayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        if (!entity) return [`对象 "${this.payload.objectId}" 不存在`];
+        return entity.actionPerformance(this.payload.performanceId)
+            ? []
+            : [
+                  `action-performance-not-found: 对象 "${this.payload.objectId}" 没有排期段 "${this.payload.performanceId}"`,
+              ];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        if (!entity) return;
+        const remaining = entity.actionPerformances.filter((candidate) => candidate.id !== this.payload.performanceId);
+        ctx.binder.unmountPerformance(this.payload.objectId, this.payload.performanceId);
+        ctx.scene.setObjectActions(this.payload.objectId, remaining);
+        ctx.timelineSelection.forget(this.payload.performanceId);
+        // 预览控制器绑的是「该对象有没有动作」,段全删完才清
+        if (remaining.length === 0) ctx.actionPreview.clear(this.payload.objectId);
+        if (ctx.binder.isEmpty) ctx.clock.pause();
+        ctx.playback.sampleCurrent();
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const performance = ctx.scene.manager
+            .getEntity(this.payload.objectId)
+            ?.actionPerformance(this.payload.performanceId);
+        // 单段追加即可复原:其余段未被触碰,不需要整表重放
+        return performance ? [remountCommandFor(this.payload.objectId, performance, false)] : null;
     }
 }
 
@@ -329,16 +508,18 @@ interface SetActionRangePayload {
     readonly durationSeconds: number;
     readonly attackSeconds?: number;
     readonly releaseSeconds?: number;
+    /** 多段序列下定位要改的那一段;缺省改首条(单段时即唯一那条)。 */
+    readonly performanceId?: string;
 }
 
 const SET_ACTION_RANGE_CONTRACT: PayloadContract = {
     properties: {
         objectId: { type: "string" },
+        performanceId: { type: "string" },
         ...ACTION_SCHEDULE_PROPERTIES,
     },
     required: ["objectId", "startTimeSeconds", "durationSeconds"],
 };
-
 /** 动作排期重定时:时间轴段条拖拽与 AI 共用的唯一写入口。 */
 export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload> {
     static readonly TYPE = "action.set-range";
@@ -349,31 +530,40 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
     }
     validate(ctx: DirectorContext): string[] {
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
-        const action = entity?.actionId
-            ? ctx.animations.actions.find((candidate) => candidate.id === entity.actionId)
+        const performance = entity ? this.targetPerformance(entity.actionPerformances) : null;
+        const action = performance
+            ? ctx.animations.actions.find((candidate) => candidate.id === performance.actionId)
             : undefined;
-        const performance = entity?.actionPerformance;
-        if (!performance || !action) return [`对象 "${this.payload.objectId}" 没有已挂载动作`];
+        if (!performance || !action) {
+            return this.payload.performanceId === undefined
+                ? [`对象 "${this.payload.objectId}" 没有已挂载动作`]
+                : [
+                      `action-performance-not-found: 对象 "${this.payload.objectId}" 没有排期段 ` +
+                          `"${this.payload.performanceId}";用 scene.describe 的 actionSequence 查段 id`,
+                  ];
+        }
         const releaseSeconds = this.payload.releaseSeconds ?? performance.releaseSeconds;
-        return [
-            ...scheduleIssues(
-                ctx,
-                this.payload,
-                scheduleValuesFor(
-                    ctx,
-                    this.payload,
-                    action,
-                    action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0,
-                ),
-                action.loopMode,
-                releaseSeconds,
-            ),
-        ];
+        const trailingSeconds = action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0;
+        const values = scheduleValuesFor(ctx, this.payload, action, trailingSeconds);
+        const issues = scheduleIssues(ctx, this.payload, values, action.loopMode, releaseSeconds);
+        if (issues.length > 0) return [...issues];
+        // 拖一段压到邻段上必须拒:多段可见之后这是最容易发生的误操作,静默交叠会让骨骼裁决错配
+        const conflict = overlappingPerformance(entity?.actionPerformances ?? [], performance.id, {
+            startTimeSeconds: values.startTimeSeconds,
+            endTimeSeconds: values.startTimeSeconds + values.durationSeconds + trailingSeconds,
+        });
+        return conflict
+            ? [
+                  `action-overlapping-performance: 该时段与同实体的另一段排期交叠` +
+                      `(已有 ${conflict.startTimeSeconds.toFixed(2)}s → ${conflict.releaseEndTimeSeconds.toFixed(2)}s)`,
+              ]
+            : [];
     }
 
     execute(ctx: DirectorContext): void {
         const entity = ctx.scene.manager.getEntity(this.payload.objectId);
-        const current = entity?.actionPerformance;
+        if (!entity) return;
+        const current = this.targetPerformance(entity.actionPerformances);
         if (!current) return;
         const transitioned = current.withTransitionSeconds(
             this.payload.attackSeconds === undefined
@@ -387,13 +577,23 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
             quantizeSeconds(ctx, this.payload.startTimeSeconds),
             quantizeSeconds(ctx, this.payload.durationSeconds),
         );
-        ctx.scene.setObjectAction(this.payload.objectId, next);
+        ctx.scene.setObjectActions(
+            this.payload.objectId,
+            entity.actionPerformances.map((candidate) => (candidate.id === current.id ? next : candidate)),
+        );
         ctx.binder.setScheduleFor(this.payload.objectId, next);
         ctx.playback.sampleCurrent();
     }
 
+    /** 缺省改首条(单段时即唯一那条);给了 performanceId 就精确定位序列里的那一段。 */
+    private targetPerformance(performances: readonly ActionPerformance[]): ActionPerformance | null {
+        if (this.payload.performanceId === undefined) return performances[0] ?? null;
+        return performances.find((candidate) => candidate.id === this.payload.performanceId) ?? null;
+    }
+
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
-        const current = ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformance;
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const current = entity ? this.targetPerformance(entity.actionPerformances) : null;
         return current
             ? [
                   {
@@ -404,6 +604,9 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
                           durationSeconds: current.durationSeconds,
                           attackSeconds: current.attackSeconds,
                           releaseSeconds: current.releaseSeconds,
+                          ...(this.payload.performanceId === undefined
+                              ? {}
+                              : { performanceId: this.payload.performanceId }),
                       },
                   },
               ]
@@ -625,6 +828,16 @@ export function registerActionCommands(dispatcher: CommandDispatcher): void {
         UnmountActionCommand.TYPE,
         (payload: UnmountActionPayload) => new UnmountActionCommand(payload),
         capability(UnmountActionCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, UNMOUNT_ACTION_CONTRACT),
+    );
+    dispatcher.register(
+        UnmountActionPerformanceCommand.TYPE,
+        (payload: UnmountActionPerformancePayload) => new UnmountActionPerformanceCommand(payload),
+        capability(
+            UnmountActionPerformanceCommand.TYPE,
+            ACTION_EDIT_PERMISSION,
+            ACTION_APPLIES_WHEN,
+            UNMOUNT_ACTION_PERFORMANCE_CONTRACT,
+        ),
     );
     dispatcher.register(
         SetActionRangeCommand.TYPE,

@@ -140,4 +140,15 @@ export abstract class DirectorCommand<P = unknown> {
      * 返回 null = 不可撤销(瞬态命令如 transport.play、capture.frame)。
      */
     invert?(ctx: DirectorContext): readonly SerializedCommand[] | null;
+
+    /**
+     * 重做回放用的 payload(可选)。
+     *
+     * 存在的理由:dispatcher 记进历史的 redo 是**原始 payload**,重做会据此重新构造命令。
+     * 若命令在构造期自行生成过 id(段 id、预设 id),重做就会换一个新 id,
+     * 而选中态、AI 手上的 id、以及本命令自己的 undo 命令都还指向旧 id——
+     * 表现为「重做之后那个东西还在,但谁也定位不到它」。
+     * 自行生成 id 的命令必须实现本方法,把生成结果补回 payload,使重放幂等。
+     */
+    replayPayload?(): P;
 }

@@ -45,6 +45,8 @@ interface SavePosePresetPayload {
     readonly objectId: string;
     readonly labelZh: string;
     readonly part: BodyPart;
+    /** 缺省时命令自行生成;重做回放必须带上它,否则重做会换 id(见 replayPayload)。 */
+    readonly presetId?: string;
 }
 
 interface RemovePosePresetPayload {
@@ -120,6 +122,8 @@ const SAVE_POSE_PRESET_CONTRACT: PayloadContract = {
         objectId: { type: "string" },
         labelZh: { type: "string" },
         part: { type: "string", enum: Object.values(BODY_PART) },
+        // 重做回放会带上生成的 presetId(replayPayload);契约漏声明会让重做被判未知字段
+        presetId: { type: "string" },
     },
     required: ["objectId", "labelZh", "part"],
 };
@@ -410,10 +414,16 @@ export class ApplyPosePresetCommand extends DirectorCommand<ApplyPosePresetPaylo
 export class SavePosePresetCommand extends DirectorCommand<SavePosePresetPayload> {
     static readonly TYPE = "pose.preset.save";
     readonly type = SavePosePresetCommand.TYPE;
-    private readonly presetId = `custom-${createId()}`;
+    /** 预设 id 构造期生成,invert 指向它;重做必须复用,否则重做出的预设与 undo 命令对不上。 */
+    private readonly presetId: string;
 
     constructor(readonly payload: SavePosePresetPayload) {
         super();
+        this.presetId = payload.presetId ?? `custom-${createId()}`;
+    }
+
+    override replayPayload(): SavePosePresetPayload {
+        return { ...this.payload, presetId: this.presetId };
     }
 
     validate(ctx: DirectorContext): string[] {
