@@ -42,6 +42,7 @@ import { SceneStore } from "@/store/SceneStore";
 import { SelectionStore } from "@/store/SelectionStore";
 import { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 import { OutputSettings } from "@/output/OutputFormat";
+import { StudioEnvironment } from "@/studio/StudioEnvironment";
 import { PlayheadDisplay } from "@/ui/timeline/PlayheadDisplay";
 import { UiStore } from "@/store/UiStore";
 import { TimelineStore } from "@/store/TimelineStore";
@@ -93,6 +94,8 @@ export interface DirectorDeskStores {
     clock: TimeTransport;
     /** 项目级最终输出画幅；只持有可序列化比例，不持有 canvas/Three 运行时。 */
     output: OutputSettings;
+    /** 工程级演播室档位（参考地板尺度/渲染画质/观测读数）；随文档往返，写入经 studio.* 命令。 */
+    studio: StudioEnvironment;
     /** 真实 R3F render 的低频帧率读数；只作性能观测，绝不进入文档状态。 */
     frameRate: FrameRateMonitor;
     /** 可序列化 TimelineDoc 的每实例状态容器 */
@@ -173,7 +176,7 @@ export function createDirectorDeskStores(options?: {
     motionPathVisible?: boolean | undefined;
     /** 壳层呈现定制(产品名/采集按钮文案/工具栏扩展位);仅创建期读取 */
     presentation?: DeskShellPresentationInit | undefined;
-    /** 参考地板边长初始值(米);运行期由项目菜单滑杆接管 */
+    /** 参考地板边长初始值(米);运行期由项目菜单经 studio.* 命令接管 */
     gridSizeMeters?: number | undefined;
 }): DirectorDeskStores {
     const dispatcher = new CommandDispatcher();
@@ -210,7 +213,8 @@ export function createDirectorDeskStores(options?: {
     binder.bindTransport(clock);
     const camera = new CameraStore();
     const output = new OutputSettings();
-    const layout = new WorkbenchLayoutStore({ gridSizeMeters: options?.gridSizeMeters });
+    const studio = new StudioEnvironment({ gridSizeMeters: options?.gridSizeMeters });
+    const layout = new WorkbenchLayoutStore();
     const motionAuthoring = new MotionAuthoringStore(layout, { pathVisible: options?.motionPathVisible });
     const viewportCamera = new ViewportCameraAuthority(camera, motionAuthoring);
     const viewportOrbit = new ViewportOrbitController();
@@ -248,6 +252,7 @@ export function createDirectorDeskStores(options?: {
         playback,
         camera,
         output,
+        studio,
         clock,
         capture,
         videoExport,

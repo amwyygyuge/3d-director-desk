@@ -27,6 +27,8 @@ import { isActorProfileInit } from "@/actor/ActorProfile";
 import { FOCUS_TARGET_KIND } from "@/camera/CameraFocusTrack";
 import { isLightingMode } from "@/store/SceneStore";
 import { isOutputFormatId } from "@/output/OutputFormat";
+import { isStudioEnvironmentJSON } from "@/studio/StudioEnvironment";
+import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 const SCENE_OBJECT_KIND_VALUES: readonly string[] = SCENE_OBJECT_KINDS;
 
 interface DocumentImportPlan {
@@ -39,6 +41,7 @@ interface DocumentImportPlan {
     readonly posePresets: readonly PosePreset[];
     readonly lighting: DeskDocumentLighting;
     readonly output: DeskDocumentOutput;
+    readonly studio: StudioEnvironmentJSON;
 }
 
 interface DocumentImportPreparation {
@@ -219,6 +222,10 @@ function outputIssues(value: unknown): readonly string[] {
     return isRecord(value) && isOutputFormatId(value.formatId) ? [] : ["输出画幅无效"];
 }
 
+function studioIssues(value: unknown): readonly string[] {
+    return isStudioEnvironmentJSON(value) ? [] : ["演播室档位无效(地板尺寸/渲染画质/读数显隐)"];
+}
+
 function posePresetIssues(value: unknown): readonly string[] {
     const preset = parsePosePreset(value);
     return preset?.custom ? [] : ["自建姿势预设参数无效"];
@@ -348,6 +355,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
         ...duplicateFieldIssues(document.posePresets, "id", "姿势预设 id"),
         ...lightingIssues(document.lighting),
         ...outputIssues(document.output),
+        ...studioIssues(document.studio),
     ];
     if (basicIssues.length > 0) return { issues: basicIssues, plan: null };
     try {
@@ -365,6 +373,7 @@ function preparePlan(document: unknown): DocumentImportPreparation {
             }),
             lighting: typed.lighting,
             output: typed.output,
+            studio: typed.studio,
         };
         const relationalIssues = [
             ...timelineIssues(plan.timeline, entityIdSet),
@@ -463,6 +472,7 @@ export class DocumentImportService {
             ctx.scene.setLightingMode(plan.lighting.mode);
             ctx.scene.replaceObjects(plan.entities);
             ctx.output.setFormat(plan.output.formatId);
+            ctx.studio.restore(plan.studio);
             ctx.camera.replaceShots(plan.shots);
             ctx.timeline.replaceDocument(plan.timeline);
             ctx.motion.restore(plan.motionClips, plan.program);

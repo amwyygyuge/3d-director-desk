@@ -18,7 +18,6 @@ import type { HostAdapter } from "@/host/HostAdapter";
 import type { DeskShellPresentationInit } from "@/ui/shell/DeskShellPresentation";
 import { HOME_DIRECTOR_POSE } from "@/store/CameraStore";
 import { GIZMO_CLICK_GUARD_MS } from "@/store/UiStore";
-import { RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
 import { BonePicker } from "@/ui/viewport/scene/BonePicker";
 import { TransformGizmoController } from "@/ui/viewport/scene/TransformGizmoController";
 import { FlyDrive } from "@/ui/viewport/scene/FlyDrive";
@@ -97,7 +96,7 @@ export interface DirectorDeskProps {
     width?: number | string;
     /** 桌面高度;同 width */
     height?: number | string;
-    /** 视口参考地板边长初始值(米);缺省 12。创建期注入——运行期由项目菜单滑杆接管(WorkbenchLayoutStore.gridSizeMeters) */
+    /** 视口参考地板边长初始值(米);缺省 12。创建期注入——运行期由项目菜单经 studio.set-grid-size 接管 */
     initialGridSizeMeters?: number;
 }
 
@@ -249,16 +248,16 @@ export const DirectorDesk = observer(function DirectorDesk({
                         <div className="absolute inset-0">
                             {/* key 绑画质档:antialias 是 WebGL 上下文属性,只能靠重建上下文切换 */}
                             <Canvas
-                                key={stores.layout.renderQuality}
+                                key={stores.studio.renderQuality}
                                 frameloop={
                                     stores.clock.isPlaying || stores.actionPreview.isPlaying || stores.ui.flying
                                         ? "always"
                                         : "demand"
                                 }
                                 camera={{ position: STUDIO_CAMERA_POSITION, fov: STUDIO_CAMERA_FOV_DEGREES }}
-                                dpr={[...RENDER_QUALITY_PROFILES[stores.layout.renderQuality].dpr]}
+                                dpr={[...stores.studio.profile.dpr]}
                                 gl={{
-                                    antialias: RENDER_QUALITY_PROFILES[stores.layout.renderQuality].antialias,
+                                    antialias: stores.studio.profile.antialias,
                                     preserveDrawingBuffer: false,
                                 }}
                                 onCreated={(state) =>

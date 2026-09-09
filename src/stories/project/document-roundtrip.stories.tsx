@@ -10,11 +10,20 @@ import { DOCUMENT_COMPATIBILITY_ISSUE_CODE } from "@/document/compatibility/Desk
 import { PROGRAM_REVIEW_ISSUE_KIND } from "@/review/ProgramReviewService";
 import type { ProgramReviewReport } from "@/review/ProgramReviewService";
 import { LIGHTING_MODE } from "@/store/SceneStore";
+import { GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
+import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { AcceptancePanel } from "@/stories/AcceptancePanel";
 import { TimelineViewport } from "@/authoring/TimelineViewport";
-import { assertAcceptance, dispatchOk, required, waitActionMounted, waitRuntime } from "@/stories/harness";
+import {
+    assertAcceptance,
+    dispatchCatching,
+    dispatchOk,
+    required,
+    waitActionMounted,
+    waitRuntime,
+} from "@/stories/harness";
 import { TEST_ASSETS, placeModel, seedShots } from "../seeds";
 
 const meta: Meta<typeof DirectorDesk> = { title: "工程/文档导入导出", component: DirectorDesk };
@@ -45,6 +54,13 @@ const LIGHT_PARAMS = {
     angleDegrees: 42,
     penumbra: 0.45,
 } as const;
+/** 播种把演播室档位全部改离默认值:任一档漏出文档,往返断言即挂。 */
+const STUDIO_SETTINGS: StudioEnvironmentJSON = {
+    gridSizeMeters: 36,
+    renderQuality: RENDER_QUALITY.HIGH,
+    frameRateVisible: true,
+    outputGridVisible: false,
+};
 
 const CHECKLIST = [
     "项目菜单「导出工程」下载 JSON;「导入工程…」选该文件 → 对象/机位/运镜/时长全还原",
@@ -54,6 +70,9 @@ const CHECKLIST = [
     "播种已断言:导出 → 清空 → 导入后场景快照逐字节一致,机位/Program/时长还原",
     "同一动作挂在多个实体上,导入后全部恢复挂载且共享同一动作实例",
     "自定义灯光模式与灯光实体随文档还原,不回退演播室",
+    "项目菜单改「地板尺寸」「渲染画质」「显示帧率」与画幅面板「显示九宫格」→ 导出的 JSON 带 studio 档位",
+    "导入该 JSON 后四项档位全部还原(地板实时重建、画质档生效、帧率读数与九宫格按档显示)",
+    "撤销可回退每一项档位改动(拖一次滑杆只产生一步)",
     "旧命令的校验失败也必须带稳定 issueDetails，供宿主与 AI 处理",
 ] as const;
 
@@ -78,6 +97,7 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
         transform: { position: [3, 5, 2], rotation: [0, 0, 0], scale: [1, 1, 1] },
         light: LIGHT_PARAMS,
     });
+    seedStudioEnvironment(stores);
     await waitRuntime(stores, FOX_ID);
     await waitRuntime(stores, FOX_PARTNER_ID);
     // 同一动作挂两个实体:回归「导出只记录首个挂载实体」的缺口
@@ -98,6 +118,40 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
         durationSeconds: SECOND_SEGMENT_DURATION_SECONDS,
     });
     assertMultiSegmentProjection(stores);
+}
+
+/**
+ * 演播室档位的命令路径与撤销:四档全部改离默认值,并逐条验证可求逆。
+ * 它们决定成片质量与构图判断,因此必须像场景数据一样进撤销栈、进文档。
+ */
+function seedStudioEnvironment(stores: DirectorDeskStores): void {
+    dispatchOk(stores, "studio.set-grid-size", { meters: STUDIO_SETTINGS.gridSizeMeters });
+    assertAcceptance(stores.studio.gridSizeMeters === STUDIO_SETTINGS.gridSizeMeters, "地板尺寸命令未落账");
+    assertAcceptance(stores.history.undo(stores).ok, "地板尺寸撤销失败");
+    assertAcceptance(stores.studio.gridSizeMeters === GRID_SIZE.DEFAULT_METERS, "地板尺寸撤销未回默认值");
+    assertAcceptance(stores.history.redo(stores).ok, "地板尺寸重做失败");
+    assertAcceptance(stores.studio.gridSizeMeters === STUDIO_SETTINGS.gridSizeMeters, "地板尺寸重做未复原");
+    // 越界值必须被命令层围栏拒绝,而不是静默钳位后写进文档
+    const outOfRange = dispatchCatching(stores, "studio.set-grid-size", { meters: GRID_SIZE.MAX_METERS + 1 });
+    assertAcceptance(!outOfRange.ok, "超界地板尺寸未被命令层拒绝");
+    dispatchOk(stores, "studio.set-render-quality", { quality: STUDIO_SETTINGS.renderQuality });
+    dispatchOk(stores, "studio.set-frame-rate-visible", { visible: STUDIO_SETTINGS.frameRateVisible });
+    dispatchOk(stores, "studio.set-output-grid-visible", { visible: STUDIO_SETTINGS.outputGridVisible });
+    assertStudioEnvironment(stores, "命令写入后");
+    const read = stores.dispatcher.query({ type: "studio.get", payload: {} }, stores);
+    assertAcceptance(read.ok, "studio.get 查询失败");
+    assertAcceptance(
+        (read.value as { readonly gridSizeMeters: number }).gridSizeMeters === STUDIO_SETTINGS.gridSizeMeters,
+        "studio.get 读数与聚合不一致",
+    );
+}
+
+function assertStudioEnvironment(stores: DirectorDeskStores, stage: string): void {
+    const studio = stores.studio;
+    assertAcceptance(studio.gridSizeMeters === STUDIO_SETTINGS.gridSizeMeters, `${stage}地板尺寸不符`);
+    assertAcceptance(studio.renderQuality === STUDIO_SETTINGS.renderQuality, `${stage}渲染画质档不符`);
+    assertAcceptance(studio.frameRateVisible === STUDIO_SETTINGS.frameRateVisible, `${stage}帧率读数显隐不符`);
+    assertAcceptance(studio.outputGridVisible === STUDIO_SETTINGS.outputGridVisible, `${stage}九宫格显隐不符`);
 }
 
 /**
@@ -208,6 +262,13 @@ function exportDocument(stores: DirectorDeskStores): DeskDocument {
         "导出的挂载缺少唯一段 id",
     );
     assertAcceptance(document.lighting.mode === LIGHTING_MODE.CUSTOM, "导出的文档缺少灯光模式");
+    assertAcceptance(
+        document.studio.gridSizeMeters === STUDIO_SETTINGS.gridSizeMeters &&
+            document.studio.renderQuality === STUDIO_SETTINGS.renderQuality &&
+            document.studio.frameRateVisible === STUDIO_SETTINGS.frameRateVisible &&
+            document.studio.outputGridVisible === STUDIO_SETTINGS.outputGridVisible,
+        `导出的文档缺少或错记演播室档位(${JSON.stringify(document.studio)})`,
+    );
     return document;
 }
 
@@ -226,6 +287,11 @@ async function reimportAndAssert(stores: DirectorDeskStores, document: DeskDocum
         dispatchOk(stores, "object.remove", { id: entity.id });
     }
     assertAcceptance(stores.scene.objectCount === 0, "清空场景失败");
+    // 档位先全部改回默认:导入必须整档覆盖,不能靠「本来就是那个值」蒙对
+    dispatchOk(stores, "studio.set-grid-size", { meters: GRID_SIZE.DEFAULT_METERS });
+    dispatchOk(stores, "studio.set-render-quality", { quality: RENDER_QUALITY.PERFORMANCE });
+    dispatchOk(stores, "studio.set-frame-rate-visible", { visible: false });
+    dispatchOk(stores, "studio.set-output-grid-visible", { visible: true });
     dispatchOk(stores, "desk.import-document", { document });
     // 动作恢复是异步的(重取资产 → 注册 → 运行时挂载);先等挂载落账再对账
     await waitActionMounted(stores, FOX_ID);
@@ -241,6 +307,7 @@ async function reimportAndAssert(stores: DirectorDeskStores, document: DeskDocum
     assertAcceptance(stores.camera.director.listShots().length === SHOT_COUNT, "机位未随文档还原");
     assertAcceptance(stores.timeline.document.duration === DURATION_SECONDS, "时间轴时长未还原");
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 输出未还原");
+    assertStudioEnvironment(stores, "导入还原后");
 }
 
 /** 兼容层拒绝路径:注册表为空(未发布),因此一切非当前版本都被结构化拒绝,且当前场景不受影响。 */

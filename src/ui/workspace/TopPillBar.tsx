@@ -33,7 +33,7 @@ import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/pre
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "@/store/UiStore";
 import type { GizmoMode } from "@/store/UiStore";
-import { GRID_SIZE, RENDER_QUALITY, RENDER_QUALITY_PROFILES } from "@/store/WorkbenchLayoutStore";
+import { GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -47,6 +47,9 @@ const COMMAND_TYPE = {
     EXPORT_DOCUMENT: "desk.export-document",
     IMPORT_DOCUMENT: "desk.import-document",
     REMOVE_OBJECT: "object.remove",
+    SET_FRAME_RATE_VISIBLE: "studio.set-frame-rate-visible",
+    SET_GRID_SIZE: "studio.set-grid-size",
+    SET_RENDER_QUALITY: "studio.set-render-quality",
     SET_SWEEP_PATH: "view.set-sweep-path",
 } as const;
 
@@ -187,19 +190,14 @@ const ProjectMenu = observer(function ProjectMenu({
             <MenuItem
                 onClick={() =>
                     closeMenuThen({
-                        action: () =>
-                            stores.layout.setRenderQuality(
-                                stores.layout.renderQuality === RENDER_QUALITY.HIGH
-                                    ? RENDER_QUALITY.PERFORMANCE
-                                    : RENDER_QUALITY.HIGH,
-                            ),
+                        action: () => toggleRenderQuality(stores),
                         onClose,
                     })
                 }
             >
                 {TEXT.RENDER_QUALITY}
                 <Typography sx={{ ml: MENU_SHORTCUT_MARGIN }} variant="caption">
-                    {RENDER_QUALITY_PROFILES[stores.layout.renderQuality].label}
+                    {stores.studio.profile.label}
                 </Typography>
             </MenuItem>
             {/* 滑杆直接在菜单内交互:stopPropagation 防方向键被 MenuList 抢走 */}
@@ -208,24 +206,15 @@ const ProjectMenu = observer(function ProjectMenu({
                 sx={{ px: 2, py: 0.5, minWidth: GRID_SLIDER_MIN_WIDTH_PX }}
             >
                 <Typography color="text.secondary" variant="caption">
-                    {`${TEXT.GRID_SIZE}（${stores.layout.gridSizeMeters}${TEXT.METER_UNIT}）`}
+                    {`${TEXT.GRID_SIZE}（${stores.studio.gridSizeMeters}${TEXT.METER_UNIT}）`}
                 </Typography>
-                <Slider
-                    aria-label={TEXT.GRID_SIZE}
-                    max={GRID_SIZE.MAX_METERS}
-                    min={GRID_SIZE.MIN_METERS}
-                    onChange={(_, value) => {
-                        if (typeof value === "number") stores.layout.setGridSizeMeters(value);
-                    }}
-                    size={COMPACT_SIZE}
-                    value={stores.layout.gridSizeMeters}
-                />
+                <GridSizeSlider />
             </Box>
-            <MenuItem onClick={() => stores.layout.toggleFrameRateVisible()}>
+            <MenuItem onClick={() => toggleFrameRateVisible(stores)}>
                 {TEXT.SHOW_FRAME_RATE}
                 <Switch
-                    checked={stores.layout.frameRateVisible}
-                    onChange={() => stores.layout.toggleFrameRateVisible()}
+                    checked={stores.studio.frameRateVisible}
+                    onChange={() => toggleFrameRateVisible(stores)}
                     onClick={(event) => event.stopPropagation()}
                     size={COMPACT_SIZE}
                     slotProps={{ input: { "aria-label": TEXT.SHOW_FRAME_RATE } }}
@@ -238,6 +227,59 @@ const ProjectMenu = observer(function ProjectMenu({
 function closeMenuThen({ action, onClose }: { readonly action: () => void; readonly onClose: () => void }): void {
     action();
     onClose();
+}
+
+/**
+ * 地板尺寸滑杆:拖拽期只走本地草稿,松手才发一条命令。
+ * 逐帧 dispatch 会把一次拖拽记成上百条撤销步,同时让整档演播室状态每帧写一次文档快照。
+ */
+const GridSizeSlider = observer(function GridSizeSlider() {
+    const stores = useDirectorDeskStores();
+    const committed = stores.studio.gridSizeMeters;
+    const [draft, setDraft] = useState<number | null>(null);
+
+    return (
+        <Slider
+            aria-label={TEXT.GRID_SIZE}
+            max={GRID_SIZE.MAX_METERS}
+            min={GRID_SIZE.MIN_METERS}
+            onChange={(_, value) => {
+                if (typeof value === "number") setDraft(value);
+            }}
+            onChangeCommitted={(_, value) => {
+                setDraft(null);
+                if (typeof value !== "number" || value === committed) return;
+                reportCommandFailure(
+                    stores,
+                    stores.dispatcher.dispatch(
+                        { type: COMMAND_TYPE.SET_GRID_SIZE, payload: { meters: value } },
+                        stores,
+                    ),
+                );
+            }}
+            size={COMPACT_SIZE}
+            value={draft ?? committed}
+        />
+    );
+});
+
+function toggleRenderQuality(stores: DirectorDeskStores): void {
+    const quality =
+        stores.studio.renderQuality === RENDER_QUALITY.HIGH ? RENDER_QUALITY.PERFORMANCE : RENDER_QUALITY.HIGH;
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch({ type: COMMAND_TYPE.SET_RENDER_QUALITY, payload: { quality } }, stores),
+    );
+}
+
+function toggleFrameRateVisible(stores: DirectorDeskStores): void {
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch(
+            { type: COMMAND_TYPE.SET_FRAME_RATE_VISIBLE, payload: { visible: !stores.studio.frameRateVisible } },
+            stores,
+        ),
+    );
 }
 
 interface HiddenImportInputsProps {

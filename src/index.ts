@@ -458,14 +458,26 @@ export { GIZMO_MODE, UiStore } from "@/store/UiStore";
 export type { CaptureMeta, VideoMeta } from "@/store/UiStore";
 export { TimelineStore } from "@/store/TimelineStore";
 export { TimelineSelectionStore } from "@/store/TimelineSelectionStore";
+export { WorkbenchLayoutStore } from "@/store/WorkbenchLayoutStore";
 export {
     GRID_SIZE,
     isGridSizeValid,
+    isRenderQuality,
+    isStudioEnvironmentJSON,
     RENDER_QUALITY,
     RENDER_QUALITY_PROFILES,
-    WorkbenchLayoutStore,
-} from "@/store/WorkbenchLayoutStore";
-export type { RenderQuality } from "@/store/WorkbenchLayoutStore";
+    STUDIO_ENVIRONMENT_DEFAULTS,
+    StudioEnvironment,
+} from "@/studio/StudioEnvironment";
+export type { RenderQuality, StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
+export {
+    registerStudioCommands,
+    SetStudioFrameRateVisibleCommand,
+    SetStudioGridSizeCommand,
+    SetStudioOutputGridVisibleCommand,
+    SetStudioRenderQualityCommand,
+    StudioGetQuery,
+} from "@/command/studioCommands";
 export { WORKSPACE_SECTION, WORKSPACE_SECTION_DEFS, WORKSPACE_SECTION_ORDER } from "@/workspace/workspaceSections";
 export type { WorkspaceSection, WorkspaceSectionDef } from "@/workspace/workspaceSections";
 export { EnterPresentationCommand, ExitPresentationCommand } from "@/command/presentationCommands";

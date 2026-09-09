@@ -97,7 +97,7 @@ function renderOutputFrameGrid(): JSX.Element {
 
 /** 目标画幅覆盖层：中心安全框、框外遮罩与三分格同用 OutputFormat 的比例语义。 */
 export const OutputFrameOverlay = observer(function OutputFrameOverlay() {
-    const { camera, layout, motionAuthoring, output } = useDirectorDeskStores();
+    const { camera, layout, motionAuthoring, output, studio } = useDirectorDeskStores();
     if (layout.isProgramTakeover) return null;
     const aspectRatio = output.format.aspectRatio;
     const isCropped = aspectRatio !== null;
@@ -120,7 +120,7 @@ export const OutputFrameOverlay = observer(function OutputFrameOverlay() {
         >
             {isCropped ? renderOutputFrameMattes() : null}
             <div data-helper="output-frame" className={targetClassName} style={targetStyle}>
-                {layout.outputGridVisible && isGuideVisible ? renderOutputFrameGrid() : null}
+                {studio.outputGridVisible && isGuideVisible ? renderOutputFrameGrid() : null}
                 <ShotFrameOverlay />
             </div>
         </Box>

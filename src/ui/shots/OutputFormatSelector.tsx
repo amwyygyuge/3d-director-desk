@@ -18,12 +18,20 @@ const FORMAT_TILE_GAP = 0.75;
 const FORMAT_ICON_BORDER_RADIUS = 0.5;
 const ADAPTIVE_ICON_ASPECT_RATIO = 16 / 9;
 const OUTPUT_GRID_LABEL = "显示九宫格";
+const OUTPUT_GRID_COMMAND = "studio.set-output-grid-visible";
 
-/** 项目输出画幅选择器：界面只发命令，当前值从 OutputSettings 聚合晚解引用。 */
+/** 项目输出画幅与构图辅助:界面只发命令,当前值从聚合晚解引用。 */
 export const OutputFormatSelector = observer(function OutputFormatSelector() {
     const stores = useDirectorDeskStores();
     const selectFormat = (formatId: OutputFormatId): void => {
         const result = stores.dispatcher.dispatch({ type: "output.set-format", payload: { formatId } }, stores);
+        reportCommandFailure(stores, result);
+    };
+    const toggleOutputGrid = (): void => {
+        const result = stores.dispatcher.dispatch(
+            { type: OUTPUT_GRID_COMMAND, payload: { visible: !stores.studio.outputGridVisible } },
+            stores,
+        );
         reportCommandFailure(stores, result);
     };
 
@@ -82,8 +90,8 @@ export const OutputFormatSelector = observer(function OutputFormatSelector() {
             <FormControlLabel
                 control={
                     <Switch
-                        checked={stores.layout.outputGridVisible}
-                        onChange={() => stores.layout.toggleOutputGridVisible()}
+                        checked={stores.studio.outputGridVisible}
+                        onChange={toggleOutputGrid}
                         size="small"
                         slotProps={{ input: { "aria-label": OUTPUT_GRID_LABEL } }}
                     />

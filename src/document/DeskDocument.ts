@@ -8,8 +8,12 @@ import type { ActionLoopMode } from "@/assets/ActionAsset";
 import type { PosePresetJSON } from "@/pose/PosePreset";
 import type { LightingMode } from "@/store/SceneStore";
 import type { OutputFormatId } from "@/output/OutputFormat";
+import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 
 /**
+ * v19 起演播室档位进文档:参考地板边长、渲染画质档、帧率读数与九宫格显隐。
+ *     它们决定成片质量与构图判断,此前只活在壳层 UI 态里,导出/导入/刷新一律丢失;
+ *     校验器对 `studio` 硬要求(缺失即判无效),故必须换版本号。
  * v18 起走位轨持久化 `policies.extrapolation`:轨道时间跨度之外钳到首/末关键帧(hold,默认)
  *     还是交还实体权威变换(rest)。旧档缺该字段时构造期取 hold,与旧档 rest 语义不同,
  *     故必须换版本号——同一份 JSON 在两版里表现不同,是兼容层再也分辨不出的那类变更。
@@ -26,7 +30,7 @@ import type { OutputFormatId } from "@/output/OutputFormat";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 18;
+export const DESK_DOCUMENT_VERSION = 19;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {
@@ -88,6 +92,8 @@ export interface DeskDocument {
     readonly posePresets: readonly PosePresetJSON[];
     readonly lighting: DeskDocumentLighting;
     readonly output: DeskDocumentOutput;
+    /** 演播室档位:参考地板尺度、渲染画质档与作者选定的观测/构图辅助显隐。 */
+    readonly studio: StudioEnvironmentJSON;
 }
 
 /** 装配当前状态为文档(单一事实源:各域 toJSON) */
@@ -103,6 +109,7 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
         },
         timeline: ctx.timeline.document.toJSON(),
         output: { formatId: ctx.output.formatId },
+        studio: ctx.studio.toJSON(),
         actions: ctx.animations.actions.map((action) => ({
             name: action.name,
             url: action.url,

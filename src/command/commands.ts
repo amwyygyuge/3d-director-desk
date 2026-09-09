@@ -39,6 +39,7 @@ import { registerReviewCommands } from "@/command/reviewCommands";
 import { registerPlacementCommands } from "@/command/placementCommands";
 import { registerStageCommands } from "@/command/stageCommands";
 import { registerOutputCommands } from "@/command/outputCommands";
+import { registerStudioCommands } from "@/command/studioCommands";
 import { registerSceneIdentityCommands } from "@/command/sceneIdentityCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
@@ -431,6 +432,7 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
     registerCameraCommands(dispatcher);
     registerCaptureCommands(dispatcher);
     registerOutputCommands(dispatcher);
+    registerStudioCommands(dispatcher);
     registerNavigationCommands(dispatcher);
     registerTimelineCommands(dispatcher);
     registerLightingCommands(dispatcher);

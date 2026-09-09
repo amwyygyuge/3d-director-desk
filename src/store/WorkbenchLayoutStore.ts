@@ -5,11 +5,6 @@ import type { WorkspaceSection } from "@/workspace/workspaceSections";
 // 壳层几何 token 的单一真相源在 theme:store 复用它,避免高度上下限在两处各写一份
 import { CHROME, TIMELINE_HEIGHT } from "@/ui/shell/theme";
 
-/**
- * 渲染画质档:唯一影响 3D 输出质量的开关(截图与录制成片同样受它影响)。
- * high = 满设备像素比 + MSAA;performance = 限像素比 + 关 MSAA,换帧率。
- */
-export const RENDER_QUALITY = { HIGH: "high", PERFORMANCE: "performance" } as const;
 /** 壳层空间编排:编辑保留全套工具,审看片段仅留轻壳,演播交出完整画面。 */
 export const SHELL_MODE = { AUTHORING: "authoring", REVIEW: "review", PRESENTATION: "presentation" } as const;
 export type ShellMode = (typeof SHELL_MODE)[keyof typeof SHELL_MODE];
@@ -17,29 +12,13 @@ export type ShellMode = (typeof SHELL_MODE)[keyof typeof SHELL_MODE];
 export function isShellMode(value: unknown): value is ShellMode {
     return Object.values(SHELL_MODE).includes(value as ShellMode);
 }
-/** 参考地板尺寸合法域(米):宿主 prop 初始值与菜单滑杆共用同一围栏(裸数值入口纪律) */
-export const GRID_SIZE = { DEFAULT_METERS: 12, MIN_METERS: 2, MAX_METERS: 100 } as const;
-
-export function isGridSizeValid(value: number): boolean {
-    return Number.isFinite(value) && value >= GRID_SIZE.MIN_METERS && value <= GRID_SIZE.MAX_METERS;
-}
-export type RenderQuality = (typeof RENDER_QUALITY)[keyof typeof RENDER_QUALITY];
-
-/** 各档的画布参数(Canvas 直接消费,禁在组件里再拼一份) */
-export const RENDER_QUALITY_PROFILES: Record<
-    RenderQuality,
-    { readonly label: string; readonly dpr: readonly [number, number]; readonly antialias: boolean }
-> = {
-    [RENDER_QUALITY.HIGH]: { label: "高画质", dpr: [1, 2], antialias: true },
-    [RENDER_QUALITY.PERFORMANCE]: { label: "高性能", dpr: [1, 1.5], antialias: false },
-};
-
 /**
  * 工作台壳层聚合(方案 D「液态悬浮界面」的状态边界)。
  *
- * 职责:悬浮壳层的空间编排与显隐 + 演播室环境档(渲染画质/参考地板)。
- * 它刻意不碰 gizmo、加载反馈、截图产物(那些留在 UiStore),也不碰任何场景数据——
- * 壳层与演播室档位是纯 UI 态,不入文档、不进撤销栈。
+ * 职责:悬浮壳层的空间编排与显隐。
+ * 它刻意不碰 gizmo、加载反馈、截图产物(那些留在 UiStore),不碰任何场景数据,
+ * 也不碰演播室档位——参考地板/渲染画质/观测读数已归 StudioEnvironment,那些是随文档往返的工程数据。
+ * 壳层编排本身是纯 UI 态,不入文档、不进撤销栈。
  *
  * 每 DirectorDesk 实例一套(实例化纪律);Monet 画布可同时挂多个导演台节点。
  */
@@ -65,25 +44,9 @@ export class WorkbenchLayoutStore {
     isTimelinePointerOver = false;
     /** 作者拖拽出的展开高度(px):纯壳层几何,不入文档与撤销栈 */
     timelineExpandedHeightPx: number = TIMELINE_HEIGHT.DEFAULT_PX;
-    /** 渲染画质档:高性能 */
-    renderQuality: RenderQuality = RENDER_QUALITY.PERFORMANCE;
-    /** 帧率读数按需展示:默认收起,不入文档与撤销栈 */
-    frameRateVisible = false;
-    /** 成片安全框内的九宫格构图辅助线；纯编辑偏好，不入文档或导出。 */
-    outputGridVisible = true;
-    /** 参考地板边长(米):视口辅助物档位,不入文档不进撤销栈 */
-    gridSizeMeters: number = GRID_SIZE.DEFAULT_METERS;
 
-    constructor(init?: { gridSizeMeters?: number | undefined }) {
+    constructor() {
         makeAutoObservable(this);
-        if (init?.gridSizeMeters === undefined) return;
-        if (isGridSizeValid(init.gridSizeMeters)) {
-            this.gridSizeMeters = init.gridSizeMeters;
-        } else if (import.meta.env.DEV) {
-            console.warn(
-                `[WorkbenchLayoutStore] gridSizeMeters 非法(${String(init.gridSizeMeters)}),回落 ${String(GRID_SIZE.DEFAULT_METERS)}m`,
-            );
-        }
     }
 
     /** 当前有效壳层态:成片输出优先,运镜预览次之,其余回到作者显式选择。 */
@@ -124,23 +87,6 @@ export class WorkbenchLayoutStore {
     /** 切换左栏分区:tab 单级直达,无中间态 */
     activateWorkspaceSection(section: WorkspaceSection): void {
         this.activeSection = section;
-    }
-
-    setRenderQuality(quality: RenderQuality): void {
-        this.renderQuality = quality;
-    }
-    /** 帧率读数是调试观测信息,默认隐藏,仅由项目菜单显式切换。 */
-    toggleFrameRateVisible(): void {
-        this.frameRateVisible = !this.frameRateVisible;
-    }
-
-    toggleOutputGridVisible(): void {
-        this.outputGridVisible = !this.outputGridVisible;
-    }
-    /** 地板尺寸设置的唯一写口;非法值静默拒绝(UI 滑杆已被 min/max 钳制,这里是 prop/未来 AI 路径的兜底) */
-    setGridSizeMeters(value: number): void {
-        if (!isGridSizeValid(value)) return;
-        this.gridSizeMeters = value;
     }
 
     toggleTimelineExpanded(): void {
