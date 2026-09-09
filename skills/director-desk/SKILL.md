@@ -205,7 +205,7 @@ dispatch({
 
 easing 只有两档:`"linear"` / `"smooth"`。运镜的 easing 是**整段时间曲线**(clip 级,`motion.set-clip-easing`):smooth = 起落加减速,linear = 全程匀速;**段与段之间的快慢由关键帧的 `progress` 分布表达**,不要给每个关键帧单独设缓动——那会让每过一枚关键帧就停顿一次。
 
-走位轨的三个实测陷阱:
+走位轨的四个实测陷阱:
 
 - **走位轨驱动的是运行时,不是实体 `transform`**:`scene.describe` 的 `transform` 是**作者态**(你 place/move 写进去的值),
   时间轴采样把位姿写到 Three 运行时。所以 seek 到走路中段时 `transform.position` 仍是 `[0,0,0]`,
@@ -215,6 +215,11 @@ easing 只有两档:`"linear"` / `"smooth"`。运镜的 easing 是**整段时间
   「调头」必须显式 `policies: { orientation: "keyed" }` 并用关键帧 `rotation.y` 表达(差 π 即 180°)。
 - **关键帧轨迹是样条,首尾同值也会过冲**:`auto` handle 下"走到 -7 停住"会在末段冲到 -7.49 再回弹。
   与动作序列无关(卸掉动作曲线一致),介意就改 `handleMode: "manual"` 压平 handle。
+- **轨道时段之外默认「保持」(v18)**:`policies.extrapolation` 缺省 `hold`——走完停在末帧位置,
+  轨道开始前站在首帧位置(不再弹回实体 `transform`,也不再在轨道起点瞬移)。
+  代价:带走位轨的对象在任意时刻用坐标轴拖动都会被下一次采样覆盖;要在时段外自由摆放,
+  显式切 `policies: { extrapolation: "rest" }`(检查器「走位」区的「走完停在终点」开关同此)。
+  注意 `transport.stop` 与删对象仍走显式回位,读的是实体 `transform`,不受本策略影响。
 
 ### 机位与运镜
 
