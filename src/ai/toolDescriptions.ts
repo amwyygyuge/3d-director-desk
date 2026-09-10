@@ -12,6 +12,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "object.place": "放置场景对象(模型/机位对象/灯光)到指定 transform;模型优先改用 assets.place",
     "object.move": "更新对象 transform(位移/旋转/缩放,全字段覆盖式写入)",
     "object.remove": "删除对象;被运镜注视引用时会返回结构化选项",
+    "scene.clear": "一次清空场景全部对象:连带撤掉引用它们的运镜与 Program 排期,一步可撤销;场景已空时结构化拒绝",
     "object.place-relative": "语义摆位:以导演相机视线为参考系,把对象放到锚点的左/右/前/后(包围球表面间距)或面朝锚点",
     // 机位
     "output.set-format": "设置项目最终输出画幅；预览安全框、PNG、MP4 与同框断言共用该中心裁切口径",

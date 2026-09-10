@@ -299,6 +299,7 @@ export { CommandHistory } from "@/command/CommandHistory";
 export type { HistoryEntry } from "@/command/CommandHistory";
 export { COMMAND_ERROR, CommandDispatcher } from "@/command/CommandDispatcher";
 export {
+    ClearSceneCommand,
     MoveObjectCommand,
     PlaceObjectCommand,
     registerBuiltinCommands,

@@ -68,6 +68,8 @@ const CHECKLIST = [
     "手工把 JSON 的 version 改成未知值 → 导入被结构化拒绝(未发布,迁移注册表为空:旧格式一律判不支持)",
     "拒绝路径不清空、不改动当前场景;失败只回结构化 issue",
     "播种已断言:导出 → 清空 → 导入后场景快照逐字节一致,机位/Program/时长还原",
+    "项目菜单「清空场景」一次清净:被运镜注视/跟拍引用的对象也一并清掉,不留清不掉的残留",
+    "清空场景只占一步撤销:Ctrl+Z 一次装回全部实体、走位轨、运镜与 Program 排期",
     "同一动作挂在多个实体上,导入后全部恢复挂载且共享同一动作实例",
     "自定义灯光模式与灯光实体随文档还原,不回退演播室",
     "项目菜单改「地板尺寸」「渲染画质」「显示帧率」与画幅面板「显示九宫格」→ 导出的 JSON 带 studio 档位",
@@ -280,13 +282,33 @@ function sceneFingerprint(stores: DirectorDeskStores): string {
     return JSON.stringify(entities.map((entity) => ({ ...entity, mountedActionId: entity.mountedActionId !== null })));
 }
 
+/** 撤销对账口径:实体身份集合,顺序无关(SceneManager 的迭代序不是契约)。 */
+function sortedEntityIds(stores: DirectorDeskStores): string {
+    return stores.scene.manager
+        .list()
+        .map((entity) => entity.id)
+        .sort()
+        .join(",");
+}
+
 async function reimportAndAssert(stores: DirectorDeskStores, document: DeskDocument): Promise<void> {
     const before = sceneFingerprint(stores);
-    // 清空(与项目菜单同路径)→ 导入还原
-    for (const entity of stores.scene.manager.list()) {
-        dispatchOk(stores, "object.remove", { id: entity.id });
-    }
+    // 撤销对账用实体 id 集合而非 sceneFingerprint:动作挂载不在实体快照里(重取资产是异步的),
+    // 撤销的承诺是「场景数据回来」,不含动作运行时重挂。
+    const idsBefore = sortedEntityIds(stores);
+    // 清空(与项目菜单同路径):一条聚合命令,被运镜引用的实体也必须一次清净
+    dispatchOk(stores, "scene.clear", {});
     assertAcceptance(stores.scene.objectCount === 0, "清空场景失败");
+    assertAcceptance(stores.motion.clips.length === 0, "清空场景残留了引用已删实体的运镜片段");
+    // 一步撤销必须整场回来(实体 + 走位轨 + 运镜 + Program),再清一次继续往返验收
+    assertAcceptance(stores.history.undo(stores).ok, "清空场景撤销失败");
+    const idsAfterUndo = sortedEntityIds(stores);
+    assertAcceptance(idsAfterUndo === idsBefore, `清空场景撤销未装回全部实体(${idsAfterUndo})`);
+    assertAcceptance(stores.motion.clips.length > 0, "清空场景撤销未装回运镜片段");
+    assertAcceptance(stores.motion.program.clips.length > 0, "清空场景撤销未装回 Program 排期");
+    dispatchOk(stores, "scene.clear", {});
+    // 空场景上再清即结构化拒绝,而不是静默成功
+    assertAcceptance(!dispatchCatching(stores, "scene.clear", {}).ok, "空场景重复清空未被结构化拒绝");
     // 档位先全部改回默认:导入必须整档覆盖,不能靠「本来就是那个值」蒙对
     dispatchOk(stores, "studio.set-grid-size", { meters: GRID_SIZE.DEFAULT_METERS });
     dispatchOk(stores, "studio.set-render-quality", { quality: RENDER_QUALITY.PERFORMANCE });
