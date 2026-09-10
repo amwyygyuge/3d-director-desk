@@ -44,9 +44,9 @@ import { CHROME } from "@/ui/shell/theme";
 
 const COMMAND_TYPE = {
     CAPTURE_VIDEO: "capture.video",
+    CLEAR_SCENE: "scene.clear",
     EXPORT_DOCUMENT: "desk.export-document",
     IMPORT_DOCUMENT: "desk.import-document",
-    REMOVE_OBJECT: "object.remove",
     SET_FRAME_RATE_VISIBLE: "studio.set-frame-rate-visible",
     SET_GRID_SIZE: "studio.set-grid-size",
     SET_RENDER_QUALITY: "studio.set-render-quality",
@@ -181,7 +181,16 @@ const ProjectMenu = observer(function ProjectMenu({
             </MenuItem>
             <MenuItem
                 disabled={objectCount === EMPTY_OBJECT_COUNT}
-                onClick={() => closeMenuThen({ action: () => clearScene(stores), onClose })}
+                onClick={() =>
+                    closeMenuThen({
+                        action: () =>
+                            reportCommandFailure(
+                                stores,
+                                stores.dispatcher.dispatch({ type: COMMAND_TYPE.CLEAR_SCENE, payload: {} }, stores),
+                            ),
+                        onClose,
+                    })
+                }
             >
                 <DeleteSweepIcon fontSize={COMPACT_SIZE} sx={{ mr: PILL_GAP }} />
                 {clearLabel}
@@ -358,15 +367,6 @@ function exportDocument(stores: DirectorDeskStores): void {
     anchor.href = url;
     anchor.click();
     URL.revokeObjectURL(url);
-}
-
-function clearScene(stores: DirectorDeskStores): void {
-    for (const entity of stores.scene.manager.list()) {
-        reportCommandFailure(
-            stores,
-            stores.dispatcher.dispatch({ type: COMMAND_TYPE.REMOVE_OBJECT, payload: { id: entity.id } }, stores),
-        );
-    }
 }
 
 const GIZMO_MODE_META: Record<GizmoMode, { readonly icon: typeof OpenWithIcon; readonly label: string }> = {

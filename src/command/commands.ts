@@ -6,10 +6,13 @@ import { SceneInspectionService } from "@/command/SceneInspectionService";
 import { registerPerceptionCommands } from "@/command/perceptionCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "@/camera/CameraShot";
+import type { CameraMotionClip } from "@/camera/CameraMotionClip";
+import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import { registerKeyframeCodec } from "@/timeline/keyframeCodecs";
 import { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import type { TransformKeyframeInit } from "@/timeline/TransformKeyframe";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
+import type { TimelineTrackInit } from "@/timeline/TimelineTrack";
 import { buildTransformTrajectory } from "@/timeline/transformTrajectory";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
 import type { ModelFormat } from "@/assets/ModelAsset";
@@ -30,7 +33,11 @@ import { LIGHT_PARAMS_SCHEMA } from "@/command/lightParamsSchema";
 import { registerLightingCommands } from "@/command/lightingCommands";
 import { registerNavigationCommands } from "@/command/navigationCommands";
 import { registerTimelineCommands, RestoreTimelineTracksCommand } from "@/command/timelineCommands";
-import { registerCameraMotionCommands } from "@/command/cameraMotionCommands";
+import {
+    CreateMotionClipCommand,
+    registerCameraMotionCommands,
+    SetProgramClipCommand,
+} from "@/command/cameraMotionCommands";
 import { registerAssetCatalogCommands } from "@/command/assetCatalogCommands";
 import { registerDocumentCommands } from "@/command/documentCommands";
 import { registerPresentationCommands } from "@/command/presentationCommands";
@@ -53,6 +60,10 @@ export const FOV_MAX = 179;
 const MODEL_FORMATS: readonly ModelFormat[] = [MODEL_FORMAT.GLTF, MODEL_FORMAT.FBX, MODEL_FORMAT.OBJ];
 /** 注视锁定与跟拍共用同一条引用拦截:删除对象前必须先解开任一层绑定 */
 const CLIP_REFERENCE_IN_USE_CODE = "clip-reference-in-use";
+/** 清空场景在空场景上的结构化拒绝:UI 据此禁用菜单项,AI 据此判断无需再清 */
+const SCENE_ALREADY_EMPTY_CODE = "scene-already-empty";
+const EMPTY_SCENE_OBJECT_COUNT = 0;
+const EMPTY_PAYLOAD: Record<string, never> = {};
 const SCENE_EDIT_PERMISSION = "scene:edit";
 const SCENE_READ_PERMISSION = "scene:read";
 const CAMERA_EDIT_PERMISSION = "camera:edit";
@@ -265,13 +276,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.playback.restoreObject(this.payload.id);
-        for (const track of ctx.timeline.removeObjectTracks(this.payload.id)) ctx.timelineSelection.forget(track.id);
-        ctx.timelineSelection.forget(this.payload.id);
-        ctx.binder.unmount(this.payload.id);
-        ctx.scene.removeObject(this.payload.id);
-        ctx.selection.remove(this.payload.id);
-        if (ctx.ui.posePickingObjectId === this.payload.id) ctx.ui.setPosePicking(null, null);
+        detachObject(ctx, this.payload.id);
         if (ctx.binder.isEmpty) ctx.clock.pause();
     }
 
@@ -283,9 +288,7 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
         const entity = ctx.scene.manager.getEntity(this.payload.id);
         if (!entity) return null;
-        const tracks = ctx.timeline.document.tracks
-            .filter((track) => track.targetId === entity.id && track.kind === TIMELINE_TRACK_KIND.TRANSFORM)
-            .map((track) => track.toJSON());
+        const tracks = transformTrackSnapshots(ctx, entity.id);
         const restoreObject: SerializedCommand = {
             type: PlaceObjectCommand.TYPE,
             payload: entity.toJSON(),
@@ -293,6 +296,101 @@ export class RemoveObjectCommand extends DirectorCommand<RemoveObjectPayload> {
         return tracks.length === 0
             ? [restoreObject]
             : [restoreObject, { type: RestoreTimelineTracksCommand.TYPE, payload: { tracks } }];
+    }
+}
+
+/**
+ * 实体退场的统一收束(删单个与清空场景共用,Rule of Two)。
+ * 运行时姿态、走位轨、动作绑定与三类选中态在此一处收敛,禁两个命令各写一份漏一项。
+ */
+function detachObject(ctx: DirectorContext, id: string): void {
+    ctx.playback.restoreObject(id);
+    for (const track of ctx.timeline.removeObjectTracks(id)) ctx.timelineSelection.forget(track.id);
+    ctx.timelineSelection.forget(id);
+    ctx.binder.unmount(id);
+    ctx.scene.removeObject(id);
+    ctx.selection.remove(id);
+    if (ctx.ui.posePickingObjectId === id) ctx.ui.setPosePicking(null, null);
+}
+
+/** 撤销快照只取 transform 轨:恢复命令的受理范围就是这一种(见 RestoreTimelineTracksCommand)。 */
+function transformTrackSnapshots(ctx: DirectorContext, targetId: string): readonly TimelineTrackInit[] {
+    return ctx.timeline.document.tracks
+        .filter((track) => track.targetId === targetId && track.kind === TIMELINE_TRACK_KIND.TRANSFORM)
+        .map((track) => track.toJSON());
+}
+
+/**
+ * 引用了场景实体的运镜片段(去重)。
+ * 判据不在此处重写:`clipsReferencingObject` 是注视 ∪ 跟拍的唯一真相源,
+ * 单个删除的拦截与清空场景的连带退场共用它。
+ */
+function dependentMotionClips(ctx: DirectorContext): readonly CameraMotionClip[] {
+    const dependents = new Map<string, CameraMotionClip>();
+    for (const entity of ctx.scene.manager.list()) {
+        for (const clip of ctx.motion.clipsReferencingObject(entity.id)) dependents.set(clip.id, clip);
+    }
+    return [...dependents.values()];
+}
+
+/**
+ * 清空场景(聚合命令,地基优先红线 15)。
+ *
+ * 逐个 `object.remove` 做不到这件事:被运镜注视/跟拍引用的对象会被 clip-reference-in-use 拦下,
+ * 于是「清空」总留下一批清不掉的残留;N 次 dispatch 还会把撤销碎成 N 步,
+ * 中途被拒即留下「实体删了一半、运镜还指着另一半」的孤儿状态。
+ *
+ * 本命令按依赖序一次退场:先撤运镜覆盖层(`removeClip` 连带清掉它的 Program 排期),
+ * 再让实体退场。`invert` 反序一次装回实体 → 走位轨 → 运镜 → 排期,撤销只一步。
+ */
+export class ClearSceneCommand extends DirectorCommand<Record<string, never>> {
+    static readonly TYPE = "scene.clear";
+    readonly type = ClearSceneCommand.TYPE;
+
+    constructor(readonly payload: Record<string, never> = EMPTY_PAYLOAD) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return this.validateIssues(ctx).map((current) => current.message);
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        return ctx.scene.objectCount > EMPTY_SCENE_OBJECT_COUNT
+            ? []
+            : [{ code: SCENE_ALREADY_EMPTY_CODE, path: "", message: "场景已经是空的,无需清空" }];
+    }
+
+    execute(ctx: DirectorContext): void {
+        // 运镜先退场:它引用实体,留到实体消失之后就是一段指空的孤儿片段
+        for (const clip of dependentMotionClips(ctx)) {
+            ctx.motionAuthoring.forgetClip(clip.id);
+            ctx.timelineSelection.forget(clip.id);
+            ctx.motion.removeClip(clip.id);
+        }
+        for (const entity of ctx.scene.manager.list()) detachObject(ctx, entity.id);
+        if (ctx.binder.isEmpty) ctx.clock.pause();
+        ctx.playback.sampleCurrent();
+    }
+
+    /**
+     * 装回顺序即校验顺序:轨道恢复要求目标实体在场、运镜要求注视/跟拍对象在场、
+     * Program 片段要求所引运镜在场。任一条提前,整条撤销会被自己的校验链拒掉。
+     */
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const entities = ctx.scene.manager.list();
+        const tracks = entities.flatMap((entity) => transformTrackSnapshots(ctx, entity.id));
+        const clips = dependentMotionClips(ctx);
+        const clipIds = new Set(clips.map((clip) => clip.id));
+        const programClips = ctx.motion.program.clips.filter(
+            (clip) => clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP && clipIds.has(clip.source.motionClipId),
+        );
+        return [
+            ...entities.map((entity) => ({ type: PlaceObjectCommand.TYPE, payload: entity.toJSON() })),
+            ...(tracks.length > 0 ? [{ type: RestoreTimelineTracksCommand.TYPE, payload: { tracks } }] : []),
+            ...clips.map((clip) => ({ type: CreateMotionClipCommand.TYPE, payload: { clip: clip.toJSON() } })),
+            ...programClips.map((clip) => ({ type: SetProgramClipCommand.TYPE, payload: { clip: clip.toJSON() } })),
+        ];
     }
 }
 
@@ -410,6 +508,11 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
         RemoveObjectCommand.TYPE,
         (payload) => new RemoveObjectCommand(payload),
         commandCapability(RemoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, REMOVE_OBJECT_CONTRACT),
+    );
+    dispatcher.register(
+        ClearSceneCommand.TYPE,
+        (payload: Record<string, never>) => new ClearSceneCommand(payload),
+        commandCapability(ClearSceneCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, EMPTY_PAYLOAD_CONTRACT),
     );
     dispatcher.register(
         SetCameraShotCommand.TYPE,
