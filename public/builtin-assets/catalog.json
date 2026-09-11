@@ -98,12 +98,13 @@
             "category": "action.performance",
             "name": "挥手",
             "source": "builtin",
-            "url": "/builtin-assets/actions/wave.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "MIT (xiaozangao/3d-director-desk)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "wave"],
-            "loopMode": "loop"
+            "loopMode": "loop",
+            "clipName": "wave"
         },
         {
             "id": "builtin.action.walking",
@@ -139,12 +140,13 @@
             "category": "action.performance",
             "name": "左侧移步",
             "source": "builtin",
-            "url": "/builtin-assets/actions/side-step-left.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "MIT (xiaozangao/3d-director-desk)",
             "skeletonFamily": "mixamo",
             "tags": ["locomotion", "side-step"],
-            "loopMode": "loop"
+            "loopMode": "loop",
+            "clipName": "side-step-left"
         },
         {
             "id": "builtin.action.nod-yes",
@@ -152,14 +154,13 @@
             "category": "action.performance",
             "name": "点头",
             "source": "builtin",
-            "url": "/builtin-assets/actions/NodYes1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "loopMode": "once",
             "tags": ["gesture", "yes"],
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "nod-yes"
         },
         {
             "id": "builtin.action.shake-head-no",
@@ -167,14 +168,13 @@
             "category": "action.performance",
             "name": "摇头",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ShakeHeadNo1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "loopMode": "once",
             "tags": ["gesture", "no"],
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "shake-head-no"
         },
         {
             "id": "builtin.action.come-here",
@@ -182,14 +182,13 @@
             "category": "action.performance",
             "name": "唤近",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ComeHere1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "beckon"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "come-here"
         },
         {
             "id": "builtin.action.go-away-quickly",
@@ -197,14 +196,13 @@
             "category": "action.performance",
             "name": "催促离开",
             "source": "builtin",
-            "url": "/builtin-assets/actions/GoAwayQuickly.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "dismiss"],
             "loopMode": "loop",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "go-away-quickly"
         },
         {
             "id": "builtin.action.hands-on-head",
@@ -212,14 +210,13 @@
             "category": "action.performance",
             "name": "抱头",
             "source": "builtin",
-            "url": "/builtin-assets/actions/HandsOnHead.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "distress"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "hands-on-head"
         },
         {
             "id": "builtin.action.stop-one-hand",
@@ -227,14 +224,13 @@
             "category": "action.performance",
             "name": "单手制止",
             "source": "builtin",
-            "url": "/builtin-assets/actions/StopOneHand1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "stop-one-hand"
         },
         {
             "id": "builtin.action.stop-two-hand",
@@ -242,14 +238,13 @@
             "category": "action.performance",
             "name": "双手制止",
             "source": "builtin",
-            "url": "/builtin-assets/actions/StopTwoHand1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "stop-two-hand"
         },
         {
             "id": "builtin.action.thumbs-up",
@@ -257,14 +252,13 @@
             "category": "action.performance",
             "name": "赞许",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ThumbsUp1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "approve"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "thumbs-up"
         },
         {
             "id": "builtin.action.thumbs-down",
@@ -272,14 +266,13 @@
             "category": "action.performance",
             "name": "否定",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ThumbsDown1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "reject"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "thumbs-down"
         },
         {
             "id": "builtin.action.celebrate",
@@ -287,14 +280,13 @@
             "category": "action.performance",
             "name": "庆祝",
             "source": "builtin",
-            "url": "/builtin-assets/actions/Celebrate1.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "celebrate"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "celebrate"
         },
         {
             "id": "builtin.action.celebrate-alt",
@@ -302,14 +294,13 @@
             "category": "action.performance",
             "name": "庆祝·二",
             "source": "builtin",
-            "url": "/builtin-assets/actions/Celebrate2.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "celebrate"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "celebrate-alt"
         },
         {
             "id": "builtin.action.celebrate-jump",
@@ -317,14 +308,13 @@
             "category": "action.performance",
             "name": "庆祝·跳跃",
             "source": "builtin",
-            "url": "/builtin-assets/actions/Celebrate3.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "celebrate", "jump"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "celebrate-jump"
         },
         {
             "id": "builtin.action.come-here-alt",
@@ -332,14 +322,13 @@
             "category": "action.performance",
             "name": "唤近·二",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ComeHere2.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "beckon"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "come-here-alt"
         },
         {
             "id": "builtin.action.come-here-emphatic",
@@ -347,14 +336,13 @@
             "category": "action.performance",
             "name": "唤近·强调",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ComeHere3.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "beckon"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "come-here-emphatic"
         },
         {
             "id": "builtin.action.go-away-angry",
@@ -362,14 +350,13 @@
             "category": "action.performance",
             "name": "愤怒驱赶",
             "source": "builtin",
-            "url": "/builtin-assets/actions/GoAwayAngry.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "dismiss", "angry"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "go-away-angry"
         },
         {
             "id": "builtin.action.go-away-annoyed",
@@ -377,14 +364,13 @@
             "category": "action.performance",
             "name": "不耐烦驱赶",
             "source": "builtin",
-            "url": "/builtin-assets/actions/GoAwayAnnoyed.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "dismiss"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "go-away-annoyed"
         },
         {
             "id": "builtin.action.stop-one-hand-alt",
@@ -392,14 +378,13 @@
             "category": "action.performance",
             "name": "单手制止·二",
             "source": "builtin",
-            "url": "/builtin-assets/actions/StopOneHand2.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "stop-one-hand-alt"
         },
         {
             "id": "builtin.action.stop-two-hand-alt",
@@ -407,14 +392,13 @@
             "category": "action.performance",
             "name": "双手制止·二",
             "source": "builtin",
-            "url": "/builtin-assets/actions/StopTwoHand2.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "stop"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "stop-two-hand-alt"
         },
         {
             "id": "builtin.action.thumbs-down-alt",
@@ -422,14 +406,13 @@
             "category": "action.performance",
             "name": "否定·二",
             "source": "builtin",
-            "url": "/builtin-assets/actions/ThumbsDown2.fbx",
-            "format": "fbx",
+            "url": "/builtin-assets/actions.glb",
+            "format": "gltf",
             "license": "CC0 (J-Beardmore/FreeMotionPack1)",
             "skeletonFamily": "mixamo",
             "tags": ["gesture", "reject"],
             "loopMode": "once",
-            "trimStartSeconds": 0.06666666666666667,
-            "trimEndSeconds": 0.03333333333333333
+            "clipName": "thumbs-down-alt"
         }
     ]
 }
