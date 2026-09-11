@@ -3,7 +3,7 @@ import type { DirectorContext, SerializedCommand } from "@/command/DirectorComma
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
-import { GRID_SIZE, RENDER_QUALITY, isGridSizeValid, isRenderQuality } from "@/studio/StudioEnvironment";
+import { EXPOSURE, GRID_SIZE, RENDER_QUALITY, isExposureValid, isGridSizeValid, isRenderQuality } from "@/studio/StudioEnvironment";
 import type { RenderQuality } from "@/studio/StudioEnvironment";
 
 const STUDIO_VERSION = "1" as const;
@@ -137,6 +137,75 @@ export class SetStudioOutputGridVisibleCommand extends DirectorCommand<SetVisibl
     }
 }
 
+interface SetExposurePayload {
+    readonly exposure: number;
+}
+
+const SET_EXPOSURE_CONTRACT: PayloadContract = {
+    properties: { exposure: { type: "number" } },
+    required: ["exposure"],
+};
+
+/** 成像曝光:影调意图的数值出口(压暗做低调、提亮做柔和),与画质档同域持久化。 */
+export class SetStudioExposureCommand extends DirectorCommand<SetExposurePayload> {
+    static readonly TYPE = "studio.set-exposure";
+    readonly type = SetStudioExposureCommand.TYPE;
+
+    constructor(readonly payload: SetExposurePayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return isExposureValid(this.payload.exposure)
+            ? []
+            : [`曝光必须是 ${EXPOSURE.MIN}~${EXPOSURE.MAX} 之间的有限数`];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.studio.setExposure(this.payload.exposure);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetStudioExposureCommand.TYPE, payload: { exposure: ctx.studio.exposure } }];
+    }
+}
+
+interface SetEnabledPayload {
+    readonly enabled: boolean;
+}
+
+const SET_ENABLED_CONTRACT: PayloadContract = {
+    properties: { enabled: { type: "boolean" } },
+    required: ["enabled"],
+};
+
+/** 环境光照(IBL)开关:开启后金属度/粗糙度才参与成像;程序化环境,无外部资源。 */
+export class SetStudioEnvironmentLightingCommand extends DirectorCommand<SetEnabledPayload> {
+    static readonly TYPE = "studio.set-environment-lighting";
+    readonly type = SetStudioEnvironmentLightingCommand.TYPE;
+
+    constructor(readonly payload: SetEnabledPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return typeof this.payload.enabled === "boolean" ? [] : ["环境光照开关必须是 boolean"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.studio.setEnvironmentLightingEnabled(this.payload.enabled);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [
+            {
+                type: SetStudioEnvironmentLightingCommand.TYPE,
+                payload: { enabled: ctx.studio.environmentLightingEnabled },
+            },
+        ];
+    }
+}
+
 /** 演播室档位读模型:AI/宿主可发现当前地板尺度与画质档,不接触 Three 或 canvas。 */
 export class StudioGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "studio.get";
@@ -152,6 +221,7 @@ export class StudioGetQuery implements DirectorQuery<Record<string, never>> {
         return {
             ...ctx.studio.toJSON(),
             gridSizeRangeMeters: { min: GRID_SIZE.MIN_METERS, max: GRID_SIZE.MAX_METERS },
+            exposureRange: { min: EXPOSURE.MIN, max: EXPOSURE.MAX },
         };
     }
 }
@@ -190,6 +260,21 @@ export function registerStudioCommands(dispatcher: CommandDispatcher): void {
             "command",
             [STUDIO_EDIT_PERMISSION],
             SET_VISIBLE_CONTRACT,
+        ),
+    );
+    dispatcher.register(
+        SetStudioExposureCommand.TYPE,
+        (payload: SetExposurePayload) => new SetStudioExposureCommand(payload),
+        studioCapability(SetStudioExposureCommand.TYPE, "command", [STUDIO_EDIT_PERMISSION], SET_EXPOSURE_CONTRACT),
+    );
+    dispatcher.register(
+        SetStudioEnvironmentLightingCommand.TYPE,
+        (payload: SetEnabledPayload) => new SetStudioEnvironmentLightingCommand(payload),
+        studioCapability(
+            SetStudioEnvironmentLightingCommand.TYPE,
+            "command",
+            [STUDIO_EDIT_PERMISSION],
+            SET_ENABLED_CONTRACT,
         ),
     );
     dispatcher.registerQuery(

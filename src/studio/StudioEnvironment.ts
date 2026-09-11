@@ -33,6 +33,19 @@ export function isGridSizeValid(value: unknown): value is number {
     );
 }
 
+/**
+ * 成像曝光合法域(`WebGLRenderer.toneMappingExposure` 的倍率)。
+ *
+ * 色调映射本身由 R3F 缺省提供(实测 `ACESFilmicToneMapping` + `srgb` 输出),缺的是曝光控制:
+ * 恒为 1 时「压暗做低调」「提亮做柔和」这类基本影调意图在导演台里无法表达。
+ * 上下限按可用影调区间收敛——低于 0.2 画面近黑、高于 3 高光全部烧掉,两端都不是可用素材。
+ */
+export const EXPOSURE = { DEFAULT: 1, MIN: 0.2, MAX: 3 } as const;
+
+export function isExposureValid(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value >= EXPOSURE.MIN && value <= EXPOSURE.MAX;
+}
+
 /** 演播室档位的可序列化形态(工程文档的 `studio` 通道)。 */
 export interface StudioEnvironmentJSON {
     /** 参考地板边长(米) */
@@ -43,6 +56,16 @@ export interface StudioEnvironmentJSON {
     readonly frameRateVisible: boolean;
     /** 成片安全框内的九宫格构图辅助线显隐 */
     readonly outputGridVisible: boolean;
+    /** 成像曝光倍率;色调映射由 R3F 缺省提供,本档只控曝光 */
+    readonly exposure: number;
+    /**
+     * 环境光照(IBL)开关。
+     *
+     * 开启后金属度/粗糙度才参与成像(内置人形的 glTF 材质是规范默认全金属,
+     * 无环境贴图时 albedo 不参与漫反射)。环境贴图为程序化生成,不拉取任何外部资源。
+     * PMREM 卷积有一次性成本且常驻一张立方图显存,故同为开关。
+     */
+    readonly environmentLightingEnabled: boolean;
 }
 
 export const STUDIO_ENVIRONMENT_DEFAULTS: StudioEnvironmentJSON = {
@@ -50,6 +73,8 @@ export const STUDIO_ENVIRONMENT_DEFAULTS: StudioEnvironmentJSON = {
     renderQuality: RENDER_QUALITY.PERFORMANCE,
     frameRateVisible: false,
     outputGridVisible: true,
+    exposure: EXPOSURE.DEFAULT,
+    environmentLightingEnabled: false,
 };
 
 export function isStudioEnvironmentJSON(value: unknown): value is StudioEnvironmentJSON {
@@ -59,16 +84,18 @@ export function isStudioEnvironmentJSON(value: unknown): value is StudioEnvironm
         isGridSizeValid(candidate.gridSizeMeters) &&
         isRenderQuality(candidate.renderQuality) &&
         typeof candidate.frameRateVisible === "boolean" &&
-        typeof candidate.outputGridVisible === "boolean"
+        typeof candidate.outputGridVisible === "boolean" &&
+        isExposureValid(candidate.exposure) &&
+        typeof candidate.environmentLightingEnabled === "boolean"
     );
 }
 
 /**
  * 演播室档位聚合(工程级、可 JSON 往返)。
  *
- * 边界:这里放的是「这个工程在什么演播室里排的」——参考地板尺度、渲染画质档,
- * 以及作者为本工程选定的观测读数与构图辅助线。它们决定成片质量与画面构图判断,
- * 因此属于工程数据,随文档导出/导入并进撤销栈;
+ * 边界:这里放的是「这个工程在什么演播室里排的」——参考地板尺度、渲染画质档、成像档位
+ * (曝光/接触阴影/环境光照),以及作者为本工程选定的观测读数与构图辅助线。
+ * 它们决定成片质量与画面构图判断,因此属于工程数据,随文档导出/导入并进撤销栈;
  * 壳层的空间编排(左栏开合、时间线高度、预览态)仍是瞬时 UI 态,留在 WorkbenchLayoutStore。
  *
  * 写入纪律:一切修改经 studio.* 命令,组件与宿主不直写(命令层收口)。
@@ -78,6 +105,8 @@ export class StudioEnvironment {
     renderQuality: RenderQuality = STUDIO_ENVIRONMENT_DEFAULTS.renderQuality;
     frameRateVisible: boolean = STUDIO_ENVIRONMENT_DEFAULTS.frameRateVisible;
     outputGridVisible: boolean = STUDIO_ENVIRONMENT_DEFAULTS.outputGridVisible;
+    exposure: number = STUDIO_ENVIRONMENT_DEFAULTS.exposure;
+    environmentLightingEnabled: boolean = STUDIO_ENVIRONMENT_DEFAULTS.environmentLightingEnabled;
 
     /** 宿主 prop 只注入创建期初值;运行期由项目菜单经命令接管。 */
     constructor(init?: { gridSizeMeters?: number | undefined }) {
@@ -115,12 +144,24 @@ export class StudioEnvironment {
         this.outputGridVisible = visible;
     }
 
+    /** 曝光唯一写口;非法值静默拒绝(同 setGridSizeMeters 口径) */
+    setExposure(value: number): void {
+        if (!isExposureValid(value)) return;
+        this.exposure = value;
+    }
+
+    setEnvironmentLightingEnabled(enabled: boolean): void {
+        this.environmentLightingEnabled = enabled;
+    }
+
     /** 文档导入的整档替换:逐字段覆盖,不保留上一工程的残留档位。 */
     restore(snapshot: StudioEnvironmentJSON): void {
         this.gridSizeMeters = snapshot.gridSizeMeters;
         this.renderQuality = snapshot.renderQuality;
         this.frameRateVisible = snapshot.frameRateVisible;
         this.outputGridVisible = snapshot.outputGridVisible;
+        this.exposure = snapshot.exposure;
+        this.environmentLightingEnabled = snapshot.environmentLightingEnabled;
     }
 
     toJSON(): StudioEnvironmentJSON {
@@ -129,6 +170,8 @@ export class StudioEnvironment {
             renderQuality: this.renderQuality,
             frameRateVisible: this.frameRateVisible,
             outputGridVisible: this.outputGridVisible,
+            exposure: this.exposure,
+            environmentLightingEnabled: this.environmentLightingEnabled,
         };
     }
 }
