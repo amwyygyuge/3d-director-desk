@@ -88,9 +88,11 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
         "设走位轨朝向、贴地、步频与跨度外取值策略;extrapolation: hold(默认,走完停在终点、开演前站在起点)/ rest(时段外回到对象自身变换)",
     // 动作与播放
     "action.mount":
-        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds/fillPolicy 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
     "action.set-range":
-        "调整对象某段动作排期的开始时间、演出时长、进入时长与回收时长;多段序列下传 performanceId 定位改哪一段(缺省改首段),段 id 见 scene.describe 的 actionSequence.performanceId;显式改时段会解除走位轨对齐;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
+        "调整对象某段动作排期的开始时间、演出时长、进入时长与回收时长;多段序列下传 performanceId 定位改哪一段(缺省改首段),段 id 见 scene.describe 的 actionSequence.performanceId;显式改时段会解除走位轨对齐。时段与 clip 时长不等时如何铺满由 fillPolicy 决定(见 action.set-fill-policy),改时段不改该策略",
+    "action.set-fill-policy":
+        "设某段动作排期的时段填充策略:repeat(按原速重复,拉长时段=演更久)/ hold(按原速播一次后停末帧,拉长=保持终态更久)/ stretch(拉伸铺满,拉长=慢放);传 null 则跟随资产循环语义(可循环→repeat,单次→hold)。多段序列下传 performanceId 定位(缺省改首段);只改填充方式,不动段的起止",
     "action.unmount":
         "卸载对象**全部**动作,骨骼回常驻基础姿势(未设置则回绑定姿态);只删一段请用 action.unmount-performance",
     "action.unmount-performance":

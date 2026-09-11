@@ -336,6 +336,7 @@ export {
 } from "@/command/cameraCommands";
 export {
     MountActionCommand,
+    SetActionFillPolicyCommand,
     SetActionRangeCommand,
     registerActionCommands,
     TransportPauseCommand,
