@@ -50,7 +50,7 @@ import {
 } from "@/ui/shell/theme";
 import { SceneRoot } from "@/ui/viewport/scene/SceneRoot";
 import { PlaybackDriver } from "@/ui/viewport/scene/PlaybackDriver";
-import { StudioRig } from "@/ui/viewport/scene/StudioRig";
+import { StudioRig, StudioShadowRig } from "@/ui/viewport/scene/StudioRig";
 import { StudioFloorGrid } from "@/ui/viewport/scene/StudioFloorGrid";
 import { CameraMotionRig } from "@/ui/viewport/scene/CameraMotionRig";
 import { OrbitAuthorityRig } from "@/ui/viewport/scene/OrbitAuthorityRig";
@@ -253,7 +253,10 @@ export const DirectorDesk = observer(function DirectorDesk({
                     >
                         {/* 画布全屏:一切 UI 悬浮其上,折叠/展开不再引起画面跳动 */}
                         <div className="absolute inset-0">
-                            {/* key 绑画质档:antialias 是 WebGL 上下文属性,只能靠重建上下文切换 */}
+                            {/* key 绑画质档:antialias 是 WebGL 上下文属性,只能靠重建上下文切换。
+                                shadows 必须由 Canvas 声明:R3F 托管 gl.shadowMap.enabled,运行时手动置 true
+                                会被它复位回 false(实测),投影因此永远不出现。真正的开关在 StudioRig——
+                                关闭时不挂投射光也不挂接收面,深度图不产生成本。 */}
                             <Canvas
                                 key={stores.studio.renderQuality}
                                 frameloop={
@@ -263,6 +266,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                                 }
                                 camera={{ position: STUDIO_CAMERA_POSITION, fov: STUDIO_CAMERA_FOV_DEGREES }}
                                 dpr={[...stores.studio.profile.dpr]}
+                                shadows="soft"
                                 gl={{
                                     antialias: stores.studio.profile.antialias,
                                     preserveDrawingBuffer: false,
@@ -301,6 +305,8 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     maxDistance={STUDIO_CAMERA_MAX_DISTANCE_METERS}
                                 />
                                 <StudioRig />
+                                {/* 投影与布光模式无关:custom 布光的工程同样需要接地线索 */}
+                                <StudioShadowRig />
                                 <SceneRoot />
                                 <PlaybackDriver />
                                 <ShotCameraRig />

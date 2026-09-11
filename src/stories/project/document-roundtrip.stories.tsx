@@ -62,6 +62,8 @@ const STUDIO_SETTINGS: StudioEnvironmentJSON = {
     outputGridVisible: false,
     exposure: 1.6,
     environmentLightingEnabled: true,
+    shadowsEnabled: true,
+    floorColor: "#3b2f2a",
 };
 
 const CHECKLIST = [
@@ -151,6 +153,13 @@ function seedStudioEnvironment(stores: DirectorDeskStores): void {
     const exposureOutOfRange = dispatchCatching(stores, "studio.set-exposure", { exposure: EXPOSURE.MAX + 1 });
     assertAcceptance(!exposureOutOfRange.ok, "超界曝光未被命令层拒绝");
     dispatchOk(stores, "studio.set-environment-lighting", { enabled: STUDIO_SETTINGS.environmentLightingEnabled });
+    dispatchOk(stores, "studio.set-shadows", { enabled: STUDIO_SETTINGS.shadowsEnabled });
+    dispatchOk(stores, "studio.set-floor-color", { color: STUDIO_SETTINGS.floorColor });
+    // 非法颜色必须被围栏拒绝,而不是静默落一个无效值进文档
+    assertAcceptance(
+        !dispatchCatching(stores, "studio.set-floor-color", { color: "red" }).ok,
+        "非法地板颜色未被命令层拒绝",
+    );
     assertStudioEnvironment(stores, "命令写入后");
     const read = stores.dispatcher.query({ type: "studio.get", payload: {} }, stores);
     assertAcceptance(read.ok, "studio.get 查询失败");
@@ -171,6 +180,8 @@ function assertStudioEnvironment(stores: DirectorDeskStores, stage: string): voi
         studio.environmentLightingEnabled === STUDIO_SETTINGS.environmentLightingEnabled,
         `${stage}环境光照开关不符`,
     );
+    assertAcceptance(studio.shadowsEnabled === STUDIO_SETTINGS.shadowsEnabled, `${stage}投影开关不符`);
+    assertAcceptance(studio.floorColor === STUDIO_SETTINGS.floorColor, `${stage}地板颜色不符`);
 }
 
 /**

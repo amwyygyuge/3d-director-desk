@@ -22,6 +22,27 @@ const RIM_LIGHT_POSITION = [0, 5, -6] as const;
 const ENVIRONMENT_BLUR_SIGMA = 0.04;
 
 /**
+ * 投影装置档位。
+ *
+ * 方位取右上前方,与三点光的主光同侧——投影方向要与造型光一致,否则画面上会出现
+ * 「光从左来、影子朝左」的矛盾线索。强度只用于产生投影,不参与造型(接收面是 shadowMaterial)。
+ *
+ * `bias`/`normalBias` 治两类失真:前者消自投影产生的条纹(shadow acne),
+ * 后者消薄壁几何沿法线方向的漏影;两者都必须小,给大了投影会从接触点脱开(peter-panning)。
+ */
+const SHADOW_LIGHT_COLOR = "#ffffff";
+const SHADOW_LIGHT_INTENSITY = 1.1;
+const SHADOW_LIGHT_POSITION = [6, 12, 8] as const;
+const SHADOW_MAP_SIZE = 2048;
+const SHADOW_CAMERA_NEAR = 0.5;
+/** 投影相机远平面按范围放大:光源在斜上方,深度跨度大于地板边长。 */
+const SHADOW_CAMERA_FAR_FACTOR = 3;
+const SHADOW_BIAS = -0.0005;
+const SHADOW_NORMAL_BIAS = 0.02;
+/** 投影范围下限(米):地板可以很小,但投影框太小会让主体落在框外而没有投影。 */
+const SHADOW_MIN_EXTENT_METERS = 12;
+
+/**
  * 演播室三点布光:仅模式为 studio 时创建,不参与用户灯光实体与其历史。
  *
  * 同时承担与布光档无关的成像状态落地(曝光/环境光照)——它是每桌唯一的演播室 rig,
@@ -86,6 +107,57 @@ export const StudioRig = observer(function StudioRig() {
                 position={FILL_LIGHT_POSITION}
             />
             <directionalLight color={RIM_LIGHT_COLOR} intensity={RIM_LIGHT_INTENSITY} position={RIM_LIGHT_POSITION} />
+        </>
+    );
+});
+
+/**
+ * 投影装置(独立组件,与布光模式无关)。
+ *
+ * 刻意不挂在 `StudioRig` 的 studio 分支里:接地投影是**几何接触线索**,不是某套布光预设的一部分,
+ * 挂进去会让 `lightingMode: "custom"` 的工程静默失去它(同 IBL 的作用域判断)。
+ *
+ * 由自带的投射光负责,而不是给三点光加 `castShadow`:三点光只在 studio 模式存在,
+ * 且它们的方位是为造型服务的,同时兼任投影会让「换布光」意外改变接地位置。
+ *
+ * 只负责投射,不带接收面:接收方是 `StudioFloorGrid` 的实心地面(它同时承载地板颜色)。
+ * 另起一张接收面会与地面共面闪烁,并多一次全屏绘制。
+ * 关闭即整体卸载,深度图不再产生成本——这才是开关的意义。
+ */
+export const StudioShadowRig = observer(function StudioShadowRig() {
+    const { scene, studio } = useDirectorDeskStores();
+    const invalidate = useThree((state) => state.invalidate);
+    const enabled = studio.shadowsEnabled;
+    const gridSizeMeters = studio.gridSizeMeters;
+    const revision = scene.revision;
+    const extent = Math.max(gridSizeMeters, SHADOW_MIN_EXTENT_METERS);
+
+    useEffect(() => {
+        invalidate();
+    }, [invalidate, enabled, extent, revision]);
+
+    if (!enabled) return null;
+
+    // 正交投影框跟随地板范围:给小了远处主体没有投影,给大了同一张深度图摊薄、投影发虚。
+    const half = extent / 2;
+    return (
+        <>
+            <directionalLight
+                castShadow
+                color={SHADOW_LIGHT_COLOR}
+                intensity={SHADOW_LIGHT_INTENSITY}
+                position={SHADOW_LIGHT_POSITION}
+                shadow-mapSize-width={SHADOW_MAP_SIZE}
+                shadow-mapSize-height={SHADOW_MAP_SIZE}
+                shadow-camera-left={-half}
+                shadow-camera-right={half}
+                shadow-camera-top={half}
+                shadow-camera-bottom={-half}
+                shadow-camera-near={SHADOW_CAMERA_NEAR}
+                shadow-camera-far={extent * SHADOW_CAMERA_FAR_FACTOR}
+                shadow-bias={SHADOW_BIAS}
+                shadow-normalBias={SHADOW_NORMAL_BIAS}
+            />
         </>
     );
 });

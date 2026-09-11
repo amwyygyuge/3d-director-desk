@@ -3,7 +3,16 @@ import type { DirectorContext, SerializedCommand } from "@/command/DirectorComma
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
-import { EXPOSURE, GRID_SIZE, RENDER_QUALITY, isExposureValid, isGridSizeValid, isRenderQuality } from "@/studio/StudioEnvironment";
+import {
+    EXPOSURE,
+    FLOOR_COLOR_DEFAULT,
+    GRID_SIZE,
+    RENDER_QUALITY,
+    isExposureValid,
+    isFloorColor,
+    isGridSizeValid,
+    isRenderQuality,
+} from "@/studio/StudioEnvironment";
 import type { RenderQuality } from "@/studio/StudioEnvironment";
 
 const STUDIO_VERSION = "1" as const;
@@ -206,6 +215,61 @@ export class SetStudioEnvironmentLightingCommand extends DirectorCommand<SetEnab
     }
 }
 
+/** 投影开关:接地感的主要来源,有每帧深度图成本故显式可关(缺省关)。 */
+export class SetStudioShadowsCommand extends DirectorCommand<SetEnabledPayload> {
+    static readonly TYPE = "studio.set-shadows";
+    readonly type = SetStudioShadowsCommand.TYPE;
+
+    constructor(readonly payload: SetEnabledPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return typeof this.payload.enabled === "boolean" ? [] : ["投影开关必须是 boolean"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.studio.setShadowsEnabled(this.payload.enabled);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetStudioShadowsCommand.TYPE, payload: { enabled: ctx.studio.shadowsEnabled } }];
+    }
+}
+
+interface SetFloorColorPayload {
+    readonly color: string;
+}
+
+const SET_FLOOR_COLOR_CONTRACT: PayloadContract = {
+    properties: { color: { type: "string" } },
+    required: ["color"],
+};
+
+/** 地板颜色:画面面积最大的一块,决定人物反差与整体影调,故属成像档位。 */
+export class SetStudioFloorColorCommand extends DirectorCommand<SetFloorColorPayload> {
+    static readonly TYPE = "studio.set-floor-color";
+    readonly type = SetStudioFloorColorCommand.TYPE;
+
+    constructor(readonly payload: SetFloorColorPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return isFloorColor(this.payload.color)
+            ? []
+            : [`地板颜色必须是 6 位十六进制(如 ${FLOOR_COLOR_DEFAULT})`];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.studio.setFloorColor(this.payload.color);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetStudioFloorColorCommand.TYPE, payload: { color: ctx.studio.floorColor } }];
+    }
+}
+
 /** 演播室档位读模型:AI/宿主可发现当前地板尺度与画质档,不接触 Three 或 canvas。 */
 export class StudioGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "studio.get";
@@ -275,6 +339,21 @@ export function registerStudioCommands(dispatcher: CommandDispatcher): void {
             "command",
             [STUDIO_EDIT_PERMISSION],
             SET_ENABLED_CONTRACT,
+        ),
+    );
+    dispatcher.register(
+        SetStudioShadowsCommand.TYPE,
+        (payload: SetEnabledPayload) => new SetStudioShadowsCommand(payload),
+        studioCapability(SetStudioShadowsCommand.TYPE, "command", [STUDIO_EDIT_PERMISSION], SET_ENABLED_CONTRACT),
+    );
+    dispatcher.register(
+        SetStudioFloorColorCommand.TYPE,
+        (payload: SetFloorColorPayload) => new SetStudioFloorColorCommand(payload),
+        studioCapability(
+            SetStudioFloorColorCommand.TYPE,
+            "command",
+            [STUDIO_EDIT_PERMISSION],
+            SET_FLOOR_COLOR_CONTRACT,
         ),
     );
     dispatcher.registerQuery(

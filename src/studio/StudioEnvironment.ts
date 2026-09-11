@@ -46,6 +46,19 @@ export function isExposureValid(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value) && value >= EXPOSURE.MIN && value <= EXPOSURE.MAX;
 }
 
+/**
+ * 地板颜色合法域(6 位十六进制)。
+ *
+ * 地板是画面里面积最大的一块,它的明度直接决定人物的反差与整体影调,
+ * 因此属于成像档位而非纯装饰:换深色地板做低调、换浅色做柔和高调。
+ */
+const FLOOR_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+export const FLOOR_COLOR_DEFAULT = "#2a2a2e";
+
+export function isFloorColor(value: unknown): value is string {
+    return typeof value === "string" && FLOOR_COLOR_PATTERN.test(value);
+}
+
 /** 演播室档位的可序列化形态(工程文档的 `studio` 通道)。 */
 export interface StudioEnvironmentJSON {
     /** 参考地板边长(米) */
@@ -66,6 +79,15 @@ export interface StudioEnvironmentJSON {
      * PMREM 卷积有一次性成本且常驻一张立方图显存,故同为开关。
      */
     readonly environmentLightingEnabled: boolean;
+    /**
+     * 投影开关(主光的实时 shadow map + 地面接收)。
+     *
+     * 「物体真的站在空间里」的主要信息量来源——没有它,人物在画面上是贴片。
+     * 有实测成本:开启后每帧要额外渲一遍深度图,故做成开关;缺省关闭,既有工程画面零变化。
+     */
+    readonly shadowsEnabled: boolean;
+    /** 参考地板颜色(6 位十六进制);面积最大的一块,直接影响人物反差 */
+    readonly floorColor: string;
 }
 
 export const STUDIO_ENVIRONMENT_DEFAULTS: StudioEnvironmentJSON = {
@@ -75,6 +97,8 @@ export const STUDIO_ENVIRONMENT_DEFAULTS: StudioEnvironmentJSON = {
     outputGridVisible: true,
     exposure: EXPOSURE.DEFAULT,
     environmentLightingEnabled: false,
+    shadowsEnabled: false,
+    floorColor: FLOOR_COLOR_DEFAULT,
 };
 
 export function isStudioEnvironmentJSON(value: unknown): value is StudioEnvironmentJSON {
@@ -86,7 +110,9 @@ export function isStudioEnvironmentJSON(value: unknown): value is StudioEnvironm
         typeof candidate.frameRateVisible === "boolean" &&
         typeof candidate.outputGridVisible === "boolean" &&
         isExposureValid(candidate.exposure) &&
-        typeof candidate.environmentLightingEnabled === "boolean"
+        typeof candidate.environmentLightingEnabled === "boolean" &&
+        typeof candidate.shadowsEnabled === "boolean" &&
+        isFloorColor(candidate.floorColor)
     );
 }
 
@@ -107,6 +133,8 @@ export class StudioEnvironment {
     outputGridVisible: boolean = STUDIO_ENVIRONMENT_DEFAULTS.outputGridVisible;
     exposure: number = STUDIO_ENVIRONMENT_DEFAULTS.exposure;
     environmentLightingEnabled: boolean = STUDIO_ENVIRONMENT_DEFAULTS.environmentLightingEnabled;
+    shadowsEnabled: boolean = STUDIO_ENVIRONMENT_DEFAULTS.shadowsEnabled;
+    floorColor: string = STUDIO_ENVIRONMENT_DEFAULTS.floorColor;
 
     /** 宿主 prop 只注入创建期初值;运行期由项目菜单经命令接管。 */
     constructor(init?: { gridSizeMeters?: number | undefined }) {
@@ -154,6 +182,16 @@ export class StudioEnvironment {
         this.environmentLightingEnabled = enabled;
     }
 
+    setShadowsEnabled(enabled: boolean): void {
+        this.shadowsEnabled = enabled;
+    }
+
+    /** 地板颜色唯一写口;非法值静默拒绝(同 setGridSizeMeters 口径) */
+    setFloorColor(value: string): void {
+        if (!isFloorColor(value)) return;
+        this.floorColor = value.toLowerCase();
+    }
+
     /** 文档导入的整档替换:逐字段覆盖,不保留上一工程的残留档位。 */
     restore(snapshot: StudioEnvironmentJSON): void {
         this.gridSizeMeters = snapshot.gridSizeMeters;
@@ -162,6 +200,8 @@ export class StudioEnvironment {
         this.outputGridVisible = snapshot.outputGridVisible;
         this.exposure = snapshot.exposure;
         this.environmentLightingEnabled = snapshot.environmentLightingEnabled;
+        this.shadowsEnabled = snapshot.shadowsEnabled;
+        this.floorColor = snapshot.floorColor;
     }
 
     toJSON(): StudioEnvironmentJSON {
@@ -172,6 +212,8 @@ export class StudioEnvironment {
             outputGridVisible: this.outputGridVisible,
             exposure: this.exposure,
             environmentLightingEnabled: this.environmentLightingEnabled,
+            shadowsEnabled: this.shadowsEnabled,
+            floorColor: this.floorColor,
         };
     }
 }

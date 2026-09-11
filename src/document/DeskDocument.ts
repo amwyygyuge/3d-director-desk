@@ -11,8 +11,9 @@ import type { OutputFormatId } from "@/output/OutputFormat";
 import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 
 /**
- * v20 起演播室档位带成像三项(曝光/接触阴影/环境光照);`isStudioEnvironmentJSON` 要求三者存在,
- *     旧档缺任一项即判不支持(零兼容阶段不写迁移器)。
+ * v21 起演播室档位带投影开关与地板颜色;`isStudioEnvironmentJSON` 要求两者存在。
+ * v20 起演播室档位带成像三项(曝光/环境光照);同上,旧档缺任一项即判不支持
+ *     (零兼容阶段不写迁移器)。
  * v19 起演播室档位进文档:参考地板边长、渲染画质档、帧率读数与九宫格显隐。
  *     它们决定成片质量与构图判断,此前只活在壳层 UI 态里,导出/导入/刷新一律丢失;
  *     校验器对 `studio` 硬要求(缺失即判无效),故必须换版本号。
@@ -32,7 +33,7 @@ import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 20;
+export const DESK_DOCUMENT_VERSION = 21;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {
