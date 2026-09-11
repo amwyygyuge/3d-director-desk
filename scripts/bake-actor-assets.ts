@@ -72,13 +72,16 @@ async function loadSourceScene(): Promise<{ scene: Object3D; animations: readonl
 }
 
 /**
- * 关键帧去冗 + 通道过滤:剔除不进场景的通道,删恒定轨道与等值中间帧。
+ * 关键帧去冗 + 通道过滤:剔除不进场景的通道,删「恒定且等于 rest」的轨道与等值中间帧。
  *
- * 恒定轨道整条删掉——骨骼停在 rest 姿态,不写轨道与写一条恒定轨道等价;
- * 中间的等值帧删掉——插值在等值端点之间取任何 t 都得同一个值。
- * 两者都在容差内无损,只减字节与运行时插值工作量。
+ * 中间的等值帧删掉——插值在等值端点之间取任何 t 都得同一个值,无损。
+ *
+ * 整条轨道只在**恒定值等于骨骼 rest 值**时才删:此时不写轨道与写一条恒定轨道等价。
+ * 「恒定」本身不是充分条件——一条轨道可以全程恒定在**非 rest** 的值上(手指保持握持、
+ * 大腿保持屈曲),删掉它骨骼就退回 rest,姿态错。曾据此误删 341 条轨道、涉 43 根骨,
+ * 最严重的 Sitting_Idle_Loop/thigh_l 差 86.9°,坐姿腿型完全不对。
  */
-function normalizedClip(clip: AnimationClip): AnimationClip {
+function normalizedClip(clip: AnimationClip, restByBone: ReadonlyMap<string, readonly number[]>): AnimationClip {
     const tracks = clip.tracks.flatMap((track) => {
         if (isDroppedTrack(track.name)) return [];
         const stride = track.values.length / track.times.length;
@@ -96,8 +99,12 @@ function normalizedClip(clip: AnimationClip): AnimationClip {
                 index === track.times.length - 1 ||
                 !(sameAs(index, index - 1) && sameAs(index, index + 1)),
         );
-        // 首末等值 ⇒ 整条恒定(中间帧已被上一步判为可删):骨骼未参与该动作。
-        if (kept.length === 2 && sameAs(0, track.times.length - 1)) return [];
+        const isConstant = kept.length === 2 && sameAs(0, track.times.length - 1);
+        const rest = restByBone.get(track.name);
+        const matchesRest =
+            rest !== undefined &&
+            rest.every((value, component) => Math.abs(value - track.values[component]!) <= epsilon);
+        if (isConstant && matchesRest) return [];
         const pruned = track.clone();
         pruned.times = new Float32Array(kept.map((index) => track.times[index]!));
         pruned.values = new Float32Array(
@@ -106,6 +113,22 @@ function normalizedClip(clip: AnimationClip): AnimationClip {
         return [pruned];
     });
     return new AnimationClip(clip.name, clip.duration, tracks);
+}
+
+/**
+ * 骨骼 rest 位姿表,键与轨道名同形(`pelvis.quaternion`),供去冗判断「恒定值是否等于 rest」。
+ *
+ * 取自源场景的骨骼节点:产物人偶与源共享同一套骨骼节点(仅根节点被旋转),
+ * 故这里的 rest 就是运行时未被轨道覆盖时骨骼实际停在的位姿。
+ */
+function restPoseByTrackName(scene: Object3D): ReadonlyMap<string, readonly number[]> {
+    const rest = new Map<string, readonly number[]>();
+    scene.traverse((node) => {
+        if (!("isBone" in node && node.isBone)) return;
+        rest.set(`${node.name}.quaternion`, node.quaternion.toArray());
+        rest.set(`${node.name}.position`, node.position.toArray());
+    });
+    return rest;
 }
 
 function firstBoneOf(root: Object3D): Object3D {
@@ -163,10 +186,12 @@ async function bake(): Promise<void> {
     const actorGlb = await exportGlb(source.scene, []);
     await Bun.write(ACTOR_OUTPUT_PATH, actorGlb);
 
+    // rest 表取自骨骼节点局部位姿;根节点的旋转不影响骨骼 local,故与 faceNegativeZ 无先后之分。
+    const restByBone = restPoseByTrackName(source.scene);
     const clips = source.animations
         .filter((clip) => !EXCLUDED_CLIP_PATTERN.test(clip.name))
         .map((clip) => {
-            const normalized = normalizedClip(clip);
+            const normalized = normalizedClip(clip, restByBone);
             console.log(
                 `  ${clip.name.padEnd(24)} ${String(normalized.tracks.length).padStart(2)}/${clip.tracks.length} tracks  ` +
                     `${normalized.duration.toFixed(2)}s`,
