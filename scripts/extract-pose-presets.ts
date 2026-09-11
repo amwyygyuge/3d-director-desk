@@ -1,5 +1,5 @@
-import { BODY_PART, MIXAMO_PART_BONES, SKELETON_FAMILY_MIXAMO } from "../src/actor/mixamoSkeleton";
-import type { BodyPart } from "../src/actor/mixamoSkeleton";
+import { BODY_PART, SKELETON_PART_BONES, SKELETON_FAMILY_UE } from "../src/actor/actorSkeleton";
+import type { BodyPart } from "../src/actor/actorSkeleton";
 import type { PosePresetJSON } from "../src/pose/PosePreset";
 import type { QuaternionTuple } from "../src/pose/PoseSnapshot";
 
@@ -16,7 +16,7 @@ const FLOAT_BYTES = 4;
 const QUATERNION_BYTES = QUATERNION_COMPONENTS * FLOAT_BYTES;
 const ROUNDING_SCALE = 100000;
 const IDENTITY_QUATERNION: QuaternionTuple = [0, 0, 0, 1];
-const SOURCE_PATH = "public/builtin-assets/humanoid-generic.glb";
+const SOURCE_PATH = "public/builtin-assets/actions.glb";
 const OUTPUT_PATH = "src/pose/posePresets.data.ts";
 
 interface GltfAccessor {
@@ -50,18 +50,10 @@ interface GltfChannel {
     };
 }
 
-interface GltfAnimationMetadata {
-    readonly sourceFrameRatio?: number;
-    readonly commentZh?: string;
-}
-
 interface GltfAnimation {
     readonly name: string;
     readonly samplers: readonly GltfSampler[];
     readonly channels: readonly GltfChannel[];
-    readonly extras?: {
-        readonly tapnowActorAnimation?: GltfAnimationMetadata;
-    };
 }
 
 interface GltfDocument {
@@ -81,32 +73,62 @@ interface PresetDefinition {
     readonly id: string;
     readonly labelZh: string;
     readonly part: BodyPart;
+    /**
+     * 取样位置(0=首帧,1=末帧)。动作是连续的,姿势要的是其中一个静止瞬间:
+     * 循环动作取 0 即代表姿态本身,带进出的转换动作要取末帧才是「到位」的姿势。
+     */
+    readonly frameRatio: number;
 }
 
+/**
+ * 姿势预设清单:从动作 clip 里取静止瞬间。
+ *
+ * 循环动作(`*_Loop`)取 frameRatio 0——循环的任一帧都代表该姿态,首帧最稳定。
+ * 带进出的转换动作取末帧(1.0):`Sitting_Enter` 的末帧才是「已坐下」,首帧还站着。
+ *
+ * 下半身决定支撑方式(站/坐/蹲/跪/游),上半身决定手臂姿态,两者可自由组合;
+ * 因此同一 clip 常同时供两个部位,取名分别体现各自语义。
+ */
 const PRESET_DEFINITIONS: readonly PresetDefinition[] = [
-    { clipName: "Sitting", id: "lower-sit-chair", labelZh: "椅上坐", part: BODY_PART.LOWER },
-    { clipName: "Sitting Floor", id: "lower-sit-floor", labelZh: "坐地", part: BODY_PART.LOWER },
-    { clipName: "Crouching", id: "lower-crouch", labelZh: "蹲伏", part: BODY_PART.LOWER },
-    { clipName: "Kneeling", id: "lower-kneel", labelZh: "单膝跪", part: BODY_PART.LOWER },
-    { clipName: "Sleeping Side", id: "lower-sleep-side", labelZh: "侧卧", part: BODY_PART.LOWER },
-    { clipName: "Sleeping Supine", id: "lower-sleep-supine", labelZh: "仰卧", part: BODY_PART.LOWER },
-    { clipName: "Lying Prone", id: "lower-lying-prone", labelZh: "俯卧", part: BODY_PART.LOWER },
-    { clipName: "Sleeping Supine Straight", id: "lower-supine-stretch", labelZh: "仰卧伸展", part: BODY_PART.LOWER },
-    { clipName: "Standing", id: "lower-stand", labelZh: "站立", part: BODY_PART.LOWER },
-    { clipName: "Sitting", id: "upper-sit-knee", labelZh: "坐姿·搭膝", part: BODY_PART.UPPER },
-    { clipName: "Sitting Floor", id: "upper-sit-floor", labelZh: "坐地·支撑", part: BODY_PART.UPPER },
-    { clipName: "Crouching", id: "upper-crouch-balance", labelZh: "蹲姿·撑地", part: BODY_PART.UPPER },
-    { clipName: "Kneeling", id: "upper-kneel-rest", labelZh: "跪姿·垂臂", part: BODY_PART.UPPER },
-    { clipName: "Sleeping Side", id: "upper-sleep-side-hug", labelZh: "侧卧·抱臂", part: BODY_PART.UPPER },
-    { clipName: "Sleeping Supine", id: "upper-sleep-supine-rest", labelZh: "仰卧·平放", part: BODY_PART.UPPER },
-    { clipName: "Lying Prone", id: "upper-lying-prone-rest", labelZh: "俯卧·侧头", part: BODY_PART.UPPER },
-    { clipName: "Sleeping Supine Straight", id: "upper-supine-stretch", labelZh: "仰卧·伸展", part: BODY_PART.UPPER },
-    { clipName: "Standing", id: "upper-stand-natural", labelZh: "站姿·自然", part: BODY_PART.UPPER },
-    { clipName: "Standing", id: "upper-stand-arms-down", labelZh: "垂臂", part: BODY_PART.UPPER },
-    { clipName: "Idle", id: "upper-idle", labelZh: "待机", part: BODY_PART.UPPER },
-    { clipName: "Walking", id: "upper-walk-swing", labelZh: "行走摆臂", part: BODY_PART.UPPER },
-    { clipName: "Running", id: "upper-run-swing", labelZh: "奔跑摆臂", part: BODY_PART.UPPER },
-    { clipName: "Jump", id: "upper-jump-spread", labelZh: "跳跃展臂", part: BODY_PART.UPPER },
+    { clipName: "Idle_Loop", id: "lower-stand", labelZh: "站立", part: BODY_PART.LOWER, frameRatio: 0 },
+    { clipName: "Sitting_Enter", id: "lower-sit-chair", labelZh: "椅上坐", part: BODY_PART.LOWER, frameRatio: 1 },
+    { clipName: "Crouch_Idle_Loop", id: "lower-crouch", labelZh: "蹲伏", part: BODY_PART.LOWER, frameRatio: 0 },
+    { clipName: "Fixing_Kneeling", id: "lower-kneel", labelZh: "单膝跪", part: BODY_PART.LOWER, frameRatio: 0.5 },
+    { clipName: "Swim_Idle_Loop", id: "lower-swim", labelZh: "浮游", part: BODY_PART.LOWER, frameRatio: 0 },
+    { clipName: "Death01", id: "lower-lying", labelZh: "倒地", part: BODY_PART.LOWER, frameRatio: 1 },
+    { clipName: "Jump_Loop", id: "lower-airborne", labelZh: "腾空", part: BODY_PART.LOWER, frameRatio: 0.5 },
+    { clipName: "Idle_Loop", id: "upper-stand-natural", labelZh: "站姿·自然", part: BODY_PART.UPPER, frameRatio: 0 },
+    { clipName: "Idle_Talking_Loop", id: "upper-talking", labelZh: "交谈", part: BODY_PART.UPPER, frameRatio: 0.5 },
+    { clipName: "Sitting_Idle_Loop", id: "upper-sit-rest", labelZh: "坐姿·垂手", part: BODY_PART.UPPER, frameRatio: 0 },
+    {
+        clipName: "Sitting_Talking_Loop",
+        id: "upper-sit-talking",
+        labelZh: "坐姿·交谈",
+        part: BODY_PART.UPPER,
+        frameRatio: 0.5,
+    },
+    {
+        clipName: "Crouch_Idle_Loop",
+        id: "upper-crouch-balance",
+        labelZh: "蹲姿·收臂",
+        part: BODY_PART.UPPER,
+        frameRatio: 0,
+    },
+    {
+        clipName: "Fixing_Kneeling",
+        id: "upper-kneel-work",
+        labelZh: "跪姿·作业",
+        part: BODY_PART.UPPER,
+        frameRatio: 0.5,
+    },
+    { clipName: "Walk_Loop", id: "upper-walk-swing", labelZh: "行走摆臂", part: BODY_PART.UPPER, frameRatio: 0.25 },
+    { clipName: "Sprint_Loop", id: "upper-run-swing", labelZh: "奔跑摆臂", part: BODY_PART.UPPER, frameRatio: 0.25 },
+    { clipName: "Jump_Start", id: "upper-jump-spread", labelZh: "跳跃展臂", part: BODY_PART.UPPER, frameRatio: 1 },
+    { clipName: "PickUp_Table", id: "upper-reach", labelZh: "伸手取物", part: BODY_PART.UPPER, frameRatio: 0.5 },
+    { clipName: "Push_Loop", id: "upper-push", labelZh: "推举", part: BODY_PART.UPPER, frameRatio: 0 },
+    { clipName: "Hit_Chest", id: "upper-hit", labelZh: "受击·护胸", part: BODY_PART.UPPER, frameRatio: 1 },
+    { clipName: "Dance_Loop", id: "upper-dance", labelZh: "舞动", part: BODY_PART.UPPER, frameRatio: 0.5 },
+    { clipName: "Swim_Idle_Loop", id: "upper-swim", labelZh: "浮游·划水", part: BODY_PART.UPPER, frameRatio: 0 },
 ];
 
 function readGlb(bytes: Uint8Array): GlbPayload {
@@ -168,9 +190,7 @@ function sampleQuaternion(
 function createPreset(definition: PresetDefinition, document: GltfDocument, binary: Uint8Array): PosePresetJSON {
     const animation = document.animations.find((candidate) => candidate.name === definition.clipName);
     if (!animation) throw new Error(`未找到动画 clip: ${definition.clipName}`);
-    const sourceComment = animation.extras?.tapnowActorAnimation?.commentZh;
-    if (!sourceComment) throw new Error(`clip 缺少中文姿势说明: ${definition.clipName}`);
-    const sourceFrameRatio = animation.extras?.tapnowActorAnimation?.sourceFrameRatio ?? 0;
+    const sourceFrameRatio = definition.frameRatio;
     const rotations = new Map<string, QuaternionTuple>();
     for (const channel of animation.channels) {
         if (channel.target.path !== ROTATION_PATH) continue;
@@ -181,7 +201,7 @@ function createPreset(definition: PresetDefinition, document: GltfDocument, bina
     }
     const nodesByName = new Map(document.nodes.flatMap((node) => (node.name ? [[node.name, node] as const] : [])));
     // Materializing inherited rest rotations keeps every half-mask independently composable.
-    const bones = MIXAMO_PART_BONES[definition.part].reduce<Record<string, QuaternionTuple>>((result, boneName) => {
+    const bones = SKELETON_PART_BONES[definition.part].reduce<Record<string, QuaternionTuple>>((result, boneName) => {
         const quaternion = rotations.get(boneName) ?? nodeQuaternion(nodesByName.get(boneName));
         result[boneName] = quaternion;
         return result;
@@ -192,18 +212,45 @@ function createPreset(definition: PresetDefinition, document: GltfDocument, bina
         id: definition.id,
         labelZh: definition.labelZh,
         part: definition.part,
-        skeletonFamily: SKELETON_FAMILY_MIXAMO,
+        skeletonFamily: SKELETON_FAMILY_UE,
         bones,
         custom: false,
     };
 }
 
+/**
+ * 产出直接符合 prettier 风格,避免 `bun run format` 把生成物改脏
+ * (生成物被改写后 md5 与重跑脚本的结果不一致,可复现性就无从校验)。
+ *
+ * 关键差异:标识符键不加引号、四元数四个分量压在一行——`JSON.stringify` 两者都不满足。
+ */
 function formatData(presets: readonly PosePresetJSON[]): string {
+    const body = presets
+        .map((preset) => {
+            const bones = Object.entries(preset.bones)
+                .map(([boneName, quaternion]) => `            ${boneName}: [${quaternion.join(", ")}],`)
+                .join("\n");
+            return [
+                "    {",
+                `        id: ${JSON.stringify(preset.id)},`,
+                `        labelZh: ${JSON.stringify(preset.labelZh)},`,
+                `        part: ${JSON.stringify(preset.part)},`,
+                `        skeletonFamily: ${JSON.stringify(preset.skeletonFamily)},`,
+                "        bones: {",
+                bones,
+                "        },",
+                `        custom: ${String(preset.custom)},`,
+                "    },",
+            ].join("\n");
+        })
+        .join("\n");
     return [
-        "/* 由 scripts/extract-pose-presets.ts 从 humanoid-generic.glb 生成，勿手改。 */",
+        "/* 由 scripts/extract-pose-presets.ts 从 actions.glb 生成，勿手改。 */",
         'import type { PosePresetJSON } from "@/pose/PosePreset";',
         "",
-        `export const BUILTIN_POSE_PRESETS: readonly PosePresetJSON[] = ${JSON.stringify(presets, null, 4)};`,
+        "export const BUILTIN_POSE_PRESETS: readonly PosePresetJSON[] = [",
+        body,
+        "];",
         "",
     ].join("\n");
 }

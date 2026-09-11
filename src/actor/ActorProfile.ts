@@ -4,7 +4,7 @@ import { ActorBuild } from "@/actor/ActorBuild";
 import type { ActorBuildInit } from "@/actor/ActorBuild";
 
 export interface ActorProfileInit {
-    /** 骨架家族(如 "mixamo"):体型解算与姿势库的兼容判据,随实体走而不再反查资源目录。 */
+    /** 骨架家族(如 "ue"):体型解算与姿势库的兼容判据,随实体走而不再反查资源目录。 */
     readonly skeletonFamily: string;
     readonly appearance?: ActorAppearanceInit;
     readonly build?: ActorBuildInit;

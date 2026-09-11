@@ -9,8 +9,8 @@ import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
 
-import { BODY_PART } from "@/actor/mixamoSkeleton";
-import type { BodyPart } from "@/actor/mixamoSkeleton";
+import { BODY_PART } from "@/actor/actorSkeleton";
+import type { BodyPart } from "@/actor/actorSkeleton";
 import { hasActorProfile } from "@/ui/actor/ActorImageSection";
 import { ModelActionSection } from "@/ui/inspector/Inspector";
 import type { InspectorSectionProps, ReportCommandResult } from "@/ui/inspector/Inspector";

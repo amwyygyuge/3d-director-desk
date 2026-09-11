@@ -21,27 +21,12 @@ export interface EmbeddedClipPresentation {
     readonly loopMode?: ActionLoopMode;
 }
 
-const HUMANOID_CLIPS: readonly EmbeddedClipPresentation[] = [
-    { clipName: "Idle", role: CLIP_ROLE.ACTION, labelZh: "待机", loopMode: ACTION_LOOP_MODE.LOOP },
-    { clipName: "Walking", role: CLIP_ROLE.ACTION, labelZh: "行走", loopMode: ACTION_LOOP_MODE.LOOP },
-    {
-        clipName: "Walking Backward",
-        role: CLIP_ROLE.ACTION,
-        labelZh: "倒退行走",
-        loopMode: ACTION_LOOP_MODE.LOOP,
-    },
-    { clipName: "Jump", role: CLIP_ROLE.ACTION, labelZh: "跳跃", loopMode: ACTION_LOOP_MODE.ONCE },
-    { clipName: "Running", role: CLIP_ROLE.ACTION, labelZh: "奔跑", loopMode: ACTION_LOOP_MODE.LOOP },
-    { clipName: "Standing", role: CLIP_ROLE.POSE_SOURCE, labelZh: "站立" },
-    { clipName: "Sitting", role: CLIP_ROLE.POSE_SOURCE, labelZh: "椅上坐" },
-    { clipName: "Sitting Floor", role: CLIP_ROLE.POSE_SOURCE, labelZh: "坐地" },
-    { clipName: "Crouching", role: CLIP_ROLE.POSE_SOURCE, labelZh: "蹲伏" },
-    { clipName: "Kneeling", role: CLIP_ROLE.POSE_SOURCE, labelZh: "单膝跪" },
-    { clipName: "Sleeping Side", role: CLIP_ROLE.POSE_SOURCE, labelZh: "侧卧" },
-    { clipName: "Sleeping Supine", role: CLIP_ROLE.POSE_SOURCE, labelZh: "仰卧" },
-    { clipName: "Lying Prone", role: CLIP_ROLE.POSE_SOURCE, labelZh: "俯卧" },
-    { clipName: "Sleeping Supine Straight", role: CLIP_ROLE.POSE_SOURCE, labelZh: "仰卧伸展" },
-];
+/**
+ * 内置人偶不内嵌 clip:动作独立成 `actions.glb`(见 scripts/bake-actor-assets.ts),
+ * 姿势预设独立成 `posePresets.data`。故本表为空,呈现规则只服务宿主注入的第三方资产
+ * ——它们的 clip 名不可预期,一律走下面的回退。
+ */
+const HUMANOID_CLIPS: readonly EmbeddedClipPresentation[] = [];
 
 const CLIP_BY_NAME = new Map(HUMANOID_CLIPS.map((clip) => [clip.clipName, clip]));
 
