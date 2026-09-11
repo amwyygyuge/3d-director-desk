@@ -23,6 +23,8 @@ import { SetTimelinePlaybackRangeCommand } from "@/command/timelineCommands";
 import type { EasingCurve } from "@/motion/EasingCurve";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { ACTION_FILL_POLICY } from "@/animation/ActionFillPolicy";
+import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { MONO_FONT_STACK } from "@/ui/shell/theme";
 import { TimelineProjectedRow } from "@/ui/timeline/TimelineTrackRows";
@@ -408,6 +410,72 @@ const WalkKeyEasingControls = observer(function WalkKeyEasingControls() {
     );
 });
 
+/** 填充策略的作用一句话说清:名字只说「是什么」,提示要说「拉长段条会怎样」。 */
+const FILL_POLICY_LABEL: Record<ActionFillPolicy, string> = {
+    [ACTION_FILL_POLICY.REPEAT]: "循环",
+    [ACTION_FILL_POLICY.HOLD]: "保持末帧",
+    [ACTION_FILL_POLICY.STRETCH]: "变速",
+};
+const FILL_POLICY_HINT: Record<ActionFillPolicy, string> = {
+    [ACTION_FILL_POLICY.REPEAT]: "按原速重复播放,拉长段条 = 演更久(走路、待机)",
+    [ACTION_FILL_POLICY.HOLD]: "按原速播一次后停在末帧,拉长段条 = 保持终态更久(倒地、取物)",
+    [ACTION_FILL_POLICY.STRETCH]: "拉伸铺满整段,拉长段条 = 慢放,缩短 = 快放",
+};
+const FOLLOW_ASSET_LABEL = "跟随资产";
+const FOLLOW_ASSET_HINT = "按动作资产的循环语义决定:可循环 → 循环,单次 → 保持末帧";
+
+/**
+ * 动作段的时段填充策略。
+ *
+ * 「跟随资产」是独立的第四态而非某个值的别名:模型里 `fillPolicy: null` 有确定语义
+ * (交还给资产的 loopMode),藏掉它会让作者显式选过之后再也回不到默认。
+ */
+const ActionFillPolicyControls = observer(function ActionFillPolicyControls() {
+    const stores = useDirectorDeskStores();
+    const selection = stores.timelineSelection.current;
+    const objectId = selection.actionObjectId;
+    const performanceId = selection.actionPerformanceId;
+    const performance =
+        objectId && performanceId
+            ? stores.scene.manager.getEntity(objectId)?.actionPerformance(performanceId)
+            : undefined;
+    if (!objectId || !performanceId || !performance) return null;
+    const setPolicy = (fillPolicy: ActionFillPolicy | null): void => {
+        const result = stores.dispatcher.dispatch(
+            { type: "action.set-fill-policy", payload: { objectId, performanceId, fillPolicy } },
+            stores,
+        );
+        reportFailure(stores, result);
+    };
+    return (
+        <>
+            <Typography variant="caption">时段填充</Typography>
+            <Tooltip title={FOLLOW_ASSET_HINT}>
+                <Button
+                    size="small"
+                    sx={{ textTransform: "none" }}
+                    variant={performance.fillPolicy === null ? "contained" : "outlined"}
+                    onClick={() => setPolicy(null)}
+                >
+                    {FOLLOW_ASSET_LABEL}
+                </Button>
+            </Tooltip>
+            {Object.values(ACTION_FILL_POLICY).map((policy) => (
+                <Tooltip key={policy} title={FILL_POLICY_HINT[policy]}>
+                    <Button
+                        size="small"
+                        sx={{ textTransform: "none" }}
+                        variant={performance.fillPolicy === policy ? "contained" : "outlined"}
+                        onClick={() => setPolicy(policy)}
+                    >
+                        {FILL_POLICY_LABEL[policy]}
+                    </Button>
+                </Tooltip>
+            ))}
+        </>
+    );
+});
+
 const SELECTION_LABEL: Record<TimelineSelectionKind, string> = {
     [TIMELINE_SELECTION_KIND.NONE]: "",
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: "成片片段",
@@ -424,7 +492,7 @@ const SELECTION_CONTROLS: Record<TimelineSelectionKind, () => ReactNode> = {
     [TIMELINE_SELECTION_KIND.NONE]: () => null,
     [TIMELINE_SELECTION_KIND.PROGRAM_CLIP]: () => null,
     [TIMELINE_SELECTION_KIND.MOTION_CLIP]: () => null,
-    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: () => null,
+    [TIMELINE_SELECTION_KIND.ACTION_CLIP]: () => <ActionFillPolicyControls />,
     [TIMELINE_SELECTION_KIND.MARKER]: () => null,
     [TIMELINE_SELECTION_KIND.MOTION_KEY]: () => null,
     [TIMELINE_SELECTION_KIND.WALK_TRACK]: () => null,
