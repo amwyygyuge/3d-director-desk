@@ -17,7 +17,7 @@ import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import type { DocumentCompatibilityService } from "@/document/compatibility/DocumentCompatibilityService";
 import { isActionLoopMode } from "@/assets/ActionAsset";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
-import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import { ACTION_FILL_POLICY, defaultFillPolicyFor, isActionFillPolicy } from "@/animation/ActionFillPolicy";
 import { MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 import { parsePosePreset } from "@/pose/PosePreset";
 import type { PosePreset } from "@/pose/PosePreset";
@@ -166,7 +166,9 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
             (mount.startTimeSeconds as number) < 0 ||
             (mount.attackSeconds as number) < 0 ||
             (mount.releaseSeconds as number) < 0 ||
-            (mount.durationSeconds as number) < MINIMUM_ACTION_DURATION_SECONDS,
+            (mount.durationSeconds as number) < MINIMUM_ACTION_DURATION_SECONDS ||
+            // 缺省/null 合法(跟随资产语义);给了值就必须是已知策略,否则运行时会静默按默认播
+            (mount.fillPolicy !== undefined && mount.fillPolicy !== null && !isActionFillPolicy(mount.fillPolicy)),
     );
     if (missing.length > 0) return [`动作 "${value.name}" 的挂载对象不存在`];
     if (missingId.length > 0) return [`动作 "${value.name}" 的排期缺少段 id`];
@@ -178,7 +180,9 @@ function actionScheduleIssues(plan: DocumentImportPlan): readonly string[] {
     return plan.actions.flatMap((action) =>
         action.mountedOn
             .filter((mount) => {
-                const releaseSeconds = action.loopMode === ACTION_LOOP_MODE.ONCE ? mount.releaseSeconds : 0;
+                // 回收只发生在 hold 段;与 PlaybackCoordinator 同一判据,否则围栏与实际播放不一致
+                const fillPolicy = mount.fillPolicy ?? defaultFillPolicyFor(action.loopMode);
+                const releaseSeconds = fillPolicy === ACTION_FILL_POLICY.HOLD ? mount.releaseSeconds : 0;
                 return mount.startTimeSeconds + mount.durationSeconds + releaseSeconds > plan.timeline.duration;
             })
             .map((mount) => `动作 "${action.name}" 在实体 "${mount.objectId}" 上的排期或回收超出时间轴时长`),
@@ -578,6 +582,7 @@ export class DocumentImportService {
                 durationSeconds: mount.durationSeconds,
                 attackSeconds: mount.attackSeconds,
                 releaseSeconds: mount.releaseSeconds,
+                ...(mount.fillPolicy ? { fillPolicy: mount.fillPolicy } : {}),
                 ...(mount.alignment ? { alignToTrack: mount.alignment } : {}),
             });
             if (!outcome.ok && !signal.aborted) {
