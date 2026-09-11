@@ -2,12 +2,12 @@ import { BoneScalePlan } from "@/actor/BoneScalePlan";
 import type { BoneScaleEntry } from "@/actor/BoneScalePlan";
 import type { ActorBuild } from "@/actor/ActorBuild";
 import {
-    MIXAMO_BONE_ORDER,
-    MIXAMO_LIMB_GIRTH_BONES,
-    MIXAMO_SHOULDER_BONES,
-    MIXAMO_TORSO_GIRTH_BONES,
-    mixamoParentOf,
-} from "@/actor/mixamoSkeleton";
+    SKELETON_BONE_ORDER,
+    SKELETON_LIMB_GIRTH_BONES,
+    SKELETON_SHOULDER_BONES,
+    SKELETON_TORSO_GIRTH_BONES,
+    skeletonParentOf,
+} from "@/actor/actorSkeleton";
 import type { Vec3 } from "@/core/SceneObject";
 
 const NEUTRAL_SCALE: Vec3 = [1, 1, 1];
@@ -33,13 +33,13 @@ function isNeutral(scale: Vec3): boolean {
 export class BodyBuildSolver {
     solve(build: ActorBuild): BoneScalePlan {
         const targets = this.targetScales(build);
-        const entries = MIXAMO_BONE_ORDER.flatMap((boneName) => this.localEntry(boneName, targets));
+        const entries = SKELETON_BONE_ORDER.flatMap((boneName) => this.localEntry(boneName, targets));
         return new BoneScalePlan(entries);
     }
 
     private localEntry(boneName: string, targets: ReadonlyMap<string, Vec3>): readonly BoneScaleEntry[] {
         const target = targets.get(boneName) ?? NEUTRAL_SCALE;
-        const parentName = mixamoParentOf(boneName);
+        const parentName = skeletonParentOf(boneName);
         const parentTarget = (parentName ? targets.get(parentName) : undefined) ?? NEUTRAL_SCALE;
         const local: Vec3 = [target[0] / parentTarget[0], target[1] / parentTarget[1], target[2] / parentTarget[2]];
         return isNeutral(local) ? [] : [{ boneName, scale: local }];
@@ -49,12 +49,12 @@ export class BodyBuildSolver {
         const torso: Vec3 = [build.girthScale, 1, build.girthScale];
         const limbGirth = 1 + (build.girthScale - 1) * LIMB_GIRTH_RATIO;
         const limb: Vec3 = [limbGirth, 1, limbGirth];
-        // Shoulder 骨的局部 +Y 指向 Arm(rest 偏移 [0,13.7,0]),故纵向缩放即横向加宽肩带
+        // clavicle 骨的局部 +Y 指向 upperarm(rest 偏移 [0.019,0.141,0.081]),故纵向缩放即横向加宽肩带
         const shoulder: Vec3 = [1, build.shoulderScale, 1];
         return new Map<string, Vec3>([
-            ...MIXAMO_TORSO_GIRTH_BONES.map((boneName) => [boneName, torso] as const),
-            ...MIXAMO_LIMB_GIRTH_BONES.map((boneName) => [boneName, limb] as const),
-            ...MIXAMO_SHOULDER_BONES.map((boneName) => [boneName, shoulder] as const),
+            ...SKELETON_TORSO_GIRTH_BONES.map((boneName) => [boneName, torso] as const),
+            ...SKELETON_LIMB_GIRTH_BONES.map((boneName) => [boneName, limb] as const),
+            ...SKELETON_SHOULDER_BONES.map((boneName) => [boneName, shoulder] as const),
         ]);
     }
 }

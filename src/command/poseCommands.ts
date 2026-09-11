@@ -1,5 +1,5 @@
-import { BODY_PART, isBodyPart } from "@/actor/mixamoSkeleton";
-import type { BodyPart } from "@/actor/mixamoSkeleton";
+import { BODY_PART, isBodyPart } from "@/actor/actorSkeleton";
+import type { BodyPart } from "@/actor/actorSkeleton";
 import { createId } from "@/core/createId";
 import { BoneKeyIndex } from "@/pose/BoneKeyIndex";
 import { PoseComposer } from "@/pose/PoseComposer";
