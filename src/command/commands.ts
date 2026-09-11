@@ -310,6 +310,8 @@ function detachObject(ctx: DirectorContext, id: string): void {
     ctx.binder.unmount(id);
     ctx.scene.removeObject(id);
     ctx.selection.remove(id);
+    // 装载结局随实体退场作废:同 id 的模型再进场时必须重新等真实骨架,不能沿用上一条 "loaded"
+    ctx.ui.forgetModelOutcome(id);
     if (ctx.ui.posePickingObjectId === id) ctx.ui.setPosePicking(null, null);
 }
 

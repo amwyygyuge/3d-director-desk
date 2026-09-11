@@ -417,7 +417,9 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
                 }
                 ui.clearLoading(requestId);
                 request.acquired = loadedHandle;
-                ui.reportModelOutcome(requestId, "loaded");
+                // 此处**不**报 "loaded":句柄到手离内容进场还差一次提交(壳层构造 → primitive 挂到运行时组)。
+                // 在这里落账会让结局表早于真实骨架若干帧转 loaded,动作挂载据此对空壳 root 预检 → 误判
+                // bone-incompatible。结局改由壳层挂载 effect 落账(见下),两者寿命一致。
                 setHandle(loadedHandle);
                 invalidate();
             })
@@ -433,6 +435,9 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
             request.cancelled = true;
             abortController.abort();
             ui.clearLoading(requestId);
+            // 失败结局由本 effect 落账,也必须由本 effect 撤回(成功结局归壳层 effect,见下)。
+            // 只清 loading 会留下一条陈旧结局,同 id 重新装载时就绪判据当场失真。
+            ui.forgetModelOutcome(requestId);
             request.acquired?.release();
         };
     }, [models, ui, sourceUrl, format, requestId, invalidate]);
@@ -480,6 +485,14 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
 
     // 文档导入用同 id 的新实体整体替换并清空骨骼索引:此处补登记并把新画像重新落到运行时。
     // 依赖实体实例——同一次挂载内它不变,导入后才换新,不会造成重复工作。
+    //
+    // 装载结局也在这里落账/撤回,而非「壳层挂载」那个 effect:
+    //  - 必须晚于句柄到手。`ModelImporter.acquire` resolve 时内容还没提交到运行时组,
+    //    在那里报 loaded 会让结局表早于真实骨架转 loaded,动作恢复据此对空壳 root 预检,
+    //    得到匹配率 0% 并被判 bone-incompatible(实测路径:导入 → 清空 → 再导入)。
+    //  - 又必须跟随**实体实例**。`object.remove` + 撤销会换新实体实例,但 id/url/format 不变,
+    //    React 复用同一组件与壳层,只依赖 shell 的 effect 不会重跑;结局便永久停在缺失,
+    //    该对象卡在 "loading",间距语义闸门(place-relative/scene.stage)从此拒绝它。
     useEffect(() => {
         if (!shell) return;
         if (!skeletons.discover(entity.id).ready) skeletons.register(entity.id, shell);
@@ -490,7 +503,11 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
         const runtime = scene.manager.getRuntime(entity.id);
         if (runtime) binder.rebindRuntime(entity.id, runtime);
         playback.sampleObject(entity.id);
-    }, [actorRuntime, skeletons, binder, playback, scene, entity, shell]);
+        ui.reportModelOutcome(entity.id, "loaded");
+        return () => {
+            ui.forgetModelOutcome(entity.id);
+        };
+    }, [actorRuntime, skeletons, binder, playback, scene, ui, entity, shell]);
     if (shell) return <primitive object={shell} />;
     return (
         <mesh>

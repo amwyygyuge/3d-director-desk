@@ -388,6 +388,27 @@ function preparePlan(document: unknown): DocumentImportPreparation {
 }
 
 /**
+ * 内容标识未变的留任实体 id。
+ *
+ * 与渲染层的模型内容签名同口径:`[id, sourceUrl, format]`(见 contents.tsx 的 requestKey)。
+ * 三元组一致才说明该 id 的 Three 内容不会被重新装载,其装载结局仍然成立;
+ * 任一项变化都要按「新装载」对待,旧结局必须作废。
+ */
+function retainedContentIds(entities: readonly SceneObject[], ctx: DirectorContext): readonly string[] {
+    return entities
+        .filter((entity) => {
+            const current = ctx.scene.manager.getEntity(entity.id);
+            return (
+                current !== undefined &&
+                current.kind === entity.kind &&
+                current.sourceUrl === entity.sourceUrl &&
+                current.format === entity.format
+            );
+        })
+        .map((entity) => entity.id);
+}
+
+/**
  * 工程快照替换应用服务：候选聚合先完整构造，提交后只保留新工程的运行时与读模型。
  *
  * 版本兼容不属于本服务：历史文档先由 DocumentCompatibilityService 单向升级到当前版本，
@@ -468,6 +489,12 @@ export class DocumentImportService {
             ctx.selection.clear();
             // 留任模型的骨架未更换,索引与其 bind 基线必须保留;整表清空会把当前姿势烙成 rest
             ctx.skeletons.retainOnly(plan.entities.map((entity) => entity.id));
+            // 装载结局同口径收束,但判据比「id 留任」更严:必须**内容标识**未变。
+            // 渲染层按 [id, sourceUrl, format] 钉住模型内容(见 contents.tsx 的 requestKey),
+            // 其中任一项变化即重新装载,旧结局当场作废。而结局撤回发生在 React 提交时,
+            // 动作恢复的首次就绪探测可能早于那一刻——只按 id 保留就会读到上一份 "loaded",
+            // 对着空壳 root 预检得到匹配率 0%,被 validate 当成 bone-incompatible 拒下。
+            ctx.ui.retainModelOutcomes(retainedContentIds(plan.entities, ctx));
             ctx.ui.setPosePicking(null, null);
             ctx.scene.setLightingMode(plan.lighting.mode);
             ctx.scene.replaceObjects(plan.entities);

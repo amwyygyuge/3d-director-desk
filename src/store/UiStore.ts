@@ -190,4 +190,27 @@ export class UiStore {
         if (this.disposed) return;
         this.modelOutcomes.set(requestId, outcome);
     }
+
+    /**
+     * 忘掉某个对象的装载结局。
+     *
+     * 结局表只描述「当前挂载中的模型内容」:内容卸载(实体退场、url 换绑、画布重建)后旧结局必须一并作废。
+     * 留着它就是一条谎言——同 id 的模型再次装载时 `entityLoadState` 会在真实骨架到位前就报 "loaded",
+     * 动作挂载据此拿空壳 root 做骨骼预检,得到匹配率 0% 并被当成 bone-incompatible 拒下
+     * (实测路径:导入 → 清空场景 → 再导入)。
+     */
+    forgetModelOutcome(requestId: string): void {
+        this.modelOutcomes.delete(requestId);
+    }
+
+    /**
+     * 工程替换的收束:退场对象的装载结局随之作废。
+     * 留任对象的结局必须保留——它们的运行时未更换,清掉会让无骨骼模型永久停在 "loading"。
+     */
+    retainModelOutcomes(objectIds: Iterable<string>): void {
+        const surviving = new Set(objectIds);
+        for (const requestId of [...this.modelOutcomes.keys()]) {
+            if (!surviving.has(requestId)) this.modelOutcomes.delete(requestId);
+        }
+    }
 }
