@@ -38,6 +38,9 @@ const ACTION_NAME = "狐狸#Survey";
 const FOX_CLIP_NAME = "Survey";
 const DURATION_SECONDS = 12;
 const SHOT_COUNT = 3;
+const LENS_SHOT_ID = "shot-镜头参数";
+/** 全部改离默认值:任一项漏出文档,往返断言即挂。 */
+const LENS_SETTINGS = { focalLengthMm: 85, apertureFStop: 1.8, focusDistanceMeters: 3.5 } as const;
 /** 第二段排期与首段的间隔:留一帧以上,避开首尾相接的边界语义。 */
 const SECOND_SEGMENT_GAP_SECONDS = 0.5;
 const SECOND_SEGMENT_DURATION_SECONDS = 1.5;
@@ -89,6 +92,27 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
     placeModel(stores, TEST_ASSETS.fox, { id: FOX_PARTNER_ID, position: [-2, 0, 0] });
     placeModel(stores, TEST_ASSETS.helmet, { position: [2, 0, 0] });
     seedShots(stores);
+    // 第三个机位专用于镜头参数往返:经 camera.set-lens 落账,验证焦距换算与光学参数持久化
+    dispatchOk(stores, "camera.set-shot", {
+        id: LENS_SHOT_ID,
+        shot: { position: [2, 1.5, 5], target: [0, 1, 0], fov: 45 },
+    });
+    dispatchOk(stores, "camera.set-lens", {
+        id: LENS_SHOT_ID,
+        focalLengthMm: LENS_SETTINGS.focalLengthMm,
+        apertureFStop: LENS_SETTINGS.apertureFStop,
+        focusDistanceMeters: LENS_SETTINGS.focusDistanceMeters,
+    });
+    // 焦距写入即换算成 fov:两者不可能同时是真相源
+    const lensShotAfterSet = required(stores.camera.director.getShot(LENS_SHOT_ID), "镜头机位未落账");
+    assertAcceptance(
+        Math.abs(lensShotAfterSet.fov - 45) > 1,
+        `set-lens 的焦距未换算进 fov(仍为 ${lensShotAfterSet.fov})`,
+    );
+    assertAcceptance(
+        !dispatchCatching(stores, "camera.set-lens", { id: LENS_SHOT_ID, apertureFStop: 999 }).ok,
+        "超界光圈未被命令层拒绝",
+    );
     dispatchOk(stores, "timeline.set-duration", { duration: DURATION_SECONDS });
     dispatchOk(stores, "motion.quick-author", {
         subjectId: FOX_ID,
@@ -361,6 +385,13 @@ async function reimportAndAssert(stores: DirectorDeskStores, document: DeskDocum
     assertAcceptance(stores.scene.lightingMode === LIGHTING_MODE.CUSTOM, "灯光模式未随文档还原");
     assertAcceptance(stores.scene.manager.getEntity(LIGHT_ID)?.light?.type === "spot", "灯光实体未随文档还原");
     assertAcceptance(stores.camera.director.listShots().length === SHOT_COUNT, "机位未随文档还原");
+    // 镜头参数随机位往返:焦距不入档(是 fov 派生视图),光圈与对焦距离必须还原
+    const lensShot = stores.camera.director.getShot(LENS_SHOT_ID);
+    assertAcceptance(
+        lensShot?.lens.apertureFStop === LENS_SETTINGS.apertureFStop &&
+            lensShot?.lens.focusDistanceMeters === LENS_SETTINGS.focusDistanceMeters,
+        `镜头参数未随文档还原(${JSON.stringify(lensShot?.lens.toJSON())})`,
+    );
     assertAcceptance(stores.timeline.document.duration === DURATION_SECONDS, "时间轴时长未还原");
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 输出未还原");
     assertStudioEnvironment(stores, "导入还原后");

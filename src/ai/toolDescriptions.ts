@@ -27,6 +27,10 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "camera.remove-shot": "删除机位,连带清理其运镜片段与 Program 排期",
     "camera.frame-subject": "按景别(大远景~大特写七档)为一个或多个被摄体生成同框机位(联合包围球定距)",
     "camera.check-framing": "视锥同框断言:逐被摄体返回 inFrame 与 NDC 边距,负值即出画——布景验收不截图",
+    "camera.set-lens":
+        "按摄影语言设镜头:focalLengthMm 焦距(24 广角/50 标准/85 人像特写,写入即换算 fov,不另存)、" +
+        "apertureFStop 光圈 f 值(越小景深越浅)、focusDistanceMeters 对焦距离(null=自动对焦到注视点)。" +
+        "只改给出的字段;焦距围栏由 fov 围栏按输出画幅换算,读回见 camera.get-pose 的 liveFocalLengthMm",
     "scene.stage": "布景配方一键成组:对峙/并肩/三角/纵深,槽位绑定实体即可,距离按包围球半径自适应尺度",
     "scene.set-identity": "为场景实体设或清除叙事身份(主角/反派/配角/道具/布景 + 稳定标签)，让后续自然语言引用可消歧",
     // 运镜

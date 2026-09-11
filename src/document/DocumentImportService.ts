@@ -3,6 +3,7 @@ import { makeAutoObservable, runInAction } from "mobx";
 import { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { CameraProgramTrack, PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import { CameraShot } from "@/camera/CameraShot";
+import { isCameraLensJSON } from "@/camera/CameraLens";
 import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
 import { mountWhenReady, provisionAction } from "@/command/actionProvisioning";
 import { SceneObject, SCENE_OBJECT_KINDS, finiteTransform, finiteVec3 } from "@/core/SceneObject";
@@ -122,10 +123,11 @@ function shotIssues(value: unknown): readonly string[] {
     if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || !isRecord(value.shot)) {
         return ["机位参数无效"];
     }
-    const { position, target, fov } = value.shot;
-    return finiteVec3(position) && finiteVec3(target) && typeof fov === "number" && Number.isFinite(fov)
-        ? []
-        : [`机位 "${value.id}" 参数无效`];
+    const { position, target, fov, lens } = value.shot;
+    const geometryValid =
+        finiteVec3(position) && finiteVec3(target) && typeof fov === "number" && Number.isFinite(fov);
+    // 镜头进 required:v23 起每个机位都带 lens,缺失即判不支持(零兼容阶段不写迁移器)
+    return geometryValid && isCameraLensJSON(lens) ? [] : [`机位 "${value.id}" 参数无效`];
 }
 
 function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly string[] {

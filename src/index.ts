@@ -54,6 +54,21 @@ export type {
 } from "@/bridge/protocol";
 export { CameraDirector } from "@/camera/CameraDirector";
 export { CameraShot, DEFAULT_CAMERA_FOV, FOV_MAX, FOV_MIN, SHOT_SIZE } from "@/camera/CameraShot";
+export {
+    APERTURE_F_STOP,
+    CAMERA_LENS_DEFAULTS,
+    CameraLens,
+    FILM_GAUGE_MM,
+    FOCUS_DISTANCE_METERS,
+    focalLengthFromFov,
+    focalLengthRangeMm,
+    fovFromFocalLength,
+    isApertureFStop,
+    isCameraLensJSON,
+    isFocalLengthMm,
+    isFocusDistanceMeters,
+} from "@/camera/CameraLens";
+export type { CameraLensJSON } from "@/camera/CameraLens";
 export type { CameraShotJSON, ShotSize } from "@/camera/CameraShot";
 export { ShotSizePresets } from "@/camera/ShotSizePresets";
 export { FramingService } from "@/camera/FramingService";
@@ -321,6 +336,7 @@ export {
     PlaceObjectCommand,
     registerBuiltinCommands,
     RemoveObjectCommand,
+    SetCameraLensCommand,
     SetCameraShotCommand,
 } from "@/command/commands";
 export {
