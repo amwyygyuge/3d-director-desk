@@ -15,8 +15,8 @@ export { BodyBuildSolver } from "@/actor/BodyBuildSolver";
 export { BoneScalePlan } from "@/actor/BoneScalePlan";
 export type { BoneScaleEntry } from "@/actor/BoneScalePlan";
 export { ActorRuntime } from "@/actor/ActorRuntime";
-export { BODY_PART, MIXAMO_PART_BONES, SKELETON_FAMILY_MIXAMO, isBodyPart } from "@/actor/mixamoSkeleton";
-export type { BodyPart, BoneRotationsByName } from "@/actor/mixamoSkeleton";
+export { BODY_PART, SKELETON_PART_BONES, SKELETON_FAMILY_UE, isBodyPart } from "@/actor/actorSkeleton";
+export type { BodyPart, BoneRotationsByName } from "@/actor/actorSkeleton";
 export {
     ActorPresetsQuery,
     ApplyBuildPresetCommand,

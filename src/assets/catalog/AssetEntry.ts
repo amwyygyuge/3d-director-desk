@@ -58,7 +58,7 @@ export interface AssetEntry {
     readonly url: string;
     readonly format: ModelFormat | null;
     readonly license: string;
-    /** 骨骼家族(动作↔模型兼容声明,如 "mixamo");无骨骼为 null——重定向约束的前置表达 */
+    /** 骨骼家族(动作↔模型兼容声明,如 "ue");无骨骼为 null——挂载兼容性的前置表达 */
     readonly skeletonFamily: string | null;
     /** 动作资产:目标 clip 名(多 clip 文件内定位) */
     readonly clipName?: string | null;

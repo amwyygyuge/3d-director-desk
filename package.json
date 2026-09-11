@@ -39,6 +39,7 @@
         "storybook": "storybook dev -p 6087",
         "build-storybook": "storybook build",
         "artifact:clean": "rm -rf dist/test-assets dist/stories",
+        "bake:actor": "bun scripts/bake-actor-assets.ts && bun scripts/extract-pose-presets.ts",
         "pack:check": "bun run artifact:clean && bun pm pack --dry-run",
         "release-check": "bun run typecheck && bun run lint && bun run build-storybook && bun run build && bun run pack:check",
         "prepack": "bun run artifact:clean",
