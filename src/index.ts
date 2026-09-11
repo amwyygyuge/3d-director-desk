@@ -184,6 +184,8 @@ export { ObjectMaterialRegistry } from "@/core/ObjectMaterialRegistry";
 export { SELECTION_ROLE } from "@/core/SelectionRole";
 export type { SelectionRole } from "@/core/SelectionRole";
 export type { FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { FRAME_STATISTICS_SAMPLE_SIZE, FrameStatisticsAnalyzer } from "@/capture/FrameStatistics";
+export type { FrameStatistics } from "@/capture/FrameStatistics";
 export { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 export type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
 export { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
@@ -197,6 +199,7 @@ export {
     CaptureFrameCommand,
     CaptureStopVideoCommand,
     CaptureVideoCommand,
+    FrameStatisticsQuery,
     registerCaptureCommands,
 } from "@/command/captureCommands";
 export { OutputGetFormatQuery, SetOutputFormatCommand, registerOutputCommands } from "@/command/outputCommands";

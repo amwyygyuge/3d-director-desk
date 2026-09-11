@@ -120,6 +120,10 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "light.adjust": "更新自定义灯光的可序列化参数;先用 lighting.get/list 读取对象和灯型",
     // 采集
     "capture.frame": "截图当前预演画面(保留地板网格，编辑辅助物不入镜);异步产物按 requestId 对账",
+    "capture.measure-frame":
+        "画面度量断言(不截图):平均亮度/影调层次/高光与暗部裁切占比/主体与背景亮度分离度。" +
+        "曝光偏了调 studio.set-exposure;层次太平开 studio.set-shadows 或换地板色;" +
+        "分离度接近 0 说明主体没从背景跳出来(负值是剪影/逆光,属有效电影语言)",
     "capture.video":
         "按工程帧率导出 MP4 参考视频(缺省当前播放范围，起点/时长可显式覆盖；source=viewport 明确导出当前编辑视角);异步产物按 requestId 对账",
     "capture.video-stop": "在当前帧边界结束 MP4 导出并交付产物",
