@@ -1,5 +1,11 @@
-import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import type { ActionLoopMode } from "@/assets/ActionAsset";
+import {
+    ACTION_FILL_POLICY,
+    clipTimeFor,
+    defaultFillPolicyFor,
+    isActionFillPolicy,
+} from "@/animation/ActionFillPolicy";
+import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 import { ActionAlignment } from "@/animation/ActionAlignment";
 import type { ActionAlignmentInit } from "@/animation/ActionAlignment";
 
@@ -22,6 +28,11 @@ export interface ActionPerformanceInit {
     /** once 结束后回到常驻姿势的回收时长;0 = 直接切换。 */
     readonly releaseSeconds?: number;
     /**
+     * 时段填充策略:段条被拉长时 clip 如何铺满(重复 / 钳末帧 / 变速)。
+     * 缺省/null = 未声明,采样期按资产 loopMode 推默认(见 defaultFillPolicyFor)。
+     */
+    readonly fillPolicy?: ActionFillPolicy | null;
+    /**
      * 可选的走位轨对齐:非空时 startTime/duration 由它派生,轨道重定时后自动跟随。
      * 落账的 startTime/duration 仍是解析后的具体值——采样期不再查表,且解析失败可回退。
      */
@@ -40,6 +51,8 @@ export class ActionPerformance {
     readonly durationSeconds: number;
     readonly attackSeconds: number;
     readonly releaseSeconds: number;
+    /** 时段填充策略;null = 未声明,按资产 loopMode 推默认。 */
+    readonly fillPolicy: ActionFillPolicy | null;
     /** 非空 = 时段由走位轨区间派生;命令层在轨道变动后据此重解算。 */
     readonly alignment: ActionAlignment | null;
 
@@ -67,6 +80,8 @@ export class ActionPerformance {
         this.durationSeconds = init.durationSeconds;
         this.attackSeconds = attackSeconds;
         this.releaseSeconds = releaseSeconds;
+        // null = 未声明,采样期按资产 loopMode 推默认(历史文档与「跟随资产」都走这条)。
+        this.fillPolicy = isActionFillPolicy(init.fillPolicy) ? init.fillPolicy : null;
         this.alignment =
             init.alignment instanceof ActionAlignment
                 ? init.alignment
@@ -84,14 +99,26 @@ export class ActionPerformance {
         return this.endTimeSeconds + this.releaseSeconds;
     }
 
-    /** null = 排期尚未开始或 once 已完全回收,骨骼应由常驻姿势接管。 */
+    /**
+     * 全局时刻 → clip 局部时刻。`null` = 本段不驱动骨骼(未开始,或 hold 已回收完)。
+     *
+     * 填充策略决定「时段比 clip 长时怎么办」,见 ActionFillPolicy:
+     * repeat 按原速重复、hold 按原速播一次后钳末帧、stretch 变速铺满。
+     * loopMode 仅在段未声明策略时用于推默认值(历史文档的兼容路径)。
+     */
     clipTimeAt(timeSeconds: number, clipDurationSeconds: number, loopMode: ActionLoopMode): number | null {
         const offsetSeconds = timeSeconds - this.startTimeSeconds;
         if (offsetSeconds < 0) return null;
-        const progress = offsetSeconds / this.durationSeconds;
-        if (loopMode === ACTION_LOOP_MODE.LOOP) return (progress % 1) * clipDurationSeconds;
-        if (timeSeconds > this.releaseEndTimeSeconds) return null;
-        return Math.min(progress, 1) * clipDurationSeconds;
+        // 段未声明策略时按资产语义兜底:历史文档没有 fillPolicy 字段。
+        const policy = isActionFillPolicy(this.fillPolicy) ? this.fillPolicy : defaultFillPolicyFor(loopMode);
+        // 只有「播完即终态」的策略才交还骨骼;repeat/stretch 在整段内始终驱动。
+        if (policy === ACTION_FILL_POLICY.HOLD && timeSeconds > this.releaseEndTimeSeconds) return null;
+        return clipTimeFor({
+            policy,
+            offsetSeconds,
+            segmentDurationSeconds: this.durationSeconds,
+            clipDurationSeconds,
+        });
     }
 
     /** null = 不在进入段;0..1 = 常驻姿势让位给动作的进度。 */
@@ -124,6 +151,11 @@ export class ActionPerformance {
         return this.replicate({ attackSeconds, releaseSeconds });
     }
 
+    /** 作者显式选择填充策略;null = 交还给资产 loopMode 决定。 */
+    withFillPolicy(fillPolicy: ActionFillPolicy | null): ActionPerformance {
+        return this.replicate({ fillPolicy });
+    }
+
     toJSON(): Required<ActionPerformanceInit> {
         return {
             id: this.id,
@@ -132,6 +164,7 @@ export class ActionPerformance {
             durationSeconds: this.durationSeconds,
             attackSeconds: this.attackSeconds,
             releaseSeconds: this.releaseSeconds,
+            fillPolicy: this.fillPolicy,
             alignment: this.alignment?.toJSON() ?? null,
         };
     }
@@ -144,6 +177,7 @@ export class ActionPerformance {
             durationSeconds: this.durationSeconds,
             attackSeconds: this.attackSeconds,
             releaseSeconds: this.releaseSeconds,
+            fillPolicy: this.fillPolicy,
             alignment: this.alignment,
             ...overrides,
         });
