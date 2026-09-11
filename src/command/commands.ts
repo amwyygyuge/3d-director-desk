@@ -6,6 +6,17 @@ import { SceneInspectionService } from "@/command/SceneInspectionService";
 import { registerPerceptionCommands } from "@/command/perceptionCommands";
 
 import { CameraShot, DEFAULT_CAMERA_FOV } from "@/camera/CameraShot";
+import {
+    APERTURE_F_STOP,
+    FOCUS_DISTANCE_METERS,
+    focalLengthRangeMm,
+    fovFromFocalLength,
+    isApertureFStop,
+    isCameraLensJSON,
+    isFocalLengthMm,
+    isFocusDistanceMeters,
+} from "@/camera/CameraLens";
+import type { CameraLensJSON } from "@/camera/CameraLens";
 import type { CameraMotionClip } from "@/camera/CameraMotionClip";
 import { PROGRAM_SOURCE_KIND } from "@/camera/CameraProgramTrack";
 import { registerKeyframeCodec } from "@/timeline/keyframeCodecs";
@@ -51,7 +62,7 @@ import { registerSceneIdentityCommands } from "@/command/sceneIdentityCommands";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
 import { EMPTY_PAYLOAD_CONTRACT, nullable, TRANSFORM_SCHEMA, VEC3_SCHEMA } from "@/command/PayloadContract";
-import type { PayloadContract } from "@/command/PayloadContract";
+import type { PayloadContract, PayloadFieldSchema } from "@/command/PayloadContract";
 
 /** FOV 合法域:命令校验与 UI 滑杆共用(Rule of Two) */
 export const FOV_MIN = 1;
@@ -398,9 +409,17 @@ export class ClearSceneCommand extends DirectorCommand<Record<string, never>> {
 
 interface SetCameraShotPayload {
     id: string;
-    shot: { position: Vec3; target: Vec3; fov?: number };
+    shot: { position: Vec3; target: Vec3; fov?: number; lens?: CameraLensJSON };
 }
 
+const CAMERA_LENS_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        apertureFStop: { type: "number" },
+        // null = 自动对焦到注视目标,是合法取值而非缺省占位
+        focusDistanceMeters: nullable({ type: "number" }),
+    },
+};
 const SET_CAMERA_SHOT_CONTRACT: PayloadContract = {
     properties: {
         id: { type: "string" },
@@ -410,6 +429,7 @@ const SET_CAMERA_SHOT_CONTRACT: PayloadContract = {
                 position: VEC3_SCHEMA,
                 target: VEC3_SCHEMA,
                 fov: { type: "number" },
+                lens: CAMERA_LENS_SCHEMA,
             },
             required: ["position", "target"],
         },
@@ -437,6 +457,12 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
         if (!Number.isFinite(fov) || fov < FOV_MIN || fov > FOV_MAX) {
             issues.push(`fov 须在 ${FOV_MIN}~${FOV_MAX} 之间的有限数`);
         }
+        if (shot.lens !== undefined && !isCameraLensJSON(shot.lens)) {
+            issues.push(
+                `镜头参数无效:光圈须在 f/${APERTURE_F_STOP.MIN}~f/${APERTURE_F_STOP.MAX},` +
+                    `对焦距离须为 null 或 ${FOCUS_DISTANCE_METERS.MIN}~${FOCUS_DISTANCE_METERS.MAX} 米`,
+            );
+        }
         return issues;
     }
 
@@ -452,6 +478,104 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
             : [{ type: RemoveShotCommand.TYPE, payload: { id: this.payload.id } }];
     }
 }
+
+interface SetCameraLensPayload {
+    readonly id: string;
+    /** 焦距(毫米):写入时换算成 fov,不另存一份 */
+    readonly focalLengthMm?: number;
+    readonly apertureFStop?: number;
+    /** null = 自动对焦到注视目标 */
+    readonly focusDistanceMeters?: number | null;
+}
+
+const SET_CAMERA_LENS_CONTRACT: PayloadContract = {
+    properties: {
+        id: { type: "string" },
+        focalLengthMm: { type: "number" },
+        apertureFStop: { type: "number" },
+        focusDistanceMeters: nullable({ type: "number" }),
+    },
+    required: ["id"],
+};
+
+/**
+ * 镜头参数(焦距/光圈/对焦距离):按摄影语言给参数,不用 fov 这个渲染量。
+ *
+ * 焦距写入即换算成 `fov`——它是派生视图,存两份必然漂移(见 `CameraLens`)。
+ * 换算依赖画幅宽高比(同一支 50mm 在 16:9 与 1:1 上视场角不同),故取当前输出画幅;
+ * 未给的字段保持原值,便于「只改光圈」这类单点调整。
+ */
+export class SetCameraLensCommand extends DirectorCommand<SetCameraLensPayload> {
+    static readonly TYPE = "camera.set-lens";
+    readonly type = SetCameraLensCommand.TYPE;
+
+    constructor(readonly payload: SetCameraLensPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) return ["机位 id 格式无效"];
+        if (!ctx.camera.director.getShot(this.payload.id)) return [`机位 "${this.payload.id}" 不存在`];
+        const issues: string[] = [];
+        const focal = this.payload.focalLengthMm;
+        if (focal !== undefined && !isFocalLengthMm(focal, aspectFor(ctx))) {
+            const range = focalLengthRangeMm(aspectFor(ctx));
+            issues.push(`焦距须在 ${range.min.toFixed(2)}~${range.max.toFixed(0)}mm 之间(由 fov 围栏换算)`);
+        }
+        if (this.payload.apertureFStop !== undefined && !isApertureFStop(this.payload.apertureFStop)) {
+            issues.push(`光圈须在 f/${APERTURE_F_STOP.MIN}~f/${APERTURE_F_STOP.MAX} 之间`);
+        }
+        if (
+            this.payload.focusDistanceMeters !== undefined &&
+            !isFocusDistanceMeters(this.payload.focusDistanceMeters)
+        ) {
+            issues.push(
+                `对焦距离须为 null(自动对焦到注视目标)或 ${FOCUS_DISTANCE_METERS.MIN}~${FOCUS_DISTANCE_METERS.MAX} 米`,
+            );
+        }
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        const previous = ctx.camera.director.getShot(this.payload.id);
+        if (!previous) return;
+        const focal = this.payload.focalLengthMm;
+        ctx.camera.addShot(
+            this.payload.id,
+            new CameraShot({
+                position: previous.position,
+                target: previous.target,
+                fov: focal === undefined ? previous.fov : fovFromFocalLength(focal, aspectFor(ctx)),
+                lens: {
+                    apertureFStop: this.payload.apertureFStop ?? previous.lens.apertureFStop,
+                    focusDistanceMeters:
+                        this.payload.focusDistanceMeters === undefined
+                            ? previous.lens.focusDistanceMeters
+                            : this.payload.focusDistanceMeters,
+                },
+            }),
+        );
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const prev = ctx.camera.director.getShot(this.payload.id);
+        return prev ? [{ type: SetCameraShotCommand.TYPE, payload: { id: this.payload.id, shot: prev.toJSON() } }] : [];
+    }
+}
+
+/**
+ * 焦距换算所用的画幅宽高比。
+ *
+ * 取项目输出画幅而非画布尺寸:焦距是成片的属性,不该随编辑窗口大小变化——
+ * 拖窗口会让同一机位的标称焦距漂移。画幅未定时回落 16:9(最常见的成片比例)。
+ */
+function aspectFor(ctx: DirectorContext): number {
+    const frame = ctx.output.frameFor(ctx.capture.size);
+    const size = frame?.cropRect;
+    return size && size.height > 0 ? size.width / size.height : DEFAULT_OUTPUT_ASPECT;
+}
+
+const DEFAULT_OUTPUT_ASPECT = 16 / 9;
 
 const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     type: "scene.describe",
@@ -524,6 +648,16 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
             CAMERA_EDIT_PERMISSION,
             CAMERA_APPLIES_WHEN,
             SET_CAMERA_SHOT_CONTRACT,
+        ),
+    );
+    dispatcher.register(
+        SetCameraLensCommand.TYPE,
+        (payload) => new SetCameraLensCommand(payload),
+        commandCapability(
+            SetCameraLensCommand.TYPE,
+            CAMERA_EDIT_PERMISSION,
+            CAMERA_APPLIES_WHEN,
+            SET_CAMERA_LENS_CONTRACT,
         ),
     );
     dispatcher.registerQuery(

@@ -12,6 +12,12 @@ import type { OutputFormatId } from "@/output/OutputFormat";
 import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 
 /**
+ * v23 起机位带镜头光学参数(lens:光圈 + 对焦距离);`shotIssues` 要求存在。
+ *     焦距不入档——它是 fov 的派生视图,存两份必然漂移。
+ * v22 起演播室档位带实心地面开关(floorSurfaceEnabled)。
+ * v21 起演播室档位带投影开关与地板颜色;`isStudioEnvironmentJSON` 要求两者存在。
+ * v20 起演播室档位带成像三项(曝光/环境光照);同上,旧档缺任一项即判不支持
+ *     (零兼容阶段不写迁移器)。
  * v19 起演播室档位进文档:参考地板边长、渲染画质档、帧率读数与九宫格显隐。
  *     它们决定成片质量与构图判断,此前只活在壳层 UI 态里,导出/导入/刷新一律丢失;
  *     校验器对 `studio` 硬要求(缺失即判无效),故必须换版本号。
@@ -30,7 +36,7 @@ import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 20;
+export const DESK_DOCUMENT_VERSION = 23;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {

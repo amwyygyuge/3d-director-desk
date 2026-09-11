@@ -33,7 +33,7 @@ import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/pre
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "@/store/UiStore";
 import type { GizmoMode } from "@/store/UiStore";
-import { GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
+import { EXPOSURE, GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -47,9 +47,14 @@ const COMMAND_TYPE = {
     CLEAR_SCENE: "scene.clear",
     EXPORT_DOCUMENT: "desk.export-document",
     IMPORT_DOCUMENT: "desk.import-document",
+    SET_ENVIRONMENT_LIGHTING: "studio.set-environment-lighting",
+    SET_EXPOSURE: "studio.set-exposure",
+    SET_FLOOR_COLOR: "studio.set-floor-color",
     SET_FRAME_RATE_VISIBLE: "studio.set-frame-rate-visible",
     SET_GRID_SIZE: "studio.set-grid-size",
     SET_RENDER_QUALITY: "studio.set-render-quality",
+    SET_SHADOWS: "studio.set-shadows",
+    SET_FLOOR_SURFACE: "studio.set-floor-surface",
     SET_SWEEP_PATH: "view.set-sweep-path",
 } as const;
 
@@ -70,9 +75,14 @@ const TEXT = {
     GRID_SIZE: "地板尺寸",
     RENDER_QUALITY: "渲染画质",
     SHOW_FRAME_RATE: "显示帧率",
+    SHOW_SHADOWS: "投影",
+    ENVIRONMENT_LIGHTING: "环境光照",
+    EXPOSURE: "曝光",
+    FLOOR_COLOR: "地板颜色",
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
+    FLOOR_SURFACE: "实心地面",
     METER_UNIT: "m",
     PRESENTING: "预览中 · Esc 退出",
     REDO: "重做",
@@ -84,6 +94,10 @@ const DOWNLOAD = { DOCUMENT: "director-desk-scene.json" } as const;
 const MENU_ID = "project-pill-menu";
 const COMPACT_SIZE = "small" as const;
 const GRID_SLIDER_MIN_WIDTH_PX = 180;
+/** 曝光滑杆步进与读数位数:0.05 够细腻又不至于让撤销栈里堆满肉眼无差的步。 */
+const EXPOSURE_STEP = 0.05;
+const EXPOSURE_LABEL_DIGITS = 2;
+const FLOOR_COLOR_SWATCH_PX = 28;
 const FIRST_ITEM_INDEX = 0;
 const EMPTY_OBJECT_COUNT = 0;
 const JSON_INDENT_SPACES = 2;
@@ -230,6 +244,58 @@ const ProjectMenu = observer(function ProjectMenu({
                     sx={{ ml: MENU_SHORTCUT_MARGIN }}
                 />
             </MenuItem>
+            <Divider />
+            <MenuItem onClick={() => toggleShadows(stores)}>
+                {TEXT.SHOW_SHADOWS}
+                <Switch
+                    checked={stores.studio.shadowsEnabled}
+                    onChange={() => toggleShadows(stores)}
+                    onClick={(event) => event.stopPropagation()}
+                    size={COMPACT_SIZE}
+                    slotProps={{ input: { "aria-label": TEXT.SHOW_SHADOWS } }}
+                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
+                />
+            </MenuItem>
+            <MenuItem onClick={() => toggleEnvironmentLighting(stores)}>
+                {TEXT.ENVIRONMENT_LIGHTING}
+                <Switch
+                    checked={stores.studio.environmentLightingEnabled}
+                    onChange={() => toggleEnvironmentLighting(stores)}
+                    onClick={(event) => event.stopPropagation()}
+                    size={COMPACT_SIZE}
+                    slotProps={{ input: { "aria-label": TEXT.ENVIRONMENT_LIGHTING } }}
+                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
+                />
+            </MenuItem>
+            <Box
+                onKeyDown={(event) => event.stopPropagation()}
+                sx={{ px: 2, py: 0.5, minWidth: GRID_SLIDER_MIN_WIDTH_PX }}
+            >
+                <Typography color="text.secondary" variant="caption">
+                    {`${TEXT.EXPOSURE}（${stores.studio.exposure.toFixed(EXPOSURE_LABEL_DIGITS)}×）`}
+                </Typography>
+                <ExposureSlider />
+            </Box>
+            <MenuItem onClick={() => toggleFloorSurface(stores)}>
+                {TEXT.FLOOR_SURFACE}
+                <Switch
+                    checked={stores.studio.floorSurfaceEnabled}
+                    onChange={() => toggleFloorSurface(stores)}
+                    onClick={(event) => event.stopPropagation()}
+                    size={COMPACT_SIZE}
+                    slotProps={{ input: { "aria-label": TEXT.FLOOR_SURFACE } }}
+                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
+                />
+            </MenuItem>
+            <Box
+                onKeyDown={(event) => event.stopPropagation()}
+                sx={{ px: 2, py: 0.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}
+            >
+                <Typography color="text.secondary" variant="caption">
+                    {TEXT.FLOOR_COLOR}
+                </Typography>
+                <FloorColorPicker />
+            </Box>
         </Menu>
     );
 });
@@ -271,6 +337,110 @@ const GridSizeSlider = observer(function GridSizeSlider() {
         />
     );
 });
+
+/**
+ * 曝光滑杆:与地板尺寸滑杆同纪律——拖拽期只走本地草稿,松手才发一条命令。
+ * 逐帧 dispatch 会把一次拖拽记成上百条撤销步。
+ */
+const ExposureSlider = observer(function ExposureSlider() {
+    const stores = useDirectorDeskStores();
+    const committed = stores.studio.exposure;
+    const [draft, setDraft] = useState<number | null>(null);
+
+    return (
+        <Slider
+            aria-label={TEXT.EXPOSURE}
+            max={EXPOSURE.MAX}
+            min={EXPOSURE.MIN}
+            onChange={(_, value) => {
+                if (typeof value === "number") setDraft(value);
+            }}
+            onChangeCommitted={(_, value) => {
+                setDraft(null);
+                if (typeof value !== "number" || value === committed) return;
+                reportCommandFailure(
+                    stores,
+                    stores.dispatcher.dispatch(
+                        { type: COMMAND_TYPE.SET_EXPOSURE, payload: { exposure: value } },
+                        stores,
+                    ),
+                );
+            }}
+            size={COMPACT_SIZE}
+            step={EXPOSURE_STEP}
+            value={draft ?? committed}
+        />
+    );
+});
+
+/**
+ * 地板颜色:原生色板输入(MUI 无颜色组件,不为此引入第二套 UI 库,红线 7)。
+ *
+ * 不设草稿态,直接在 `onChange` 落命令。两条实测踩坑记此:
+ *  - 只在 `blur` 提交(照滑杆的思路)不成立:取完色值停在草稿上、领域态不变,表现为改不动地板颜色。
+ *  - 再叠一个 `onInput` 维护草稿更糟:React 的 `onChange` 本就绑在原生 `input` 事件上,
+ *    两者同源,`onInput` 会把它吞掉,命令永远不发。
+ *
+ * 系统取色器在确认时才把值交回页面(拖动期不逐帧回调),因此直接提交不会制造撤销碎片,
+ * 无需滑杆那套 draft/commit 分离。
+ */
+const FloorColorPicker = observer(function FloorColorPicker() {
+    const stores = useDirectorDeskStores();
+    const committed = stores.studio.floorColor;
+
+    return (
+        <input
+            aria-label={TEXT.FLOOR_COLOR}
+            onChange={(event) => {
+                const value = event.target.value;
+                if (value.toLowerCase() === committed) return;
+                reportCommandFailure(
+                    stores,
+                    stores.dispatcher.dispatch(
+                        { type: COMMAND_TYPE.SET_FLOOR_COLOR, payload: { color: value } },
+                        stores,
+                    ),
+                );
+            }}
+            style={{ width: FLOOR_COLOR_SWATCH_PX, height: FLOOR_COLOR_SWATCH_PX, border: "none", background: "none" }}
+            type="color"
+            value={committed}
+        />
+    );
+});
+
+function toggleFloorSurface(stores: DirectorDeskStores): void {
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch(
+            { type: COMMAND_TYPE.SET_FLOOR_SURFACE, payload: { enabled: !stores.studio.floorSurfaceEnabled } },
+            stores,
+        ),
+    );
+}
+
+function toggleShadows(stores: DirectorDeskStores): void {
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch(
+            { type: COMMAND_TYPE.SET_SHADOWS, payload: { enabled: !stores.studio.shadowsEnabled } },
+            stores,
+        ),
+    );
+}
+
+function toggleEnvironmentLighting(stores: DirectorDeskStores): void {
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch(
+            {
+                type: COMMAND_TYPE.SET_ENVIRONMENT_LIGHTING,
+                payload: { enabled: !stores.studio.environmentLightingEnabled },
+            },
+            stores,
+        ),
+    );
+}
 
 function toggleRenderQuality(stores: DirectorDeskStores): void {
     const quality =

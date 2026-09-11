@@ -10,7 +10,7 @@ import { DOCUMENT_COMPATIBILITY_ISSUE_CODE } from "@/document/compatibility/Desk
 import { PROGRAM_REVIEW_ISSUE_KIND } from "@/review/ProgramReviewService";
 import type { ProgramReviewReport } from "@/review/ProgramReviewService";
 import { LIGHTING_MODE } from "@/store/SceneStore";
-import { GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
+import { EXPOSURE, GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
 import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -38,6 +38,9 @@ const ACTION_NAME = "狐狸#Survey";
 const FOX_CLIP_NAME = "Survey";
 const DURATION_SECONDS = 12;
 const SHOT_COUNT = 3;
+const LENS_SHOT_ID = "shot-镜头参数";
+/** 全部改离默认值:任一项漏出文档,往返断言即挂。 */
+const LENS_SETTINGS = { focalLengthMm: 85, apertureFStop: 1.8, focusDistanceMeters: 3.5 } as const;
 /** 第二段排期与首段的间隔:留一帧以上,避开首尾相接的边界语义。 */
 const SECOND_SEGMENT_GAP_SECONDS = 0.5;
 const SECOND_SEGMENT_DURATION_SECONDS = 1.5;
@@ -60,6 +63,11 @@ const STUDIO_SETTINGS: StudioEnvironmentJSON = {
     renderQuality: RENDER_QUALITY.HIGH,
     frameRateVisible: true,
     outputGridVisible: false,
+    exposure: 1.6,
+    environmentLightingEnabled: true,
+    shadowsEnabled: true,
+    floorColor: "#3b2f2a",
+    floorSurfaceEnabled: true,
 };
 
 const CHECKLIST = [
@@ -84,6 +92,27 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
     placeModel(stores, TEST_ASSETS.fox, { id: FOX_PARTNER_ID, position: [-2, 0, 0] });
     placeModel(stores, TEST_ASSETS.helmet, { position: [2, 0, 0] });
     seedShots(stores);
+    // 第三个机位专用于镜头参数往返:经 camera.set-lens 落账,验证焦距换算与光学参数持久化
+    dispatchOk(stores, "camera.set-shot", {
+        id: LENS_SHOT_ID,
+        shot: { position: [2, 1.5, 5], target: [0, 1, 0], fov: 45 },
+    });
+    dispatchOk(stores, "camera.set-lens", {
+        id: LENS_SHOT_ID,
+        focalLengthMm: LENS_SETTINGS.focalLengthMm,
+        apertureFStop: LENS_SETTINGS.apertureFStop,
+        focusDistanceMeters: LENS_SETTINGS.focusDistanceMeters,
+    });
+    // 焦距写入即换算成 fov:两者不可能同时是真相源
+    const lensShotAfterSet = required(stores.camera.director.getShot(LENS_SHOT_ID), "镜头机位未落账");
+    assertAcceptance(
+        Math.abs(lensShotAfterSet.fov - 45) > 1,
+        `set-lens 的焦距未换算进 fov(仍为 ${lensShotAfterSet.fov})`,
+    );
+    assertAcceptance(
+        !dispatchCatching(stores, "camera.set-lens", { id: LENS_SHOT_ID, apertureFStop: 999 }).ok,
+        "超界光圈未被命令层拒绝",
+    );
     dispatchOk(stores, "timeline.set-duration", { duration: DURATION_SECONDS });
     dispatchOk(stores, "motion.quick-author", {
         subjectId: FOX_ID,
@@ -139,6 +168,24 @@ function seedStudioEnvironment(stores: DirectorDeskStores): void {
     dispatchOk(stores, "studio.set-render-quality", { quality: STUDIO_SETTINGS.renderQuality });
     dispatchOk(stores, "studio.set-frame-rate-visible", { visible: STUDIO_SETTINGS.frameRateVisible });
     dispatchOk(stores, "studio.set-output-grid-visible", { visible: STUDIO_SETTINGS.outputGridVisible });
+    // 成像三项:曝光进撤销栈并有围栏,两个开关随文档往返
+    dispatchOk(stores, "studio.set-exposure", { exposure: STUDIO_SETTINGS.exposure });
+    assertAcceptance(stores.studio.exposure === STUDIO_SETTINGS.exposure, "曝光命令未落账");
+    assertAcceptance(stores.history.undo(stores).ok, "曝光撤销失败");
+    assertAcceptance(stores.studio.exposure === EXPOSURE.DEFAULT, "曝光撤销未回默认值");
+    assertAcceptance(stores.history.redo(stores).ok, "曝光重做失败");
+    assertAcceptance(stores.studio.exposure === STUDIO_SETTINGS.exposure, "曝光重做未复原");
+    const exposureOutOfRange = dispatchCatching(stores, "studio.set-exposure", { exposure: EXPOSURE.MAX + 1 });
+    assertAcceptance(!exposureOutOfRange.ok, "超界曝光未被命令层拒绝");
+    dispatchOk(stores, "studio.set-environment-lighting", { enabled: STUDIO_SETTINGS.environmentLightingEnabled });
+    dispatchOk(stores, "studio.set-shadows", { enabled: STUDIO_SETTINGS.shadowsEnabled });
+    dispatchOk(stores, "studio.set-floor-color", { color: STUDIO_SETTINGS.floorColor });
+    dispatchOk(stores, "studio.set-floor-surface", { enabled: STUDIO_SETTINGS.floorSurfaceEnabled });
+    // 非法颜色必须被围栏拒绝,而不是静默落一个无效值进文档
+    assertAcceptance(
+        !dispatchCatching(stores, "studio.set-floor-color", { color: "red" }).ok,
+        "非法地板颜色未被命令层拒绝",
+    );
     assertStudioEnvironment(stores, "命令写入后");
     const read = stores.dispatcher.query({ type: "studio.get", payload: {} }, stores);
     assertAcceptance(read.ok, "studio.get 查询失败");
@@ -154,6 +201,17 @@ function assertStudioEnvironment(stores: DirectorDeskStores, stage: string): voi
     assertAcceptance(studio.renderQuality === STUDIO_SETTINGS.renderQuality, `${stage}渲染画质档不符`);
     assertAcceptance(studio.frameRateVisible === STUDIO_SETTINGS.frameRateVisible, `${stage}帧率读数显隐不符`);
     assertAcceptance(studio.outputGridVisible === STUDIO_SETTINGS.outputGridVisible, `${stage}九宫格显隐不符`);
+    assertAcceptance(studio.exposure === STUDIO_SETTINGS.exposure, `${stage}曝光不符`);
+    assertAcceptance(
+        studio.environmentLightingEnabled === STUDIO_SETTINGS.environmentLightingEnabled,
+        `${stage}环境光照开关不符`,
+    );
+    assertAcceptance(studio.shadowsEnabled === STUDIO_SETTINGS.shadowsEnabled, `${stage}投影开关不符`);
+    assertAcceptance(studio.floorColor === STUDIO_SETTINGS.floorColor, `${stage}地板颜色不符`);
+    assertAcceptance(
+        studio.floorSurfaceEnabled === STUDIO_SETTINGS.floorSurfaceEnabled,
+        `${stage}实心地面开关不符`,
+    );
 }
 
 /**
@@ -327,6 +385,13 @@ async function reimportAndAssert(stores: DirectorDeskStores, document: DeskDocum
     assertAcceptance(stores.scene.lightingMode === LIGHTING_MODE.CUSTOM, "灯光模式未随文档还原");
     assertAcceptance(stores.scene.manager.getEntity(LIGHT_ID)?.light?.type === "spot", "灯光实体未随文档还原");
     assertAcceptance(stores.camera.director.listShots().length === SHOT_COUNT, "机位未随文档还原");
+    // 镜头参数随机位往返:焦距不入档(是 fov 派生视图),光圈与对焦距离必须还原
+    const lensShot = stores.camera.director.getShot(LENS_SHOT_ID);
+    assertAcceptance(
+        lensShot?.lens.apertureFStop === LENS_SETTINGS.apertureFStop &&
+            lensShot?.lens.focusDistanceMeters === LENS_SETTINGS.focusDistanceMeters,
+        `镜头参数未随文档还原(${JSON.stringify(lensShot?.lens.toJSON())})`,
+    );
     assertAcceptance(stores.timeline.document.duration === DURATION_SECONDS, "时间轴时长未还原");
     assertAcceptance(stores.motion.program.clips.length === 1, "Program 输出未还原");
     assertStudioEnvironment(stores, "导入还原后");

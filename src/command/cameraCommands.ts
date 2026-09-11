@@ -18,7 +18,8 @@ import type { SubjectBounds } from "@/command/subjectBounds";
 import type { Vec3 } from "@/core/SceneObject";
 import { measureModelBox } from "@/core/measureModelBox";
 
-/** 采样缓冲:查询低频但遵守零分配纪律(命令层模块级临时对象先例) */
+import { focalLengthFromFov } from "@/camera/CameraLens";
+
 const TMP_MOTION_SAMPLE: CameraMotionSample = createCameraMotionSample();
 const CAMERA_COMMAND_VERSION = "1" as const;
 const CAMERA_APPLIES_WHEN = "director-desk.camera-v1";
@@ -84,21 +85,38 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
         const solver = new CameraFrameSolver(ctx.timeline, ctx.scene.manager);
         const isSampled = clip !== null && solver.solve(clip, ctx.clock.time, TMP_MOTION_SAMPLE);
         const sampled = isSampled ? TMP_MOTION_SAMPLE : null;
+        const live = ctx.capture.readCameraPose();
+        const aspect = liveAspectFor(ctx);
         return {
             activeShotId: ctx.camera.activeShotId,
             programSource,
-            live: ctx.capture.readCameraPose(),
+            live,
+            // 焦距是 fov 的派生视图:一并回传,免得 AI 自己按错的画幅换算
+            liveFocalLengthMm: live?.fov == null ? null : focalLengthFromFov(live.fov, aspect),
+            lens: ctx.camera.director.getShot(ctx.camera.activeShotId ?? "")?.lens.toJSON() ?? null,
             motionSampled: sampled
                 ? {
                       position: [sampled.positionX, sampled.positionY, sampled.positionZ],
                       target: [sampled.targetX, sampled.targetY, sampled.targetZ],
                       fov: sampled.fov,
+                      focalLengthMm: focalLengthFromFov(sampled.fov, aspect),
                   }
                 : null,
             directorPose: ctx.camera.lastDirectorPose,
         };
     }
 }
+
+/**
+ * 焦距换算所用的画幅宽高比(与 `camera.set-lens` 同口径,禁两处各写一份)。
+ * 取项目输出画幅而非画布:焦距是成片属性,不该随编辑窗口大小漂移。
+ */
+function liveAspectFor(ctx: DirectorContext): number {
+    const crop = ctx.output.frameFor(ctx.capture.size)?.cropRect;
+    return crop && crop.height > 0 ? crop.width / crop.height : DEFAULT_POSE_ASPECT;
+}
+
+const DEFAULT_POSE_ASPECT = 16 / 9;
 /**
  * 机位表此前只能直读 desk.camera.director; 注册查询让工具/宿主面可发现。
  */

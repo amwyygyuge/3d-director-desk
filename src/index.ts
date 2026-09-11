@@ -56,6 +56,21 @@ export type {
 } from "@/bridge/protocol";
 export { CameraDirector } from "@/camera/CameraDirector";
 export { CameraShot, DEFAULT_CAMERA_FOV, FOV_MAX, FOV_MIN, SHOT_SIZE } from "@/camera/CameraShot";
+export {
+    APERTURE_F_STOP,
+    CAMERA_LENS_DEFAULTS,
+    CameraLens,
+    FILM_GAUGE_MM,
+    FOCUS_DISTANCE_METERS,
+    focalLengthFromFov,
+    focalLengthRangeMm,
+    fovFromFocalLength,
+    isApertureFStop,
+    isCameraLensJSON,
+    isFocalLengthMm,
+    isFocusDistanceMeters,
+} from "@/camera/CameraLens";
+export type { CameraLensJSON } from "@/camera/CameraLens";
 export type { CameraShotJSON, ShotSize } from "@/camera/CameraShot";
 export { ShotSizePresets } from "@/camera/ShotSizePresets";
 export { FramingService } from "@/camera/FramingService";
@@ -186,6 +201,8 @@ export { ObjectMaterialRegistry } from "@/core/ObjectMaterialRegistry";
 export { SELECTION_ROLE } from "@/core/SelectionRole";
 export type { SelectionRole } from "@/core/SelectionRole";
 export type { FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { FRAME_STATISTICS_SAMPLE_SIZE, FrameStatisticsAnalyzer } from "@/capture/FrameStatistics";
+export type { FrameStatistics } from "@/capture/FrameStatistics";
 export { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 export type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
 export { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
@@ -195,10 +212,24 @@ export type { PlayheadSource, VideoExportSource, VideoExportState } from "@/capt
 export { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
 export type { VideoExportSourcePolicy, VideoExportStage } from "@/capture/VideoExportSourcePolicy";
 export {
+    LIGHTING_MOOD,
+    LIGHTING_MOOD_PRESETS,
+    LightingMoodCompiler,
+    isLightingMood,
+} from "@/lighting/LightingMoodCompiler";
+export type {
+    CompiledLightingMood,
+    CompiledMoodLight,
+    LightingMood,
+    LightingMoodPreset,
+    MoodLightPlacement,
+} from "@/lighting/LightingMoodCompiler";
+export {
     CancelVideoCaptureCommand,
     CaptureFrameCommand,
     CaptureStopVideoCommand,
     CaptureVideoCommand,
+    FrameStatisticsQuery,
     registerCaptureCommands,
 } from "@/command/captureCommands";
 export { OutputGetFormatQuery, SetOutputFormatCommand, registerOutputCommands } from "@/command/outputCommands";
@@ -263,6 +294,7 @@ export type {
 export { FrameViewCommand, registerNavigationCommands } from "@/command/navigationCommands";
 export {
     AdjustLightCommand,
+    AuthorLightingCommand,
     LightingGetQuery,
     LightingListQuery,
     registerLightingCommands,
@@ -306,6 +338,7 @@ export {
     PlaceObjectCommand,
     registerBuiltinCommands,
     RemoveObjectCommand,
+    SetCameraLensCommand,
     SetCameraShotCommand,
 } from "@/command/commands";
 export {
