@@ -111,8 +111,32 @@ async function exportGlb(root: Object3D, animations: readonly AnimationClip[]): 
     return await promise;
 }
 
+/**
+ * 把资产转到「正面朝 −Z」——全仓的朝向约定。
+ *
+ * three 的 `lookAt` 让 −Z 指向目标,故本仓一律以 −Z 为主体正面:
+ * `TimelineSampler` 的切线朝向 `atan2(-x,-z)`、`placementCommands` 的「面对面」、
+ * `FramingService` 的正视机位、`CameraFollowTrack` 的跟拍方位角都建立在这条约定上。
+ *
+ * 而本资产的正面朝 +Z(实测:脚踝→脚掌指向 +Z,网格 bbox 亦偏向 +Z),
+ * 直接入库会让「沿轨迹前进」变成倒着跑、「面对面」变成背对背。
+ *
+ * 修正放在烘制期而非运行时:朝向是**资产的坐标约定**,不是场景语义。
+ * 若改运行时(例如给 yaw 加 π),四个模块都要各自记住这条补偿,
+ * 且宿主注入的第三方资产会与内置资产行为不一致。
+ *
+ * 旋转落在**根节点**(Armature)上,而非烘进顶点:动作 clip 写的是骨骼局部绝对旋转,
+ * 会覆盖被动画骨骼的节点旋转,但根节点在骨骼链之上、不被任何轨道触及,
+ * 因此这一层旋转对 rest 与所有 clip 一致生效(已按 Walk_Loop 逐帧验证)。
+ */
+function faceNegativeZ(scene: Object3D): void {
+    scene.rotation.y += Math.PI;
+    scene.updateMatrixWorld(true);
+}
+
 async function bake(): Promise<void> {
     const source = await loadSourceScene();
+    faceNegativeZ(source.scene);
 
     // 人偶:整棵场景树(网格 + 骨架),不带任何 clip。
     const actorGlb = await exportGlb(source.scene, []);
