@@ -54,6 +54,7 @@ const COMMAND_TYPE = {
     SET_GRID_SIZE: "studio.set-grid-size",
     SET_RENDER_QUALITY: "studio.set-render-quality",
     SET_SHADOWS: "studio.set-shadows",
+    SET_FLOOR_SURFACE: "studio.set-floor-surface",
     SET_SWEEP_PATH: "view.set-sweep-path",
 } as const;
 
@@ -81,6 +82,7 @@ const TEXT = {
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
+    FLOOR_SURFACE: "实心地面",
     METER_UNIT: "m",
     PRESENTING: "预览中 · Esc 退出",
     REDO: "重做",
@@ -274,6 +276,17 @@ const ProjectMenu = observer(function ProjectMenu({
                 </Typography>
                 <ExposureSlider />
             </Box>
+            <MenuItem onClick={() => toggleFloorSurface(stores)}>
+                {TEXT.FLOOR_SURFACE}
+                <Switch
+                    checked={stores.studio.floorSurfaceEnabled}
+                    onChange={() => toggleFloorSurface(stores)}
+                    onClick={(event) => event.stopPropagation()}
+                    size={COMPACT_SIZE}
+                    slotProps={{ input: { "aria-label": TEXT.FLOOR_SURFACE } }}
+                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
+                />
+            </MenuItem>
             <Box
                 onKeyDown={(event) => event.stopPropagation()}
                 sx={{ px: 2, py: 0.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}
@@ -395,6 +408,16 @@ const FloorColorPicker = observer(function FloorColorPicker() {
         />
     );
 });
+
+function toggleFloorSurface(stores: DirectorDeskStores): void {
+    reportCommandFailure(
+        stores,
+        stores.dispatcher.dispatch(
+            { type: COMMAND_TYPE.SET_FLOOR_SURFACE, payload: { enabled: !stores.studio.floorSurfaceEnabled } },
+            stores,
+        ),
+    );
+}
 
 function toggleShadows(stores: DirectorDeskStores): void {
     reportCommandFailure(

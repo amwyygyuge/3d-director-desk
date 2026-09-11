@@ -117,6 +117,11 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "pose.clear": "清除常驻基础姿势,回绑定姿态",
     // 灯光
     "scene.set-lighting-mode": "切灯光模式:studio 兜底布光 / custom 自定义",
+    "lighting.author":
+        "打光情绪一步落地(聚合命令,一步撤销):neutral 中性均匀 / low-key 低调暗部 / " +
+        "silhouette 逆光剪影 / golden-hour 黄金时刻 / night 夜景冷调。" +
+        "灯位按被摄体包围球定尺(给 subjectId 更准,缺省取全场景模型),同时设好配套曝光与投影。" +
+        "只接管自己产出的灯,作者手放的灯不动;效果用 capture.measure-frame 断言",
     "light.adjust": "更新自定义灯光的可序列化参数;先用 lighting.get/list 读取对象和灯型",
     // 采集
     "capture.frame": "截图当前预演画面(保留地板网格，编辑辅助物不入镜);异步产物按 requestId 对账",

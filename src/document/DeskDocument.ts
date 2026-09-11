@@ -11,6 +11,7 @@ import type { OutputFormatId } from "@/output/OutputFormat";
 import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 
 /**
+ * v22 起演播室档位带实心地面开关(floorSurfaceEnabled)。
  * v21 起演播室档位带投影开关与地板颜色;`isStudioEnvironmentJSON` 要求两者存在。
  * v20 起演播室档位带成像三项(曝光/环境光照);同上,旧档缺任一项即判不支持
  *     (零兼容阶段不写迁移器)。
@@ -33,7 +34,7 @@ import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 21;
+export const DESK_DOCUMENT_VERSION = 22;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {

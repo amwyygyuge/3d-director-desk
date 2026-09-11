@@ -88,6 +88,14 @@ export interface StudioEnvironmentJSON {
     readonly shadowsEnabled: boolean;
     /** 参考地板颜色(6 位十六进制);面积最大的一块,直接影响人物反差 */
     readonly floorColor: string;
+    /**
+     * 实心地面开关。
+     *
+     * 关闭后只剩网格线(等于本功能之前的行为):地板颜色不再成像,投影也失去接收面。
+     * 有实测成本——它是一张覆盖视口的全屏面,按满分辨率着色(实测 ~0.11ms/帧,
+     * 高分屏满 dpr 下与整帧同量级),故按性能纪律做成开关。
+     */
+    readonly floorSurfaceEnabled: boolean;
 }
 
 export const STUDIO_ENVIRONMENT_DEFAULTS: StudioEnvironmentJSON = {
@@ -99,6 +107,7 @@ export const STUDIO_ENVIRONMENT_DEFAULTS: StudioEnvironmentJSON = {
     environmentLightingEnabled: false,
     shadowsEnabled: false,
     floorColor: FLOOR_COLOR_DEFAULT,
+    floorSurfaceEnabled: false,
 };
 
 export function isStudioEnvironmentJSON(value: unknown): value is StudioEnvironmentJSON {
@@ -112,7 +121,8 @@ export function isStudioEnvironmentJSON(value: unknown): value is StudioEnvironm
         isExposureValid(candidate.exposure) &&
         typeof candidate.environmentLightingEnabled === "boolean" &&
         typeof candidate.shadowsEnabled === "boolean" &&
-        isFloorColor(candidate.floorColor)
+        isFloorColor(candidate.floorColor) &&
+        typeof candidate.floorSurfaceEnabled === "boolean"
     );
 }
 
@@ -135,6 +145,7 @@ export class StudioEnvironment {
     environmentLightingEnabled: boolean = STUDIO_ENVIRONMENT_DEFAULTS.environmentLightingEnabled;
     shadowsEnabled: boolean = STUDIO_ENVIRONMENT_DEFAULTS.shadowsEnabled;
     floorColor: string = STUDIO_ENVIRONMENT_DEFAULTS.floorColor;
+    floorSurfaceEnabled: boolean = STUDIO_ENVIRONMENT_DEFAULTS.floorSurfaceEnabled;
 
     /** 宿主 prop 只注入创建期初值;运行期由项目菜单经命令接管。 */
     constructor(init?: { gridSizeMeters?: number | undefined }) {
@@ -192,6 +203,10 @@ export class StudioEnvironment {
         this.floorColor = value.toLowerCase();
     }
 
+    setFloorSurfaceEnabled(enabled: boolean): void {
+        this.floorSurfaceEnabled = enabled;
+    }
+
     /** 文档导入的整档替换:逐字段覆盖,不保留上一工程的残留档位。 */
     restore(snapshot: StudioEnvironmentJSON): void {
         this.gridSizeMeters = snapshot.gridSizeMeters;
@@ -202,6 +217,7 @@ export class StudioEnvironment {
         this.environmentLightingEnabled = snapshot.environmentLightingEnabled;
         this.shadowsEnabled = snapshot.shadowsEnabled;
         this.floorColor = snapshot.floorColor;
+        this.floorSurfaceEnabled = snapshot.floorSurfaceEnabled;
     }
 
     toJSON(): StudioEnvironmentJSON {
@@ -214,6 +230,7 @@ export class StudioEnvironment {
             environmentLightingEnabled: this.environmentLightingEnabled,
             shadowsEnabled: this.shadowsEnabled,
             floorColor: this.floorColor,
+            floorSurfaceEnabled: this.floorSurfaceEnabled,
         };
     }
 }

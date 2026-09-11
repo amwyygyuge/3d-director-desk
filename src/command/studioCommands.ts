@@ -270,6 +270,28 @@ export class SetStudioFloorColorCommand extends DirectorCommand<SetFloorColorPay
     }
 }
 
+/** 实心地面开关:承载地板颜色与投影接收面,有全屏着色成本故显式可关(缺省关)。 */
+export class SetStudioFloorSurfaceCommand extends DirectorCommand<SetEnabledPayload> {
+    static readonly TYPE = "studio.set-floor-surface";
+    readonly type = SetStudioFloorSurfaceCommand.TYPE;
+
+    constructor(readonly payload: SetEnabledPayload) {
+        super();
+    }
+
+    validate(): string[] {
+        return typeof this.payload.enabled === "boolean" ? [] : ["实心地面开关必须是 boolean"];
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.studio.setFloorSurfaceEnabled(this.payload.enabled);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        return [{ type: SetStudioFloorSurfaceCommand.TYPE, payload: { enabled: ctx.studio.floorSurfaceEnabled } }];
+    }
+}
+
 /** 演播室档位读模型:AI/宿主可发现当前地板尺度与画质档,不接触 Three 或 canvas。 */
 export class StudioGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "studio.get";
@@ -354,6 +376,16 @@ export function registerStudioCommands(dispatcher: CommandDispatcher): void {
             "command",
             [STUDIO_EDIT_PERMISSION],
             SET_FLOOR_COLOR_CONTRACT,
+        ),
+    );
+    dispatcher.register(
+        SetStudioFloorSurfaceCommand.TYPE,
+        (payload: SetEnabledPayload) => new SetStudioFloorSurfaceCommand(payload),
+        studioCapability(
+            SetStudioFloorSurfaceCommand.TYPE,
+            "command",
+            [STUDIO_EDIT_PERMISSION],
+            SET_ENABLED_CONTRACT,
         ),
     );
     dispatcher.registerQuery(

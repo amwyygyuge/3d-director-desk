@@ -64,6 +64,7 @@ const STUDIO_SETTINGS: StudioEnvironmentJSON = {
     environmentLightingEnabled: true,
     shadowsEnabled: true,
     floorColor: "#3b2f2a",
+    floorSurfaceEnabled: true,
 };
 
 const CHECKLIST = [
@@ -155,6 +156,7 @@ function seedStudioEnvironment(stores: DirectorDeskStores): void {
     dispatchOk(stores, "studio.set-environment-lighting", { enabled: STUDIO_SETTINGS.environmentLightingEnabled });
     dispatchOk(stores, "studio.set-shadows", { enabled: STUDIO_SETTINGS.shadowsEnabled });
     dispatchOk(stores, "studio.set-floor-color", { color: STUDIO_SETTINGS.floorColor });
+    dispatchOk(stores, "studio.set-floor-surface", { enabled: STUDIO_SETTINGS.floorSurfaceEnabled });
     // 非法颜色必须被围栏拒绝,而不是静默落一个无效值进文档
     assertAcceptance(
         !dispatchCatching(stores, "studio.set-floor-color", { color: "red" }).ok,
@@ -182,6 +184,10 @@ function assertStudioEnvironment(stores: DirectorDeskStores, stage: string): voi
     );
     assertAcceptance(studio.shadowsEnabled === STUDIO_SETTINGS.shadowsEnabled, `${stage}投影开关不符`);
     assertAcceptance(studio.floorColor === STUDIO_SETTINGS.floorColor, `${stage}地板颜色不符`);
+    assertAcceptance(
+        studio.floorSurfaceEnabled === STUDIO_SETTINGS.floorSurfaceEnabled,
+        `${stage}实心地面开关不符`,
+    );
 }
 
 /**

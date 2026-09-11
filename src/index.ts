@@ -195,6 +195,19 @@ export type { PlayheadSource, VideoExportSource, VideoExportState } from "@/capt
 export { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
 export type { VideoExportSourcePolicy, VideoExportStage } from "@/capture/VideoExportSourcePolicy";
 export {
+    LIGHTING_MOOD,
+    LIGHTING_MOOD_PRESETS,
+    LightingMoodCompiler,
+    isLightingMood,
+} from "@/lighting/LightingMoodCompiler";
+export type {
+    CompiledLightingMood,
+    CompiledMoodLight,
+    LightingMood,
+    LightingMoodPreset,
+    MoodLightPlacement,
+} from "@/lighting/LightingMoodCompiler";
+export {
     CancelVideoCaptureCommand,
     CaptureFrameCommand,
     CaptureStopVideoCommand,
@@ -264,6 +277,7 @@ export type {
 export { FrameViewCommand, registerNavigationCommands } from "@/command/navigationCommands";
 export {
     AdjustLightCommand,
+    AuthorLightingCommand,
     LightingGetQuery,
     LightingListQuery,
     registerLightingCommands,

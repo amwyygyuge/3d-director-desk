@@ -45,11 +45,17 @@ export const StudioFloorGrid = observer(function StudioFloorGrid() {
  * 必须是一张真实的面而不是 `Grid` 的属性——drei 的 `Grid` 只画线,没有填充色,
  * 且投影需要一个 `receiveShadow` 的表面才能落下来。两件事由同一张面承担:
  * 换颜色与接投影本就都属于「地面」这一个概念,拆成两张面会同时带来共面闪烁与双份绘制。
+ *
+ * 关闭即卸载而非留在树里:它是一张覆盖视口的全屏面,按满分辨率着色
+ * (实测 ~0.11ms/帧,高分屏满 dpr 下与整帧同量级)。留着 `visible=false` 仍会跟着
+ * observable 重渲,只有卸载才真正不计价(性能纪律)。
  */
 const StudioFloorSurface = observer(function StudioFloorSurface() {
     const { studio } = useDirectorDeskStores();
     const gridSizeMeters = studio.gridSizeMeters;
     const floorColor = studio.floorColor;
+
+    if (!studio.floorSurfaceEnabled) return null;
 
     return (
         <mesh receiveShadow position={[0, -FLOOR_SURFACE_DROP, 0]} rotation={[-Math.PI / 2, 0, 0]}>

@@ -12,7 +12,10 @@ import {
     normalizeLightParams,
 } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
-import type { SceneObject } from "@/core/SceneObject";
+import type { SceneObject, Vec3 } from "@/core/SceneObject";
+import { subjectBoundsFor } from "@/command/subjectBounds";
+import { LIGHTING_MOOD, LightingMoodCompiler, isLightingMood } from "@/lighting/LightingMoodCompiler";
+import type { LightingMood } from "@/lighting/LightingMoodCompiler";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
@@ -259,6 +262,154 @@ export class LightingGetQuery implements DirectorQuery<GetLightPayload> {
     }
 }
 
+interface AuthorLightingPayload {
+    readonly mood: LightingMood;
+    /** 被摄体 id;灯位按其包围球定尺定位。缺省取全场景模型的合并包围球。 */
+    readonly subjectId?: string;
+}
+
+const AUTHOR_LIGHTING_CONTRACT: PayloadContract = {
+    properties: {
+        mood: { type: "string", enum: Object.values(LIGHTING_MOOD) },
+        subjectId: { type: "string" },
+    },
+    required: ["mood"],
+};
+
+/**
+ * 打光情绪编排(聚合命令,地基优先红线 15)。
+ *
+ * 一条命令完成「切 custom 模式 → 清掉上一组情绪灯 → 放新灯组 → 设曝光 → 设投影」。
+ * 拆成多次 dispatch 做不到这件事:撤销会碎成 N 步,中途被拒会留下「灯放了一半、
+ * 曝光已改」的孤儿状态;`invert` 因此一次性回滚全部副产物。
+ *
+ * 只接管**自己产出**的灯(按 id 前缀识别),作者手放的灯不动——
+ * 情绪是可反复试的档位,不该吃掉手工布光。
+ */
+export class AuthorLightingCommand extends DirectorCommand<AuthorLightingPayload> {
+    static readonly TYPE = "lighting.author";
+    readonly type = AuthorLightingCommand.TYPE;
+    private readonly compiler = new LightingMoodCompiler();
+
+    constructor(readonly payload: AuthorLightingPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        return this.validateIssues(ctx).map((current) => current.message);
+    }
+
+    override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
+        if (!isPayloadRecord(this.payload) || !isLightingMood(this.payload.mood)) {
+            return [
+                issue(
+                    ISSUE_CODE.PAYLOAD,
+                    "mood",
+                    `打光情绪必须是 ${Object.values(LIGHTING_MOOD).join(" / ")} 之一`,
+                ),
+            ];
+        }
+        const subjectId = this.payload.subjectId;
+        if (subjectId === undefined) return [];
+        if (typeof subjectId !== "string" || subjectId.length === 0) {
+            return [issue(ISSUE_CODE.PAYLOAD, "subjectId", "被摄体 id 格式无效")];
+        }
+        return ctx.scene.manager.getEntity(subjectId)
+            ? []
+            : [issue(ISSUE_CODE.TARGET, "subjectId", `被摄体 "${subjectId}" 不存在`)];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const compiled = this.compiledFor(ctx);
+        if (!compiled) return;
+        // 先撤旧情绪灯:同名 id 直接 place 会撞 SceneManager 的重复 id 断言
+        for (const id of moodLightIds(ctx)) ctx.scene.removeObject(id);
+        ctx.scene.setLightingMode(LIGHTING_MODE.CUSTOM);
+        for (const light of compiled.lights) {
+            ctx.scene.addObject({
+                id: light.id,
+                kind: "light",
+                transform: { position: light.position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+                light: light.light,
+            });
+        }
+        ctx.studio.setExposure(compiled.exposure);
+        ctx.studio.setShadowsEnabled(compiled.shadowsEnabled);
+        ctx.playback.sampleCurrent();
+    }
+
+    /**
+     * 反演回上一状态的完整快照:模式 + 曝光 + 投影 + 全部既有灯。
+     * 逐条 place 装回旧灯之前必须先删掉本次产出的灯,否则 id 冲突。
+     */
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] {
+        const previousLights = ctx.scene.manager
+            .list()
+            .filter((entity) => entity.kind === "light")
+            .map((entity) => entity.toJSON());
+        return [
+            ...moodLightIds(ctx).map((id) => ({ type: "object.remove", payload: { id } })),
+            ...previousLights.map((light) => ({ type: "object.place", payload: light })),
+            { type: SetLightingModeCommand.TYPE, payload: { mode: ctx.scene.lightingMode } },
+            { type: "studio.set-exposure", payload: { exposure: ctx.studio.exposure } },
+            { type: "studio.set-shadows", payload: { enabled: ctx.studio.shadowsEnabled } },
+        ];
+    }
+
+    private compiledFor(ctx: DirectorContext) {
+        const bounds = this.payload.subjectId
+            ? subjectBoundsFor(ctx, this.payload.subjectId)
+            : sceneModelBounds(ctx);
+        if (!bounds) return null;
+        return this.compiler.compile({
+            mood: this.payload.mood,
+            center: bounds.center,
+            radius: bounds.radius,
+            idPrefix: MOOD_LIGHT_ID_PREFIX,
+        });
+    }
+}
+
+/**
+ * 情绪灯的 id 前缀:命令据此识别「哪些灯归自己管」。
+ *
+ * 用命名约定而不是另存一份清单,是为了让身份判据随文档往返自动成立——
+ * 存一份 id 列表就要同步进 DeskDocument,而它在导入导出、撤销重做里都会与实体表漂移。
+ */
+const MOOD_LIGHT_ID_PREFIX = "mood-light";
+
+function moodLightIds(ctx: DirectorContext): readonly string[] {
+    return ctx.scene.manager
+        .list()
+        .filter((entity) => entity.kind === "light" && entity.id.startsWith(`${MOOD_LIGHT_ID_PREFIX}-`))
+        .map((entity) => entity.id);
+}
+
+/** 全场景模型的合并包围球(未指定被摄体时的兜底);没有模型返回 null。 */
+function sceneModelBounds(ctx: DirectorContext): { readonly center: Vec3; readonly radius: number } | null {
+    const ids = ctx.scene.manager
+        .list()
+        .filter((entity) => entity.kind === "model")
+        .map((entity) => entity.id);
+    if (ids.length === 0) return null;
+    const bounds = ids.flatMap((id) => {
+        const measured = subjectBoundsFor(ctx, id);
+        return measured ? [measured] : [];
+    });
+    if (bounds.length === 0) return null;
+    const center: Vec3 = [
+        bounds.reduce((sum, b) => sum + b.center[0], 0) / bounds.length,
+        bounds.reduce((sum, b) => sum + b.center[1], 0) / bounds.length,
+        bounds.reduce((sum, b) => sum + b.center[2], 0) / bounds.length,
+    ];
+    // 合并半径取「到最远子中心的距离 + 该子半径」,保证包住整组
+    const radius = bounds.reduce((max, b) => {
+        const distance = Math.hypot(b.center[0] - center[0], b.center[1] - center[1], b.center[2] - center[2]);
+        return Math.max(max, distance + b.radius);
+    }, 0);
+    return { center, radius };
+}
+
 function capability(
     type: string,
     kind: "command" | "query",
@@ -286,6 +437,11 @@ export function registerLightingCommands(dispatcher: CommandDispatcher): void {
         SetLightingModeCommand.TYPE,
         (payload: SetLightingModePayload) => new SetLightingModeCommand(payload),
         capability(SetLightingModeCommand.TYPE, "command", [LIGHTING_PERMISSION], SET_LIGHTING_MODE_CONTRACT),
+    );
+    dispatcher.register(
+        AuthorLightingCommand.TYPE,
+        (payload: AuthorLightingPayload) => new AuthorLightingCommand(payload),
+        capability(AuthorLightingCommand.TYPE, "command", [LIGHTING_PERMISSION], AUTHOR_LIGHTING_CONTRACT),
     );
     dispatcher.registerQuery(
         LightingListQuery.TYPE,
