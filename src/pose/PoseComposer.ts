@@ -1,5 +1,5 @@
-import { BODY_PART, MIXAMO_PART_BONES } from "@/actor/mixamoSkeleton";
-import type { BodyPart, BoneRotationsByName } from "@/actor/mixamoSkeleton";
+import { BODY_PART, SKELETON_PART_BONES } from "@/actor/actorSkeleton";
+import type { BodyPart, BoneRotationsByName } from "@/actor/actorSkeleton";
 import type { BoneKeyIndex } from "@/pose/BoneKeyIndex";
 import type { PosePreset } from "@/pose/PosePreset";
 import { PoseSnapshot } from "@/pose/PoseSnapshot";
@@ -32,7 +32,7 @@ export class PoseComposer {
     }
 
     static extractPresetBones({ snapshot, index, part }: ExtractPresetBonesRequest): BoneRotationsByName {
-        const eligibleNames = MIXAMO_PART_BONES[part];
+        const eligibleNames = SKELETON_PART_BONES[part];
         const bones: Record<string, QuaternionTuple> = {};
         for (const [key, quaternion] of snapshot.entries) {
             const name = index.nameOf(key);

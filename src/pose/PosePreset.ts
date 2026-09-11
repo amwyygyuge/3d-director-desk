@@ -1,5 +1,5 @@
-import { BODY_PART, isBodyPart } from "@/actor/mixamoSkeleton";
-import type { BodyPart, BoneRotationsByName } from "@/actor/mixamoSkeleton";
+import { BODY_PART, isBodyPart } from "@/actor/actorSkeleton";
+import type { BodyPart, BoneRotationsByName } from "@/actor/actorSkeleton";
 import { isQuaternionTuple } from "@/pose/PoseSnapshot";
 import type { QuaternionTuple } from "@/pose/PoseSnapshot";
 

@@ -22,7 +22,7 @@ export class BoneCompatibilityChecker {
         root.traverse((node) => {
             if (node.name) nodeNames.add(node.name);
         });
-        // 轨道名形如 "mixamorigHips.position",目标节点名取第一段
+        // 轨道名形如 "pelvis.position",目标节点名取第一段
         const targets = [...new Set(clip.tracks.map((track) => track.name.split(".")[0] ?? ""))].filter(Boolean);
         const missingTargets = targets.filter((name) => !nodeNames.has(name));
         const matchedRatio = targets.length === 0 ? 0 : (targets.length - missingTargets.length) / targets.length;

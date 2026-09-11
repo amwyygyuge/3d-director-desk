@@ -1,9 +1,9 @@
 import { SkinnedMesh } from "three";
 import type { Object3D } from "three";
 
-import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
+import { formatFromUrl } from "@/assets/ModelAsset";
 import type { ActionAsset, ActionLoopMode } from "@/assets/ActionAsset";
-import { ACTION_CHANNEL_POLICY, MixamoActionRetargeter } from "@/animation/MixamoActionRetargeter";
+import { trimClip } from "@/animation/ActionClipTrimmer";
 import { MountActionCommand } from "@/command/actionCommands";
 import { entityLoadState } from "@/command/subjectBounds";
 import { waitMs } from "@/core/waitMs";
@@ -12,11 +12,14 @@ import type { DirectorContext } from "@/command/DirectorCommand";
 /** 挂载恢复的运行时等待上限:40 × 250ms = 10s(模型重新加载) */
 const MOUNT_RETRY_LIMIT = 40;
 const MOUNT_RETRY_INTERVAL_MS = 250;
-const actionRetargeter = new MixamoActionRetargeter();
 
 /**
  * 动作资源置备(文档导入与目录挂载共用,Rule of Two):
- * 按 URL 取 clip(clipName 定位)→ 外部 FBX 以目标骨架做世界空间重定向 → 注册进动作库;幂等(重名复用)。
+ * 按 URL 取 clip(clipName 定位)→ 按需裁剪参考帧 → 注册进动作库;幂等(重名复用)。
+ *
+ * 不做骨骼重定向:内置动作与内置人偶同源同骨架(见 scripts/bake-actor-assets.ts),
+ * 轨道名直接命中目标节点。第三方动作的骨架差异由 MountActionCommand 的骨骼预检
+ * 拦下并给出结构化诊断,而不是在这里猜测对应关系——猜错会静默播出错误姿态。
  */
 export async function provisionAction(
     ctx: DirectorContext,
@@ -32,12 +35,6 @@ export async function provisionAction(
 ): Promise<ActionAsset> {
     const format = formatFromUrl(init.url);
     if (!format) throw new Error(`无法识别动作资产格式: ${init.url}`);
-    const needsRetarget = format === MODEL_FORMAT.FBX;
-    if (needsRetarget && !options?.targetObjectId) throw new Error(`FBX 动作需要目标人偶:${init.url}`);
-    const targetRuntime = needsRetarget
-        ? await targetRuntimeWhenReady(ctx, options?.targetObjectId, options?.signal)
-        : null;
-    if (needsRetarget && !targetRuntime) throw new Error(`目标骨架未就绪:${options?.targetObjectId}`);
 
     const handle = await ctx.models.acquire(init.url, format, options?.signal ? { signal: options.signal } : {});
     try {
@@ -54,17 +51,11 @@ export async function provisionAction(
         }
         const clip = namedClip ?? handle.animations[0];
         if (!clip) throw new Error(`资产无动作 clip: ${init.url}`);
-        const retargetedClip = actionRetargeter.normalize(clip, {
-            channels: needsRetarget ? ACTION_CHANNEL_POLICY.ROTATION_ONLY : ACTION_CHANNEL_POLICY.PRESERVE,
-            trimStartSeconds: init.trimStartSeconds ?? 0,
-            trimEndSeconds: init.trimEndSeconds ?? 0,
-            sourceRoot: handle.object3d,
-            ...(targetRuntime ? { targetRoot: targetRuntime } : {}),
-        });
+        const trimmedClip = trimClip(clip, init.trimStartSeconds ?? 0, init.trimEndSeconds ?? 0);
         return ctx.animations.register({
             name: init.name,
             url: init.url,
-            clip: retargetedClip,
+            clip: trimmedClip,
             loopMode: init.loopMode,
             trimStartSeconds: init.trimStartSeconds ?? 0,
             trimEndSeconds: init.trimEndSeconds ?? 0,
@@ -72,33 +63,6 @@ export async function provisionAction(
     } finally {
         handle.release();
     }
-}
-
-async function targetRuntimeWhenReady(
-    ctx: DirectorContext,
-    objectId: string | undefined,
-    signal?: AbortSignal,
-): Promise<Object3D | null> {
-    return objectId ? targetRuntimeAttempt(ctx, objectId, MOUNT_RETRY_LIMIT, signal) : null;
-}
-
-async function targetRuntimeAttempt(
-    ctx: DirectorContext,
-    objectId: string,
-    remainingAttempts: number,
-    signal?: AbortSignal,
-): Promise<Object3D | null> {
-    if (remainingAttempts === 0 || signal?.aborted) return null;
-    const entity = ctx.scene.manager.getEntity(objectId);
-    // 同 mountWhenReady:重定向要拿真实骨架做世界空间对位,
-    // 内容加载前的外层组会让 MixamoActionRetargeter 对着空骨架算,结果是错的 clip。
-    // 判据同样取「结局表」与「骨架实测」的并集,避免结局表未落账时永久等待。
-    const ready = entity ? entityLoadState(ctx, entity) : "loading";
-    if (ready === "failed") return null;
-    const runtime = ctx.scene.manager.getRuntime(objectId);
-    if (runtime && (ready === "loaded" || ready === "none" || hasBoundSkeleton(runtime))) return runtime;
-    await waitMs(MOUNT_RETRY_INTERVAL_MS);
-    return targetRuntimeAttempt(ctx, objectId, remainingAttempts - 1, signal);
 }
 
 /**
