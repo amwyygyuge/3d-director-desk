@@ -37,8 +37,29 @@ const EXCLUDED_CLIP_PATTERN = /^(Pistol_|Punch_|Sword_|Spell_|A_TPose$)/;
  */
 const KEYFRAME_EPSILON = 1e-6;
 
+/**
+ * 位移轨道的等值判据(米)。0.1 毫米——远低于人体尺度的可辨差异,
+ * 但比四元数判据宽,否则 Float32 噪声会让本该恒定的轨道全部留下。
+ */
+const POSITION_EPSILON = 1e-4;
+
 /** 骨架根骨名:其轨道不进场景(位置与朝向由实体 transform 决定)。 */
 const ROOT_BONE_NAME = "root";
+
+/**
+ * 不进场景的通道:
+ *
+ * - `scale`:实测源包 43 段里非恒定的 scale 通道数为 0,留着纯占字节。
+ * - 根骨的任何通道:root motion 的容器,位置与朝向权威归实体 transform。
+ *
+ * **`pelvis.position` 必须保留**:那是身体相对脚底的起伏(跑步腾空、跳跃蹲起、
+ * 倒地下沉),不是位移。实测 25/28 段带非恒定 pelvis 位移,Roll 达身高 60%、
+ * Jog 12.6%、Sprint 7.2%;且逐段水平净漂移均为 0.000m——前进位移早已被抽到根骨,
+ * 留下它不会让角色漂离原位。丢掉它会让所有动作失去重量感(曾误删,导致跑步发飘)。
+ */
+function isDroppedTrack(trackName: string): boolean {
+    return trackName.endsWith(".scale") || trackName.startsWith(`${ROOT_BONE_NAME}.`);
+}
 
 async function loadSourceScene(): Promise<{ scene: Object3D; animations: readonly AnimationClip[] }> {
     const bytes = await Bun.file(SOURCE_PATH).arrayBuffer();
@@ -51,21 +72,21 @@ async function loadSourceScene(): Promise<{ scene: Object3D; animations: readonl
 }
 
 /**
- * 关键帧去冗 + 通道过滤:只留旋转、剔根骨、删恒定轨道与等值中间帧。
+ * 关键帧去冗 + 通道过滤:剔除不进场景的通道,删恒定轨道与等值中间帧。
  *
  * 恒定轨道整条删掉——骨骼停在 rest 姿态,不写轨道与写一条恒定轨道等价;
- * 中间的等值帧删掉——球面插值在等值端点之间取任何 t 都得同一个值。
+ * 中间的等值帧删掉——插值在等值端点之间取任何 t 都得同一个值。
  * 两者都在容差内无损,只减字节与运行时插值工作量。
  */
 function normalizedClip(clip: AnimationClip): AnimationClip {
     const tracks = clip.tracks.flatMap((track) => {
-        if (!track.name.endsWith(".quaternion")) return [];
-        if (track.name.startsWith(`${ROOT_BONE_NAME}.`)) return [];
+        if (isDroppedTrack(track.name)) return [];
         const stride = track.values.length / track.times.length;
+        const epsilon = track.name.endsWith(".quaternion") ? KEYFRAME_EPSILON : POSITION_EPSILON;
         const sameAs = (left: number, right: number): boolean => {
             for (let component = 0; component < stride; component++) {
                 const delta = track.values[left * stride + component]! - track.values[right * stride + component]!;
-                if (Math.abs(delta) > KEYFRAME_EPSILON) return false;
+                if (Math.abs(delta) > epsilon) return false;
             }
             return true;
         };

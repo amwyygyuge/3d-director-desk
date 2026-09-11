@@ -84,22 +84,30 @@ async function waitCatalogEntry(
 }
 
 /**
- * 动作只驱动骨骼旋转,不改变实体位姿。
+ * 动作驱动骨骼,但不改变实体位姿。
  *
- * 内置动作与内置人偶同源同骨架,不经重定向;根骨轨道在烘制期就被剔除
- * (见 scripts/bake-actor-assets.ts),故这里断言的是「产物契约」而非「重定向正确性」:
- * 位置/缩放轨道与根骨轨道都不该出现在运行时 clip 里。
+ * 内置动作与内置人偶同源同骨架,不经重定向;根骨与缩放轨道在烘制期就被剔除
+ * (见 scripts/bake-actor-assets.ts),故这里断言的是「产物契约」:
+ * 实体的位置与朝向权威不被动作侵占。
+ *
+ * `pelvis.position` **允许存在且必须存在**:那是身体相对脚底的起伏(跑步腾空、
+ * 跳跃蹲起、倒地下沉),不是位移——源资产的前进位移已抽到根骨,逐段水平净漂移为 0。
+ * 曾误把它一并剔除,结果所有动作失去重量感。
  */
 function assertUprightFirstFrame(stores: DirectorDeskStores, objectId: string): void {
     const actionId = stores.scene.manager.getEntity(objectId)?.actionId;
     const clip = required(actionId ? stores.animations.getClip(actionId) : undefined, "动作缺少 clip");
     assertAcceptance(
-        clip.tracks.every((track) => !track.name.endsWith(".position") && !track.name.endsWith(".scale")),
-        "动作资产仍包含位置/缩放轨道",
+        clip.tracks.every((track) => !track.name.endsWith(".scale")),
+        "动作资产仍包含缩放轨道",
     );
     assertAcceptance(
         clip.tracks.every((track) => !track.name.startsWith("root.")),
         "动作资产仍写根骨轨道",
+    );
+    assertAcceptance(
+        clip.tracks.every((track) => !track.name.endsWith(".position") || track.name === "pelvis.position"),
+        "位移轨道出现在 pelvis 之外的骨骼上",
     );
 }
 
