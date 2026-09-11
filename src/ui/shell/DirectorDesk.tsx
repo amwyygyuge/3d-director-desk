@@ -84,6 +84,11 @@ export interface DirectorDeskProps {
     host?: HostAdapter;
     /** 宿主注入的资源 provider(直嵌形态;iframe 形态走 bridge register-assets 消息) */
     assetProviders?: readonly AssetProvider[];
+    /**
+     * 内置资源(包内 `dist/builtin-assets/`)的 serve 基址;缺省站点根 `/builtin-assets`。
+     * 嵌入宿主时必须提供——站点根属宿主,缺省路径会 404 且资源面板空白。
+     */
+    builtinAssetBaseUrl?: string;
     /** iframe 宿主的精确 origin/source/session 信任边界；未提供时采用无通信安全缺省 */
     hostBridge?: HostBridgeConfiguration;
     /** 编排轨迹辅助物的初始可见性(Storybook/宿主播种);缺省即编排态默认(可见),运行时开关在顶栏。 */
@@ -117,6 +122,7 @@ export const DirectorDesk = observer(function DirectorDesk({
     host,
     hostBridge,
     assetProviders,
+    builtinAssetBaseUrl,
     onReady,
     initialMotionPathVisible,
     presentation,
@@ -129,6 +135,7 @@ export const DirectorDesk = observer(function DirectorDesk({
             host,
             hostBridge,
             assetProviders,
+            builtinAssetBaseUrl,
             motionPathVisible: initialMotionPathVisible,
             presentation,
             gridSizeMeters: initialGridSizeMeters,

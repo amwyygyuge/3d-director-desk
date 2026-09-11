@@ -38,13 +38,27 @@ export class AssetCatalog {
         return this.registerEntries(parsed, "injected");
     }
 
-    /** 加载 provider 条目;单个失败不影响其他(provider 隔离) */
-    async loadProvider(provider: AssetProvider, source: AssetSource, signal?: AbortSignal): Promise<number> {
+    /**
+     * 加载 provider 条目;单个失败不影响其他(provider 隔离)。
+     *
+     * 失败必须可见:此前 `catch { return 0; }` 把错误彻底吞掉,而调用方是 `void` 调用,
+     * 于是「基址配错 / 资产没 serve」的表现是资源面板静默空白,零线索。
+     * 隔离的语义是「不打断其他 provider」,不是「不告诉任何人」——故仍不抛出,只上报。
+     */
+    async loadProvider(
+        provider: AssetProvider,
+        source: AssetSource,
+        signal?: AbortSignal,
+        onFailure?: (message: string) => void,
+    ): Promise<number> {
         try {
             const entries = await provider.load();
             if (signal?.aborted) return 0;
             return this.registerEntries(entries, source);
-        } catch {
+        } catch (error) {
+            if (signal?.aborted) return 0;
+            const detail = error instanceof Error ? error.message : String(error);
+            onFailure?.(`资源目录加载失败(${source}):${detail}`);
             return 0;
         }
     }

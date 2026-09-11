@@ -241,7 +241,7 @@ export type {
     ProgramReviewShot,
 } from "@/review/ProgramReviewService";
 export { AssetCatalog } from "@/assets/catalog/AssetCatalog";
-export { BuiltinAssetProvider } from "@/assets/catalog/AssetProvider";
+export { BuiltinAssetProvider, DEFAULT_BUILTIN_ASSET_BASE_URL } from "@/assets/catalog/AssetProvider";
 export type { AssetProvider } from "@/assets/catalog/AssetProvider";
 export { ASSET_CATEGORY, ASSET_KIND, ASSET_SOURCE } from "@/assets/catalog/AssetEntry";
 export type { AssetEntry, AssetKind, AssetSource } from "@/assets/catalog/AssetEntry";

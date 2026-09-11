@@ -172,6 +172,13 @@ export function createDirectorDeskStores(options?: {
     hostBridge?: HostBridgeConfiguration | undefined;
     /** 宿主注入的资源 provider(直嵌形态);内置资源始终加载 */
     assetProviders?: readonly AssetProvider[] | undefined;
+    /**
+     * 内置资源(`dist/builtin-assets/`)的 serve 基址;缺省站点根 `/builtin-assets`。
+     *
+     * 嵌入宿主时必须给:站点根属宿主,缺省路径会 404 并让资源面板空白。
+     * 宿主把该目录 serve 出去后传其前缀即可(条目 url 由 provider 按此基址改写)。
+     */
+    builtinAssetBaseUrl?: string | undefined;
     /** 运镜轨迹辅助物的初始可见性(Storybook/宿主播种) */
     motionPathVisible?: boolean | undefined;
     /** 壳层呈现定制(产品名/采集按钮文案/工具栏扩展位);仅创建期读取 */
@@ -239,10 +246,18 @@ export function createDirectorDeskStores(options?: {
     const playheadDisplay = new PlayheadDisplay(clock);
     const videoExport = new VideoExportSession(playheadDisplay);
     const animations = new AnimationLibrary();
-    // 资源目录装载:内置必载 + 宿主注入;异步失败静默(目录为空可由 assets.list 断言发现)
-    void catalog.loadProvider(new BuiltinAssetProvider(), "builtin", lifecycle.signal);
+    // 资源目录装载:内置必载 + 宿主注入。失败经 applicationNotice 上报——
+    // 基址配错/资产未 serve 是嵌入宿主时最常见的集成故障,静默空白面板没有任何线索。
+    const ui = new UiStore();
+    const reportCatalogFailure = (message: string): void => ui.setApplicationNotice(message);
+    void catalog.loadProvider(
+        new BuiltinAssetProvider(options?.builtinAssetBaseUrl),
+        "builtin",
+        lifecycle.signal,
+        reportCatalogFailure,
+    );
     for (const provider of options?.assetProviders ?? []) {
-        void catalog.loadProvider(provider, "injected", lifecycle.signal);
+        void catalog.loadProvider(provider, "injected", lifecycle.signal, reportCatalogFailure);
     }
     return {
         scene,
@@ -260,7 +275,7 @@ export function createDirectorDeskStores(options?: {
         dispatcher,
         assets: new AssetLibrary(),
         models: new ModelImporter(),
-        ui: new UiStore(),
+        ui,
         layout,
         motionAuthoring,
         timelineSelection: new TimelineSelectionStore(),

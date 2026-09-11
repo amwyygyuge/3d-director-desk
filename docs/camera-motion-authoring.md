@@ -534,7 +534,7 @@ interface MotionPresetRequest {
 
 ### 9.1 序列化
 
-`DESK_DOCUMENT_VERSION = 8`：`CameraMotionClipJSON` 新增 `follow` 字段，用于持久化跟拍绑定。
+`CameraMotionClipJSON` 新增 `follow` 字段（用于持久化跟拍绑定）时的文档版本为 `8`；此处记录该字段的引入时点，当前版本号以 `DESK_DOCUMENT_VERSION` 常量为准。
 
 ---
 

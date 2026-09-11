@@ -114,9 +114,21 @@ const tools = bridge.listToolSchemas(); // { name, description, kind, permission
 
 ## Project document compatibility
 
-`desk.export-document` produces document version `8`; imports accept only that exact version and validate entity, reference, timeline, camera-motion, and Program links before atomically replacing the current project. There is no legacy migration path before the first release.
+`desk.export-document` produces the current `DESK_DOCUMENT_VERSION`; imports accept only that exact version and validate entity, reference, timeline, camera-motion, and Program links before atomically replacing the current project. There is no legacy migration path before the first release. Read the constant rather than hard-coding the number: `import { DESK_DOCUMENT_VERSION } from "@dm/3d-director-desk"`.
 
 Documents contain scene data and resource URLs, not model or action binaries. Every referenced URL must remain available to the importing desk. In particular, browser `blob:` URLs from locally selected files are session-local and cannot be restored after a refresh; the playground detects and clears those transient snapshots rather than presenting a broken project.
+
+## Built-in asset hosting
+
+The package ships its built-in model and action library in `dist/builtin-assets/`. The desk loads it at runtime by `fetch`, so a host must serve that directory and say where it lives:
+
+```tsx
+<DirectorDesk builtinAssetBaseUrl="/my-vendor-path/builtin-assets" />
+```
+
+`builtinAssetBaseUrl` defaults to the site-root path `/builtin-assets`, which is correct only when the desk itself is served from the site root (this repository's playground and Storybook). An embedded host's site root belongs to the host, so leaving the default in place makes the catalog request resolve against the host's root and the asset panel stays empty. Catalog entry URLs are rewritten to the configured base, so the catalog file needs no per-host edit.
+
+Copy or sync `dist/builtin-assets/` into whatever path the host serves; do not symlink it to a source checkout, which breaks on any clean clone or CI build. When the catalog cannot be loaded, the desk reports the failing URL through `UiStore.setApplicationNotice(...)` instead of failing silently.
 
 ## Public API
 
