@@ -339,17 +339,26 @@ export class AuthorLightingCommand extends DirectorCommand<AuthorLightingPayload
     }
 
     /**
-     * 反演回上一状态的完整快照:模式 + 曝光 + 投影 + 全部既有灯。
-     * 逐条 place 装回旧灯之前必须先删掉本次产出的灯,否则 id 冲突。
+     * 反演只覆盖本命令**实际改动**的东西:自己产出的情绪灯 + 模式 + 曝光 + 投影。
+     *
+     * 两条都是实测踩出来的:
+     *  - 不能把作者手放的灯也装回一遍。`invert` 在 execute **之前**调用,那时它们还在场景里,
+     *    重新 place 会撞 SceneManager 的重复 id 断言,整条撤销被自己的校验链拒掉
+     *    (实测 `id "key-light" 已存在`,撤销返回 !ok、场景纹丝不动)。它们本就没被动过。
+     *  - 待删 id 必须取**本次将要产出**的那批(编译结果),而不是当前场景里的情绪灯:
+     *    `object.remove` 对不存在的 id 会校验失败,而首次应用情绪时场景里还没有情绪灯。
      */
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
-        const previousLights = ctx.scene.manager
+        // execute 会删掉上一轮情绪灯,故必须在此装回
+        const previousMoodLights = ctx.scene.manager
             .list()
-            .filter((entity) => entity.kind === "light")
+            .filter((entity) => entity.kind === "light" && entity.id.startsWith(`${MOOD_LIGHT_ID_PREFIX}-`))
             .map((entity) => entity.toJSON());
+        const created = this.compiledFor(ctx)?.lights ?? [];
         return [
-            ...moodLightIds(ctx).map((id) => ({ type: "object.remove", payload: { id } })),
-            ...previousLights.map((light) => ({ type: "object.place", payload: light })),
+            // 先删本次产出的灯:与上一轮可能同名,不先删则装回时 id 冲突
+            ...created.map((light) => ({ type: "object.remove", payload: { id: light.id } })),
+            ...previousMoodLights.map((light) => ({ type: "object.place", payload: light })),
             { type: SetLightingModeCommand.TYPE, payload: { mode: ctx.scene.lightingMode } },
             { type: "studio.set-exposure", payload: { exposure: ctx.studio.exposure } },
             { type: "studio.set-shadows", payload: { enabled: ctx.studio.shadowsEnabled } },
