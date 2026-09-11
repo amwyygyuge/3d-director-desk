@@ -26,10 +26,17 @@ export interface CategorizedPresetButtonGridProps {
     readonly onApply: (id: string) => void;
 }
 
+/**
+ * 动作分区标签描述**资产的天然语义**,不再叫「常驻/一次性」。
+ *
+ * 「常驻动作」是时间轴还没有排期概念时的遗留:那时循环动作确实一直挂着。
+ * 现在每段动作都有明确时段,循环与否只说明它能不能无缝接续——
+ * 而「拉长段条时怎么铺满」由排期的填充策略决定(见 ActionFillPolicy)。
+ */
 const ACTION_CATEGORY_ORDER: readonly ActionLoopMode[] = [ACTION_LOOP_MODE.LOOP, ACTION_LOOP_MODE.ONCE];
 const ACTION_CATEGORY_LABEL: Record<ActionLoopMode, string> = {
-    [ACTION_LOOP_MODE.LOOP]: "常驻动作",
-    [ACTION_LOOP_MODE.ONCE]: "一次性动作",
+    [ACTION_LOOP_MODE.LOOP]: "可循环",
+    [ACTION_LOOP_MODE.ONCE]: "单次",
 };
 
 /** 检查器里动作/姿势预设的统一按钮网格;不同数据源只负责映射 id 与标签。 */
