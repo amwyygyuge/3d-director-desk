@@ -361,31 +361,37 @@ const ExposureSlider = observer(function ExposureSlider() {
 });
 
 /**
- * 地板颜色:原生色板输入(MUI 无颜色组件,不为此引入第二套 UI 库)。
- * 拖动色板会连续触发 change,故与滑杆同纪律——只在 blur/commit 时发命令。
+ * 地板颜色:原生色板输入(MUI 无颜色组件,不为此引入第二套 UI 库,红线 7)。
+ *
+ * 不设草稿态,直接在 `onChange` 落命令。两条实测踩坑记此:
+ *  - 只在 `blur` 提交(照滑杆的思路)不成立:取完色值停在草稿上、领域态不变,表现为改不动地板颜色。
+ *  - 再叠一个 `onInput` 维护草稿更糟:React 的 `onChange` 本就绑在原生 `input` 事件上,
+ *    两者同源,`onInput` 会把它吞掉,命令永远不发。
+ *
+ * 系统取色器在确认时才把值交回页面(拖动期不逐帧回调),因此直接提交不会制造撤销碎片,
+ * 无需滑杆那套 draft/commit 分离。
  */
 const FloorColorPicker = observer(function FloorColorPicker() {
     const stores = useDirectorDeskStores();
     const committed = stores.studio.floorColor;
-    const [draft, setDraft] = useState<string | null>(null);
-
-    const commit = (value: string): void => {
-        setDraft(null);
-        if (value.toLowerCase() === committed) return;
-        reportCommandFailure(
-            stores,
-            stores.dispatcher.dispatch({ type: COMMAND_TYPE.SET_FLOOR_COLOR, payload: { color: value } }, stores),
-        );
-    };
 
     return (
         <input
             aria-label={TEXT.FLOOR_COLOR}
-            onBlur={(event) => commit(event.target.value)}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+                const value = event.target.value;
+                if (value.toLowerCase() === committed) return;
+                reportCommandFailure(
+                    stores,
+                    stores.dispatcher.dispatch(
+                        { type: COMMAND_TYPE.SET_FLOOR_COLOR, payload: { color: value } },
+                        stores,
+                    ),
+                );
+            }}
             style={{ width: FLOOR_COLOR_SWATCH_PX, height: FLOOR_COLOR_SWATCH_PX, border: "none", background: "none" }}
             type="color"
-            value={draft ?? committed}
+            value={committed}
         />
     );
 });
