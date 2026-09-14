@@ -3,6 +3,7 @@ import type { DirectorContext, SerializedCommand } from "@/command/DirectorComma
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
+import { FLOOR_COLOR_PALETTE } from "@/studio/FloorColorPalette";
 import {
     EXPOSURE,
     FLOOR_COLOR_DEFAULT,
@@ -256,9 +257,7 @@ export class SetStudioFloorColorCommand extends DirectorCommand<SetFloorColorPay
     }
 
     validate(): string[] {
-        return isFloorColor(this.payload.color)
-            ? []
-            : [`地板颜色必须是 6 位十六进制(如 ${FLOOR_COLOR_DEFAULT})`];
+        return isFloorColor(this.payload.color) ? [] : [`地板颜色必须是 6 位十六进制(如 ${FLOOR_COLOR_DEFAULT})`];
     }
 
     execute(ctx: DirectorContext): void {
@@ -292,7 +291,10 @@ export class SetStudioFloorSurfaceCommand extends DirectorCommand<SetEnabledPayl
     }
 }
 
-/** 演播室档位读模型:AI/宿主可发现当前地板尺度与画质档,不接触 Three 或 canvas。 */
+/**
+ * 演播室档位读模型:AI/宿主可发现当前地板尺度与画质档,不接触 Three 或 canvas。
+ * 同时给出地板色词表——UI 色块与 AI 色名共读同一张表,用户看到的标签就是能对模型说的词。
+ */
 export class StudioGetQuery implements DirectorQuery<Record<string, never>> {
     static readonly TYPE = "studio.get";
     readonly type = StudioGetQuery.TYPE;
@@ -308,6 +310,11 @@ export class StudioGetQuery implements DirectorQuery<Record<string, never>> {
             ...ctx.studio.toJSON(),
             gridSizeRangeMeters: { min: GRID_SIZE.MIN_METERS, max: GRID_SIZE.MAX_METERS },
             exposureRange: { min: EXPOSURE.MIN, max: EXPOSURE.MAX },
+            floorColorPalette: FLOOR_COLOR_PALETTE.map((swatch) => ({
+                id: swatch.id,
+                labelZh: swatch.labelZh,
+                hex: swatch.hex,
+            })),
         };
     }
 }
@@ -381,12 +388,7 @@ export function registerStudioCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         SetStudioFloorSurfaceCommand.TYPE,
         (payload: SetEnabledPayload) => new SetStudioFloorSurfaceCommand(payload),
-        studioCapability(
-            SetStudioFloorSurfaceCommand.TYPE,
-            "command",
-            [STUDIO_EDIT_PERMISSION],
-            SET_ENABLED_CONTRACT,
-        ),
+        studioCapability(SetStudioFloorSurfaceCommand.TYPE, "command", [STUDIO_EDIT_PERMISSION], SET_ENABLED_CONTRACT),
     );
     dispatcher.registerQuery(
         StudioGetQuery.TYPE,

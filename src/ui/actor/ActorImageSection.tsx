@@ -4,7 +4,6 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Chip from "@mui/material/Chip";
 import Slider from "@mui/material/Slider";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
@@ -18,6 +17,7 @@ import { ACTOR_GIRTH_SCALE, ACTOR_HEIGHT_METERS, ACTOR_SHOULDER_SCALE, ActorBuil
 import type { ActorBuildInit, ActorBuildRange } from "@/actor/ActorBuild";
 import { ACTOR_PALETTE } from "@/actor/ActorPalette";
 import { BUILD_PRESETS, matchBuildPreset } from "@/actor/BuildPresetCompiler";
+import { ColorField } from "@/ui/controls/ColorField";
 import type { InspectorSectionProps, ReportCommandResult } from "@/ui/inspector/Inspector";
 import { INSPECTOR_FIELD_SX } from "@/ui/inspector/TransformFields";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -78,38 +78,42 @@ const ActorPaletteGrid = observer(function ActorPaletteGrid({ objectId, report }
 });
 
 /**
- * 自定义取色器:拖色轮期间只重写材质 uniform(不写实体、不进历史),失焦才落一条命令。
+ * 自定义取色器:拖色轮期间只重写材质 uniform(不写实体、不进历史),松手/关面板才落一条命令。
  * 与 BonePicker 的拖拽范式一致——一次连续调节在撤销栈里是一条记录。
+ *
+ * 用应用内 `ColorField` 而非 `<input type="color">`:系统色板窗口的 Esc 由操作系统消费,
+ * 页面收不到按键,「Esc 应用当前色并关闭」只能在自绘面板里兑现。
+ *
+ * 不给面板传 `swatches`:`ACTOR_PALETTE` 已由上方 `ActorPaletteGrid` 常驻展开,
+ * 面板内再放一份是同一张表的第二个入口(选中态两处各自表达,必然出现「哪个才对」的疑问)。
  */
 const ActorColorPicker = observer(function ActorColorPicker({ objectId, report }: ActorControlsProps) {
     const stores = useDirectorDeskStores();
     const appearance = stores.scene.manager.getEntity(objectId)?.actor?.appearance;
-    const [draft, setDraft] = useState(() => appearance?.baseColorHex ?? "");
     if (!appearance) return null;
 
-    const preview = (baseColorHex: string) => {
-        setDraft(baseColorHex);
-        stores.actorRuntime.paint(objectId, appearance.withColor(baseColorHex));
-        stores.playback.requestRender();
-    };
-
     return (
-        <TextField
-            size="small"
-            type="color"
-            label="自定义颜色"
-            value={draft || appearance.baseColorHex}
-            slotProps={{ htmlInput: { "aria-label": "人偶自定义颜色" } }}
-            onChange={(event) => preview(event.target.value)}
-            onBlur={() =>
-                report(
-                    stores.dispatcher.dispatch(
-                        { type: "actor.appearance.set", payload: { objectId, baseColorHex: draft } },
-                        stores,
-                    ),
-                )
-            }
-        />
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: CHIP_GAP }}>
+            <Typography variant="caption" color="text.secondary">
+                自定义颜色
+            </Typography>
+            <ColorField
+                ariaLabel="人偶自定义颜色"
+                value={appearance.baseColorHex}
+                onPreview={(baseColorHex) => {
+                    stores.actorRuntime.paint(objectId, appearance.withColor(baseColorHex));
+                    stores.playback.requestRender();
+                }}
+                onCommit={(baseColorHex) =>
+                    report(
+                        stores.dispatcher.dispatch(
+                            { type: "actor.appearance.set", payload: { objectId, baseColorHex } },
+                            stores,
+                        ),
+                    )
+                }
+            />
+        </Box>
     );
 });
 

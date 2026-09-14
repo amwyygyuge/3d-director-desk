@@ -8,6 +8,12 @@ import { LIGHTING_MODE } from "@/store/SceneStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 
 const AMBIENT_INTENSITY = 0.5;
+/**
+ * 环境光照开启时的补光强度:IBL 的漫反射项**就是**环境光的物理解,
+ * `ambientLight` 只是它的常数近似——两者并存等于同一份间接光算两遍,能量上错的。
+ * 归零而不是删掉节点:开关是运行时可切的,保留节点让 React 只改 uniform 不重建场景图。
+ */
+const AMBIENT_INTENSITY_WITH_ENVIRONMENT = 0;
 const KEY_LIGHT_INTENSITY = 1.4;
 const FILL_LIGHT_INTENSITY = 0.65;
 const RIM_LIGHT_INTENSITY = 0.9;
@@ -20,6 +26,22 @@ const RIM_LIGHT_POSITION = [0, 5, -6] as const;
 
 /** PMREM 卷积的模糊半径:RoomEnvironment 的推荐量级,过大会抹平方向性、过小留下块状接缝。 */
 const ENVIRONMENT_BLUR_SIGMA = 0.04;
+
+/**
+ * 环境贴图的全局倍率(`Scene.environmentIntensity`)。
+ *
+ * `RoomEnvironment` 的灯箱 `emissiveIntensity` 取 17~100、点光取 900,那是 three 官方按
+ * 「IBL 是唯一光源」标定的量级;这里它是三点光之上的**补充**光源,原样叠加会整体过曝
+ * (ACES 的肩部把中低调抬得比高光多,主观上是发白、反差塌)。
+ * 取到让金属度/粗糙度的差异可辨、又不接管主体曝光的量级(亮色地板是最吃亮度的一块面:
+ * 全场唯一朝上的大面、法线正对顶部灯箱,浅灰 albedo 的线性反射率约是深灰的 32 倍)。
+ *
+ * 只能全局调,不能逐材质给:`envMap === null && scene.environment !== null` 时
+ * WebGLRenderer 每帧把材质的 `envMapIntensity` uniform 覆写成本值
+ * (`WebGLRenderer.js` 的 `envMapIntensity.value = scene.environmentIntensity`),
+ * 单独给某张面设 `envMapIntensity` 会被静默丢弃——想逐面控制得先给它自己的 `envMap`。
+ */
+const ENVIRONMENT_INTENSITY = 0.35;
 
 /**
  * 投影装置档位。
@@ -87,9 +109,11 @@ export const StudioRig = observer(function StudioRig() {
         room.dispose();
         generator.dispose();
         threeScene.environment = target.texture;
+        threeScene.environmentIntensity = ENVIRONMENT_INTENSITY;
         invalidate();
         return () => {
             threeScene.environment = null;
+            threeScene.environmentIntensity = 1;
             target.dispose();
             invalidate();
         };
@@ -99,7 +123,9 @@ export const StudioRig = observer(function StudioRig() {
 
     return (
         <>
-            <ambientLight intensity={AMBIENT_INTENSITY} />
+            <ambientLight
+                intensity={environmentLightingEnabled ? AMBIENT_INTENSITY_WITH_ENVIRONMENT : AMBIENT_INTENSITY}
+            />
             <directionalLight color={KEY_LIGHT_COLOR} intensity={KEY_LIGHT_INTENSITY} position={KEY_LIGHT_POSITION} />
             <directionalLight
                 color={FILL_LIGHT_COLOR}

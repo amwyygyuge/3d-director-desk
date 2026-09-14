@@ -9,6 +9,10 @@ export const SCRUB_STEP = {
     distanceMeters: 0.1,
     decay: 0.1,
     ratio: 0.05,
+    /** 焦距(毫米):1mm 是摄影上可辨识的最小档,0.1 只会让刮擦变钝 */
+    focalLengthMm: 1,
+    /** 光圈 f 值:0.1 约等于三分之一档,比整档细、够作者试深浅 */
+    apertureFStop: 0.1,
 } as const;
 export type ScrubKind = keyof typeof SCRUB_STEP;
 

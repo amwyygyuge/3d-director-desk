@@ -113,11 +113,16 @@ export const MotionPresetControls = observer(function MotionPresetControls({ cam
         reportCommandFailure(stores, result);
     };
 
-    /** 把落幅构图直接用作起幅:作者想「先摆到这个景别再运镜」时的显式出口,可撤销。 */
+    /**
+     * 把落幅构图直接用作起幅:作者想「先摆到这个景别再运镜」时的显式出口,可撤销。
+     * 只落几何三项——落幅预览的 lens 是构造缺省值,整对象提交会把作者设好的光圈/对焦擦掉;
+     * `camera.set-shot` 在 lens 缺省时保持原镜头。
+     */
     const applyLandingToShot = (): void => {
         if (!landing) return;
+        const { position, target, fov } = landing.shot;
         const result = dispatcher.dispatch(
-            { type: "camera.set-shot", payload: { id: cameraId, shot: landing.shot.toJSON() } },
+            { type: "camera.set-shot", payload: { id: cameraId, shot: { position, target, fov } } },
             stores,
         );
         reportCommandFailure(stores, result);

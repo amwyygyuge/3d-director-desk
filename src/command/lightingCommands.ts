@@ -14,7 +14,13 @@ import {
 import type { LightParams } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { subjectBoundsFor } from "@/command/subjectBounds";
-import { LIGHTING_MOOD, LightingMoodCompiler, isLightingMood } from "@/lighting/LightingMoodCompiler";
+import {
+    LIGHTING_MOOD,
+    LIGHTING_MOOD_PRESETS,
+    LightingMoodCompiler,
+    isLightingMood,
+} from "@/lighting/LightingMoodCompiler";
+import { LIGHT_COLOR_PALETTE } from "@/lighting/LightColorPalette";
 import type { LightingMood } from "@/lighting/LightingMoodCompiler";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
@@ -302,11 +308,7 @@ export class AuthorLightingCommand extends DirectorCommand<AuthorLightingPayload
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         if (!isPayloadRecord(this.payload) || !isLightingMood(this.payload.mood)) {
             return [
-                issue(
-                    ISSUE_CODE.PAYLOAD,
-                    "mood",
-                    `打光情绪必须是 ${Object.values(LIGHTING_MOOD).join(" / ")} 之一`,
-                ),
+                issue(ISSUE_CODE.PAYLOAD, "mood", `打光情绪必须是 ${Object.values(LIGHTING_MOOD).join(" / ")} 之一`),
             ];
         }
         const subjectId = this.payload.subjectId;
@@ -366,9 +368,7 @@ export class AuthorLightingCommand extends DirectorCommand<AuthorLightingPayload
     }
 
     private compiledFor(ctx: DirectorContext) {
-        const bounds = this.payload.subjectId
-            ? subjectBoundsFor(ctx, this.payload.subjectId)
-            : sceneModelBounds(ctx);
+        const bounds = this.payload.subjectId ? subjectBoundsFor(ctx, this.payload.subjectId) : sceneModelBounds(ctx);
         if (!bounds) return null;
         return this.compiler.compile({
             mood: this.payload.mood,
@@ -435,6 +435,34 @@ function capability(
     };
 }
 
+/**
+ * AI 发现面:灯色词表与打光情绪配方,与 UI 标签同源——用户看到什么就能对模型说什么。
+ *
+ * 灯色单列一张表而非塞进 `lighting.list`:后者是**逐盏灯的快照**(每盏都带一份词表是冗余),
+ * 而词表是与场内有几盏灯无关的静态发现信息,零灯场景同样要能问出「有哪些可说的灯色」。
+ */
+export class LightingPresetsQuery implements DirectorQuery<Record<string, never>> {
+    static readonly TYPE = "lighting.presets.list";
+    readonly type = LightingPresetsQuery.TYPE;
+
+    constructor(readonly payload: Record<string, never> = EMPTY_PAYLOAD) {}
+
+    validate(): readonly string[] {
+        return [];
+    }
+
+    execute(): unknown {
+        return {
+            colors: LIGHT_COLOR_PALETTE.map((swatch) => ({
+                id: swatch.id,
+                labelZh: swatch.labelZh,
+                hex: swatch.hex,
+            })),
+            moods: LIGHTING_MOOD_PRESETS.map((preset) => ({ id: preset.id, labelZh: preset.labelZh })),
+        };
+    }
+}
+
 /** lighting.* 在同一注册表提供写、读与发现元数据；返回值只有可 JSON 化领域数据。 */
 export function registerLightingCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
@@ -461,5 +489,10 @@ export function registerLightingCommands(dispatcher: CommandDispatcher): void {
         LightingGetQuery.TYPE,
         (payload: GetLightPayload) => new LightingGetQuery(payload),
         capability(LightingGetQuery.TYPE, "query", [LIGHTING_READ_PERMISSION], GET_LIGHT_CONTRACT),
+    );
+    dispatcher.registerQuery(
+        LightingPresetsQuery.TYPE,
+        (payload: Record<string, never>) => new LightingPresetsQuery(payload),
+        capability(LightingPresetsQuery.TYPE, "query", [LIGHTING_READ_PERMISSION], EMPTY_PAYLOAD_CONTRACT),
     );
 }

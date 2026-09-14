@@ -1,6 +1,6 @@
 import { Box3 } from "three";
 
-import { SHOT_SIZE } from "@/camera/CameraShot";
+import { CameraShot, SHOT_SIZE } from "@/camera/CameraShot";
 import type { ShotSize } from "@/camera/CameraShot";
 import { CameraFrameSolver } from "@/camera/CameraFrameSolver";
 import { createCameraMotionSample } from "@/camera/CameraMotionClip";
@@ -86,7 +86,8 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
         const isSampled = clip !== null && solver.solve(clip, ctx.clock.time, TMP_MOTION_SAMPLE);
         const sampled = isSampled ? TMP_MOTION_SAMPLE : null;
         const live = ctx.capture.readCameraPose();
-        const aspect = liveAspectFor(ctx);
+        // 与 camera.set-lens 同口径(OutputSettings.aspectRatioFor):禁两处各写一份换算画幅
+        const aspect = ctx.output.aspectRatioFor(ctx.capture.size);
         return {
             activeShotId: ctx.camera.activeShotId,
             programSource,
@@ -107,16 +108,6 @@ export class CameraGetPoseQuery implements DirectorQuery<Record<string, never>> 
     }
 }
 
-/**
- * 焦距换算所用的画幅宽高比(与 `camera.set-lens` 同口径,禁两处各写一份)。
- * 取项目输出画幅而非画布:焦距是成片属性,不该随编辑窗口大小漂移。
- */
-function liveAspectFor(ctx: DirectorContext): number {
-    const crop = ctx.output.frameFor(ctx.capture.size)?.cropRect;
-    return crop && crop.height > 0 ? crop.width / crop.height : DEFAULT_POSE_ASPECT;
-}
-
-const DEFAULT_POSE_ASPECT = 16 / 9;
 /**
  * 机位表此前只能直读 desk.camera.director; 注册查询让工具/宿主面可发现。
  */
@@ -283,6 +274,7 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
         return [];
     }
 
+    /** 景别只决定构图几何:覆盖既有机位时保留其镜头参数(与 `camera.set-shot` 同纪律)。 */
     execute(ctx: DirectorContext): void {
         const subject = jointSubjectBounds(ctx, this.payload.subjectIds);
         if (!subject) return;
@@ -290,14 +282,25 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
         const azimuth =
             this.payload.azimuth ??
             (eye ? azimuthAroundCenter(eye.position, subject.center) : DEFAULT_SHOT_AZIMUTH_RADIANS);
-        const shot = shotSizePresets.resolve({
+        const framed = shotSizePresets.resolve({
             size: this.payload.shotSize,
             subjectCenter: subject.center,
             subjectRadius: subject.radius,
             azimuthRad: azimuth,
             outputAspectRatio: ctx.output.format.aspectRatio,
         });
-        ctx.camera.addShot(this.payload.shotId, shot);
+        const previousLens = ctx.camera.director.getShot(this.payload.shotId)?.lens;
+        ctx.camera.addShot(
+            this.payload.shotId,
+            previousLens
+                ? new CameraShot({
+                      position: framed.position,
+                      target: framed.target,
+                      fov: framed.fov,
+                      lens: previousLens,
+                  })
+                : framed,
+        );
     }
 
     /** 覆盖已有机位 → 回滚旧参数;新建 → 撤销即删除。 */

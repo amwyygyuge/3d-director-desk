@@ -9,6 +9,7 @@ export { ActorProfile } from "@/actor/ActorProfile";
 export type { ActorProfileInit } from "@/actor/ActorProfile";
 export { ACTOR_PALETTE, paletteHexFor } from "@/actor/ActorPalette";
 export type { ActorPaletteSwatch } from "@/actor/ActorPalette";
+export type { ColorSwatch } from "@/core/ColorSwatch";
 export { BUILD_PRESETS, compileBuildPreset, matchBuildPreset } from "@/actor/BuildPresetCompiler";
 export type { BuildPreset } from "@/actor/BuildPresetCompiler";
 export { BodyBuildSolver } from "@/actor/BodyBuildSolver";
@@ -224,6 +225,7 @@ export type {
     LightingMoodPreset,
     MoodLightPlacement,
 } from "@/lighting/LightingMoodCompiler";
+export { LIGHT_COLOR_PALETTE } from "@/lighting/LightColorPalette";
 export {
     CancelVideoCaptureCommand,
     CaptureFrameCommand,
@@ -297,6 +299,7 @@ export {
     AuthorLightingCommand,
     LightingGetQuery,
     LightingListQuery,
+    LightingPresetsQuery,
     registerLightingCommands,
 } from "@/command/lightingCommands";
 export type { LightingObjectSnapshot } from "@/command/lightingCommands";
@@ -507,6 +510,7 @@ export {
     StudioEnvironment,
 } from "@/studio/StudioEnvironment";
 export type { RenderQuality, StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
+export { FLOOR_COLOR_PALETTE } from "@/studio/FloorColorPalette";
 export {
     registerStudioCommands,
     SetStudioFrameRateVisibleCommand,

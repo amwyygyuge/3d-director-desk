@@ -21,7 +21,9 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "studio.set-render-quality": "设渲染画质档:high 满像素比+抗锯齿 / performance 限像素比换帧率;截图与 MP4 同受影响",
     "studio.set-frame-rate-visible": "开关视口右上角的真实渲染帧率读数(观测用,不入成片)",
     "studio.set-output-grid-visible": "开关成片安全框内的九宫格构图辅助线(编排辅助,不入成片)",
-    "camera.set-shot": "保存或覆盖静态机位(position/target/fov);景别构图优先改用 camera.frame-subject",
+    "camera.set-shot":
+        "保存或覆盖静态机位(position/target/fov);不给 lens 则保持原镜头(光圈/对焦距离不会被重置)," +
+        "改镜头走 camera.set-lens;景别构图优先改用 camera.frame-subject",
     "camera.activate": "切入指定机位视角(机位须已存在)",
     "camera.deactivate": "退出机位视角,回导演自由视角",
     "camera.remove-shot": "删除机位,连带清理其运镜片段与 Program 排期",
@@ -128,7 +130,9 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
         "silhouette 逆光剪影 / golden-hour 黄金时刻 / night 夜景冷调。" +
         "灯位按被摄体包围球定尺(给 subjectId 更准,缺省取全场景模型),同时设好配套曝光与投影。" +
         "只接管自己产出的灯,作者手放的灯不动;效果用 capture.measure-frame 断言",
-    "light.adjust": "更新自定义灯光的可序列化参数;先用 lighting.get/list 读取对象和灯型",
+    "light.adjust":
+        "更新自定义灯光的可序列化参数;先用 lighting.get/list 读取对象和灯型," +
+        "可说的灯色词表查 lighting.presets.list(色温轴:钨丝灯/日光/月光…)",
     // 采集
     "capture.frame": "截图当前预演画面(保留地板网格，编辑辅助物不入镜);异步产物按 requestId 对账",
     "capture.measure-frame":
@@ -151,13 +155,16 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "assets.list": "资产目录发现,可按 kind/category 过滤;条目带许可与骨骼家族",
     "camera.get-pose": "生效相机位姿:live 实际值与 motionSampled 运镜期望值并排,运镜断言用",
     "output.get-format": "当前项目最终输出画幅比例",
-    "studio.get": "当前演播室档位:地板边长(含合法区间)、渲染画质档、帧率读数与九宫格显隐",
+    "studio.get":
+        "当前演播室档位:地板边长(含合法区间)、渲染画质档、帧率读数与九宫格显隐," +
+        "并给出按影调排布的地板色词表(吸光黑→高调白)",
     "camera.list-shots": "机位表与当前激活机位",
     "motion.get": "运镜编排全量:片段/关键帧/Program 排期/视图模式/预览态",
     "timeline.get-document": "时间轴文档:时长/轨道/关键帧全量",
     "transport.get-state": "播放态:当前时刻/是否播放/循环/时长",
     "lighting.list": "灯光清单(快照)",
     "lighting.get": "单个灯光详情",
+    "lighting.presets.list": "灯光发现面:按色温排布的灯色词表 + 打光情绪配方清单",
     "pose.bones.discover": "骨骼发现:姿态编辑前必查,确认骨骼家族与可动骨骼",
     "pose.get": "当前姿势快照(全骨骼旋转)",
     "pose.presets.list": "姿势预设目录(内置+自定义)",

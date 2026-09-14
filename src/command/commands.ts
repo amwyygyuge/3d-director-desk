@@ -466,8 +466,19 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
         return issues;
     }
 
+    /**
+     * `lens` 缺省 = **保持原镜头**,不是回默认值。
+     *
+     * 摆位手势与坐标/视角输入都只关心几何,它们一律不带 lens;若按 `CameraShot` 的构造缺省
+     * 兑现成 f/2.8 + 自动对焦,作者在视口里动一下机位就会静默擦掉刚设好的光圈与对焦距离
+     * (撤销栈能还原,但作者不会知道自己丢了东西)。要显式改镜头走 `camera.set-lens`。
+     */
     execute(ctx: DirectorContext): void {
-        ctx.camera.addShot(this.payload.id, new CameraShot(this.payload.shot));
+        const lens = this.payload.shot.lens ?? ctx.camera.director.getShot(this.payload.id)?.lens;
+        ctx.camera.addShot(
+            this.payload.id,
+            new CameraShot(lens ? { ...this.payload.shot, lens } : this.payload.shot),
+        );
     }
 
     /** 覆盖已有机位 → 回滚旧参数;新建 → 撤销即删除 */
@@ -518,8 +529,10 @@ export class SetCameraLensCommand extends DirectorCommand<SetCameraLensPayload> 
         if (!ctx.camera.director.getShot(this.payload.id)) return [`机位 "${this.payload.id}" 不存在`];
         const issues: string[] = [];
         const focal = this.payload.focalLengthMm;
-        if (focal !== undefined && !isFocalLengthMm(focal, aspectFor(ctx))) {
-            const range = focalLengthRangeMm(aspectFor(ctx));
+        // 画幅取项目输出比例(不是画布):焦距是成片属性,拖窗口不该让标称焦距漂移
+        const aspect = ctx.output.aspectRatioFor(ctx.capture.size);
+        if (focal !== undefined && !isFocalLengthMm(focal, aspect)) {
+            const range = focalLengthRangeMm(aspect);
             issues.push(`焦距须在 ${range.min.toFixed(2)}~${range.max.toFixed(0)}mm 之间(由 fov 围栏换算)`);
         }
         if (this.payload.apertureFStop !== undefined && !isApertureFStop(this.payload.apertureFStop)) {
@@ -545,7 +558,10 @@ export class SetCameraLensCommand extends DirectorCommand<SetCameraLensPayload> 
             new CameraShot({
                 position: previous.position,
                 target: previous.target,
-                fov: focal === undefined ? previous.fov : fovFromFocalLength(focal, aspectFor(ctx)),
+                fov:
+                    focal === undefined
+                        ? previous.fov
+                        : fovFromFocalLength(focal, ctx.output.aspectRatioFor(ctx.capture.size)),
                 lens: {
                     apertureFStop: this.payload.apertureFStop ?? previous.lens.apertureFStop,
                     focusDistanceMeters:
@@ -563,19 +579,6 @@ export class SetCameraLensCommand extends DirectorCommand<SetCameraLensPayload> 
     }
 }
 
-/**
- * 焦距换算所用的画幅宽高比。
- *
- * 取项目输出画幅而非画布尺寸:焦距是成片的属性,不该随编辑窗口大小变化——
- * 拖窗口会让同一机位的标称焦距漂移。画幅未定时回落 16:9(最常见的成片比例)。
- */
-function aspectFor(ctx: DirectorContext): number {
-    const frame = ctx.output.frameFor(ctx.capture.size);
-    const size = frame?.cropRect;
-    return size && size.height > 0 ? size.width / size.height : DEFAULT_OUTPUT_ASPECT;
-}
-
-const DEFAULT_OUTPUT_ASPECT = 16 / 9;
 
 const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     type: "scene.describe",

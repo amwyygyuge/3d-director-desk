@@ -1,16 +1,14 @@
 import { DEFAULT_ACTOR_COLOR_HEX } from "@/actor/ActorAppearance";
+import type { ColorSwatch } from "@/core/ColorSwatch";
 
-export interface ActorPaletteSwatch {
-    readonly id: string;
-    readonly labelZh: string;
-    readonly hex: string;
-}
+/** 人偶色块沿用通用语义色块结构;别名保留是因为它已是对外导出的公开类型名 */
+export type ActorPaletteSwatch = ColorSwatch;
 
 /**
  * 人偶语义色板:UI 色块与 AI 色名共读同一张表——用户看到的标签就是能对模型说的词。
  * 自定义取色器仍可给任意 #RRGGBB,色板只保证常用色一击到底。
  */
-export const ACTOR_PALETTE: readonly ActorPaletteSwatch[] = [
+export const ACTOR_PALETTE: readonly ColorSwatch[] = [
     { id: "plaster", labelZh: "石膏白", hex: DEFAULT_ACTOR_COLOR_HEX },
     { id: "clay", labelZh: "黏土", hex: "#c8a48a" },
     { id: "charcoal", labelZh: "炭灰", hex: "#4a4a4f" },

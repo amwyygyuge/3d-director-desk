@@ -36,13 +36,16 @@ import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { ASSET_KIND } from "@/assets/catalog/AssetEntry";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { listActionClips, presentEmbeddedClip } from "@/pose/PosePresetCatalog";
+import { LIGHT_COLOR_PALETTE } from "@/lighting/LightColorPalette";
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
+import { ColorField } from "@/ui/controls/ColorField";
 import { SCRUB_STEP } from "@/ui/controls/numberFieldConfig";
 import type { ScrubKind } from "@/ui/controls/numberFieldConfig";
 import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { invalidInputNotice } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { CategorizedPresetButtonGrid } from "@/ui/inspector/PresetButtonGrid";
+import { ShotLensSection } from "@/ui/inspector/ShotLensControls";
 import { INSPECTOR_FIELD_SX, TransformFields } from "@/ui/inspector/TransformFields";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { WalkPolicySection } from "@/ui/inspector/WalkPolicyControls";
@@ -245,8 +248,10 @@ const ShotFields = observer(function ShotFields({ shotId, report }: ShotFieldsPr
                 <Typography variant="overline">变换</Typography>
                 <ShotVectorFields shotId={shotId} onCommit={commitVectorAxis} />
             </Box>
+            <ShotLensSection shotId={shotId} report={report} />
             <Box sx={INSPECTOR_FIELD_SX}>
-                <Typography variant="overline">镜头</Typography>
+                {/* 视野与镜头区的焦距是同一个量的两个视图(fov ↔ mm);滑杆保留粗调手感,焦距管精确标称 */}
+                <Typography variant="overline">视野</Typography>
                 <ShotFovField shotId={shotId} onCommit={commitFov} />
             </Box>
         </Stack>
@@ -593,14 +598,18 @@ const LightControls = observer(function LightControls({ objectId, report }: Obje
                         </MenuItem>
                     ))}
                 </TextField>
-                <TextField
-                    size="small"
-                    label="颜色"
-                    type="color"
-                    value={light.color}
-                    slotProps={{ htmlInput: { "aria-label": "灯光颜色" } }}
-                    onChange={(event) => dispatchAdjustment({ ...light, color: event.target.value })}
-                />
+                {/* 拖拽期不预览:灯光只由 store 驱动渲染,直写 three 会绕过命令层(红线 8);松手/关面板落一条命令 */}
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">
+                        颜色
+                    </Typography>
+                    <ColorField
+                        ariaLabel="灯光颜色"
+                        value={light.color}
+                        swatches={LIGHT_COLOR_PALETTE}
+                        onCommit={(color) => dispatchAdjustment({ ...light, color })}
+                    />
+                </Box>
                 <LightIntensityControl
                     intensity={light.intensity}
                     onCommit={(intensity) => dispatchAdjustment({ ...light, intensity })}

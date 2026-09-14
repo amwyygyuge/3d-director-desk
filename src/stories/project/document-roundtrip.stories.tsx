@@ -113,6 +113,18 @@ async function seedScene(stores: DirectorDeskStores): Promise<void> {
         !dispatchCatching(stores, "camera.set-lens", { id: LENS_SHOT_ID, apertureFStop: 999 }).ok,
         "超界光圈未被命令层拒绝",
     );
+    // 几何写入不得擦镜头:摆位手势/坐标输入都只带 position/target/fov,
+    // 若 set-shot 按构造缺省兑现 lens,作者动一下机位就静默丢掉刚设好的光圈与对焦
+    dispatchOk(stores, "camera.set-shot", {
+        id: LENS_SHOT_ID,
+        shot: { position: [2.5, 1.6, 5.2], target: [0, 1, 0], fov: lensShotAfterSet.fov },
+    });
+    const lensShotAfterMove = required(stores.camera.director.getShot(LENS_SHOT_ID), "机位在几何写入后丢失");
+    assertAcceptance(
+        lensShotAfterMove.lens.apertureFStop === LENS_SETTINGS.apertureFStop &&
+            lensShotAfterMove.lens.focusDistanceMeters === LENS_SETTINGS.focusDistanceMeters,
+        `不带 lens 的 camera.set-shot 擦掉了镜头参数(${JSON.stringify(lensShotAfterMove.lens.toJSON())})`,
+    );
     dispatchOk(stores, "timeline.set-duration", { duration: DURATION_SECONDS });
     dispatchOk(stores, "motion.quick-author", {
         subjectId: FOX_ID,

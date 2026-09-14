@@ -1,6 +1,8 @@
 import CloseIcon from "@mui/icons-material/Close";
+import ContrastIcon from "@mui/icons-material/Contrast";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import KeyboardIcon from "@mui/icons-material/Keyboard";
+import LayersIcon from "@mui/icons-material/Layers";
 import MenuIcon from "@mui/icons-material/Menu";
 import OpenWithIcon from "@mui/icons-material/OpenWith";
 import PolylineIcon from "@mui/icons-material/Polyline";
@@ -14,6 +16,7 @@ import UndoIcon from "@mui/icons-material/Undo";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
+import WbSunnyIcon from "@mui/icons-material/WbSunny";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
@@ -33,12 +36,14 @@ import { EnterPresentationCommand, ExitPresentationCommand } from "@/command/pre
 import { formatShortcutHint, SHORTCUT_ID } from "@/shortcuts/builtinShortcuts";
 import { GIZMO_MODE } from "@/store/UiStore";
 import type { GizmoMode } from "@/store/UiStore";
+import { FLOOR_COLOR_PALETTE } from "@/studio/FloorColorPalette";
 import { EXPOSURE, GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
 import { VIDEO_EXPORT_SOURCE } from "@/capture/VideoExportSession";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { ToolbarExtension } from "@/ui/shell/DeskShellPresentation";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
+import { ColorField } from "@/ui/controls/ColorField";
 import { importModelFile } from "@/ui/assets/importFiles";
 import { CHROME } from "@/ui/shell/theme";
 
@@ -76,13 +81,16 @@ const TEXT = {
     RENDER_QUALITY: "渲染画质",
     SHOW_FRAME_RATE: "显示帧率",
     SHOW_SHADOWS: "投影",
+    SHOW_SHADOWS_HINT: "主体在地面的接触投影；关闭即不产生深度图",
     ENVIRONMENT_LIGHTING: "环境光照",
+    ENVIRONMENT_LIGHTING_HINT: "环境光包裹（IBL）：让金属度与粗糙度参与成像，暗部不再死黑",
     EXPOSURE: "曝光",
     FLOOR_COLOR: "地板颜色",
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
     MENU: "项目菜单",
     FLOOR_SURFACE: "实心地面",
+    FLOOR_SURFACE_HINT: "网格之外的实心地板，同时是投影的接收面",
     METER_UNIT: "m",
     PRESENTING: "预览中 · Esc 退出",
     REDO: "重做",
@@ -97,7 +105,6 @@ const GRID_SLIDER_MIN_WIDTH_PX = 180;
 /** 曝光滑杆步进与读数位数:0.05 够细腻又不至于让撤销栈里堆满肉眼无差的步。 */
 const EXPOSURE_STEP = 0.05;
 const EXPOSURE_LABEL_DIGITS = 2;
-const FLOOR_COLOR_SWATCH_PX = 28;
 const FIRST_ITEM_INDEX = 0;
 const EMPTY_OBJECT_COUNT = 0;
 const JSON_INDENT_SPACES = 2;
@@ -245,28 +252,6 @@ const ProjectMenu = observer(function ProjectMenu({
                 />
             </MenuItem>
             <Divider />
-            <MenuItem onClick={() => toggleShadows(stores)}>
-                {TEXT.SHOW_SHADOWS}
-                <Switch
-                    checked={stores.studio.shadowsEnabled}
-                    onChange={() => toggleShadows(stores)}
-                    onClick={(event) => event.stopPropagation()}
-                    size={COMPACT_SIZE}
-                    slotProps={{ input: { "aria-label": TEXT.SHOW_SHADOWS } }}
-                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
-                />
-            </MenuItem>
-            <MenuItem onClick={() => toggleEnvironmentLighting(stores)}>
-                {TEXT.ENVIRONMENT_LIGHTING}
-                <Switch
-                    checked={stores.studio.environmentLightingEnabled}
-                    onChange={() => toggleEnvironmentLighting(stores)}
-                    onClick={(event) => event.stopPropagation()}
-                    size={COMPACT_SIZE}
-                    slotProps={{ input: { "aria-label": TEXT.ENVIRONMENT_LIGHTING } }}
-                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
-                />
-            </MenuItem>
             <Box
                 onKeyDown={(event) => event.stopPropagation()}
                 sx={{ px: 2, py: 0.5, minWidth: GRID_SLIDER_MIN_WIDTH_PX }}
@@ -275,26 +260,6 @@ const ProjectMenu = observer(function ProjectMenu({
                     {`${TEXT.EXPOSURE}（${stores.studio.exposure.toFixed(EXPOSURE_LABEL_DIGITS)}×）`}
                 </Typography>
                 <ExposureSlider />
-            </Box>
-            <MenuItem onClick={() => toggleFloorSurface(stores)}>
-                {TEXT.FLOOR_SURFACE}
-                <Switch
-                    checked={stores.studio.floorSurfaceEnabled}
-                    onChange={() => toggleFloorSurface(stores)}
-                    onClick={(event) => event.stopPropagation()}
-                    size={COMPACT_SIZE}
-                    slotProps={{ input: { "aria-label": TEXT.FLOOR_SURFACE } }}
-                    sx={{ ml: MENU_SHORTCUT_MARGIN }}
-                />
-            </MenuItem>
-            <Box
-                onKeyDown={(event) => event.stopPropagation()}
-                sx={{ px: 2, py: 0.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}
-            >
-                <Typography color="text.secondary" variant="caption">
-                    {TEXT.FLOOR_COLOR}
-                </Typography>
-                <FloorColorPicker />
             </Box>
         </Menu>
     );
@@ -374,37 +339,33 @@ const ExposureSlider = observer(function ExposureSlider() {
 });
 
 /**
- * 地板颜色:原生色板输入(MUI 无颜色组件,不为此引入第二套 UI 库,红线 7)。
+ * 地板颜色:应用内取色面板(`ColorField`,MUI 无颜色组件,自绘而不引第二套 UI 库,红线 7)。
  *
- * 不设草稿态,直接在 `onChange` 落命令。两条实测踩坑记此:
- *  - 只在 `blur` 提交(照滑杆的思路)不成立:取完色值停在草稿上、领域态不变,表现为改不动地板颜色。
- *  - 再叠一个 `onInput` 维护草稿更糟:React 的 `onChange` 本就绑在原生 `input` 事件上,
- *    两者同源,`onInput` 会把它吞掉,命令永远不发。
+ * 原先用 `<input type="color">`,弹的是操作系统色板窗口——它的 Esc 由系统消费,页面收不到按键,
+ * 「Esc 应用当前色并关闭」无从实现。`ColorField` 把 Esc 与点击面板外收敛到同一条关闭路径:
+ * 先提交当前色再关面板,不存在丢弃出口。
  *
- * 系统取色器在确认时才把值交回页面(拖动期不逐帧回调),因此直接提交不会制造撤销碎片,
- * 无需滑杆那套 draft/commit 分离。
+ * 提交仍是一次调节一条命令:拖拽期只走面板内部草稿,松手/关闭才 dispatch,不制造撤销碎片。
+ * 此处不给 `onPreview`——地面颜色由 store 驱动着色,绕过命令层直写 three 违反红线 8。
+ *
+ * 实心地面关闭时禁用:颜色只作用在那张实心面上,关掉后画面只剩网格线,
+ * 此时可调的取色块会让作者以为改了没生效。禁用把「先开地面」这个前置条件显性化。
  */
 const FloorColorPicker = observer(function FloorColorPicker() {
     const stores = useDirectorDeskStores();
-    const committed = stores.studio.floorColor;
 
     return (
-        <input
-            aria-label={TEXT.FLOOR_COLOR}
-            onChange={(event) => {
-                const value = event.target.value;
-                if (value.toLowerCase() === committed) return;
+        <ColorField
+            ariaLabel={TEXT.FLOOR_COLOR}
+            disabled={!stores.studio.floorSurfaceEnabled}
+            value={stores.studio.floorColor}
+            swatches={FLOOR_COLOR_PALETTE}
+            onCommit={(color) =>
                 reportCommandFailure(
                     stores,
-                    stores.dispatcher.dispatch(
-                        { type: COMMAND_TYPE.SET_FLOOR_COLOR, payload: { color: value } },
-                        stores,
-                    ),
-                );
-            }}
-            style={{ width: FLOOR_COLOR_SWATCH_PX, height: FLOOR_COLOR_SWATCH_PX, border: "none", background: "none" }}
-            type="color"
-            value={committed}
+                    stores.dispatcher.dispatch({ type: COMMAND_TYPE.SET_FLOOR_COLOR, payload: { color } }, stores),
+                )
+            }
         />
     );
 });
@@ -647,6 +608,73 @@ const WalkDraftToggle = observer(function WalkDraftToggle() {
         </Tooltip>
     );
 });
+
+/**
+ * 成像效果组(投影 / 环境光照 / 实心地面 / 地板颜色)。
+ *
+ * 从项目菜单提到顶栏常驻:它们是**用来反复对比画面的**——开一下看质感、关一下看反差,
+ * 与地板尺寸、画质档那类「设一次就走」的配置不同,每次对比都要展开菜单是纯粹的往返成本。
+ * 菜单里不再重复出现,同一控件只保留一个入口。
+ *
+ * 归一组:都在回答「这一帧长什么样」。与相邻的编排辅助物开关(轨迹/走位)隔一条分隔线,
+ * 后者回答的是「作者看到哪些辅助线」,不进成片。
+ * 地板颜色紧贴实心地面,且随它禁用——颜色只作用在那张面上。
+ *
+ * 命令经 dispatcher 而非直写 store:成像档位进撤销栈并随文档往返(同菜单原路径)。
+ */
+const ShadowsToggle = observer(function ShadowsToggle() {
+    const stores = useDirectorDeskStores();
+    const active = stores.studio.shadowsEnabled;
+    return (
+        <Tooltip title={`${TEXT.SHOW_SHADOWS} · ${TEXT.SHOW_SHADOWS_HINT}`}>
+            <IconButton
+                aria-label={TEXT.SHOW_SHADOWS}
+                aria-pressed={active}
+                onClick={() => toggleShadows(stores)}
+                size={COMPACT_SIZE}
+                sx={active ? ACTIVE_TOOL_SX : undefined}
+            >
+                <ContrastIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
+
+const EnvironmentLightingToggle = observer(function EnvironmentLightingToggle() {
+    const stores = useDirectorDeskStores();
+    const active = stores.studio.environmentLightingEnabled;
+    return (
+        <Tooltip title={`${TEXT.ENVIRONMENT_LIGHTING} · ${TEXT.ENVIRONMENT_LIGHTING_HINT}`}>
+            <IconButton
+                aria-label={TEXT.ENVIRONMENT_LIGHTING}
+                aria-pressed={active}
+                onClick={() => toggleEnvironmentLighting(stores)}
+                size={COMPACT_SIZE}
+                sx={active ? ACTIVE_TOOL_SX : undefined}
+            >
+                <WbSunnyIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
+
+const FloorSurfaceToggle = observer(function FloorSurfaceToggle() {
+    const stores = useDirectorDeskStores();
+    const active = stores.studio.floorSurfaceEnabled;
+    return (
+        <Tooltip title={`${TEXT.FLOOR_SURFACE} · ${TEXT.FLOOR_SURFACE_HINT}`}>
+            <IconButton
+                aria-label={TEXT.FLOOR_SURFACE}
+                aria-pressed={active}
+                onClick={() => toggleFloorSurface(stores)}
+                size={COMPACT_SIZE}
+                sx={active ? ACTIVE_TOOL_SX : undefined}
+            >
+                <LayersIcon fontSize={COMPACT_SIZE} />
+            </IconButton>
+        </Tooltip>
+    );
+});
 const ShortcutHelpControl = observer(function ShortcutHelpControl() {
     const { ui } = useDirectorDeskStores();
     return (
@@ -669,6 +697,11 @@ const OutputPill = observer(function OutputPill() {
             <PathHelperToggle />
             <FollowSweepPathToggle />
             <WalkDraftToggle />
+            <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
+            <ShadowsToggle />
+            <EnvironmentLightingToggle />
+            <FloorSurfaceToggle />
+            <FloorColorPicker />
             <Divider flexItem orientation="vertical" sx={{ mx: DIVIDER_MARGIN_X }} />
             <CaptureControls />
             <ToolbarExtensionButtons />
