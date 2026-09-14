@@ -6,7 +6,6 @@ import {
     DEFAULT_ACTION_RELEASE_SECONDS,
 } from "@/animation/ActionPerformance";
 import { ActionAlignment, resolveActionRange } from "@/animation/ActionAlignment";
-import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { ACTION_FILL_POLICY, isActionFillPolicy } from "@/animation/ActionFillPolicy";
 import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 import type { ActionAsset } from "@/assets/ActionAsset";
@@ -169,19 +168,46 @@ interface ActionScheduleValues {
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
 }
+/**
+ * 缺省起点:**播放头处已被占用就接到那一段的演出末端**,空着就落在播放头。
+ *
+ * 作者的动作是「把播放头停在这儿,连着排下一段」,而不是「排在播放头再自己去解决冲突」。
+ * 旧行为直接取播放头,于是在已有段上排第二个动作必被重叠围栏拒——报错正确但没用,
+ * 作者要的落点是唯一确定的(紧接末端),命令自己算得出来。
+ *
+ * 连续占用要一路跳到底(A 接 B 接 C 时停在 A 上排新段应落到 C 之后),故循环推进。
+ * 只在**未显式给起点**时生效:显式 startTimeSeconds 是作者的直接指令,不代劳。
+ *
+ * 不为回收段预留空间:它是演出后的收势,可被下一段抢占、也可被片尾截断
+ * (与重叠围栏同口径)。预留会让「动作正好演到片尾」排不进去。
+ */
 function scheduleValuesFor(
     ctx: DirectorContext,
     payload: ActionSchedulePayload,
     action: ActionAsset,
-    trailingSeconds: number,
+    existing: readonly ActionPerformance[] = [],
 ): ActionScheduleValues {
     const durationSeconds = quantizeSeconds(ctx, payload.durationSeconds ?? action.duration);
-    const latestStart = Math.max(0, ctx.timeline.document.duration - durationSeconds - trailingSeconds);
-    const startTimeSeconds = quantizeSeconds(
-        ctx,
-        payload.startTimeSeconds === undefined ? Math.min(ctx.clock.time, latestStart) : payload.startTimeSeconds,
-    );
-    return { startTimeSeconds, durationSeconds };
+    const latestStart = Math.max(0, ctx.timeline.document.duration - durationSeconds);
+    const requestedStart =
+        payload.startTimeSeconds === undefined
+            ? Math.min(appendStartFor(existing, ctx.clock.time), latestStart)
+            : payload.startTimeSeconds;
+    return { startTimeSeconds: quantizeSeconds(ctx, requestedStart), durationSeconds };
+}
+
+/** 从 `timeSeconds` 起跳过所有连续占用的演出段,返回第一个空位的起点。 */
+function appendStartFor(existing: readonly ActionPerformance[], timeSeconds: number): number {
+    let start = timeSeconds;
+    // 每轮最多推进一段;段数有限,循环必然收敛
+    for (let guard = 0; guard < existing.length; guard += 1) {
+        const occupying = existing.find(
+            (performance) => start >= performance.startTimeSeconds && start < performance.endTimeSeconds,
+        );
+        if (!occupying) return start;
+        start = occupying.endTimeSeconds;
+    }
+    return start;
 }
 
 /**
@@ -199,8 +225,15 @@ function alignedScheduleFor(ctx: DirectorContext, alignment: ActionAlignment): A
 }
 
 /**
- * 序列重叠检查:同一实体的动作排期不得在时间上交叠(含 release 回收段)。
- * 允许首尾相接——「走完立刻倒地」正是相接,不是重叠。
+ * 序列重叠检查:同一实体的动作排期不得在**演出段**上交叠。
+ *
+ * 按 `endTimeSeconds` 而非 `releaseEndTimeSeconds` 计价——回收段**允许被下一段抢占**。
+ * 播放层本就是这么裁决的:`SceneObject.actionPerformanceAt` 与
+ * `AnimationBinder.applySequenceTime` 都「倒序取最后一个已开始的段」,
+ * 下一段一旦开始就赢,前一段的回收过渡自然让位(实测:A 回收至 3.25、B 起于 3.00,
+ * t=3.10 生效的是 B)。围栏若按回收末端计价就比播放层更严,
+ * 「走完立刻倒地」这种最普通的紧贴排期会被拒,而作者在时间轴上看到的是
+ * 「明明贴上了却弹报错」——缝隙无从消除。
  *
  * `selfPerformanceId` 是正在写入的那一段,必须排除:重挂同一段(撤销重放、改时段)
  * 否则会与自己的旧时段判定为交叠而被拒。
@@ -213,7 +246,7 @@ function overlappingPerformance(
     for (const performance of existing) {
         if (performance.id === selfPerformanceId) continue;
         if (
-            candidate.startTimeSeconds < performance.releaseEndTimeSeconds &&
+            candidate.startTimeSeconds < performance.endTimeSeconds &&
             performance.startTimeSeconds < candidate.endTimeSeconds
         ) {
             return performance;
@@ -226,13 +259,8 @@ function scheduleIssues(
     ctx: DirectorContext,
     payload: ActionSchedulePayload,
     values: ActionScheduleValues,
-    loopMode: ActionAsset["loopMode"],
-    releaseSeconds: number,
 ): readonly string[] {
     const frameDuration = ctx.timeline.document.frameRate.frameDurationSeconds;
-    const endTimeSeconds = values.startTimeSeconds + values.durationSeconds;
-    const recoveryEndTimeSeconds =
-        loopMode === ACTION_LOOP_MODE.ONCE ? endTimeSeconds + releaseSeconds : endTimeSeconds;
     return [
         ...(payload.startTimeSeconds !== undefined &&
         (!Number.isFinite(payload.startTimeSeconds) || payload.startTimeSeconds < 0)
@@ -250,7 +278,10 @@ function scheduleIssues(
             ? ["动作回收时长必须是 ≥0 的有限秒数"]
             : []),
         ...(values.durationSeconds < frameDuration ? ["动作时长必须至少覆盖一帧"] : []),
-        ...(recoveryEndTimeSeconds > ctx.timeline.document.duration ? ["动作时段和回收不能超出时间轴时长"] : []),
+        // 只约束演出段:回收段是收势,越过片尾就截断(与重叠围栏、导入校验同口径)
+        ...(values.startTimeSeconds + values.durationSeconds > ctx.timeline.document.duration
+            ? ["动作时段不能超出时间轴时长"]
+            : []),
     ];
 }
 
@@ -319,8 +350,6 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         if (!action || !clip) return [`动作 "${this.payload.actionId}" 不在动作库`];
         const runtime = ctx.scene.manager.getRuntime(this.payload.objectId);
         if (!runtime) return [`对象 "${this.payload.objectId}" 运行时未就绪(模型加载中?)`];
-        const releaseSeconds = this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS;
-        const trailingSeconds = action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0;
         if (this.payload.alignToTrack) {
             const alignment = new ActionAlignment(this.payload.alignToTrack);
             if (!alignedScheduleFor(ctx, alignment)) {
@@ -330,19 +359,20 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
                 ];
             }
         }
-        const schedule = this.scheduleFor(ctx, action, trailingSeconds);
+        const schedule = this.scheduleFor(ctx, action);
         if (!schedule) return ["action-alignment-unresolved: 对齐解析失败"];
-        const scheduleIssuesFound = scheduleIssues(ctx, this.payload, schedule, action.loopMode, releaseSeconds);
+        const scheduleIssuesFound = scheduleIssues(ctx, this.payload, schedule);
         if (scheduleIssuesFound.length > 0) return [...scheduleIssuesFound];
         if (this.payload.replace !== true) {
             const conflict = overlappingPerformance(entity.actionPerformances, this.performanceId, {
                 startTimeSeconds: schedule.startTimeSeconds,
-                endTimeSeconds: schedule.startTimeSeconds + schedule.durationSeconds + trailingSeconds,
+                // 只报演出段:本段的回收尾巴可以盖在下一段上,由播放裁决让位
+                endTimeSeconds: schedule.startTimeSeconds + schedule.durationSeconds,
             });
             if (conflict) {
                 return [
-                    `action-overlapping-performance: 该时段与已有动作排期交叠` +
-                        `(已有 ${conflict.startTimeSeconds.toFixed(2)}s → ${conflict.releaseEndTimeSeconds.toFixed(2)}s);` +
+                    `action-overlapping-performance: 该时段与已有动作排期的演出段交叠` +
+                        `(已有 ${conflict.startTimeSeconds.toFixed(2)}s → ${conflict.endTimeSeconds.toFixed(2)}s);` +
                         `改时段、或传 replace: true 覆盖全部动作`,
                 ];
             }
@@ -370,7 +400,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         const clip = ctx.animations.getClip(this.payload.actionId);
         if (!entity || !runtime || !action || !clip) return;
         const releaseSeconds = this.payload.releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS;
-        const schedule = this.scheduleFor(ctx, action, action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0);
+        const schedule = this.scheduleFor(ctx, action);
         if (!schedule) return;
         const performance = new ActionPerformance({
             id: this.performanceId,
@@ -398,16 +428,23 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
         ctx.playback.sampleCurrent();
     }
 
-    /** 对齐优先于显式排期:两者都给时以对齐为准(声明式意图更稳)。 */
-    private scheduleFor(
-        ctx: DirectorContext,
-        action: ActionAsset,
-        trailingSeconds: number,
-    ): ActionScheduleValues | null {
+    /**
+     * 对齐优先于显式排期:两者都给时以对齐为准(声明式意图更稳)。
+     *
+     * `replace` 会清空整表,那时缺省起点不该跳过即将被删的段——传空表让它落回播放头。
+     */
+    private scheduleFor(ctx: DirectorContext, action: ActionAsset): ActionScheduleValues | null {
         if (this.payload.alignToTrack) {
             return alignedScheduleFor(ctx, new ActionAlignment(this.payload.alignToTrack));
         }
-        return scheduleValuesFor(ctx, this.payload, action, trailingSeconds);
+        // 排除本段自己:撤销/重做重放同一段 id 时,它还在表里,不排除会被自己顶到末端之后
+        const existing =
+            this.payload.replace === true
+                ? []
+                : (ctx.scene.manager.getEntity(this.payload.objectId)?.actionPerformances ?? []).filter(
+                      (candidate) => candidate.id !== this.performanceId,
+                  );
+        return scheduleValuesFor(ctx, this.payload, action, existing);
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] {
@@ -583,20 +620,19 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
                           `"${this.payload.performanceId}";用 scene.describe 的 actionSequence 查段 id`,
                   ];
         }
-        const releaseSeconds = this.payload.releaseSeconds ?? performance.releaseSeconds;
-        const trailingSeconds = action.loopMode === ACTION_LOOP_MODE.ONCE ? releaseSeconds : 0;
-        const values = scheduleValuesFor(ctx, this.payload, action, trailingSeconds);
-        const issues = scheduleIssues(ctx, this.payload, values, action.loopMode, releaseSeconds);
+        const values = scheduleValuesFor(ctx, this.payload, action);
+        const issues = scheduleIssues(ctx, this.payload, values);
         if (issues.length > 0) return [...issues];
-        // 拖一段压到邻段上必须拒:多段可见之后这是最容易发生的误操作,静默交叠会让骨骼裁决错配
+        // 拖一段压到邻段的**演出段**上必须拒:静默交叠会让骨骼裁决错配。
+        // 回收段不计入——它可被抢占,计了就没法紧贴(作者看到的是「贴上了却报错」)。
         const conflict = overlappingPerformance(entity?.actionPerformances ?? [], performance.id, {
             startTimeSeconds: values.startTimeSeconds,
-            endTimeSeconds: values.startTimeSeconds + values.durationSeconds + trailingSeconds,
+            endTimeSeconds: values.startTimeSeconds + values.durationSeconds,
         });
         return conflict
             ? [
-                  `action-overlapping-performance: 该时段与同实体的另一段排期交叠` +
-                      `(已有 ${conflict.startTimeSeconds.toFixed(2)}s → ${conflict.releaseEndTimeSeconds.toFixed(2)}s)`,
+                  `action-overlapping-performance: 该时段与同实体另一段排期的演出段交叠` +
+                      `(已有 ${conflict.startTimeSeconds.toFixed(2)}s → ${conflict.endTimeSeconds.toFixed(2)}s)`,
               ]
             : [];
     }

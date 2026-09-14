@@ -75,6 +75,16 @@ const PROGRAM_BAR_COLOR = "secondary.main";
 const MOTION_BAR_COLOR = "primary.main";
 const ACTION_BAR_COLOR = "success.main";
 const TRANSFORM_BAR_COLOR = "secondary.main";
+/**
+ * 回收段延长条:比段条轻(不可编辑、也不占用时段),但**必须能看见**。
+ *
+ * 踩过两次:success.main @0.18 平涂叠在同色相 @0.14 的动作轨上等于隐形;
+ * 改向右淡出的渐变后,4px 宽的窄尾巴末端渐到与轨底同亮度,照样看不见。
+ * 现在用 success.light 实色 —— 辨识度不随宽度衰减,窄到 3px 也是一条亮边。
+ */
+const RELEASE_TAIL_FILL_ALPHA = 0.42;
+const RELEASE_TAIL_BORDER_ALPHA = 0.85;
+const RELEASE_TAIL_RADIUS_PX = 2;
 const TRACK_DATA_ATTRIBUTE = "[data-timeline-track]";
 const BAR_TRANSFORM_ORIGIN = "left center";
 const DRAG_HANDLE_CLASS_NAME = "timeline-drag-handle";
@@ -584,6 +594,100 @@ function overlapsProgramBar(stores: DirectorDeskStores, bar: TimelineBar): boole
     );
 }
 
+/**
+ * 段条 aria-label 的回收段后缀。
+ *
+ * 回收段视觉上是独立的延长条,但它 `aria-hidden`(纯装饰,不该占朗读位),
+ * 于是这段收势必须由段条自己播报——否则读屏用户只知道演出时长,
+ * 读不到「动作末尾还有一段收势,且会被下一段抢占」。
+ * 不播报「占用至」:回收段不占用时段,下一段可以紧贴演出末端排。
+ */
+function releaseTailLabelFor(bar: TimelineBar): string {
+    if (bar.releaseSeconds <= 0) return "";
+    return `，含回收段 ${bar.releaseSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒（可被下一段抢占）`;
+}
+
+/**
+ * 同实体后继动作段的起点;没有后继返回 Infinity。
+ *
+ * 回收段可被抢占,所以尾巴的可见长度要被下一段的起点封顶。按 `ownerId` 过滤——
+ * 动作行是按实体成行的,别的实体的段不参与抢占。
+ */
+function nextActionStartAfter(stores: DirectorDeskStores, bar: TimelineBar, afterSeconds: number): number {
+    return stores.timelineLayout
+        .project(motionViewport(stores))
+        .flatMap((row) => row.bars)
+        .filter(
+            (candidate) =>
+                candidate.kind === TIMELINE_BAR_KIND.ACTION &&
+                candidate.ownerId === bar.ownerId &&
+                candidate.id !== bar.id &&
+                candidate.startSeconds >= afterSeconds,
+        )
+        .reduce((earliest, candidate) => Math.min(earliest, candidate.startSeconds), Number.POSITIVE_INFINITY);
+}
+
+/**
+ * release 回收段的可见延长条。
+ *
+ * 一次性动作演出结束后有一段回到常驻姿势的过渡(`ActionPerformance.releaseSeconds`)。
+ * 它**不占用**时间轴——下一段一旦开始就抢占它(播放裁决「倒序取最后一个已开始的段」),
+ * 所以吸附与重叠围栏都只认演出末端。但它得画出来,否则两件事作者读不懂:
+ * 动作末尾这段收势是从哪来的,以及紧贴下一段之后为什么收势变短了。
+ *
+ * 被下一段抢占时尾巴**截断到那一段的起点**——画出实际还能播的部分,
+ * 而不是画一条伸到邻段身下、看着像重叠的假尾巴。
+ *
+ * 独立成条而非做段条的子元素:段条 `overflow: hidden`(要裁剪标签文字),子元素越不出去。
+ * `range` 由段条下传当前拖拽态(拖拽期 `drag.range`,否则投影值)——违反值型 props 纪律
+ * 是有意的:尾巴几何派生于被拖段的瞬时时段,自取会读到未提交的旧值、拖拽期与段条脱开。
+ */
+const TimelineReleaseTail = observer(function TimelineReleaseTail({
+    barId,
+    range,
+}: {
+    readonly barId: string;
+    readonly range: TimelineClipRange;
+}) {
+    const stores = useDirectorDeskStores();
+    const bar = projectedBar(stores, barId);
+    if (!bar || bar.releaseSeconds <= 0) return null;
+    const viewport = motionViewport(stores);
+    const tailStartSeconds = range.startTimeSeconds + range.durationSeconds;
+    // 同实体后继段的起点封顶:回收段可被抢占,尾巴只画实际播得到的那截
+    const nextStartSeconds = nextActionStartAfter(stores, bar, tailStartSeconds);
+    const tailEndSeconds = Math.min(tailStartSeconds + bar.releaseSeconds, nextStartSeconds);
+    const tailSeconds = tailEndSeconds - tailStartSeconds;
+    if (tailSeconds <= 0) return null;
+    return (
+        <Box
+            // 纯装饰:占用语义已由段条的 aria-label 播报,回收段不该再占一个 tab/朗读位。
+            // 不挂 Tooltip——pointerEvents: none 让指针事件到不了它,挂了也永远不触发。
+            aria-hidden
+            sx={{
+                position: "absolute",
+                top: BAR_LANE_TOP_PX,
+                height: BAR_LANE_HEIGHT_PX,
+                left: `${viewport.ratioAt(tailStartSeconds) * PERCENT_FULL}%`,
+                width: `${(tailSeconds / viewport.visibleSeconds) * PERCENT_FULL}%`,
+                // 实色平涂 + 亮边:辨识度不随宽度衰减。
+                // 踩过两次:同色相半透明(0.18 叠 0.14)隐形;向右淡出的渐变在 4px 宽时
+                // 末端已渐到与轨底同亮度(实测 (44,69,47) vs (23,37,25)),窄尾巴照样看不见。
+                bgcolor: (theme) => alpha(theme.palette.success.light, RELEASE_TAIL_FILL_ALPHA),
+                borderTop: 1,
+                borderBottom: 1,
+                borderRight: 1,
+                borderStyle: "solid",
+                borderColor: (theme) => alpha(theme.palette.success.light, RELEASE_TAIL_BORDER_ALPHA),
+                borderTopRightRadius: RELEASE_TAIL_RADIUS_PX,
+                borderBottomRightRadius: RELEASE_TAIL_RADIUS_PX,
+                pointerEvents: "none",
+                zIndex: CLIP_BAR_Z_INDEX,
+            }}
+        />
+    );
+});
+
 /** Program、运镜与走位段条只在领域命令不同；手势、把手与读数必须全同构。 */
 const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineClipBarProps) {
     const stores = useDirectorDeskStores();
@@ -652,133 +756,136 @@ const TimelineClipBar = observer(function TimelineClipBar({ barId }: TimelineCli
         commitRange(range);
     };
     return (
-        <Tooltip title={isProgramConflict ? PROGRAM_CONFLICT_LABEL : ""}>
-            <Box
-                role="button"
-                tabIndex={0}
-                aria-keyshortcuts="ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight"
-                aria-label={`${bar.label} 片段 ${bar.startSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒，时长 ${bar.durationSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒`}
-                onClick={() => {
-                    if (drag.shouldIgnoreClick()) return;
-                    activate(stores, bar);
-                }}
-                onContextMenu={(event) => {
-                    const track = timelineTrackFor(event.currentTarget);
-                    selectTimelineBar(stores, bar);
-                    open(
-                        event,
-                        track ? trackTimeAtPointer(stores, track, event.clientX).timeSeconds : bar.startSeconds,
-                        isMotion ? bar.id : null,
-                    );
-                }}
-                onKeyDown={keydown}
-                onPointerDown={drag.onPointerDown}
-                onPointerMove={drag.onPointerMove}
-                onPointerUp={drag.onPointerUp}
-                onPointerCancel={drag.onPointerCancel}
-                sx={{
-                    position: "absolute",
-                    top: BAR_LANE_TOP_PX,
-                    height: BAR_LANE_HEIGHT_PX,
-                    left: `${bar.startRatio * PERCENT_FULL}%`,
-                    width: `${bar.widthRatio * PERCENT_FULL}%`,
-                    px: 0.75,
-                    display: "flex",
-                    alignItems: "center",
-                    overflow: "hidden",
-                    transformOrigin: BAR_TRANSFORM_ORIGIN,
-                    border: 1,
-                    borderColor: isProgramConflict
-                        ? PROGRAM_CONFLICT_BORDER
-                        : isSelected
-                          ? "common.white"
-                          : BAR_COLOR[bar.kind],
-                    bgcolor: isMotion
-                        ? (theme) => alpha(theme.palette.primary.main, MOTION_CLIP_BACKGROUND_ALPHA)
-                        : BAR_COLOR[bar.kind],
-                    color: "common.white",
-                    cursor: drag.isDragging ? "grabbing" : "grab",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    whiteSpace: "nowrap",
-                    fontFamily: MONO_FONT_STACK,
-                    touchAction: "none",
-                    zIndex: isTransform ? TRANSFORM_BAR_Z_INDEX : CLIP_BAR_Z_INDEX,
-                    "&:hover .timeline-drag-handle, &:focus-visible .timeline-drag-handle": {
-                        opacity: HANDLE_VISIBLE_OPACITY,
-                    },
-                }}
-            >
-                {bar.label}
-                <TimelineDragHandle side={TIMELINE_DRAG_HANDLE_SIDE.START} />
-                <TimelineDragHandle side={TIMELINE_DRAG_HANDLE_SIDE.END} />
-                {drag.range && (
-                    <Box
-                        sx={{
-                            position: "absolute",
-                            inset: TIME_START_SECONDS,
-                            display: "grid",
-                            placeItems: "center",
-                            pointerEvents: "none",
-                            bgcolor: DRAG_READOUT_BACKGROUND,
-                            fontFamily: MONO_FONT_STACK,
-                        }}
-                    >
-                        {dragReadout(drag.kind, currentRange)}
-                    </Box>
-                )}
-                {drag.isDragging && (
-                    <Box
-                        sx={{
-                            position: "absolute",
-                            top: -BAR_LANE_TOP_PX,
-                            bottom: -MARK_LANE_TOP_PX,
-                            left: snapGuideLeft,
-                            width: SNAP_GUIDE_WIDTH_PX,
-                            bgcolor: SNAP_GUIDE_COLOR,
-                            opacity: drag.snap?.candidate ? HANDLE_VISIBLE_OPACITY : HANDLE_HIDDEN_OPACITY,
-                            pointerEvents: "none",
-                        }}
-                    />
-                )}
-                {(bar.linked || followSubjectName) && (
-                    <Box sx={{ display: "flex", alignItems: "center", ml: BAR_BADGE_MARGIN }}>
-                        {bar.linked && (
-                            <Tooltip title={`${LINK_LABEL}：${LINK_HINT}`}>
-                                <IconButton
-                                    aria-label={LINK_LABEL}
-                                    size={LINK_ICON_SIZE}
-                                    onPointerDown={(event) => event.stopPropagation()}
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        removeLinkedProgram();
-                                    }}
-                                    sx={{ color: "inherit", p: 0 }}
-                                >
-                                    <LinkIcon fontSize="inherit" />
-                                </IconButton>
-                            </Tooltip>
-                        )}
-                        {followSubjectName && (
-                            <Tooltip title={followBadgeTooltip(followSubjectName)}>
-                                <IconButton
-                                    aria-label={`${FOLLOW_LABEL} ${followSubjectName}`}
-                                    size={LINK_ICON_SIZE}
-                                    onPointerDown={(event) => event.stopPropagation()}
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        unbindFollow();
-                                    }}
-                                    sx={{ color: "inherit", p: 0 }}
-                                >
-                                    <DirectionsWalkIcon fontSize="inherit" />
-                                </IconButton>
-                            </Tooltip>
-                        )}
-                    </Box>
-                )}
-            </Box>
-        </Tooltip>
+        <>
+            {bar.kind === TIMELINE_BAR_KIND.ACTION && <TimelineReleaseTail barId={barId} range={currentRange} />}
+            <Tooltip title={isProgramConflict ? PROGRAM_CONFLICT_LABEL : ""}>
+                <Box
+                    role="button"
+                    tabIndex={0}
+                    aria-keyshortcuts="ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight"
+                    aria-label={`${bar.label} 片段 ${bar.startSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒，时长 ${bar.durationSeconds.toFixed(DRAG_READOUT_DECIMAL_PLACES)} 秒${releaseTailLabelFor(bar)}`}
+                    onClick={() => {
+                        if (drag.shouldIgnoreClick()) return;
+                        activate(stores, bar);
+                    }}
+                    onContextMenu={(event) => {
+                        const track = timelineTrackFor(event.currentTarget);
+                        selectTimelineBar(stores, bar);
+                        open(
+                            event,
+                            track ? trackTimeAtPointer(stores, track, event.clientX).timeSeconds : bar.startSeconds,
+                            isMotion ? bar.id : null,
+                        );
+                    }}
+                    onKeyDown={keydown}
+                    onPointerDown={drag.onPointerDown}
+                    onPointerMove={drag.onPointerMove}
+                    onPointerUp={drag.onPointerUp}
+                    onPointerCancel={drag.onPointerCancel}
+                    sx={{
+                        position: "absolute",
+                        top: BAR_LANE_TOP_PX,
+                        height: BAR_LANE_HEIGHT_PX,
+                        left: `${bar.startRatio * PERCENT_FULL}%`,
+                        width: `${bar.widthRatio * PERCENT_FULL}%`,
+                        px: 0.75,
+                        display: "flex",
+                        alignItems: "center",
+                        overflow: "hidden",
+                        transformOrigin: BAR_TRANSFORM_ORIGIN,
+                        border: 1,
+                        borderColor: isProgramConflict
+                            ? PROGRAM_CONFLICT_BORDER
+                            : isSelected
+                              ? "common.white"
+                              : BAR_COLOR[bar.kind],
+                        bgcolor: isMotion
+                            ? (theme) => alpha(theme.palette.primary.main, MOTION_CLIP_BACKGROUND_ALPHA)
+                            : BAR_COLOR[bar.kind],
+                        color: "common.white",
+                        cursor: drag.isDragging ? "grabbing" : "grab",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        fontFamily: MONO_FONT_STACK,
+                        touchAction: "none",
+                        zIndex: isTransform ? TRANSFORM_BAR_Z_INDEX : CLIP_BAR_Z_INDEX,
+                        "&:hover .timeline-drag-handle, &:focus-visible .timeline-drag-handle": {
+                            opacity: HANDLE_VISIBLE_OPACITY,
+                        },
+                    }}
+                >
+                    {bar.label}
+                    <TimelineDragHandle side={TIMELINE_DRAG_HANDLE_SIDE.START} />
+                    <TimelineDragHandle side={TIMELINE_DRAG_HANDLE_SIDE.END} />
+                    {drag.range && (
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                inset: TIME_START_SECONDS,
+                                display: "grid",
+                                placeItems: "center",
+                                pointerEvents: "none",
+                                bgcolor: DRAG_READOUT_BACKGROUND,
+                                fontFamily: MONO_FONT_STACK,
+                            }}
+                        >
+                            {dragReadout(drag.kind, currentRange)}
+                        </Box>
+                    )}
+                    {drag.isDragging && (
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                top: -BAR_LANE_TOP_PX,
+                                bottom: -MARK_LANE_TOP_PX,
+                                left: snapGuideLeft,
+                                width: SNAP_GUIDE_WIDTH_PX,
+                                bgcolor: SNAP_GUIDE_COLOR,
+                                opacity: drag.snap?.candidate ? HANDLE_VISIBLE_OPACITY : HANDLE_HIDDEN_OPACITY,
+                                pointerEvents: "none",
+                            }}
+                        />
+                    )}
+                    {(bar.linked || followSubjectName) && (
+                        <Box sx={{ display: "flex", alignItems: "center", ml: BAR_BADGE_MARGIN }}>
+                            {bar.linked && (
+                                <Tooltip title={`${LINK_LABEL}：${LINK_HINT}`}>
+                                    <IconButton
+                                        aria-label={LINK_LABEL}
+                                        size={LINK_ICON_SIZE}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            removeLinkedProgram();
+                                        }}
+                                        sx={{ color: "inherit", p: 0 }}
+                                    >
+                                        <LinkIcon fontSize="inherit" />
+                                    </IconButton>
+                                </Tooltip>
+                            )}
+                            {followSubjectName && (
+                                <Tooltip title={followBadgeTooltip(followSubjectName)}>
+                                    <IconButton
+                                        aria-label={`${FOLLOW_LABEL} ${followSubjectName}`}
+                                        size={LINK_ICON_SIZE}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            unbindFollow();
+                                        }}
+                                        sx={{ color: "inherit", p: 0 }}
+                                    >
+                                        <DirectionsWalkIcon fontSize="inherit" />
+                                    </IconButton>
+                                </Tooltip>
+                            )}
+                        </Box>
+                    )}
+                </Box>
+            </Tooltip>
+        </>
     );
 });
 

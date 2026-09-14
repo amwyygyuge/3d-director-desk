@@ -1,7 +1,7 @@
 import { ASSET_CATEGORY, ASSET_KIND, isAssetKind } from "@/assets/catalog/AssetEntry";
 import type { AssetEntry } from "@/assets/catalog/AssetEntry";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
-import { DEFAULT_ACTION_RELEASE_SECONDS, MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
+import { MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 import type { ActorProfileInit } from "@/actor/ActorProfile";
 import { createId } from "@/core/createId";
 import { finiteTransform } from "@/core/SceneObject";
@@ -13,6 +13,24 @@ import type { DirectorContext } from "@/command/DirectorCommand";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { TRANSFORM_SCHEMA } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
+import { ShortcutChord } from "@/shortcuts/ShortcutChord";
+
+/**
+ * 挂载成功提示。
+ *
+ * 动作是排进**时间轴**的,而时间轴默认收起、播放头也未必落在新排的那一段上——
+ * 视口里人偶可能毫无动静。不指路作者会以为没挂上,于是反复点同一个动作
+ * (每点一次都往后追加一段,越点越乱)。
+ *
+ * 键位从 `ShortcutChord` 现算而非写死 "T":速查表与提示同一个真相源,改键位不会漂。
+ * 不引 `formatShortcutHint`——那个模块 import 命令层,命令层再引它就成环。
+ */
+export function actionMountedMessage(actionName: string): string {
+    return `已排入时间轴:${actionName} · 按 ${ShortcutChord.parse(TIMELINE_EXPAND_CHORD).format()} 展开时间轴查看`;
+}
+
+/** 与 SHORTCUT_SPECS 里 TIMELINE_EXPAND_TOGGLE 的 chord 一致(那边是键位注册的真相源)。 */
+const TIMELINE_EXPAND_CHORD = "t";
 const ASSETS_COMMAND_VERSION = "1" as const;
 const ASSETS_READ_PERMISSION = "assets:read";
 const ASSETS_EDIT_PERMISSION = "assets:edit";
@@ -182,22 +200,15 @@ interface AssetsMountPayload {
     readonly replace?: boolean;
 }
 
-function assetsMountScheduleIssues(
-    ctx: DirectorContext,
-    payload: AssetsMountPayload,
-    entry: AssetEntry,
-): readonly string[] {
+function assetsMountScheduleIssues(ctx: DirectorContext, payload: AssetsMountPayload): readonly string[] {
     const frameDuration = ctx.timeline.document.frameRate.frameDurationSeconds;
     const startTimeSeconds = payload.startTimeSeconds;
     const durationSeconds = payload.durationSeconds;
     const attackSeconds = payload.attackSeconds;
     const releaseSeconds = payload.releaseSeconds;
-    const recoveryEndTimeSeconds =
-        startTimeSeconds !== undefined && durationSeconds !== undefined
-            ? startTimeSeconds +
-              durationSeconds +
-              (entry.loopMode === ACTION_LOOP_MODE.ONCE ? (releaseSeconds ?? DEFAULT_ACTION_RELEASE_SECONDS) : 0)
-            : null;
+    // 只约束演出段:回收段是收势,可被下一段抢占或被片尾截断(与 action.mount 同口径)
+    const performanceEndSeconds =
+        startTimeSeconds !== undefined && durationSeconds !== undefined ? startTimeSeconds + durationSeconds : null;
     return [
         ...(startTimeSeconds !== undefined && (!Number.isFinite(startTimeSeconds) || startTimeSeconds < 0)
             ? ["动作开始时间必须是 ≥0 的有限秒数"]
@@ -213,8 +224,8 @@ function assetsMountScheduleIssues(
         ...(releaseSeconds !== undefined && (!Number.isFinite(releaseSeconds) || releaseSeconds < 0)
             ? ["动作回收时长必须是 ≥0 的有限秒数"]
             : []),
-        ...(recoveryEndTimeSeconds !== null && recoveryEndTimeSeconds > ctx.timeline.document.duration
-            ? ["动作时段和回收不能超出时间轴时长"]
+        ...(performanceEndSeconds !== null && performanceEndSeconds > ctx.timeline.document.duration
+            ? ["动作时段不能超出时间轴时长"]
             : []),
     ];
 }
@@ -235,7 +246,7 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
         if (!ctx.scene.manager.getEntity(this.payload.objectId)) return [`对象 "${this.payload.objectId}" 不存在`];
         // 对齐模式下时段由走位轨派生,显式排期校验不适用(真正的解析失败由 action.mount 报结构化 issue)
         if (this.payload.alignToTrack) return [];
-        return [...assetsMountScheduleIssues(ctx, this.payload, entry)];
+        return [...assetsMountScheduleIssues(ctx, this.payload)];
     }
 
     execute(ctx: DirectorContext): void {
@@ -279,6 +290,10 @@ export class AssetsMountCommand extends DirectorCommand<AssetsMountPayload> {
                                 ? `动作挂载被拒:${this.payload.objectId} — ${outcome.issues.join(";")}`
                                 : `动作挂载等待运行时超时:${this.payload.objectId}`,
                         );
+                    } else {
+                        // 成功也要报:动作排进了时间轴,而时间轴默认是收起的——
+                        // 不指路的话作者只看到视口里人偶没动静(播放头未必落在新段上),会以为没挂上
+                        ctx.ui.setSuccessNotice(actionMountedMessage(entry.name));
                     }
                     ctx.playback.sampleCurrent();
                 }

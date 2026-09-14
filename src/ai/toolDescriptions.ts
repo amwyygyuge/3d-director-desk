@@ -94,7 +94,10 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
         "设走位轨朝向、贴地、步频与跨度外取值策略;extrapolation: hold(默认,走完停在终点、开演前站在起点)/ rest(时段外回到对象自身变换)",
     // 动作与播放
     "action.mount":
-        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds/fillPolicy 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds/fillPolicy 可选。" +
+        "省略起点时:播放头处已被某段占用则**接到那一段的演出末端**(连续占用一路顺延),空着才落在播放头;" +
+        "若 clip 放不入剩余时间轴则向前贴合。重叠只按演出段判定——回收段(release)可被下一段抢占," +
+        "故「走完立刻倒地」这类紧贴排期合法;骨骼兼容性预检不过返回结构化诊断与可用动作",
     "action.set-range":
         "调整对象某段动作排期的开始时间、演出时长、进入时长与回收时长;多段序列下传 performanceId 定位改哪一段(缺省改首段),段 id 见 scene.describe 的 actionSequence.performanceId;显式改时段会解除走位轨对齐。时段与 clip 时长不等时如何铺满由 fillPolicy 决定(见 action.set-fill-policy),改时段不改该策略",
     "action.set-fill-policy":

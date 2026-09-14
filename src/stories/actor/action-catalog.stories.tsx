@@ -10,7 +10,14 @@ import type { DeskDocument } from "@/document/DeskDocument";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { AcceptancePanel } from "@/stories/AcceptancePanel";
-import { assertAcceptance, dispatchOk, required, waitActionMounted, waitRuntime } from "@/stories/harness";
+import {
+    assertAcceptance,
+    dispatchCatching,
+    dispatchOk,
+    required,
+    waitActionMounted,
+    waitRuntime,
+} from "@/stories/harness";
 
 const HUMANOID_ASSET_ID = "builtin.humanoid-generic";
 const ACTOR_ID = "catalog-action-actor";
@@ -275,11 +282,26 @@ async function seedActionCatalog(stores: DirectorDeskStores): Promise<void> {
             actionBar.durationSeconds === performance.durationSeconds,
         "动作排期段条与实体排期不一致",
     );
-    // 一次性动作的占用含 release 尾巴:吸附吸这里,贴段才不会被重叠围栏拒掉
+    // 占用只到演出末端:回收段可被下一段抢占,吸附与围栏都不该把它算进去
     assertAcceptance(
-        Math.abs(actionBar.occupancyEndSeconds - performance.releaseEndTimeSeconds) <= TIME_EPSILON_SECONDS,
-        "一次性动作段条未把 release 回收段计入占用末端",
+        Math.abs(actionBar.occupancyEndSeconds - performance.endTimeSeconds) <= TIME_EPSILON_SECONDS,
+        "动作段条的占用末端应为演出末端(回收段不占用)",
     );
+    assertAcceptance(
+        Math.abs(actionBar.releaseSeconds - performance.releaseSeconds) <= TIME_EPSILON_SECONDS,
+        "一次性动作段条未带出回收段时长(尾巴无从绘制)",
+    );
+    // 紧贴演出末端排下一段必须放行:回收段可被抢占,「走完立刻倒地」是最普通的编排
+    assertAcceptance(
+        dispatchCatching(stores, "action.mount", {
+            objectId: ACTOR_ID,
+            actionId: onceActionId,
+            startTimeSeconds: performance.endTimeSeconds,
+            durationSeconds: ONCE_ACTION_DURATION_SECONDS,
+        }).ok,
+        "紧贴前一段演出末端的排期被围栏误拒(回收段被当成占用)",
+    );
+    assertAcceptance(stores.history.undo(stores).ok, "紧贴排期验收未能撤销");
     dispatchOk(stores, "action.set-range", {
         objectId: ACTOR_ID,
         performanceId: oncePerformanceId,

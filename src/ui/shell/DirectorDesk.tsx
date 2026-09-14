@@ -28,7 +28,7 @@ import { TimelineSelection } from "@/authoring/TimelineSelection";
 import { createDirectorDeskStores, DirectorDeskProvider } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { WorkspaceNavigator } from "@/ui/workspace/WorkspaceNavigator";
-import { ApplicationNotice } from "@/ui/workspace/ApplicationNotice";
+import { ApplicationNotice, SuccessNotice } from "@/ui/workspace/ApplicationNotice";
 import { InspectorSheet } from "@/ui/workspace/InspectorSheet";
 import { TimelineConsole } from "@/ui/workspace/TimelineConsole";
 import { PresentationExitHint, TopPillBar } from "@/ui/workspace/TopPillBar";
@@ -332,6 +332,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                             <RecordingHud />
                         </div>
                         <ApplicationNotice />
+                        <SuccessNotice />
                         <Hotkeys deskRef={deskRef} />
                         <HelpOverlay />
                         <CommandPalette />

@@ -34,7 +34,11 @@ interface NormalViewportToastProps extends ViewportToastBaseProps {
     readonly tone?: typeof VIEWPORT_TOAST_TONE.NORMAL;
     readonly open: boolean;
     readonly autoHideMs?: number;
-    readonly onClose?: never;
+    /**
+     * 可选:提示源自 store 字段时必须给——自动收起只关 Snackbar,不清那个字段,
+     * 不回写就再也触发不了同一条提示(第二次操作静默)。纯派生的提示(如交互提示)不需要。
+     */
+    readonly onClose?: () => void;
 }
 
 interface ErrorViewportToastProps extends ViewportToastBaseProps {
@@ -64,13 +68,13 @@ export const ViewportToast = observer(function ViewportToast({
     const isError = tone === VIEWPORT_TOAST_TONE.ERROR;
     const topOffset = CHROME.edgeGapPx + slot * (CHROME.pillHeightPx + TOAST_STACK_GAP_PX);
     const autoHideDuration = autoHideMs;
-    const closeToast = isError ? onClose : undefined;
+    // 两种语气都要回调:成功提示也源自 store 字段,自动收起后必须回写才能再次触发
     return (
         <Snackbar
             open={open}
             anchorOrigin={{ vertical: "top", horizontal: "center" }}
             {...(autoHideDuration === undefined ? {} : { autoHideDuration })}
-            onClose={closeToast}
+            onClose={onClose}
             sx={{
                 top: { xs: topOffset, sm: topOffset },
                 zIndex: CHROME.toastZIndex,
@@ -103,10 +107,11 @@ export const ViewportToast = observer(function ViewportToast({
                 >
                     {children}
                 </Typography>
-                {closeToast ? (
+                {/* 关闭按钮只给错误:成功提示自动收起即可,多一颗叉是噪音 */}
+                {isError && onClose ? (
                     <IconButton
                         aria-label="关闭错误提示"
-                        onClick={closeToast}
+                        onClick={onClose}
                         size="small"
                         sx={{ ml: 1, pointerEvents: "auto" }}
                     >

@@ -34,6 +34,7 @@ import {
 import type { LightParams } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { ASSET_KIND } from "@/assets/catalog/AssetEntry";
+import { actionMountedMessage } from "@/command/assetCatalogCommands";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
 import { listActionClips, presentEmbeddedClip } from "@/pose/PosePresetCatalog";
 import { LIGHT_COLOR_PALETTE } from "@/lighting/LightColorPalette";
@@ -456,9 +457,13 @@ const ActionPresetSection = observer(function ActionPresetSection({ objectId, re
                     clip,
                     loopMode: presentation.loopMode ?? ACTION_LOOP_MODE.ONCE,
                 }).action;
-                report(
-                    dispatcher.dispatch({ type: "action.mount", payload: { objectId, actionId: action.id } }, stores),
+                const result = dispatcher.dispatch(
+                    { type: "action.mount", payload: { objectId, actionId: action.id } },
+                    stores,
                 );
+                report(result);
+                // 与 assets.mount 同一条反馈:动作进的是时间轴,不指路作者会以为没挂上
+                if (result.ok) ui.setSuccessNotice(actionMountedMessage(presentation.labelZh));
             } finally {
                 handle.release();
             }

@@ -53,6 +53,12 @@ export class UiStore {
     helpOpen = false;
     /** 应用级命令失败提示；宿主边界写入，展示层自行订阅和清除。 */
     applicationNotice: string | null = null;
+    /**
+     * 应用级**成功**提示(常态语气);与 applicationNotice 分开,后者恒为错误语气。
+     * 只用于「操作成了,但结果不在当前视野里」这类需要指路的反馈——
+     * 看得见结果的操作不该弹提示(那是噪音)。
+     */
+    successNotice: string | null = null;
     /** 飞行中(WASD 按住):DirectorDesk 据此把 frameloop 切 "always" */
     flying = false;
     /** 加载中资源:稳定对象请求 id → 进度 0~1(反馈体系;Map 字段自动可观察) */
@@ -154,6 +160,7 @@ export class UiStore {
         this.loading.clear();
         this.modelOutcomes.clear();
         this.applicationNotice = null;
+        this.successNotice = null;
         this.posePickingObjectId = null;
         this.posePickingBoneKey = null;
         this.inspectorTabs.clear();
@@ -174,6 +181,15 @@ export class UiStore {
 
     clearApplicationNotice(): void {
         this.applicationNotice = null;
+    }
+
+    setSuccessNotice(message: string): void {
+        if (this.disposed) return;
+        this.successNotice = message;
+    }
+
+    clearSuccessNotice(): void {
+        this.successNotice = null;
     }
 
     reportLoading(requestId: string, progress: number): void {

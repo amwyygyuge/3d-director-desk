@@ -48,12 +48,23 @@ export interface TimelineBar {
     readonly startRatio: number;
     readonly widthRatio: number;
     /**
-     * 段条实际占用的结束时刻。一次性动作在演出结束后还有 release 回收段,
-     * 占用到 `releaseEndTimeSeconds`;吸附必须吸到这里,否则作者把下一段贴到
-     * 视觉末端就会被重叠围栏拒掉(release 尾巴造成的「假重叠」)。
-     * 无尾巴的种类等于 startSeconds + durationSeconds。
+     * 段条实际占用的结束时刻 = **演出末端**。
+     *
+     * 一次性动作在演出后还有 release 回收过渡,但它**可被下一段抢占**——播放裁决
+     * 「倒序取最后一个已开始的段」,下一段一开始就赢(见 `SceneObject.actionPerformanceAt`)。
+     * 因此占用只算到演出末端:吸附吸这里,重叠围栏也只报演出段交叠,
+     * 「走完立刻倒地」这种紧贴排期才能真正贴上(按回收末端计价会让作者
+     * 「明明贴上了却被拒」,且时间轴上留一段无法消除的缝)。
      */
     readonly occupancyEndSeconds: number;
+    /**
+     * 回收段时长(秒);0 = 无尾巴(循环动作,或作者把 release 设成 0)。
+     *
+     * 与 `occupancyEndSeconds` 分开表达:回收段**不占用**时间轴(可被下一段抢占),
+     * 但要在段条右侧画出来——否则作者不知道这段过渡存在,也读不懂
+     * 「紧贴之后前一段的收尾被截短」是预期行为。非动作段条恒为 0。
+     */
+    readonly releaseSeconds: number;
     /** Program 片段直接引用运镜 = 时段联动态,重定时时一并移动 */
     readonly linked: boolean;
     /** 运镜片段的跟拍主体;非运镜条恒为 null。 */
@@ -160,6 +171,7 @@ export class TimelineLayout {
             startRatio: viewport.ratioAt(clip.startTimeSeconds),
             widthRatio: clip.durationSeconds / viewport.visibleSeconds,
             occupancyEndSeconds: clip.endTimeSeconds,
+            releaseSeconds: 0,
             linked: clip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP,
             followSubjectId: null,
         }));
@@ -183,6 +195,7 @@ export class TimelineLayout {
                 startRatio: viewport.ratioAt(clip.startTimeSeconds),
                 widthRatio: clip.durationSeconds / viewport.visibleSeconds,
                 occupancyEndSeconds: clip.endTimeSeconds,
+                releaseSeconds: 0,
                 linked: this.motion.program.clips.some(
                     (programClip) =>
                         programClip.source.kind === PROGRAM_SOURCE_KIND.MOTION_CLIP &&
@@ -227,11 +240,10 @@ export class TimelineLayout {
                         durationSeconds: performance.durationSeconds,
                         startRatio: viewport.ratioAt(performance.startTimeSeconds),
                         widthRatio: performance.durationSeconds / viewport.visibleSeconds,
-                        // 一次性动作的占用含 release 回收段;循环动作没有尾巴
-                        occupancyEndSeconds:
-                            action.loopMode === ACTION_LOOP_MODE.ONCE
-                                ? performance.releaseEndTimeSeconds
-                                : performance.endTimeSeconds,
+                        // 回收段可被抢占,不计入占用:吸附与围栏都只认演出末端
+                        occupancyEndSeconds: performance.endTimeSeconds,
+                        // 一次性动作才有回收过渡;循环动作直接接续,没有收尾
+                        releaseSeconds: action.loopMode === ACTION_LOOP_MODE.ONCE ? performance.releaseSeconds : 0,
                         linked: performance.alignment !== null,
                         followSubjectId: null,
                     },
@@ -271,6 +283,7 @@ export class TimelineLayout {
                                   startRatio: viewport.ratioAt(firstKeyframe.time),
                                   widthRatio: (lastKeyframe.time - firstKeyframe.time) / viewport.visibleSeconds,
                                   occupancyEndSeconds: lastKeyframe.time,
+                                  releaseSeconds: 0,
                                   linked: false,
                                   followSubjectId: null,
                               },

@@ -64,7 +64,11 @@ export class TimelineContentSpan {
             label: `Program 片段 ${clip.id}`,
             endSeconds: clip.endTimeSeconds,
         }));
-        // 逐段计价:动作序列的内容下界是**最后一段**的收尾,只看首条会让 fit-duration 把后续段截掉
+        // 逐段计价:动作序列的内容下界是**最后一段**的收尾,只看首条会让 fit-duration 把后续段截掉。
+        //
+        // 这里**保留** release:与重叠围栏的口径不同是有意的。围栏问「下一段能否紧贴」——
+        // 能,回收段可被抢占;内容下界问「时间轴至少要多长才装得下全部内容」——
+        // 最后一段没有后继来抢占它的收势,截掉就是真的丢表演。
         const actionPerformances = scene.list().flatMap((entity) =>
             entity.actionPerformances.flatMap((performance) => {
                 const action = animations.actions.find((candidate) => candidate.id === performance.actionId);

@@ -18,7 +18,7 @@ import { DESK_DOCUMENT_VERSION } from "@/document/DeskDocument";
 import type { DocumentCompatibilityService } from "@/document/compatibility/DocumentCompatibilityService";
 import { isActionLoopMode } from "@/assets/ActionAsset";
 import { formatFromUrl, MODEL_FORMAT } from "@/assets/ModelAsset";
-import { ACTION_FILL_POLICY, defaultFillPolicyFor, isActionFillPolicy } from "@/animation/ActionFillPolicy";
+import { isActionFillPolicy } from "@/animation/ActionFillPolicy";
 import { MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 import { parsePosePreset } from "@/pose/PosePreset";
 import type { PosePreset } from "@/pose/PosePreset";
@@ -124,8 +124,7 @@ function shotIssues(value: unknown): readonly string[] {
         return ["机位参数无效"];
     }
     const { position, target, fov, lens } = value.shot;
-    const geometryValid =
-        finiteVec3(position) && finiteVec3(target) && typeof fov === "number" && Number.isFinite(fov);
+    const geometryValid = finiteVec3(position) && finiteVec3(target) && typeof fov === "number" && Number.isFinite(fov);
     // 镜头进 required:v23 起每个机位都带 lens,缺失即判不支持(零兼容阶段不写迁移器)
     return geometryValid && isCameraLensJSON(lens) ? [] : [`机位 "${value.id}" 参数无效`];
 }
@@ -178,16 +177,18 @@ function actionIssues(value: unknown, entityIds: ReadonlySet<string>): readonly 
     return value.url.length > 0 ? [] : [`动作 "${value.name}" 的 url 无效`];
 }
 
+/**
+ * 排期越界只看**演出段**。
+ *
+ * 回收段是演出后的收势过渡,既可被下一段抢占,也可被时间轴末端截断——
+ * 按它计价会让「最后一个动作正好演到片尾」这种正常工程判不支持。
+ * 与 `actionCommands` 的重叠围栏同口径。
+ */
 function actionScheduleIssues(plan: DocumentImportPlan): readonly string[] {
     return plan.actions.flatMap((action) =>
         action.mountedOn
-            .filter((mount) => {
-                // 回收只发生在 hold 段;与 PlaybackCoordinator 同一判据,否则围栏与实际播放不一致
-                const fillPolicy = mount.fillPolicy ?? defaultFillPolicyFor(action.loopMode);
-                const releaseSeconds = fillPolicy === ACTION_FILL_POLICY.HOLD ? mount.releaseSeconds : 0;
-                return mount.startTimeSeconds + mount.durationSeconds + releaseSeconds > plan.timeline.duration;
-            })
-            .map((mount) => `动作 "${action.name}" 在实体 "${mount.objectId}" 上的排期或回收超出时间轴时长`),
+            .filter((mount) => mount.startTimeSeconds + mount.durationSeconds > plan.timeline.duration)
+            .map((mount) => `动作 "${action.name}" 在实体 "${mount.objectId}" 上的排期超出时间轴时长`),
     );
 }
 
