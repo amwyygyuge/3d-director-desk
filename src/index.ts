@@ -15,8 +15,8 @@ export { BodyBuildSolver } from "@/actor/BodyBuildSolver";
 export { BoneScalePlan } from "@/actor/BoneScalePlan";
 export type { BoneScaleEntry } from "@/actor/BoneScalePlan";
 export { ActorRuntime } from "@/actor/ActorRuntime";
-export { BODY_PART, MIXAMO_PART_BONES, SKELETON_FAMILY_MIXAMO, isBodyPart } from "@/actor/mixamoSkeleton";
-export type { BodyPart, BoneRotationsByName } from "@/actor/mixamoSkeleton";
+export { BODY_PART, SKELETON_PART_BONES, SKELETON_FAMILY_UE, isBodyPart } from "@/actor/actorSkeleton";
+export type { BodyPart, BoneRotationsByName } from "@/actor/actorSkeleton";
 export {
     ActorPresetsQuery,
     ApplyBuildPresetCommand,
@@ -36,6 +36,8 @@ export { ACTION_LOOP_MODE, ActionAsset } from "@/assets/ActionAsset";
 export type { ActionLoopMode } from "@/assets/ActionAsset";
 export { ActionPerformance, MINIMUM_ACTION_DURATION_SECONDS } from "@/animation/ActionPerformance";
 export type { ActionPerformanceInit } from "@/animation/ActionPerformance";
+export { ACTION_FILL_POLICY, defaultFillPolicyFor, isActionFillPolicy } from "@/animation/ActionFillPolicy";
+export type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 export { formatFromFileName, formatFromUrl, ModelAsset, MODEL_FORMAT } from "@/assets/ModelAsset";
 export type { ModelFormat } from "@/assets/ModelAsset";
 export { HostBridge, HostBridgeConfiguration, HostBridgeSession } from "@/bridge/HostBridge";

@@ -1,6 +1,8 @@
 import { reaction } from "mobx";
 
-import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import { ACTION_FILL_POLICY, defaultFillPolicyFor } from "@/animation/ActionFillPolicy";
+import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
+import type { ActionPerformance } from "@/animation/ActionPerformance";
 import type { AnimationBinder } from "@/animation/AnimationBinder";
 import type { ActionPreviewController } from "@/animation/ActionPreviewController";
 import { CameraMotionSampler } from "@/camera/CameraMotionSampler";
@@ -54,14 +56,29 @@ export class PlaybackCoordinator {
         const performance = entity.actionPerformanceAt(this.sampleTimeSeconds);
         if (!performance) return;
         const attackProgress = performance.attackProgressAt(this.sampleTimeSeconds);
+        // 回收只对「播完即停在末帧」的段成立:repeat/stretch 在整段内始终有动作驱动,
+        // 没有可回收的终态。判据取段的填充策略,而非资产 loopMode——同一个循环资产
+        // 也可以被作者按 hold 排一段。
         const releaseProgress =
-            this.binder.loopModeAt(entity.id, performance.id) === ACTION_LOOP_MODE.ONCE
+            this.fillPolicyOf(entity.id, performance) === ACTION_FILL_POLICY.HOLD
                 ? performance.releaseProgressAt(this.sampleTimeSeconds)
                 : null;
         const baseWeight = attackProgress !== null ? 1 - attackProgress : releaseProgress;
         if (baseWeight === null) return;
         this.binder.blendActionWithBasePose(entity.id, entity.pose, baseWeight);
     };
+
+    /**
+     * 该段生效的填充策略:段显式声明优先,未声明则按资产 loopMode 推默认。
+     *
+     * 与 ActionPerformance.clipTimeAt 的兜底必须同一判据,否则「按什么时间取帧」
+     * 与「要不要回收/要不要步频同步」会错配。
+     */
+    private fillPolicyOf(objectId: string, performance: ActionPerformance): ActionFillPolicy | null {
+        if (performance.fillPolicy) return performance.fillPolicy;
+        const loopMode = this.binder.loopModeAt(objectId, performance.id);
+        return loopMode ? defaultFillPolicyFor(loopMode) : null;
+    }
 
     constructor(
         private readonly timeline: TimelineStore,
@@ -199,15 +216,16 @@ export class PlaybackCoordinator {
     /**
      * 步频同步:动作相位由本帧已走弧长决定,未开启同步的对象保持墙钟对齐。
      *
-     * 只对当前生效的**循环**动作生效:一次性动作(倒地/受击)有自己的时间语义,
-     * 被步频改写会让它跟着位移倒放。走位轨可以横跨整段,动作序列各段各自表演。
+     * 只对**按原速重复**的段生效:hold 段(倒地/受击)有自己的时间语义,被步频改写
+     * 会让它跟着位移倒放;stretch 段的作者意图正是变速,步频同步会覆盖掉那个选择。
+     * 走位轨可以横跨整段,动作序列各段各自表演。
      */
     private syncLocomotion(targetId: string, track: TimelineTrack): void {
         if (!track.policies.isLocomotionSynced) return;
         const entity = this.scene.getEntity(targetId);
         const performance = entity?.actionPerformanceAt(this.sampleTimeSeconds);
         if (!performance) return;
-        if (this.binder.loopModeAt(targetId, performance.id) !== ACTION_LOOP_MODE.LOOP) return;
+        if (this.fillPolicyOf(targetId, performance) !== ACTION_FILL_POLICY.REPEAT) return;
         this.binder.setStridePhaseFor(targetId, track.policies.stridePhaseAt(this.sampler.lastArcLengthMeters));
     }
 

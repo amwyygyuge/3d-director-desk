@@ -5,6 +5,7 @@ import type { SceneObjectInit } from "@/core/SceneObject";
 import type { TimelineDocInit } from "@/timeline/TimelineDoc";
 import type { DirectorContext } from "@/command/DirectorCommand";
 import type { ActionLoopMode } from "@/assets/ActionAsset";
+import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 import type { PosePresetJSON } from "@/pose/PosePreset";
 import type { LightingMode } from "@/store/SceneStore";
 import type { OutputFormatId } from "@/output/OutputFormat";
@@ -21,10 +22,9 @@ import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
  * v18 起走位轨持久化 `policies.extrapolation`:轨道时间跨度之外钳到首/末关键帧(hold,默认)
  *     还是交还实体权威变换(rest)。旧档缺该字段时构造期取 hold,与旧档 rest 语义不同,
  *     故必须换版本号——同一份 JSON 在两版里表现不同,是兼容层再也分辨不出的那类变更。
+ * v20 起动作排期持久化时段填充策略(repeat/hold/stretch);缺省按资产循环语义推默认。
  * v17 起动作排期段持久化稳定 `id`:同一实体可对同一动作有多段排期,
  *     时间轴段条、选中态与运行时 clip 全按段 id 定位;旧档缺少该 id 无法还原段身份。
- * v16 起同一实体可持久化**多段动作排期**(一次性 → 循环 → 一次性),
- *     且排期可声明对齐到某条走位轨的关键帧区间(轨道重定时后排期自动跟随);
  * v15 起实体持久化叙事身份与量纲模式；旧档不迁移，版本不符即判不支持。
  * v14 起项目级输出画幅进入文档；切换采用中心裁切，机位仍只保存位姿。
  * v6 起运镜与机位彻底解耦;v7 起时间轴带帧率、播放范围与标记;v8 起运镜片段带跟拍覆盖层;
@@ -34,7 +34,7 @@ import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
  */
-export const DESK_DOCUMENT_VERSION = 22;
+export const DESK_DOCUMENT_VERSION = 20;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {
@@ -51,6 +51,11 @@ export interface DeskDocumentActionMount {
     readonly durationSeconds: number;
     readonly attackSeconds: number;
     readonly releaseSeconds: number;
+    /**
+     * 时段填充策略:段条比 clip 长时如何铺满(repeat 重复 / hold 钳末帧 / stretch 变速)。
+     * 缺省或 null = 未声明,运行时按资产 loopMode 推默认——历史文档走这条。
+     */
+    readonly fillPolicy?: ActionFillPolicy | null;
     /** 非空 = 该段排期对齐到走位轨区间;导入后恢复对齐声明,重定时继续自动跟随。 */
     readonly alignment?: DeskDocumentActionAlignment | null;
 }
@@ -132,6 +137,7 @@ export function assembleDeskDocument(ctx: DirectorContext): DeskDocument {
                         durationSeconds: performance.durationSeconds,
                         attackSeconds: performance.attackSeconds,
                         releaseSeconds: performance.releaseSeconds,
+                        fillPolicy: performance.fillPolicy,
                         alignment: performance.alignment?.toJSON() ?? null,
                     })),
             ),

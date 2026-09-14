@@ -14,12 +14,12 @@ import { assertAcceptance, dispatchOk, required, waitActionMounted, waitRuntime 
 
 const HUMANOID_ASSET_ID = "builtin.humanoid-generic";
 const ACTOR_ID = "catalog-action-actor";
-const WAVE_ASSET_ID = "builtin.action.wave";
-const THUMBS_UP_ASSET_ID = "builtin.action.thumbs-up";
-const NOD_ASSET_ID = "builtin.action.nod-yes";
-const CELEBRATE_ALT_ASSET_ID = "builtin.action.celebrate-alt";
-const EXPECTED_ACTION_COUNT = 21;
-/** 走查里该实体依次挂了「挥手(循环)」与「赞许(一次性)」两段排期,故段条应为两条。 */
+const WAVE_ASSET_ID = "builtin.action.idle-talking";
+const THUMBS_UP_ASSET_ID = "builtin.action.pickup-table";
+const NOD_ASSET_ID = "builtin.action.interact";
+const CELEBRATE_ALT_ASSET_ID = "builtin.action.dance";
+const EXPECTED_ACTION_COUNT = 28;
+/** 走查里该实体依次挂了「交谈(循环)」与「取物(一次性)」两段排期,故段条应为两条。 */
 const EXPECTED_ACTION_BAR_COUNT = 2;
 const ONCE_ACTION_START_SECONDS = 1.2;
 const ONCE_ACTION_DURATION_SECONDS = 2;
@@ -27,20 +27,17 @@ const RETIMED_ACTION_START_SECONDS = 2.4;
 const RETIMED_ACTION_DURATION_SECONDS = 1.5;
 const ONCE_ACTION_ACTIVE_SECONDS = 0.2;
 const ONCE_ACTION_HOLD_SAMPLE_SECONDS = 0.5;
-const BASE_POSE_PRESET_ID = "upper-stand-arms-down";
-const BASE_POSE_BONE = "mixamorigRightArm";
+const BASE_POSE_PRESET_ID = "upper-stand-natural";
+const BASE_POSE_BONE = "upperarm_r";
 const TIMELINE_SCALE_FACTOR = 0.5;
 const TIME_EPSILON_SECONDS = 1e-6;
 const WAIT_ATTEMPT_LIMIT = 40;
 const WAIT_INTERVAL_MS = 250;
-const MAX_HIPS_FIRST_FRAME_DELTA_DEGREES = 10;
 const POSE_HOLD_EPSILON = 1e-6;
-/** humanoid-generic.glb 的 bind Hips 局部旋转;用于防止外部动作把根骨骼翻回源坐标系。 */
-const TARGET_HIPS_REST_QUATERNION = [-0.70710678, 0, 0, 0.70710678] as const;
 
 const CHECKLIST = [
-    "资源目录含 21 个内置动作资产(点头/摇头已回归);人偶检查器「动作资产」区按骨架族列出",
-    "先选常驻姿势「垂臂」,再依次挂「挥手/赞许/点头/庆祝·二」:动作与常驻姿势分层共存",
+    "资源目录含 28 个内置动作资产;人偶检查器「动作资产」区按骨架族列出",
+    "先选常驻姿势「站姿·自然」,再依次挂「交谈/取物/交互/舞动」:动作与常驻姿势分层共存",
     "一次性动作带明确时间轴排期;结束后经回收段自动回垂臂,不会停在动作末帧",
     "时间轴动作行里**每段排期各自一条段条**(挂了几段就有几条);拖任一条只改那一段,不影响邻段",
     "选中某一段按 Delete 只删该段,其余段保留;撤销后该段按原位复原",
@@ -86,26 +83,32 @@ async function waitCatalogEntry(
     await waitCatalogEntry(stores, assetId, remainingAttempts - 1);
 }
 
+/**
+ * 动作驱动骨骼,但不改变实体位姿。
+ *
+ * 内置动作与内置人偶同源同骨架,不经重定向;根骨与缩放轨道在烘制期就被剔除
+ * (见 scripts/bake-actor-assets.ts),故这里断言的是「产物契约」:
+ * 实体的位置与朝向权威不被动作侵占。
+ *
+ * `pelvis.position` **允许存在且必须存在**:那是身体相对脚底的起伏(跑步腾空、
+ * 跳跃蹲起、倒地下沉),不是位移——源资产的前进位移已抽到根骨,逐段水平净漂移为 0。
+ * 曾误把它一并剔除,结果所有动作失去重量感。
+ */
 function assertUprightFirstFrame(stores: DirectorDeskStores, objectId: string): void {
     const actionId = stores.scene.manager.getEntity(objectId)?.actionId;
     const clip = required(actionId ? stores.animations.getClip(actionId) : undefined, "动作缺少 clip");
     assertAcceptance(
-        clip.tracks.every((track) => !track.name.endsWith(".position") && !track.name.endsWith(".scale")),
-        "动作资产仍包含位置/缩放轨道",
+        clip.tracks.every((track) => !track.name.endsWith(".scale")),
+        "动作资产仍包含缩放轨道",
     );
     assertAcceptance(
-        clip.tracks.every((track) => track.name !== "mixamorigHips.quaternion"),
-        "动作资产仍写 Hips 朝向",
+        clip.tracks.every((track) => !track.name.startsWith("root.")),
+        "动作资产仍写根骨轨道",
     );
-    const hips = boneQuaternion(stores, objectId, "mixamorigHips");
-    const firstDotBaseline = Math.abs(
-        hips[0]! * TARGET_HIPS_REST_QUATERNION[0] +
-            hips[1]! * TARGET_HIPS_REST_QUATERNION[1] +
-            hips[2]! * TARGET_HIPS_REST_QUATERNION[2] +
-            hips[3]! * TARGET_HIPS_REST_QUATERNION[3],
+    assertAcceptance(
+        clip.tracks.every((track) => !track.name.endsWith(".position") || track.name === "pelvis.position"),
+        "位移轨道出现在 pelvis 之外的骨骼上",
     );
-    const deltaDegrees = (2 * Math.acos(Math.min(1, firstDotBaseline)) * 180) / Math.PI;
-    assertAcceptance(deltaDegrees <= MAX_HIPS_FIRST_FRAME_DELTA_DEGREES, "动作改变了模型朝向");
 }
 
 function boneQuaternion(stores: DirectorDeskStores, objectId: string, boneName: string): readonly number[] {
@@ -115,7 +118,7 @@ function boneQuaternion(stores: DirectorDeskStores, objectId: string, boneName: 
 }
 
 function headQuaternion(stores: DirectorDeskStores, objectId: string): readonly number[] {
-    return boneQuaternion(stores, objectId, "mixamorigHead");
+    return boneQuaternion(stores, objectId, "Head");
 }
 
 function quaternionEquals(left: readonly number[], right: readonly number[]): boolean {

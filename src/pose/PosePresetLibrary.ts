@@ -1,6 +1,6 @@
 import { makeAutoObservable, observable } from "mobx";
 
-import type { BodyPart } from "@/actor/mixamoSkeleton";
+import type { BodyPart } from "@/actor/actorSkeleton";
 import { PosePreset } from "@/pose/PosePreset";
 import { BUILTIN_POSE_PRESETS } from "@/pose/posePresets.data";
 

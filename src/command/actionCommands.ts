@@ -7,6 +7,8 @@ import {
 } from "@/animation/ActionPerformance";
 import { ActionAlignment, resolveActionRange } from "@/animation/ActionAlignment";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
+import { ACTION_FILL_POLICY } from "@/animation/ActionFillPolicy";
+import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 import type { ActionAsset } from "@/assets/ActionAsset";
 import { Bone } from "three";
 import type { AnimationClip, Object3D } from "three";
@@ -104,6 +106,12 @@ interface ActionSchedulePayload {
     readonly attackSeconds?: number;
     /** once 结束后回常驻姿势的回收时长;缺省 0.25s */
     readonly releaseSeconds?: number;
+    /**
+     * 时段填充策略:段条比 clip 长时如何铺满。
+     * repeat 按原速重复、hold 按原速播一次后钳末帧、stretch 变速铺满。
+     * 缺省 = 跟随资产循环语义(loop → repeat,once → hold)。
+     */
+    readonly fillPolicy?: ActionFillPolicy;
 }
 
 interface MountActionPayload extends ActionSchedulePayload {
@@ -132,6 +140,7 @@ const ACTION_SCHEDULE_PROPERTIES = {
     durationSeconds: { type: "number" },
     attackSeconds: { type: "number" },
     releaseSeconds: { type: "number" },
+    fillPolicy: { type: "string", enum: [...Object.values(ACTION_FILL_POLICY)] },
 } as const;
 
 const ALIGN_TO_TRACK_PROPERTY = {
@@ -370,6 +379,7 @@ export class MountActionCommand extends DirectorCommand<MountActionPayload> {
             durationSeconds: schedule.durationSeconds,
             attackSeconds: this.payload.attackSeconds ?? DEFAULT_ACTION_ATTACK_SECONDS,
             releaseSeconds,
+            fillPolicy: this.payload.fillPolicy ?? null,
             alignment: this.payload.alignToTrack ? new ActionAlignment(this.payload.alignToTrack) : null,
         });
         const isReplacing = this.payload.replace === true;
