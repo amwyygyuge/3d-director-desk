@@ -477,6 +477,13 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
         skeletons.register(entity.id, shell);
         // 人偶画像落到 Three(材质克隆 + 骨骼缩放)与骨骼索引同一时机,卸载时一并摘除
         actorRuntime.attach(entity.id, shell);
+        // 投影投射标记:一次性遍历本模型的壳层(不是整棵场景树),与骨骼索引同一时机。
+        // 恒置 true 与开关无冲突——`castShadow` 只在渲染器开了 shadowMap 时才计价,
+        // 投影关闭时 StudioShadowRig 整体卸载,没有投射光,这个标记不产生任何成本。
+        shell.traverse((node) => {
+            const mesh = node as { isMesh?: boolean; isSkinnedMesh?: boolean; castShadow?: boolean };
+            if (mesh.isMesh === true || mesh.isSkinnedMesh === true) mesh.castShadow = true;
+        });
         return () => {
             actorRuntime.detach(entity.id);
             skeletons.unregister(entity.id);

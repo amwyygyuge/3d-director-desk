@@ -186,6 +186,8 @@ export { ObjectMaterialRegistry } from "@/core/ObjectMaterialRegistry";
 export { SELECTION_ROLE } from "@/core/SelectionRole";
 export type { SelectionRole } from "@/core/SelectionRole";
 export type { FramingMeasure, RenderHandles, ShotFramingPose } from "@/capture/CaptureService";
+export { FRAME_STATISTICS_SAMPLE_SIZE, FrameStatisticsAnalyzer } from "@/capture/FrameStatistics";
+export type { FrameStatistics } from "@/capture/FrameStatistics";
 export { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 export type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
 export { CAPTURE_PRODUCT_KIND } from "@/capture/CaptureProduct";
@@ -195,10 +197,24 @@ export type { PlayheadSource, VideoExportSource, VideoExportState } from "@/capt
 export { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
 export type { VideoExportSourcePolicy, VideoExportStage } from "@/capture/VideoExportSourcePolicy";
 export {
+    LIGHTING_MOOD,
+    LIGHTING_MOOD_PRESETS,
+    LightingMoodCompiler,
+    isLightingMood,
+} from "@/lighting/LightingMoodCompiler";
+export type {
+    CompiledLightingMood,
+    CompiledMoodLight,
+    LightingMood,
+    LightingMoodPreset,
+    MoodLightPlacement,
+} from "@/lighting/LightingMoodCompiler";
+export {
     CancelVideoCaptureCommand,
     CaptureFrameCommand,
     CaptureStopVideoCommand,
     CaptureVideoCommand,
+    FrameStatisticsQuery,
     registerCaptureCommands,
 } from "@/command/captureCommands";
 export { OutputGetFormatQuery, SetOutputFormatCommand, registerOutputCommands } from "@/command/outputCommands";
@@ -263,6 +279,7 @@ export type {
 export { FrameViewCommand, registerNavigationCommands } from "@/command/navigationCommands";
 export {
     AdjustLightCommand,
+    AuthorLightingCommand,
     LightingGetQuery,
     LightingListQuery,
     registerLightingCommands,

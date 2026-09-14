@@ -7,7 +7,7 @@ import type { VideoExportSource } from "@/capture/VideoExportSession";
 import { videoExportPolicyFor } from "@/capture/VideoExportSourcePolicy";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext } from "@/command/DirectorCommand";
-import type { CommandCapability, CommandDispatcher } from "@/command/CommandDispatcher";
+import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { EMPTY_PAYLOAD_CONTRACT } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
 import type { OutputFrameGeometry } from "@/output/OutputFrameGeometry";
@@ -371,6 +371,36 @@ export class CancelVideoCaptureCommand extends DirectorCommand<Record<string, ne
     }
 }
 
+const CAPTURE_READ_PERMISSION = "capture:read";
+
+/**
+ * 画面度量查询(AI 的「第二只眼」):曝光、影调层次、主体与背景的分离度。
+ *
+ * 与 `camera.check-framing` 同类——都是把「画面对不对」变成可执行的数值证据,
+ * 免去截图交给多模态判断那条慢而不稳的路:
+ *  - `meanLuma` 偏离中间调 → 调 `studio.set-exposure`;
+ *  - `clippedHighlights` / `clippedShadows` 偏高 → 曝光过冲,细节已经裁掉;
+ *  - `contrast` 过低 → 灰平一片,考虑开 `studio.set-shadows` 或换地板颜色;
+ *  - `subjectSeparation` 接近 0 → 主体没从背景里跳出来(带符号:负值是剪影/逆光,
+ *    那是有效的电影语言而非错误)。
+ *
+ * 只读:强制渲一帧后取样,不改任何领域状态;截图仍留给美学终审。
+ */
+export class FrameStatisticsQuery implements DirectorQuery<Record<string, never>> {
+    static readonly TYPE = "capture.measure-frame";
+    readonly type = FrameStatisticsQuery.TYPE;
+
+    constructor(readonly payload: Record<string, never> = {}) {}
+
+    validate(ctx: DirectorContext): readonly string[] {
+        return ctx.capture.isAttached ? [] : ["渲染器未就绪(Canvas 尚未 onCreated)"];
+    }
+
+    execute(ctx: DirectorContext): unknown {
+        return ctx.capture.measureFrameStatistics({ outputFrame: outputFrameFor(ctx) });
+    }
+}
+
 export function registerCaptureCommands(dispatcher: CommandDispatcher): void {
     dispatcher.register(
         CaptureFrameCommand.TYPE,
@@ -391,5 +421,17 @@ export function registerCaptureCommands(dispatcher: CommandDispatcher): void {
         CancelVideoCaptureCommand.TYPE,
         (payload: Record<string, never>) => new CancelVideoCaptureCommand(payload),
         captureCapability(CancelVideoCaptureCommand.TYPE, EMPTY_PAYLOAD_CONTRACT),
+    );
+    dispatcher.registerQuery(
+        FrameStatisticsQuery.TYPE,
+        (payload: Record<string, never>) => new FrameStatisticsQuery(payload),
+        {
+            type: FrameStatisticsQuery.TYPE,
+            version: CAPTURE_VERSION,
+            kind: "query",
+            permissions: [CAPTURE_READ_PERMISSION],
+            appliesWhen: CAPTURE_APPLIES_WHEN,
+            payload: EMPTY_PAYLOAD_CONTRACT,
+        },
     );
 }

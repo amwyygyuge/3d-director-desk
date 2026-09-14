@@ -6,6 +6,8 @@ import { DeterministicMp4Exporter } from "@/capture/DeterministicMp4Exporter";
 import type { DeterministicMp4ExportResult } from "@/capture/DeterministicMp4Exporter";
 import { HelperVisibilityTransaction } from "@/capture/HelperVisibilityTransaction";
 import type { CaptureHelperLifecycle } from "@/capture/HelperVisibilityTransaction";
+import { FRAME_STATISTICS_SAMPLE_SIZE, FrameStatisticsAnalyzer } from "@/capture/FrameStatistics";
+import type { FrameStatistics } from "@/capture/FrameStatistics";
 import type { Vec3 } from "@/core/SceneObject";
 import type {
     OutputFrameGeometry,
@@ -75,6 +77,9 @@ export class CaptureService {
     private recordedMimeType: string | null = null;
     /** 中心裁切导出画布：仅在采集期复用，绝不进入 observable。 */
     private outputCanvas: HTMLCanvasElement | null = null;
+    /** 统计采样画布与分析器:与 outputCanvas 同纪律,只在采集期复用,绝不进 observable。 */
+    private statisticsCanvas: HTMLCanvasElement | null = null;
+    private readonly statisticsAnalyzer = new FrameStatisticsAnalyzer();
 
     attach(handles: RenderHandles): void {
         this.handles = handles;
@@ -85,6 +90,7 @@ export class CaptureService {
     }
     dispose(): void {
         this.outputCanvas = null;
+        this.statisticsCanvas = null;
         this.exporter?.requestCancel();
         this.helpers.clear();
         this.detach();
@@ -309,6 +315,43 @@ export class CaptureService {
         } finally {
             this.restoreEditingVisuals(handover);
         }
+    }
+
+    /**
+     * 当前画面的曝光与影调度量;未 attach 返回 null。
+     *
+     * 与 `capture()` 同纪律:单个 JS 任务内强制渲一帧再取样,并让位编辑辅助物——
+     * gizmo/高亮框入镜会污染亮度统计,让 AI 按辅助物的颜色去校曝光。
+     * 读回固定降到 64×64:度量与画布分辨率解耦,4K 画布也只读 16KB,
+     * 且统计量对降采样稳定(均值/标准差不随采样密度漂移)。
+     */
+    measureFrameStatistics(options?: { outputFrame?: OutputFrameGeometry | null }): FrameStatistics | null {
+        const handles = this.handles;
+        if (!handles) return null;
+        const { gl, scene, camera } = handles;
+        const handover = this.beginEditingVisualHandover({ shouldHide: true });
+        try {
+            gl.render(scene, camera);
+            const source = this.outputCanvasFor(gl.domElement, options?.outputFrame?.cropRect ?? null);
+            this.copyOutputFrame(gl.domElement, source, options?.outputFrame?.cropRect ?? null);
+            const size = FRAME_STATISTICS_SAMPLE_SIZE;
+            const sampler = this.statisticsCanvasFor(size);
+            const context = sampler.getContext("2d", { willReadFrequently: true });
+            if (!context) return null;
+            context.drawImage(source, 0, 0, source.width, source.height, 0, 0, size, size);
+            return this.statisticsAnalyzer.analyze(context.getImageData(0, 0, size, size).data, size);
+        } finally {
+            this.restoreEditingVisuals(handover);
+        }
+    }
+
+    /** 统计采样画布:尺寸恒定,复用同一张,绝不进 observable(同 outputCanvas 纪律)。 */
+    private statisticsCanvasFor(size: number): HTMLCanvasElement {
+        const canvas = this.statisticsCanvas ?? document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        this.statisticsCanvas = canvas;
+        return canvas;
     }
 }
 

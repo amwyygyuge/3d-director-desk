@@ -117,9 +117,18 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "pose.clear": "清除常驻基础姿势,回绑定姿态",
     // 灯光
     "scene.set-lighting-mode": "切灯光模式:studio 兜底布光 / custom 自定义",
+    "lighting.author":
+        "打光情绪一步落地(聚合命令,一步撤销):neutral 中性均匀 / low-key 低调暗部 / " +
+        "silhouette 逆光剪影 / golden-hour 黄金时刻 / night 夜景冷调。" +
+        "灯位按被摄体包围球定尺(给 subjectId 更准,缺省取全场景模型),同时设好配套曝光与投影。" +
+        "只接管自己产出的灯,作者手放的灯不动;效果用 capture.measure-frame 断言",
     "light.adjust": "更新自定义灯光的可序列化参数;先用 lighting.get/list 读取对象和灯型",
     // 采集
     "capture.frame": "截图当前预演画面(保留地板网格，编辑辅助物不入镜);异步产物按 requestId 对账",
+    "capture.measure-frame":
+        "画面度量断言(不截图):平均亮度/影调层次/高光与暗部裁切占比/主体与背景亮度分离度。" +
+        "曝光偏了调 studio.set-exposure;层次太平开 studio.set-shadows 或换地板色;" +
+        "分离度接近 0 说明主体没从背景跳出来(负值是剪影/逆光,属有效电影语言)",
     "capture.video":
         "按工程帧率导出 MP4 参考视频(缺省当前播放范围，起点/时长可显式覆盖；source=viewport 明确导出当前编辑视角);异步产物按 requestId 对账",
     "capture.video-stop": "在当前帧边界结束 MP4 导出并交付产物",

@@ -10,7 +10,7 @@ import { DOCUMENT_COMPATIBILITY_ISSUE_CODE } from "@/document/compatibility/Desk
 import { PROGRAM_REVIEW_ISSUE_KIND } from "@/review/ProgramReviewService";
 import type { ProgramReviewReport } from "@/review/ProgramReviewService";
 import { LIGHTING_MODE } from "@/store/SceneStore";
-import { GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
+import { EXPOSURE, GRID_SIZE, RENDER_QUALITY } from "@/studio/StudioEnvironment";
 import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 import { DirectorDesk } from "@/ui/shell/DirectorDesk";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
@@ -60,6 +60,11 @@ const STUDIO_SETTINGS: StudioEnvironmentJSON = {
     renderQuality: RENDER_QUALITY.HIGH,
     frameRateVisible: true,
     outputGridVisible: false,
+    exposure: 1.6,
+    environmentLightingEnabled: true,
+    shadowsEnabled: true,
+    floorColor: "#3b2f2a",
+    floorSurfaceEnabled: true,
 };
 
 const CHECKLIST = [
@@ -139,6 +144,24 @@ function seedStudioEnvironment(stores: DirectorDeskStores): void {
     dispatchOk(stores, "studio.set-render-quality", { quality: STUDIO_SETTINGS.renderQuality });
     dispatchOk(stores, "studio.set-frame-rate-visible", { visible: STUDIO_SETTINGS.frameRateVisible });
     dispatchOk(stores, "studio.set-output-grid-visible", { visible: STUDIO_SETTINGS.outputGridVisible });
+    // 成像三项:曝光进撤销栈并有围栏,两个开关随文档往返
+    dispatchOk(stores, "studio.set-exposure", { exposure: STUDIO_SETTINGS.exposure });
+    assertAcceptance(stores.studio.exposure === STUDIO_SETTINGS.exposure, "曝光命令未落账");
+    assertAcceptance(stores.history.undo(stores).ok, "曝光撤销失败");
+    assertAcceptance(stores.studio.exposure === EXPOSURE.DEFAULT, "曝光撤销未回默认值");
+    assertAcceptance(stores.history.redo(stores).ok, "曝光重做失败");
+    assertAcceptance(stores.studio.exposure === STUDIO_SETTINGS.exposure, "曝光重做未复原");
+    const exposureOutOfRange = dispatchCatching(stores, "studio.set-exposure", { exposure: EXPOSURE.MAX + 1 });
+    assertAcceptance(!exposureOutOfRange.ok, "超界曝光未被命令层拒绝");
+    dispatchOk(stores, "studio.set-environment-lighting", { enabled: STUDIO_SETTINGS.environmentLightingEnabled });
+    dispatchOk(stores, "studio.set-shadows", { enabled: STUDIO_SETTINGS.shadowsEnabled });
+    dispatchOk(stores, "studio.set-floor-color", { color: STUDIO_SETTINGS.floorColor });
+    dispatchOk(stores, "studio.set-floor-surface", { enabled: STUDIO_SETTINGS.floorSurfaceEnabled });
+    // 非法颜色必须被围栏拒绝,而不是静默落一个无效值进文档
+    assertAcceptance(
+        !dispatchCatching(stores, "studio.set-floor-color", { color: "red" }).ok,
+        "非法地板颜色未被命令层拒绝",
+    );
     assertStudioEnvironment(stores, "命令写入后");
     const read = stores.dispatcher.query({ type: "studio.get", payload: {} }, stores);
     assertAcceptance(read.ok, "studio.get 查询失败");
@@ -154,6 +177,17 @@ function assertStudioEnvironment(stores: DirectorDeskStores, stage: string): voi
     assertAcceptance(studio.renderQuality === STUDIO_SETTINGS.renderQuality, `${stage}渲染画质档不符`);
     assertAcceptance(studio.frameRateVisible === STUDIO_SETTINGS.frameRateVisible, `${stage}帧率读数显隐不符`);
     assertAcceptance(studio.outputGridVisible === STUDIO_SETTINGS.outputGridVisible, `${stage}九宫格显隐不符`);
+    assertAcceptance(studio.exposure === STUDIO_SETTINGS.exposure, `${stage}曝光不符`);
+    assertAcceptance(
+        studio.environmentLightingEnabled === STUDIO_SETTINGS.environmentLightingEnabled,
+        `${stage}环境光照开关不符`,
+    );
+    assertAcceptance(studio.shadowsEnabled === STUDIO_SETTINGS.shadowsEnabled, `${stage}投影开关不符`);
+    assertAcceptance(studio.floorColor === STUDIO_SETTINGS.floorColor, `${stage}地板颜色不符`);
+    assertAcceptance(
+        studio.floorSurfaceEnabled === STUDIO_SETTINGS.floorSurfaceEnabled,
+        `${stage}实心地面开关不符`,
+    );
 }
 
 /**

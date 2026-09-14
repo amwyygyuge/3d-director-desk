@@ -12,6 +12,10 @@ import type { OutputFormatId } from "@/output/OutputFormat";
 import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
 
 /**
+ * v22 起演播室档位带实心地面开关(floorSurfaceEnabled)。
+ * v21 起演播室档位带投影开关与地板颜色;`isStudioEnvironmentJSON` 要求两者存在。
+ * v20 起演播室档位带成像三项(曝光/环境光照);同上,旧档缺任一项即判不支持
+ *     (零兼容阶段不写迁移器)。
  * v19 起演播室档位进文档:参考地板边长、渲染画质档、帧率读数与九宫格显隐。
  *     它们决定成片质量与构图判断,此前只活在壳层 UI 态里,导出/导入/刷新一律丢失;
  *     校验器对 `studio` 硬要求(缺失即判无效),故必须换版本号。
