@@ -25,41 +25,47 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 
 ## 感知(怎么看懂场景)
 
-| 你要知道的                  | 怎么拿                                                                                                                                                                                                                                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 资源目录(发现可用模型/动作) | `query({ type: "assets.list", payload: { kind?: "model"\|"action", category?: "character.human"\|"character.animal"\|"plant"\|"furniture" } })` → 条目含 license/skeletonFamily/embeddedClips                                                                                                                |
-| 低上下文场景索引            | `query({ type: "desk.inspect", payload: { detail: "brief" } })` → 实体身份/装载态/量纲；要几何细节再用 `focused` + `entityIds`                                                                                                                                                                               |
-| 生效相机位姿                | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                                                                                                                                             |
-| 截图溯源                    | capture 后读 `desk.ui.lastCaptureMeta` → requestId/timeSeconds/cameraPose/尺寸(requestId = 命令幂等键,连发截图按它对账)                                                                                                                                                                                      |
-| 机位表                      | `query({ type: "camera.list-shots", payload: {} })` → `{ shots: [{ id, shot }], activeShotId }`                                                                                                                                                                                                              |
-| 同框断言                    | `query({ type: "camera.check-framing", payload: { subjectIds: [...] } })` → `[{ id, inFrame, marginNdc }]`;`marginNdc < 0` 即出画。激活机位时按机位定义测量,与渲染帧时序无关                                                                                                                                 |
-| 播放态                      | `query({ type: "transport.get-state", payload: {} })` → `{ time, isPlaying, isLooping, durationSeconds }`                                                                                                                                                                                                    |
-| 时间轴文档                  | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                                                                                                                                  |
-| 运镜编排                    | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, follow, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
-| 灯光                        | `query({ type: "lighting.list", payload: {} })`                                                                                                                                                                                                                                                              |
-| 骨骼(姿态编辑前必查)        | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                                                                                                                                                                              |
-| 眼睛(构图确认,仅美学用)     | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                                                                                                                                                                               |
+| 你要知道的                      | 怎么拿                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 资源目录(发现可用模型/动作)     | `query({ type: "assets.list", payload: { kind?: "model"\|"action", category?: "character.human"\|"scenery.geometry"\|"action.performance" } })` → 条目含 license/skeletonFamily(内置人形是 `ue`)/loopMode/embeddedClips                                                                                      |
+| 低上下文场景索引                | `query({ type: "desk.inspect", payload: { detail: "brief" } })` → 实体身份/装载态/量纲；要几何细节再用 `focused` + `entityIds`                                                                                                                                                                               |
+| 生效相机位姿                    | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                                                                                                                                             |
+| 截图溯源                        | capture 后读 `desk.ui.lastCaptureMeta` → requestId/timeSeconds/cameraPose/尺寸(requestId = 命令幂等键,连发截图按它对账)                                                                                                                                                                                      |
+| 机位表                          | `query({ type: "camera.list-shots", payload: {} })` → `{ shots: [{ id, shot }], activeShotId }`                                                                                                                                                                                                              |
+| 同框断言                        | `query({ type: "camera.check-framing", payload: { subjectIds: [...] } })` → `[{ id, inFrame, marginNdc }]`;`marginNdc < 0` 即出画。激活机位时按机位定义测量,与渲染帧时序无关                                                                                                                                 |
+| 播放态                          | `query({ type: "transport.get-state", payload: {} })` → `{ time, isPlaying, isLooping, durationSeconds }`                                                                                                                                                                                                    |
+| 时间轴文档                      | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                                                                                                                                  |
+| 运镜编排                        | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, follow, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
+| 灯光                            | `query({ type: "lighting.list", payload: {} })`                                                                                                                                                                                                                                                              |
+| 灯光发现面(色温词表 + 情绪配方) | `query({ type: "lighting.presets.list", payload: {} })` → 可说的灯色词与 5 档打光情绪                                                                                                                                                                                                                        |
+| 单灯详情                        | `query({ type: "lighting.get", payload: { id } })`                                                                                                                                                                                                                                                           |
+| 演播室档位                      | `query({ type: "studio.get", payload: {} })` → 地板边长(含 2~~100 合法区间)/画质档/曝光(含 0.2~~3 区间)/环境光照与投影开关/实心地面开关/地板色 + 按影调排布的地板色词表                                                                                                                                      |
+| 画面度量(不截图断言曝光影调)    | `query({ type: "capture.measure-frame", payload: {} })` → `{ meanLuma, contrast, clippedHighlights, clippedShadows, subjectLuma, backgroundLuma, subjectSeparation }`,全部 0~1(分离度带符号)                                                                                                                 |
+| 输出画幅                        | `query({ type: "output.get-format", payload: {} })` → 预览安全框/PNG/MP4/同框断言共用的中心裁切口径                                                                                                                                                                                                          |
+| 骨骼(姿态编辑前必查)            | `query({ type: "pose.bones.discover", payload: { objectId } })`                                                                                                                                                                                                                                              |
+| 眼睛(构图确认,仅美学用)         | `dispatch({ type: "capture.frame", payload: {} })` 截图,产物元数据读 `desk.ui.lastCaptureMeta`                                                                                                                                                                                                               |
 
 **分工:度量问数据,美学问截图。默认断言驱动:每步操作后用 query 断言结果,断言过了不截图;只有断言失败(排查)或验收构图(美学)才截图。**
 
 ### 资源目录(优先用目录,别手搓 URL)
 
-- `assets.list` 发现 → `assets.place { assetId, transform? }` 放模型；内置模型的姿势与动作来自自身 `embeddedClips`，不再提供独立内置动作条目；
+- `assets.list` 发现 → `assets.place { id, assetId, transform? }` 放模型 / `assets.mount { objectId, assetId, ... }` 挂动作;内置目录含 6 个模型(人形 + 5 个几何体)与 28 条动作条目,动作骨架族统一 `ue`;
 - 同一 `assetId` 可重复 `assets.place`，命令会固化一个新 UUID 场景实体 id；
 - 内置资源已入库缓存（许可随目录条目可审计）；宿主注入条目可标记 `source: "injected"`，远程条目用 `"remote"`；
 - 目录为空 → 内置 catalog.json 加载失败,停止并报告(别改用 URL 硬编)。
 
 ### 断言驱动验收协议
 
-| 步骤     | 断言(query)                                                                                       | 失败时                                                 |
-| -------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理;`mountedActionId` 回读挂载态 | `failed` → 换资产;`loading` 超 10s → 查 URL            |
-| 量纲断言 | `desk.inspect focused` → `spatialScale.kind`;只有 `actor-meters`/`reference-meters` 可用真实米数  | `relative` → 改用比例或补 `physicalMaxDimensionMeters` |
-| 角色身份 | `scene.set-identity` 后 `desk.inspect brief` 回读 `{ role, label }`                               | 消歧失败 → 用稳定 label 而非猜资源名                   |
-| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                                           | 不符 → 检查是否播放中录 key 被拒                       |
-| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                                         | 不符 → capture 时机错,重新 seek+capture                |
-| 视频     | `lastVideoMeta.durationSeconds` == 目标时长,文件头 EBML(0x1A45DFA3)                               | 录制被拒 → 已有录制在进行(cancel 或等完成)             |
-| 文档接管 | import 后 `scene.describe` 与导出前一致;动作 actionId 恢复                                        | 动作恢复失败 → 看 applicationNotice(资产 URL 不可达?)  |
+| 步骤     | 断言(query)                                                                                          | 失败时                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 放模型   | `scene.describe` → 该实体 `loadState` 变 `loaded`,`bounds.size` 合理;`mountedActionId` 回读挂载态    | `failed` → 换资产;`loading` 超 10s → 查 URL                 |
+| 量纲断言 | `desk.inspect focused` → `spatialScale.kind`;只有 `actor-meters`/`reference-meters` 可用真实米数     | `relative` → 改用比例或补 `physicalMaxDimensionMeters`      |
+| 角色身份 | `scene.set-identity` 后 `desk.inspect brief` 回读 `{ role, label }`                                  | 消歧失败 → 用稳定 label 而非猜资源名                        |
+| 运镜     | `camera.get-pose`:seek 后 `live` 应逼近 `motionSampled`                                              | 不符 → 检查是否播放中录 key 被拒                            |
+| 截图     | `lastCaptureMeta.timeSeconds` == 目标时刻                                                            | 不符 → capture 时机错,重新 seek+capture                     |
+| 视频     | `lastVideoMeta.durationSeconds` == 目标时长,文件头 `ftypisom`(MP4/h264,**不是** EBML)                | 录制被拒 → 已有录制在进行(cancel 或等完成)                  |
+| 画面影调 | `capture.measure-frame`:`clippedHighlights`/`clippedShadows` < ~0.02、`subjectSeparation` 明显偏离 0 | 过曝 → 降 `studio.set-exposure`;糊在一起 → 换地板色或开投影 |
+| 文档接管 | import 后 `scene.describe` 与导出前一致;动作 actionId 恢复                                           | 动作恢复失败 → 看 applicationNotice(资产 URL 不可达?)       |
 
 ## 核心命令速查
 
@@ -136,24 +142,24 @@ dispatch({ type: "action.preview.pause", payload: {} });
 传 `replace: true` 才是整表替换(旧的单动作行为)。
 
 ```js
-// 1) 一次性:被驱赶的反应
+// 1) 一次性:受击反应
 dispatch({
     type: "assets.mount",
-    payload: { objectId: "actor", assetId: "builtin.action.hands-on-head", startTimeSeconds: 0, durationSeconds: 2.8 },
+    payload: { objectId: "actor", assetId: "builtin.action.hit-chest", startTimeSeconds: 0, durationSeconds: 2.8 },
 });
 // 2) 循环:走路 —— 时段声明为「对齐到走位轨的某个关键帧区间」,不手填时间
 dispatch({
     type: "assets.mount",
     payload: {
         objectId: "actor",
-        assetId: "builtin.action.walking",
+        assetId: "builtin.action.walk",
         alignToTrack: { trackId: "walk-actor", fromKeyframeId: "k-turn-out", toKeyframeId: "k-walk-end" },
     },
 });
-// 3) 一次性:收尾
+// 3) 一次性:收尾倒地
 dispatch({
     type: "assets.mount",
-    payload: { objectId: "actor", assetId: "builtin.action.thumbs-down", startTimeSeconds: 10.3, durationSeconds: 2.5 },
+    payload: { objectId: "actor", assetId: "builtin.action.death01", startTimeSeconds: 10.3, durationSeconds: 2.5 },
 });
 ```
 
@@ -174,14 +180,41 @@ dispatch({
   走位段 4→10s 的动作实际占到 10.25s,在 10s 挂下一段会被拒——从 `releaseEndTimeSeconds` 之后接。
 - **循环动作才吃步频同步**:`locomotion: "sync"` 只驱动当前生效的 `loop` 动作;
   一次性动作有自己的时间语义,不会被位移改写。
-- **走路资产**:`builtin.action.walking` / `builtin.action.running`(loop)。其余 21 个内置动作都是手势,
-  只有 `挥手`/`左侧移步`/`催促离开` 是 loop,其余全 `once`——`assets.list` 的 `loopMode` 字段可查。
+- **走路/奔跑资产**(全部 loop):`builtin.action.walk`(常速)、`walk-formal`(正式步态)、`jog-fwd`、`sprint`、
+  `crouch-fwd`(蹲行)、`swim-fwd`。内置共 28 条动作,骨架族统一 `ue`,**18 条 loop / 10 条 once**——
+  待场类(`idle`、`idle-talking`、`sitting-idle`、`idle-torch`、`dance`、`push`、`driving`、`fixing-kneeling` 等)是 loop,
+  事件类(`sitting-enter`/`sitting-exit`、`jump-start`/`jump-land`、`interact`、`pickup-table`、`roll`、
+  `hit-chest`、`hit-head`、`death01`)是 once。**别猜 id**,`assets.list` 的 `id` 与 `loopMode` 是唯一依据。
 - **`action.set-range` 在多段下要带 `performanceId`** 定位改哪一段,缺省改首段。显式改时段会**解除对齐**
   (作者的直接操作胜过声明式派生),想保留对齐就别用它。拖到与邻段交叠会被
   `action-overlapping-performance` 拒下。
 - **删一段用 `action.unmount-performance { objectId, performanceId }`**;`action.unmount` 是清空该实体
   **全部**动作,多段序列下用错会把其余几段一起抹掉。
 - **每段排期在时间轴上各自成条**,段条 id 即 `performanceId`;拖条、选中、Delete 都按段生效。
+
+#### 时段填充策略(拉长段条 ≠ 慢放)
+
+排期时长与 clip 原生时长不等时,由 `fillPolicy` 决定怎么铺满这段时间。三态各回答不同的问题:
+
+| fillPolicy | 拉长时段的效果   | 典型用法                       |
+| ---------- | ---------------- | ------------------------------ |
+| `repeat`   | 演更久(原速接续) | 走路/待场等可无缝循环的动作    |
+| `hold`     | 保持终态更久     | 倒地/受击/取物等一次性事件     |
+| `stretch`  | 慢放(变速铺满)   | 刻意的慢动作/快动作,必须显式选 |
+
+```js
+dispatch({
+    type: "action.set-fill-policy",
+    payload: { objectId: "actor", performanceId: "perf-walk", fillPolicy: "repeat" },
+});
+// fillPolicy: null = 第四态「跟随资产」:loop 资产落 repeat,once 资产落 hold
+```
+
+- **`null` 不是 `repeat` 的别名**,是「跟随资产循环语义」的独立状态;`assets.mount` 缺省即 `null`。
+- 三条分支都是纯函数(相位取模、不累积状态),scrub / 倒放 / 跳帧复现同一帧。
+- 多段序列下传 `performanceId` 定位(缺省改首段);只改填充方式,**不动段的起止**。
+- `action.set-range` 改时段**不会**顺带改填充策略——想「走更久」改时段就够,不必碰 stretch。
+- 段条选中后检查器/时间轴有同一入口(UI 与 AI 共读同一模型),随文档往返。
 
 ### 时间轴（走位关键帧）
 
@@ -238,6 +271,12 @@ dispatch({
 });
 // shotSize 词表:extreme-long | long | medium-long | medium | medium-close | close-up | extreme-close-up
 
+// 镜头参数(按摄影语言,不用 fov 这个渲染量);机位须已存在,只改给出的字段
+dispatch({
+    type: "camera.set-lens",
+    payload: { id: "机位 02", focalLengthMm: 85, apertureFStop: 1.8, focusDistanceMeters: null },
+});
+
 // 推荐入口：一次落地可编辑的运镜片段和 Program 输出。
 dispatch({
     type: "motion.create-take",
@@ -293,39 +332,81 @@ dispatch({
 
 `motion.author` 的 `move` 词汇：`dolly-in`、`dolly-out`、`pan`、`tilt`、`truck`、`crane`、`orbit`、`hold`。同一机位片段不得重叠；`motion.create-take` 若其它机位占用 Program 时段会返回结构化 `program-overlapping-clip`，按 options 重试，不要手工补 Program。
 
-### 灯光与成片
+镜头(`camera.set-lens`)是**机位的光学层**,与几何(position/target)分开写:
 
-````js
-dispatch({ type: "scene.set-lighting-mode", payload: { mode: "studio" | "custom" } })
-dispatch({ type: "light.adjust", payload: {...} })   // 细节先 lighting.list 看现状
-dispatch({ type: "capture.frame", payload: { requestId: "shot-01" } }) // 截图(隐藏辅助物);requestId 可选,缺省自动生成,产物元数据原样回带
-dispatch({ type: "capture.video", payload: {} })     // 录 WebM(缺省=时间轴时长;产物在 ui.lastVideoUrl/lastVideoMeta,含 requestId)
-dispatch({ type: "capture.video-cancel", payload: {} }) // 提前终止录制(丢弃产物)
-dispatch({ type: "view.frame", payload: {} })        // 导演视角取景到场景内容
+- `focalLengthMm` 写入即换算成 `fov`(派生量,不另存两份),换算吃**输出画幅**比例——同一支 50mm 在 16:9 与 1:1 上视场角不同,所以改 `output.set-format` 后标称焦距对应的视场角会跟着变。惯用值:24 广角 / 50 标准 / 85 人像特写;围栏由 fov 围栏按画幅反算,越界会报出该画幅下的合法区间。
+- `apertureFStop` 在 f/0.7~~f/22,越小景深越浅;`focusDistanceMeters` 为 `null` 表示自动对焦到注视点,否则 0.05~~500 米。
+- **只改给出的字段**,便于「只改光圈」这类单点调整;反过来 `camera.set-shot` 不给 `lens` 时保持原镜头,不会把刚设好的光圈静默清掉。
+- 读回走 `camera.get-pose` 的 `liveFocalLengthMm`(按当前画幅从 live fov 反算),机位表读 `shot.lens`。随文档往返(v23)。
+
+### 灯光与成像
+
+```js
+// 情绪打光(聚合命令,一步撤销):切 custom → 清旧情绪灯 → 放灯组 → 设曝光 → 设投影
+dispatch({ type: "lighting.author", payload: { mood: "low-key", subjectId: "hero" } });
+// mood 词表:neutral 中性均匀 | low-key 低调暗部 | silhouette 逆光剪影 | golden-hour 黄金时刻 | night 夜景冷调
+dispatch({ type: "scene.set-lighting-mode", payload: { mode: "studio" | "custom" } });
+dispatch({ type: "light.adjust", payload: {} }); // 细节先 lighting.list / lighting.get 看现状,灯色词表查 lighting.presets.list
+
+// 成像档位(工程级,随文档往返;凡影响性能必可关)
+dispatch({ type: "studio.set-exposure", payload: { exposure: 1.2 } }); // 0.2~3
+dispatch({ type: "studio.set-environment-lighting", payload: { enabled: true } }); // IBL,金属度/粗糙度才参与成像
+dispatch({ type: "studio.set-shadows", payload: { enabled: true } }); // 实时投影,接地感主来源(缺省关)
+dispatch({ type: "studio.set-floor-surface", payload: { enabled: true } }); // 实心地面(缺省关)
+dispatch({ type: "studio.set-floor-color", payload: { color: "#3b2f2a" } }); // 6 位十六进制,色名词表查 studio.get
+dispatch({ type: "studio.set-grid-size", payload: { meters: 12 } }); // 参考地板边长 2~100 米,是空间基准
+dispatch({ type: "studio.set-render-quality", payload: { quality: "high" } }); // high 满像素比+抗锯齿 / performance 换帧率
+```
+
+**打光的验收是数值,不是截图**:`lighting.author` 之后用 `capture.measure-frame` 断言影调——
+`clippedHighlights` / `clippedShadows` 高就是细节已裁掉(降 `studio.set-exposure`),
+`contrast` 过低是灰平一片(开 `studio.set-shadows` 或换地板色),
+`subjectSeparation` 接近 0 说明主体没从背景跳出来。**分离度是带符号的**:负值是剪影/逆光,
+那是有效的电影语言而不是错误——做 `silhouette` 时就该看到负值。
+
+`lighting.author` 只接管**自己产出**的灯(按 id 前缀识别),作者手放的灯不动;
+灯位按被摄体包围球半径定尺(给 `subjectId` 更准,缺省取全场景模型合并包围球),
+所以同一情绪对人偶与建筑都成立。它是聚合命令——撤销一步回到打光前的灯组 + 曝光 + 投影。
+
+地板颜色只在实心地面开启时可见:要用地板压反差,`set-floor-color` 与 `set-floor-surface` 成对下。
+人偶默认肤色 `#d8d3ca`,与内置几何体几乎同色——多人布景仍要 `actor.appearance.set` 分色。
+
+### 成片采集
+
+```js
+dispatch({ type: "capture.frame", payload: { requestId: "shot-01" } }); // 截图(隐藏辅助物);requestId 可选,产物元数据原样回带
+dispatch({ type: "capture.video", payload: {} }); // 录 MP4/h264(缺省=当前播放范围;产物在 ui.lastVideoUrl/lastVideoMeta)
+dispatch({ type: "capture.video-stop", payload: {} }); // 在当前帧边界收尾并交付产物
+dispatch({ type: "capture.video-cancel", payload: {} }); // 放弃录制(丢弃产物)
+dispatch({ type: "output.set-format", payload: { formatId: "landscape-16-9" } }); // 画幅:安全框/PNG/MP4/同框断言共用
+dispatch({ type: "view.frame", payload: {} }); // 导演视角取景到场景内容
+dispatch({ type: "scene.clear", payload: {} }); // 一次清空全部对象(连带运镜与 Program),一步可撤销;场景已空时结构化拒绝
+```
 
 ### 文档导出/接管
 
 ```js
-// 导出整桌为一份 JSON(实体/机位/运镜/时间轴/动作引用/灯光模式)——存档或交给另一个控制台接管
+// 导出整桌为一份 JSON(实体/机位+镜头/运镜/时间轴/动作排期/灯光/演播室档位)——存档或交给另一个控制台接管
 const doc = query({ type: "desk.export-document", payload: {} }).value;
 // 导入(替换式,清空重建;动作 clip 按 URL 异步重取并恢复挂载;可撤销)
-dispatch({ type: "desk.import-document", payload: { document: doc } })
-````
+dispatch({ type: "desk.import-document", payload: { document: doc } });
+```
 
-- 文档版本门(v9):版本不符直接结构化拒绝(`document-version-unsupported`),旧档不迁移——重导前先重新导出。
-- v9 起 `actions[].mountedOn` 是实体 id 数组:同一动作挂 N 个实体,导入后全部恢复挂载且共享同一动作实例。
-- v9 起 `lighting.mode` 随文档往返:custom 模式导入后不回退 studio;灯本体是实体,参数在 `entities[].light`。
-- 动作恢复是异步流水线(重取资产 → 注册 → 等运行时就绪 → 挂载):import 返回 ok ≠ 已挂载,断言挂载要轮询 `scene.describe` 的 `mountedActionId`。
+- 文档版本门:当前 `DESK_DOCUMENT_VERSION = 23`,版本不符直接结构化拒绝(`document-version-unsupported`),旧档不迁移——重导前先重新导出。别把手册里的版本号当常量抄,以 `desk.export-document` 回带的 `version` 为准。
+- v23 起机位带镜头光学参数(`shot.lens`:光圈 + 对焦距离);v22 起演播室档位带实心地面开关。曝光/IBL/投影/地板色与动作段的 `fillPolicy` 都随文档往返。
+- `actions[].mountedOn` 是实体 id 数组:同一动作挂 N 个实体,导入后全部恢复挂载且共享同一动作实例。
+- `lighting.mode` 随文档往返:custom 模式导入后不回退 studio;灯本体是实体,参数在 `entities[].light`。
+- 动作恢复是异步流水线(重取资产 → 注册 → 等运行时就绪 → 挂载):import 返回 ok ≠ 已挂载,断言挂载要轮询 `scene.describe` 的 `actionSequence`。
 
 ## 工作流配方(标准成片路径)
 
 1. **感知**:`desk.inspect brief` → 对候选实体 `focused`；先读取身份、装载态、量纲，不截屏。
 2. **布景**:放模型 → 等 `loaded` → `scene.set-identity` → **摆自然初始姿态(见下)** → `scene.stage` / `object.place-relative` → 朝向点积断言 → `camera.frame-subject` → `camera.check-framing`;
-3. **动作**:挂 clip → 骨骼不兼容会收到 `bone-incompatible` 类 issue,换一个动作或换模型,别硬试;
-4. **时间轴与运镜**:set-duration → 打关键帧（仅走位使用 timeline）；优先 `motion.create-take` 一次创建片段和 Program 输出;
-5. **灯光**:studio 兜底,custom 微调;
-6. **验收**:以 `scene.describe`、`camera.get-pose`、`camera.check-framing` 做位置/尺寸/同框断言；只有美学终审才截图;
-7. **导出**:capture.frame 逐时间点 seek + 截图 = 参考帧序列。
+3. **动作**:`assets.mount` 按目录条目挂(id 与 loopMode 从 `assets.list` 读,别猜)→ 骨骼不兼容会收到 `bone-incompatible` 类 issue,换一个动作或换模型,别硬试;时段与 clip 时长不等时用 `action.set-fill-policy` 选 repeat/hold/stretch;
+4. **时间轴与运镜**:set-duration → 打关键帧（仅走位使用 timeline）；优先 `motion.create-take` 一次创建片段和 Program 输出;镜头光学参数走 `camera.set-lens`;
+5. **灯光与成像**:`lighting.author` 给情绪打底(studio 兜底,custom 微调)→ `capture.measure-frame` 断言影调 → 需要接地感就开 `studio.set-shadows` + `studio.set-floor-surface`;
+6. **验收**:以 `scene.describe`、`camera.get-pose`、`camera.check-framing`、`capture.measure-frame` 做位置/尺寸/同框/影调断言；只有美学终审才截图;
+7. **导出**:`output.set-format` 定画幅 → capture.frame 逐时间点 seek + 截图 = 参考帧序列;整段成片走 capture.video。
 
 ### 初始姿态:人偶落地就是 T-pose,必须摆
 
@@ -336,11 +417,17 @@ dispatch({ type: "desk.import-document", payload: { document: doc } })
 dispatch({ type: "pose.apply-preset", payload: { objectId: "hero", presetId: "lower-stand", mode: "merge" } });
 dispatch({
     type: "pose.apply-preset",
-    payload: { objectId: "hero", presetId: "upper-stand-arms-down", mode: "merge" },
+    payload: { objectId: "hero", presetId: "upper-stand-natural", mode: "merge" },
 });
 ```
 
-`pose.presets.list` 读全表(23 项,分 `lower` / `upper` 两部位)。常用上半身:`upper-stand-arms-down`(垂臂,对峙/待场默认)、`upper-stand-natural`(站姿·自然)、`upper-idle`(待机)。下半身:`lower-stand` / `lower-crouch` / `lower-kneel` / `lower-sit-chair` 等。
+`pose.presets.list` 读全表(内置 21 项,分 `lower` / `upper` 两部位),**id 以查询回带的为准**。
+下半身:`lower-stand`(站立)、`lower-sit-chair`(椅上坐)、`lower-crouch`(蹲伏)、`lower-kneel`(单膝跪)、
+`lower-swim`、`lower-lying`(倒地)、`lower-airborne`(腾空)。
+上半身:`upper-stand-natural`(站姿·自然,对峙/待场默认)、`upper-talking`(交谈)、`upper-sit-rest`(坐姿·垂手)、
+`upper-sit-talking`、`upper-crouch-balance`、`upper-kneel-work`、`upper-walk-swing`、`upper-run-swing`、
+`upper-jump-spread`、`upper-reach`、`upper-push`、`upper-hit`(受击·护胸)、`upper-dance`、`upper-swim`。
+自定义预设走 `pose.preset.save` / `pose.preset.remove`,误删内置用 `pose.preset.restore` 恢复。
 
 注意姿态与动作的关系:挂了 `action.mount` 的实体在**动作窗口内**由动作驱动(`scene.describe` 的 `actionSchedule` 给出 `startTimeSeconds`/`durationSeconds`),窗口外才回落到这个基础姿态。所以 t=1 看到手臂张开可能是动作正在演,不是 T-pose 没摆——查 `actionSchedule` 再判断,或取动作结束后的时刻复核。
 
@@ -404,6 +491,11 @@ dispatch({
 - `assets.mount` 的排期含 release 尾巴,**超出时间轴时长会被拒**(`动作时段和回收不能超出时间轴时长`)。收尾动作排到接近 `duration` 时先 `timeline.set-duration` 留出 1~2s 余量,再挂。
 - `scene.describe` 的 `bounds`(size/center)对 scenery **在 `object.move` 改 scale 后不刷新**,读到的是旧包围盒。要算遮挡/间距请用 `transform.position × transform.scale × 资产基础尺寸`(wall `2×1.5×0.1`、column `0.7×2×0.7`、platform `2×0.2×2`),或读 `desk.scene.manager.getRuntime(id)`。
 - `motion.set-focus` 的 `worldOffset` 是**注视点相对主体原点的偏移**,不是"抬高一点"的微调量:人偶(1.75m)给 `[0,1.4,0]` 会瞄到头顶以上,把主体挤出画。胸腹高度 `[0,0.9,0]` 才稳。
+- `camera.set-lens` 的 `id` 必填且机位**须已存在**(它只改光学层,不建机位);焦距围栏随 `output.set-format` 变——换画幅后同一个 `focalLengthMm` 可能从合法变越界,报错里会带该画幅下的合法区间。
+- `action.set-fill-policy` 的 `fillPolicy` 允许 `null`(跟随资产),这是**有效值而非省略**:省略字段与传 `null` 语义不同,契约里它是 nullable 而非 optional。
+- `lighting.author` 是聚合命令:它会把灯光模式切到 `custom` 并改写曝光与投影开关。要保留手工曝光就在它之后再下 `studio.set-exposure`,否则被情绪配方的建议值覆盖。
+- `capture.measure-frame` 需要渲染器已就绪(Canvas `onCreated` 之后),否则结构化拒绝「渲染器未就绪」;它会强制渲一帧后取 64×64 降采样,开销恒定,与画布分辨率无关。
+- `studio.set-floor-color` 只吃 **6 位十六进制**字符串(`"red"` 这类颜色名会被拒);颜色要可见需同时 `studio.set-floor-surface { enabled: true }`。
 
 ### 运镜与验收
 
@@ -423,7 +515,7 @@ dispatch({
 
 捞帧姿势(避开上面所有坑):`capture.frame` → `fetch(desk.ui.lastCaptureUrl)` → 页面内 `OffscreenCanvas` 缩到 1400px 宽 → base64 回传落盘 → 用带具体问题的图像复核。缩图是必要的:原图 2833×1783 直接复核容易把 200px 高的人偶读成"圆柱"。
 
-**"断言全绿但视觉说只看到一个人"时,用像素探针定位,不要靠反复问截图。** 实测里三个人偶全部 `inFrame: true`,视觉却只认出一个——真因是 scenery 挡在主体前面且被主光打到接近纯白(采样 RGB `[240,242,245]`),人偶贴在上面等于消失。诊断链路(每步都是可证伪的数值):
+**"断言全绿但视觉说只看到一个人"时,先用 `capture.measure-frame` 再用像素探针,不要靠反复问截图。** 实测里三个人偶全部 `inFrame: true`,视觉却只认出一个——真因是 scenery 挡在主体前面且被主光打到接近纯白(采样 RGB `[240,242,245]`),人偶贴在上面等于消失。这类问题现在有一步到位的数值信号:`capture.measure-frame` 的 `subjectSeparation` 接近 0 就是「主体没从背景跳出来」,`clippedHighlights` 高就是过曝已裁掉细节。要定位到具体是哪个主体,再走下面的探针链路(每步都是可证伪的数值):
 
 1. 从 `camera.get-pose` 的 `live`(position + direction + fov)自己算主体的屏幕坐标:构相机基 `r = normalize(dir × [0,1,0])`、`u = r × dir`,投影 `nx = (x/z)/(tan(fov/2)·aspect)`、`ny = (y/z)/tan(fov/2)`,再映射到像素。
 2. `capture.frame` 后把产物画进 `OffscreenCanvas`,在每个主体的像素位置 `getImageData` 取 25×25 均值。**同色即消失**:主体与近邻背景 RGB 差 < ~20 就是画面上糊掉了,和构图无关。
@@ -431,7 +523,9 @@ dispatch({
 4. 想确认视觉复核有没有漏读,把投影点画成彩色圆圈叠在截图上再送去问"哪个圈里有人"——比开放式提问可靠得多。
 5. 验证假设最快的办法是**临时把 scenery `object.move` 到 y = -200**(撤销一步即回),再取一帧:三个人立刻都认出来了 → 遮挡/同色成立。
 
-修法优先级:scenery 往深处推(墙 z ≤ -20、柱子挪出主体横向车道)→ 降主光 `intensity` / 提 `decay` 压掉过曝 → 最后才动机位。**另外补一块实心地面**(`builtin.scenery.platform` scale 到 `[22, 0.8, 26]`、y 略低于 0)能消掉"人偶悬在网格虚空里"的观感,这是视觉复核最常提的意见。
+修法优先级:降主光 `intensity` / 提 `decay` / 降 `studio.set-exposure` 压掉过曝 → 换 `studio.set-floor-color` 拉开主体与地面的反差 → scenery 往深处推(墙 z ≤ -20、柱子挪出主体横向车道)→ 最后才动机位。每步之后用 `capture.measure-frame` 复核 `subjectSeparation` 有没有真的拉开,别靠再截一张图猜。
+
+**"人偶悬在网格虚空里"用 `studio.set-floor-surface { enabled: true }`**(配 `studio.set-floor-color`),不要再摆 `builtin.scenery.platform` 当地面——实心地面是成像档位的一部分,随文档往返、承载投影接收面,且开 `studio.set-shadows` 才有接地阴影。旧手册里的 platform 变通只是当时没有这个开关。
 
 ## 纪律
 

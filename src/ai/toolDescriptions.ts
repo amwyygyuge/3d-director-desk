@@ -21,6 +21,17 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "studio.set-render-quality": "设渲染画质档:high 满像素比+抗锯齿 / performance 限像素比换帧率;截图与 MP4 同受影响",
     "studio.set-frame-rate-visible": "开关视口右上角的真实渲染帧率读数(观测用,不入成片)",
     "studio.set-output-grid-visible": "开关成片安全框内的九宫格构图辅助线(编排辅助,不入成片)",
+    "studio.set-exposure":
+        "设成像曝光倍率(0.2 至 3,缺省 1):压暗做低调、提亮做柔和;" +
+        "偏了先用 capture.measure-frame 读裁切占比再调,别靠截图目测",
+    "studio.set-environment-lighting":
+        "开关环境光照(IBL,程序化环境无外部资源):开启后金属度/粗糙度才参与成像,材质质感与反射靠它",
+    "studio.set-shadows": "开关实时投影(shadow map):接地感的主要来源,有每帧深度图成本故缺省关",
+    "studio.set-floor-color":
+        "设地板颜色(6 位十六进制):画面面积最大的一块,决定人物反差与整体影调;" +
+        "按影调排布的色名词表查 studio.get,需要它可见时同时开 studio.set-floor-surface",
+    "studio.set-floor-surface":
+        "开关实心地面:承载地板颜色与投影接收面,消掉「人偶悬在网格虚空里」的观感;有全屏着色成本故缺省关",
     "camera.set-shot":
         "保存或覆盖静态机位(position/target/fov);不给 lens 则保持原镜头(光圈/对焦距离不会被重置)," +
         "改镜头走 camera.set-lens;景别构图优先改用 camera.frame-subject",
