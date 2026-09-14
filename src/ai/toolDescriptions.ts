@@ -27,6 +27,10 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "camera.remove-shot": "删除机位,连带清理其运镜片段与 Program 排期",
     "camera.frame-subject": "按景别(大远景~大特写七档)为一个或多个被摄体生成同框机位(联合包围球定距)",
     "camera.check-framing": "视锥同框断言:逐被摄体返回 inFrame 与 NDC 边距,负值即出画——布景验收不截图",
+    "camera.set-lens":
+        "按摄影语言设镜头:focalLengthMm 焦距(24 广角/50 标准/85 人像特写,写入即换算 fov,不另存)、" +
+        "apertureFStop 光圈 f 值(越小景深越浅)、focusDistanceMeters 对焦距离(null=自动对焦到注视点)。" +
+        "只改给出的字段;焦距围栏由 fov 围栏按输出画幅换算,读回见 camera.get-pose 的 liveFocalLengthMm",
     "scene.stage": "布景配方一键成组:对峙/并肩/三角/纵深,槽位绑定实体即可,距离按包围球半径自适应尺度",
     "scene.set-identity": "为场景实体设或清除叙事身份(主角/反派/配角/道具/布景 + 稳定标签)，让后续自然语言引用可消歧",
     // 运镜
@@ -88,9 +92,11 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
         "设走位轨朝向、贴地、步频与跨度外取值策略;extrapolation: hold(默认,走完停在终点、开演前站在起点)/ rest(时段外回到对象自身变换)",
     // 动作与播放
     "action.mount":
-        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
+        "给对象挂载动作并按时间轴排期;startTimeSeconds/durationSeconds/attackSeconds/releaseSeconds/fillPolicy 可选。省略起点时从当前播放头开始，若 clip 放不入剩余时间轴则向前贴合；骨骼兼容性预检不过返回结构化诊断与可用动作",
     "action.set-range":
-        "调整对象某段动作排期的开始时间、演出时长、进入时长与回收时长;多段序列下传 performanceId 定位改哪一段(缺省改首段),段 id 见 scene.describe 的 actionSequence.performanceId;显式改时段会解除走位轨对齐;一次性动作结束后经 releaseSeconds 回常驻姿势,循环动作按排期周期循环",
+        "调整对象某段动作排期的开始时间、演出时长、进入时长与回收时长;多段序列下传 performanceId 定位改哪一段(缺省改首段),段 id 见 scene.describe 的 actionSequence.performanceId;显式改时段会解除走位轨对齐。时段与 clip 时长不等时如何铺满由 fillPolicy 决定(见 action.set-fill-policy),改时段不改该策略",
+    "action.set-fill-policy":
+        "设某段动作排期的时段填充策略:repeat(按原速重复,拉长时段=演更久)/ hold(按原速播一次后停末帧,拉长=保持终态更久)/ stretch(拉伸铺满,拉长=慢放);传 null 则跟随资产循环语义(可循环→repeat,单次→hold)。多段序列下传 performanceId 定位(缺省改首段);只改填充方式,不动段的起止",
     "action.unmount":
         "卸载对象**全部**动作,骨骼回常驻基础姿势(未设置则回绑定姿态);只删一段请用 action.unmount-performance",
     "action.unmount-performance":

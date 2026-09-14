@@ -7,7 +7,7 @@ import {
 } from "@/animation/ActionPerformance";
 import { ActionAlignment, resolveActionRange } from "@/animation/ActionAlignment";
 import { ACTION_LOOP_MODE } from "@/assets/ActionAsset";
-import { ACTION_FILL_POLICY } from "@/animation/ActionFillPolicy";
+import { ACTION_FILL_POLICY, isActionFillPolicy } from "@/animation/ActionFillPolicy";
 import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
 import type { ActionAsset } from "@/assets/ActionAsset";
 import { Bone } from "three";
@@ -655,6 +655,96 @@ export class SetActionRangeCommand extends DirectorCommand<SetActionRangePayload
     }
 }
 
+interface SetActionFillPolicyPayload {
+    readonly objectId: string;
+    /** 多段序列下定位要改的那一段;缺省改首条(单段时即唯一那条)。 */
+    readonly performanceId?: string;
+    /** null = 交还给资产循环语义决定(loop → repeat,once → hold)。 */
+    readonly fillPolicy: ActionFillPolicy | null;
+}
+
+const SET_ACTION_FILL_POLICY_CONTRACT: PayloadContract = {
+    properties: {
+        objectId: { type: "string" },
+        performanceId: { type: "string" },
+        fillPolicy: {
+            anyOf: [{ type: "string", enum: [...Object.values(ACTION_FILL_POLICY)] }, { type: "null" }],
+        },
+    },
+    required: ["objectId", "fillPolicy"],
+};
+
+/**
+ * 改某段排期的时段填充策略:时间轴选中态操作条与 AI 共用的唯一写入口。
+ *
+ * 不改时段本身——拉长/缩短走 action.set-range。这里只决定「已定的时段里 clip 怎么铺」,
+ * 故不需要重叠围栏与时长校验:段的起止没动。
+ */
+export class SetActionFillPolicyCommand extends DirectorCommand<SetActionFillPolicyPayload> {
+    static readonly TYPE = "action.set-fill-policy";
+    readonly type = SetActionFillPolicyCommand.TYPE;
+
+    constructor(readonly payload: SetActionFillPolicyPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const performance = entity ? this.targetPerformance(entity.actionPerformances) : null;
+        if (!performance) {
+            return this.payload.performanceId === undefined
+                ? [`对象 "${this.payload.objectId}" 没有已挂载动作`]
+                : [
+                      `action-performance-not-found: 对象 "${this.payload.objectId}" 没有排期段 ` +
+                          `"${this.payload.performanceId}";用 scene.describe 的 actionSequence 查段 id`,
+                  ];
+        }
+        return this.payload.fillPolicy === null || isActionFillPolicy(this.payload.fillPolicy)
+            ? []
+            : [`未知的时段填充策略:${String(this.payload.fillPolicy)}`];
+    }
+
+    execute(ctx: DirectorContext): void {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        if (!entity) return;
+        const current = this.targetPerformance(entity.actionPerformances);
+        if (!current) return;
+        const next = current.withFillPolicy(this.payload.fillPolicy);
+        ctx.scene.setObjectActions(
+            this.payload.objectId,
+            entity.actionPerformances.map((candidate) => (candidate.id === current.id ? next : candidate)),
+        );
+        // binder 按段取帧,策略变了要立刻换表,否则本帧仍按旧策略采样
+        ctx.binder.setScheduleFor(this.payload.objectId, next);
+        ctx.playback.sampleCurrent();
+    }
+
+    /** 缺省改首条(单段时即唯一那条);给了 performanceId 就精确定位序列里的那一段。 */
+    private targetPerformance(performances: readonly ActionPerformance[]): ActionPerformance | null {
+        if (this.payload.performanceId === undefined) return performances[0] ?? null;
+        return performances.find((candidate) => candidate.id === this.payload.performanceId) ?? null;
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        const entity = ctx.scene.manager.getEntity(this.payload.objectId);
+        const current = entity ? this.targetPerformance(entity.actionPerformances) : null;
+        return current
+            ? [
+                  {
+                      type: SetActionFillPolicyCommand.TYPE,
+                      payload: {
+                          objectId: this.payload.objectId,
+                          fillPolicy: current.fillPolicy,
+                          ...(this.payload.performanceId === undefined
+                              ? {}
+                              : { performanceId: this.payload.performanceId }),
+                      },
+                  },
+              ]
+            : null;
+    }
+}
+
 /** Plays only the selected model's mounted action; global Timeline playback is intentionally untouched. */
 export class ActionPreviewPlayCommand extends DirectorCommand<PreviewActionPayload> {
     static readonly TYPE = "action.preview.play";
@@ -884,6 +974,16 @@ export function registerActionCommands(dispatcher: CommandDispatcher): void {
         SetActionRangeCommand.TYPE,
         (payload: SetActionRangePayload) => new SetActionRangeCommand(payload),
         capability(SetActionRangeCommand.TYPE, ACTION_EDIT_PERMISSION, ACTION_APPLIES_WHEN, SET_ACTION_RANGE_CONTRACT),
+    );
+    dispatcher.register(
+        SetActionFillPolicyCommand.TYPE,
+        (payload: SetActionFillPolicyPayload) => new SetActionFillPolicyCommand(payload),
+        capability(
+            SetActionFillPolicyCommand.TYPE,
+            ACTION_EDIT_PERMISSION,
+            ACTION_APPLIES_WHEN,
+            SET_ACTION_FILL_POLICY_CONTRACT,
+        ),
     );
     dispatcher.register(
         ActionPreviewPlayCommand.TYPE,
