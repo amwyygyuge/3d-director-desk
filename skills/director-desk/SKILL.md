@@ -32,7 +32,7 @@ desk.dispatcher.listCommands(); // 全部可写命令 type
 | 生效相机位姿                    | `query({ type: "camera.get-pose", payload: {} })` → live(实际相机)+ motionSampled(当前时刻运镜期望值),并排即断言                                                                                                                                                                                             |
 | 截图溯源                        | capture 后读 `desk.ui.lastCaptureMeta` → requestId/timeSeconds/cameraPose/尺寸(requestId = 命令幂等键,连发截图按它对账)                                                                                                                                                                                      |
 | 机位表                          | `query({ type: "camera.list-shots", payload: {} })` → `{ shots: [{ id, shot }], activeShotId }`                                                                                                                                                                                                              |
-| 同框断言                        | `query({ type: "camera.check-framing", payload: { subjectIds: [...] } })` → `[{ id, inFrame, marginNdc }]`;`marginNdc < 0` 即出画。激活机位时按机位定义测量,与渲染帧时序无关                                                                                                                                 |
+| 同框断言                        | `query({ type: "camera.check-framing", payload: { subjectIds: [...], atTimeSeconds? } })` → `[{ id, inFrame, marginNdc }]`;`marginNdc < 0` 即出画。缺省按激活机位定义测量(与渲染帧时序无关);给 `atTimeSeconds` 按该时刻 Program 排期测量(运镜片段解析式采样/静态机位定义),无排期或采样失败时按无位姿测量 |
 | 播放态                          | `query({ type: "transport.get-state", payload: {} })` → `{ time, isPlaying, isLooping, durationSeconds }`                                                                                                                                                                                                    |
 | 时间轴文档                      | `dispatcher.query({ type: "timeline.get-document", payload: {} }, desk)` → 时长/轨道/关键帧                                                                                                                                                                                                                  |
 | 运镜编排                        | `query({ type: "motion.get", payload: {} })` → `{ clips: [{ id, cameraId, startTimeSeconds, durationSeconds, keys: [{ id, progress, position, target, fov, handleMode, inHandle, outHandle }], focus, follow, easing }], program, activeProgramCameraId, timelineDurationSeconds, viewMode, previewClipId }` |
@@ -224,7 +224,7 @@ dispatch({
     type: "timeline.add-key",
     payload: {
         trackId: "track-mecha",
-        targetId: "mecha",
+        targetId: "mecha", // 轨道已存在时可省略(沿用轨道归属对象);新建轨道必填
         keyframe: {
             id: "k1",
             time: 0,
@@ -282,7 +282,6 @@ dispatch({
     type: "motion.create-take",
     payload: {
         id: "take-push-01",
-        cameraId: "机位 01",
         startTimeSeconds: 0,
         durationSeconds: 2,
         keys: [
@@ -317,7 +316,7 @@ dispatch({
 });
 ```
 
-`CameraKey` 是一帧完整画面：`position`、`target`、`fov`。`fov: null` 表示跟随机位的静态 fov；`focus` 是可选的注视覆盖层，非空时接管 key 的 `target`，`null` 则回到 key 的 target 插值。`follow` 是可选跟拍绑定：其局部坐标是内部实现细节，AI 应优先传 `follow.approach` 与 `frame` 枚举，不根据世界轴手写相对偏移。`progress ∈ [0,1]` 是**片段内轨迹参数**（不是时间比例）：整段时间曲线 `easing` 把归一化时间映射成它，`smooth` 下 `progress = 3p² - 2p³`（`p` = 归一化时间），`linear` 下两者相等；反解 `p = 0.5 - sin(asin(1 - 2·progress) / 3)`。拉伸或重定时片段不改变运镜形状。要在「某个时刻」落画面，用 `motion.set-key` 前先按上式换算，或直接在镜头视角摆好画面让 UI 落键。
+`CameraKey` 是一帧完整画面：`position`、`target`、`fov`。`fov: null` 表示**写入时**取当时激活机位的 fov(无激活机位取默认 45)——是一次性快照,写入后机位再改不跟随。`focus` 是可选的注视覆盖层，非空时接管 key 的 `target`，`null` 则回到 key 的 target 插值。`follow` 是可选跟拍绑定：其局部坐标是内部实现细节，AI 应优先传 `follow.approach` 与 `frame` 枚举，不根据世界轴手写相对偏移。`progress ∈ [0,1]` 是**片段内轨迹参数**（不是时间比例）：整段时间曲线 `easing` 把归一化时间映射成它，`smooth` 下 `progress = 3p² - 2p³`（`p` = 归一化时间），`linear` 下两者相等；反解 `p = 0.5 - sin(asin(1 - 2·progress) / 3)`。拉伸或重定时片段不改变运镜形状。要在「某个时刻」落画面，用 `motion.set-key` 前先按上式换算，或直接在镜头视角摆好画面让 UI 落键。
 
 编辑命令：`motion.set-key`（存在即覆盖）/ `motion.move-key` / `motion.remove-key` / `motion.set-key-handle` / `motion.reset-key-handles` / `motion.set-clip-easing` / `motion.set-clip-range` / `motion.set-focus` / `motion.remove-clip`。`motion.preview.enter` / `motion.preview.exit` 控制指定片段预览：进入预览时若 playhead 不在片段内会自动 seek 到片段起点，且预览片段的取景优先于 Program 排期；`view.set-mode { mode: "director" | "lens" }` 切换导演/镜头视角；`transport.set-loop { loop: boolean }` 控制整段循环。
 
@@ -346,7 +345,7 @@ dispatch({
 dispatch({ type: "lighting.author", payload: { mood: "low-key", subjectId: "hero" } });
 // mood 词表:neutral 中性均匀 | low-key 低调暗部 | silhouette 逆光剪影 | golden-hour 黄金时刻 | night 夜景冷调
 dispatch({ type: "scene.set-lighting-mode", payload: { mode: "studio" | "custom" } });
-dispatch({ type: "light.adjust", payload: {} }); // 细节先 lighting.list / lighting.get 看现状,灯色词表查 lighting.presets.list
+dispatch({ type: "light.adjust", payload: { id: "key-light", light: { intensity: 40 } } }); // 部分更新:缺省字段沿用现灯;带 type 换灯型时 color/intensity 随身、专属参数(distance/decay/angleDegrees/penumbra)回新灯型默认再叠给出的字段。现状先 lighting.list / lighting.get,灯色词表查 lighting.presets.list
 
 // 成像档位(工程级,随文档往返;凡影响性能必可关)
 dispatch({ type: "studio.set-exposure", payload: { exposure: 1.2 } }); // 0.2~3
@@ -378,7 +377,7 @@ dispatch({ type: "capture.frame", payload: { requestId: "shot-01" } }); // 截�
 dispatch({ type: "capture.video", payload: {} }); // 录 MP4/h264(缺省=当前播放范围;产物在 ui.lastVideoUrl/lastVideoMeta)
 dispatch({ type: "capture.video-stop", payload: {} }); // 在当前帧边界收尾并交付产物
 dispatch({ type: "capture.video-cancel", payload: {} }); // 放弃录制(丢弃产物)
-dispatch({ type: "output.set-format", payload: { formatId: "landscape-16-9" } }); // 画幅:安全框/PNG/MP4/同框断言共用
+dispatch({ type: "output.set-format", payload: { formatId: "16:9" } }); // 画幅:安全框/PNG/MP4/同框断言共用;合法值 auto | 21:9 | 16:9 | 4:3 | 1:1 | 3:4 | 9:16(不是 "landscape-16-9")
 dispatch({ type: "view.frame", payload: {} }); // 导演视角取景到场景内容
 dispatch({ type: "scene.clear", payload: {} }); // 一次清空全部对象(连带运镜与 Program),一步可撤销;场景已空时结构化拒绝
 ```
@@ -482,11 +481,11 @@ dispatch({
 - `assets.place`:`id` 实际必填(能力元数据标的是可选),缺 id 报 `command-construction-failed`;同一 assetId 摆多个实例时各给各的 id。
 - `scene.describe` 的 `value` 是实体数组本体,不是 `{ entities: [...] }`——轮询 loadState 别取错层。
 - `actor.build.set` / `actor.build.apply-preset`:播放期拒改,issue `transport-playing` 自带 `pause-transport` 选项——先暂停→改→恢复播放。`actor.appearance.set`(上色)不受播放限制。
-- `light.adjust`:intensity 围栏 0~100,超了报 `lighting.invalid-payload` 并指名 `light.intensity`。物理衰减下嫌暗优先降 `decay`、拉近灯距,别硬堆强度。
+- `light.adjust`:intensity 围栏 0~100,超了报 `lighting.invalid-payload` 并指名 `light.intensity`。物理衰减下嫌暗优先降 `decay`、拉近灯距,别硬堆强度。payload 是**部分更新**:只传要改的字段即可,不必回传整套灯参。
 - `motion.get` 的 clip **不带 `cameraId` 字段**(只有 id/startTimeSeconds/durationSeconds/keys/focus/follow/easing)。按机位找片段要匹配 `id`(`motion.author` 生成的 id 形如 `take-<机位名>-<move>-<start>`),不要读 `c.cameraId` —— 会得到 undefined 然后炸在 `.keys`。
 - `timeline.set-duration` **不联动播放范围**:`program.review` 的 `range.outSeconds` 仍是旧值。改时长后补一条 `timeline.set-playback-range { inSeconds, outSeconds }`,否则录制/输出按旧范围截断。
 - `capture.video` 的产物在当前环境是 **MP4/h264**(`ftypisom` 头),不是 WebM/EBML。验收查 `lastVideoMeta.durationSeconds` + `ffprobe`,不要断言 EBML 魔数。**前提是安全上下文**,否则永远拿不到产物(见「页面环境」)。
-- `motion.create-take` **不吃 `cameraId`**(手册示例里的 `cameraId` 会被 `payload-contract-violation` 拦下,报 `payload.cameraId 为未知字段`)。片段身份只有 `id`;要绑机位就先 `camera.frame-subject` 建机位,再用同名前缀的 clip id 自己记账。`motion.author` 反过来**必须**带 `cameraId`。
+- `motion.create-take` **不吃 `cameraId`**(传了会被 `payload-contract-violation` 拦下,报 `payload.cameraId 为未知字段`)。片段身份只有 `id`;要绑机位就先 `camera.frame-subject` 建机位,再用同名前缀的 clip id 自己记账。`motion.author` 反过来**必须**带 `cameraId`。
 - `timeline.add-marker` 的字段是 **`{ id, timeSeconds, label }` 平铺**,不是 `{ marker: {...} }`。
 - `assets.mount` 的排期含 release 尾巴,**超出时间轴时长会被拒**(`动作时段和回收不能超出时间轴时长`)。收尾动作排到接近 `duration` 时先 `timeline.set-duration` 留出 1~2s 余量,再挂。
 - `scene.describe` 的 `bounds`(size/center)对 scenery **在 `object.move` 改 scale 后不刷新**,读到的是旧包围盒。要算遮挡/间距请用 `transform.position × transform.scale × 资产基础尺寸`(wall `2×1.5×0.1`、column `0.7×2×0.7`、platform `2×0.2×2`),或读 `desk.scene.manager.getRuntime(id)`。

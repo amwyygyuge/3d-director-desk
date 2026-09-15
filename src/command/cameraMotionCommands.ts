@@ -34,7 +34,7 @@ import {
 } from "@/authoring/MotionPresetCompiler";
 import type { MotionMove, MotionPresetRequest, OrbitMotionParametersInit } from "@/authoring/MotionPresetCompiler";
 import { TimelineSelection } from "@/authoring/TimelineSelection";
-import { SHOT_SIZE } from "@/camera/CameraShot";
+import { DEFAULT_CAMERA_FOV, SHOT_SIZE } from "@/camera/CameraShot";
 import type { CameraShot, ShotSize } from "@/camera/CameraShot";
 import { azimuthAroundCenter, DEFAULT_SHOT_AZIMUTH_RADIANS, ShotSizePresets } from "@/camera/ShotSizePresets";
 import { subjectBoundsFor } from "@/command/subjectBounds";
@@ -101,15 +101,25 @@ const programLinkage = new ProgramLinkage();
 const presetCompiler = new MotionPresetCompiler();
 const shotSizePresets = new ShotSizePresets();
 
+/** 命令入口的镜头关键帧形状:fov 允许 null,写入时解析为当时激活机位的 fov(快照,非跟随)。 */
+interface CameraKeyPayload extends Omit<CameraKeyJSON, "fov"> {
+    readonly fov: number | null;
+}
+
+/** 命令入口的运镜片段形状:keys 沿用可空 fov 的关键帧形状,其余与持久化 JSON 同形。 */
+interface MotionClipPayload extends Omit<CameraMotionClipJSON, "keys"> {
+    readonly keys: readonly CameraKeyPayload[];
+}
+
 interface CreateMotionClipPayload {
-    readonly clip: CameraMotionClipJSON;
+    readonly clip: MotionClipPayload;
 }
 
 interface CreateTakePayload {
     readonly id?: string;
     readonly startTimeSeconds: number;
     readonly durationSeconds: number;
-    readonly keys: readonly CameraKeyJSON[];
+    readonly keys: readonly CameraKeyPayload[];
     readonly focus?: FocusTargetJSON | null;
     /** 跟拍覆盖层:非空时 keys 视为跟随系坐标 */
     readonly follow?: CameraFollowTrackJSON | null;
@@ -119,7 +129,7 @@ interface CreateTakePayload {
 }
 
 interface ReplaceMotionClipPayload {
-    readonly clip: CameraMotionClipJSON;
+    readonly clip: MotionClipPayload;
 }
 
 interface MotionClipIdPayload {
@@ -144,7 +154,7 @@ interface SetMotionClipRangePayload {
 
 interface SetMotionKeyPayload {
     readonly clipId: string;
-    readonly key: CameraKeyJSON;
+    readonly key: CameraKeyPayload;
 }
 
 interface MoveMotionKeyPayload {
@@ -200,7 +210,7 @@ const CAMERA_KEY_SCHEMA: PayloadFieldSchema = {
         progress: { type: "number" },
         position: VEC3_SCHEMA,
         target: VEC3_SCHEMA,
-        fov: { type: "number" },
+        fov: nullable({ type: "number" }),
         handleMode: { type: "string", enum: Object.values(MOTION_HANDLE_MODE) },
         inHandle: VEC3_SCHEMA,
         outHandle: VEC3_SCHEMA,
@@ -525,9 +535,18 @@ function motionProgramSource(clip: ProgramRangeLike): ProgramSource {
     return { kind: PROGRAM_SOURCE_KIND.MOTION_CLIP, motionClipId: clip.id };
 }
 
-function motionClipFrom(clip: CameraMotionClipJSON): CameraMotionClip | null {
+/** fov: null 的解析基准:当时激活机位的 fov;无激活机位退回领域默认。写入后即为具体数,机位再改不跟随。 */
+function resolveKeyFov(ctx: DirectorContext): number {
+    return ctx.camera.director.getShot(ctx.camera.activeShotId ?? "")?.fov ?? DEFAULT_CAMERA_FOV;
+}
+
+function resolvedKeys(ctx: DirectorContext, keys: readonly CameraKeyPayload[]): readonly CameraKeyJSON[] {
+    return keys.map((key) => ({ ...key, fov: key.fov ?? resolveKeyFov(ctx) }));
+}
+
+function motionClipFrom(ctx: DirectorContext, clip: MotionClipPayload): CameraMotionClip | null {
     try {
-        return new CameraMotionClip(clip);
+        return new CameraMotionClip({ ...clip, keys: resolvedKeys(ctx, clip.keys) });
     } catch {
         return null;
     }
@@ -685,7 +704,7 @@ export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPay
     }
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
-        const parsed = motionClipFrom(this.payload.clip);
+        const parsed = motionClipFrom(ctx, this.payload.clip);
         const clip = parsed ? quantizedMotionClip(ctx, parsed) : null;
         if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段时间范围至少覆盖一帧")];
         if (ctx.motion.clip(clip.id)) return [issue(ISSUE_CODE.PAYLOAD, "clip.id", "运镜片段 id 已存在")];
@@ -693,7 +712,7 @@ export class CreateMotionClipCommand extends DirectorCommand<CreateMotionClipPay
     }
 
     execute(ctx: DirectorContext): void {
-        const parsed = motionClipFrom(this.payload.clip);
+        const parsed = motionClipFrom(ctx, this.payload.clip);
         const clip = parsed ? quantizedMotionClip(ctx, parsed) : null;
         if (clip) replaceQuantizedClip(ctx, clip);
         ctx.playback.sampleCurrent();
@@ -760,7 +779,7 @@ export class CreateMotionTakeCommand extends DirectorCommand<CreateTakePayload> 
                 id: this.payload.id ?? takeIdFor(this.payload),
                 startTimeSeconds: range.startTimeSeconds,
                 durationSeconds: range.durationSeconds,
-                keys: this.payload.keys,
+                keys: resolvedKeys(ctx, this.payload.keys),
                 focus: this.payload.focus ? { mode: CAMERA_FOCUS_MODE, target: this.payload.focus } : null,
                 follow: this.payload.follow ?? null,
                 ...(this.payload.easing ? { easing: this.payload.easing } : {}),
@@ -900,7 +919,7 @@ export class SetMotionKeyCommand extends DirectorCommand<SetMotionKeyPayload> {
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         const clip = existingClip(ctx, this.payload.clipId);
         if (!clip) return [issue(ISSUE_CODE.CLIP, "clipId", "运镜片段不存在")];
-        const key = cameraKeyOrNull(this.payload.key);
+        const key = cameraKeyOrNull(ctx, this.payload.key);
         if (!key)
             return [issue(ISSUE_CODE.PAYLOAD, "key", "镜头关键帧参数无效(progress∈[0,1]、位姿有限、fov 在围栏内)")];
         return withKeyIssues(clip, key);
@@ -908,7 +927,7 @@ export class SetMotionKeyCommand extends DirectorCommand<SetMotionKeyPayload> {
 
     execute(ctx: DirectorContext): void {
         const clip = existingClip(ctx, this.payload.clipId);
-        const key = cameraKeyOrNull(this.payload.key);
+        const key = cameraKeyOrNull(ctx, this.payload.key);
         if (clip && key) replaceKey(ctx, clip, key);
     }
 
@@ -922,9 +941,9 @@ export class SetMotionKeyCommand extends DirectorCommand<SetMotionKeyPayload> {
     }
 }
 
-function cameraKeyOrNull(json: CameraKeyJSON): CameraKey | null {
+function cameraKeyOrNull(ctx: DirectorContext, json: CameraKeyPayload): CameraKey | null {
     try {
-        return new CameraKey(json);
+        return new CameraKey({ ...json, fov: json.fov ?? resolveKeyFov(ctx) });
     } catch {
         return null;
     }
@@ -1199,13 +1218,13 @@ export class ReplaceMotionClipCommand extends DirectorCommand<ReplaceMotionClipP
 
     override validateIssues(ctx: DirectorContext): readonly CommandIssue[] {
         if (!existingClip(ctx, this.payload.clip.id)) return [issue(ISSUE_CODE.CLIP, "clip.id", "运镜片段不存在")];
-        const clip = motionClipFrom(this.payload.clip);
+        const clip = motionClipFrom(ctx, this.payload.clip);
         if (!clip) return [issue(ISSUE_CODE.PAYLOAD, "clip", "运镜片段数据无效")];
         return clipIssues(ctx, clip);
     }
 
     execute(ctx: DirectorContext): void {
-        const clip = motionClipFrom(this.payload.clip);
+        const clip = motionClipFrom(ctx, this.payload.clip);
         if (!clip || !existingClip(ctx, clip.id)) return;
         replaceQuantizedClip(ctx, clip);
         ctx.playback.sampleCurrent();

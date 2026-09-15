@@ -38,3 +38,13 @@ export const LIGHT_PARAMS_SCHEMA: PayloadFieldSchema = {
         },
     ],
 };
+
+/** light.adjust 的部分更新形状:全字段可缺省,缺省字段沿用现灯;换灯型时专属参数由 retype 补默认。 */
+export const LIGHT_PARAMS_PATCH_SCHEMA: PayloadFieldSchema = {
+    type: "object",
+    properties: {
+        ...LOCAL_LIGHT_PROPERTIES,
+        angleDegrees: { type: "number" },
+        penumbra: { type: "number" },
+    },
+};

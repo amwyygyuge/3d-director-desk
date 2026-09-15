@@ -17,6 +17,7 @@ import { subjectBoundsFor } from "@/command/subjectBounds";
 import type { SubjectBounds } from "@/command/subjectBounds";
 import type { Vec3 } from "@/core/SceneObject";
 import { measureModelBox } from "@/core/measureModelBox";
+import type { ShotFramingPose } from "@/capture/CaptureService";
 
 import { focalLengthFromFov } from "@/camera/CameraLens";
 
@@ -42,7 +43,10 @@ const FRAME_SUBJECT_PAYLOAD_CONTRACT: PayloadContract = {
 };
 
 const CHECK_FRAMING_CONTRACT: PayloadContract = {
-    properties: { subjectIds: { type: "array", items: { type: "string" }, minItems: 1 } },
+    properties: {
+        subjectIds: { type: "array", items: { type: "string" }, minItems: 1 },
+        atTimeSeconds: { type: "number" },
+    },
     required: ["subjectIds"],
 };
 
@@ -274,7 +278,7 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
         return [];
     }
 
-    /** 景别只决定构图几何:覆盖既有机位时保留其镜头参数(与 `camera.set-shot` 同纪律)。 */
+    /** 景别只决定构图几何:覆盖既有机位时保留其光学参数(fov 与 lens 是同一光学量的两个视图,一并保留;与 `camera.set-shot` 同纪律)。 */
     execute(ctx: DirectorContext): void {
         const subject = jointSubjectBounds(ctx, this.payload.subjectIds);
         if (!subject) return;
@@ -289,15 +293,15 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
             azimuthRad: azimuth,
             outputAspectRatio: ctx.output.format.aspectRatio,
         });
-        const previousLens = ctx.camera.director.getShot(this.payload.shotId)?.lens;
+        const previousShot = ctx.camera.director.getShot(this.payload.shotId);
         ctx.camera.addShot(
             this.payload.shotId,
-            previousLens
+            previousShot
                 ? new CameraShot({
                       position: framed.position,
                       target: framed.target,
-                      fov: framed.fov,
-                      lens: previousLens,
+                      fov: previousShot.fov,
+                      lens: previousShot.lens,
                   })
                 : framed,
         );
@@ -314,6 +318,26 @@ export class CameraFrameSubjectCommand extends DirectorCommand<FrameSubjectPaylo
 
 interface CheckFramingPayload {
     readonly subjectIds: string[];
+    /** 缺省 = 按当前激活机位测量;给出 = 按该时刻 Program 排期(运镜解析式采样 / 静态机位定义)测量 */
+    readonly atTimeSeconds?: number;
+}
+
+/** 指定时刻的排期取景位姿:运镜片段解析式采样,静态机位直读定义;该时刻无排期或采样失败 → undefined。 */
+function shotPoseAt(ctx: DirectorContext, timeSeconds: number): ShotFramingPose | undefined {
+    const source = ctx.motion.program.sourceAt(timeSeconds);
+    if (!source) return undefined;
+    if (source.kind === PROGRAM_SOURCE_KIND.STATIC_SHOT) {
+        const shot = ctx.camera.director.getShot(source.shotId);
+        return shot ? { position: shot.position, target: shot.target, fov: shot.fov } : undefined;
+    }
+    const clip = ctx.motion.clip(source.motionClipId);
+    const solver = new CameraFrameSolver(ctx.timeline, ctx.scene.manager);
+    if (!clip || !solver.solve(clip, timeSeconds, TMP_MOTION_SAMPLE)) return undefined;
+    return {
+        position: [TMP_MOTION_SAMPLE.positionX, TMP_MOTION_SAMPLE.positionY, TMP_MOTION_SAMPLE.positionZ],
+        target: [TMP_MOTION_SAMPLE.targetX, TMP_MOTION_SAMPLE.targetY, TMP_MOTION_SAMPLE.targetZ],
+        fov: TMP_MOTION_SAMPLE.fov,
+    };
 }
 
 const TMP_FRAMING_BOX = new Box3();
@@ -329,17 +353,21 @@ export class CameraCheckFramingQuery implements DirectorQuery<CheckFramingPayloa
     constructor(readonly payload: CheckFramingPayload) {}
 
     validate(ctx: DirectorContext): readonly string[] {
-        return this.payload.subjectIds
-            .filter((id) => !ctx.scene.manager.getEntity(id))
-            .map((id) => `对象 "${id}" 不存在`);
+        const timeIssues =
+            this.payload.atTimeSeconds !== undefined &&
+            (!Number.isFinite(this.payload.atTimeSeconds) || this.payload.atTimeSeconds < 0)
+                ? ["atTimeSeconds 须为非负有限数"]
+                : [];
+        return [
+            ...timeIssues,
+            ...this.payload.subjectIds
+                .filter((id) => !ctx.scene.manager.getEntity(id))
+                .map((id) => `对象 "${id}" 不存在`),
+        ];
     }
 
     execute(ctx: DirectorContext): unknown {
-        // 激活机位存在 → 按机位定义解析式测量(渲染相机下一帧才就位,同任务链读不到)
-        const activeShot = ctx.camera.activeShotId ? ctx.camera.director.getShot(ctx.camera.activeShotId) : undefined;
-        const pose = activeShot
-            ? { position: activeShot.position, target: activeShot.target, fov: activeShot.fov }
-            : undefined;
+        const pose = this.resolvedPose(ctx);
         const outputFrame = ctx.output.frameFor(ctx.capture.size);
         return this.payload.subjectIds.map((id) => {
             const runtime = ctx.scene.manager.getRuntime(id);
@@ -347,6 +375,15 @@ export class CameraCheckFramingQuery implements DirectorQuery<CheckFramingPayloa
             const measure = runtime ? ctx.capture.measureFraming(TMP_FRAMING_BOX, pose, outputFrame) : null;
             return { id, inFrame: measure?.inFrame ?? false, marginNdc: measure?.marginNdc ?? null };
         });
+    }
+
+    /** 缺省时刻按激活机位测量(渲染相机下一帧才就位,同任务链读不到);给出时刻按排期解析式测量。 */
+    private resolvedPose(ctx: DirectorContext): ShotFramingPose | undefined {
+        if (this.payload.atTimeSeconds !== undefined) return shotPoseAt(ctx, this.payload.atTimeSeconds);
+        const activeShot = ctx.camera.activeShotId ? ctx.camera.director.getShot(ctx.camera.activeShotId) : undefined;
+        return activeShot
+            ? { position: activeShot.position, target: activeShot.target, fov: activeShot.fov }
+            : undefined;
     }
 }
 

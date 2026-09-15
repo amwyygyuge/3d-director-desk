@@ -10,8 +10,9 @@ import {
     isLightType,
     isSpotAngleDegrees,
     normalizeLightParams,
+    retypeLightParams,
 } from "@/core/LightParams";
-import type { LightParams } from "@/core/LightParams";
+import type { LightParams, LightType } from "@/core/LightParams";
 import type { SceneObject, Vec3 } from "@/core/SceneObject";
 import { subjectBoundsFor } from "@/command/subjectBounds";
 import {
@@ -25,7 +26,7 @@ import type { LightingMood } from "@/lighting/LightingMoodCompiler";
 import type { CommandCapability, CommandDispatcher, DirectorQuery } from "@/command/CommandDispatcher";
 import { DirectorCommand } from "@/command/DirectorCommand";
 import type { CommandIssue, DirectorContext, SerializedCommand } from "@/command/DirectorCommand";
-import { LIGHT_PARAMS_SCHEMA } from "@/command/lightParamsSchema";
+import { LIGHT_PARAMS_PATCH_SCHEMA } from "@/command/lightParamsSchema";
 import { EMPTY_PAYLOAD_CONTRACT, isPayloadRecord } from "@/command/PayloadContract";
 import type { PayloadContract } from "@/command/PayloadContract";
 
@@ -40,9 +41,20 @@ const ISSUE_CODE = {
     TARGET_KIND: "lighting.target-not-light",
 } as const;
 
+/** light.adjust 的部分更新:缺省字段沿用现灯;type 变更时专属参数按新灯型 retype 补默认。 */
+interface LightParamsPatch {
+    readonly type?: LightType;
+    readonly color?: string;
+    readonly intensity?: number;
+    readonly distance?: number;
+    readonly decay?: number;
+    readonly angleDegrees?: number;
+    readonly penumbra?: number;
+}
+
 interface AdjustLightPayload {
     readonly id: string;
-    readonly light: LightParams;
+    readonly light: LightParamsPatch;
 }
 
 interface GetLightPayload {
@@ -61,7 +73,7 @@ export interface LightingObjectSnapshot {
 }
 
 const ADJUST_LIGHT_CONTRACT: PayloadContract = {
-    properties: { id: { type: "string" }, light: LIGHT_PARAMS_SCHEMA },
+    properties: { id: { type: "string" }, light: LIGHT_PARAMS_PATCH_SCHEMA },
     required: ["id", "light"],
 };
 
@@ -79,48 +91,29 @@ function issue(code: string, path: string, message: string): CommandIssue {
     return { code, path, message };
 }
 
-function lightPayloadIssues(value: unknown, path: string): readonly CommandIssue[] {
+/** 逐字段守卫表:字段缺省即跳过,存在才做范围检查(部分更新语义)。 */
+const LIGHT_PATCH_FIELD_RULES: readonly {
+    readonly field: keyof LightParamsPatch;
+    readonly isValid: (value: unknown) => boolean;
+    readonly message: string;
+}[] = [
+    { field: "type", isValid: isLightType, message: "灯光类型必须是 directional、point 或 spot" },
+    { field: "color", isValid: isLightColor, message: "灯光颜色必须是 #rrggbb" },
+    { field: "intensity", isValid: isLightIntensity, message: "灯光强度必须是 0~100 的有限数" },
+    { field: "distance", isValid: isLightDistance, message: "灯光范围必须是 0~100 米的有限数" },
+    { field: "decay", isValid: isLightDecay, message: "灯光衰减必须是 0~4 的有限数" },
+    { field: "angleDegrees", isValid: isSpotAngleDegrees, message: "聚光半角必须是 1~90 度的有限数" },
+    { field: "penumbra", isValid: isLightPenumbra, message: "边缘软化必须是 0~1 的有限数" },
+];
+
+function lightPatchIssues(value: unknown, path: string): readonly CommandIssue[] {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return [issue(ISSUE_CODE.PAYLOAD, path, "灯光参数格式无效")];
     }
-    const candidate = value as {
-        readonly type?: unknown;
-        readonly color?: unknown;
-        readonly intensity?: unknown;
-        readonly distance?: unknown;
-        readonly decay?: unknown;
-        readonly angleDegrees?: unknown;
-        readonly penumbra?: unknown;
-    };
-    if (!isLightType(candidate.type)) {
-        return [issue(ISSUE_CODE.PAYLOAD, `${path}.type`, "灯光类型必须是 directional、point 或 spot")];
-    }
-    const baseIssues = [
-        fieldIssue(isLightColor(candidate.color), `${path}.color`, "灯光颜色必须是 #rrggbb"),
-        fieldIssue(isLightIntensity(candidate.intensity), `${path}.intensity`, "灯光强度必须是 0~100 的有限数"),
-    ].flat();
-    switch (candidate.type) {
-        case "directional":
-            return baseIssues;
-        case "point":
-            return [
-                ...baseIssues,
-                fieldIssue(isLightDistance(candidate.distance), `${path}.distance`, "灯光范围必须是 0~100 米的有限数"),
-                fieldIssue(isLightDecay(candidate.decay), `${path}.decay`, "灯光衰减必须是 0~4 的有限数"),
-            ].flat();
-        case "spot":
-            return [
-                ...baseIssues,
-                fieldIssue(isLightDistance(candidate.distance), `${path}.distance`, "灯光范围必须是 0~100 米的有限数"),
-                fieldIssue(isLightDecay(candidate.decay), `${path}.decay`, "灯光衰减必须是 0~4 的有限数"),
-                fieldIssue(
-                    isSpotAngleDegrees(candidate.angleDegrees),
-                    `${path}.angleDegrees`,
-                    "聚光半角必须是 1~90 度的有限数",
-                ),
-                fieldIssue(isLightPenumbra(candidate.penumbra), `${path}.penumbra`, "边缘软化必须是 0~1 的有限数"),
-            ].flat();
-    }
+    const candidate = value as Record<string, unknown>;
+    return LIGHT_PATCH_FIELD_RULES.flatMap(({ field, isValid, message }) =>
+        candidate[field] === undefined ? [] : fieldIssue(isValid(candidate[field]), `${path}.${field}`, message),
+    );
 }
 
 function fieldIssue(isValid: boolean, path: string, message: string): readonly CommandIssue[] {
@@ -173,12 +166,25 @@ export class AdjustLightCommand extends DirectorCommand<AdjustLightPayload> {
             const targetIssue = targetLightIssue(ctx, payload.id);
             if (targetIssue) issues.push(targetIssue);
         }
-        issues.push(...lightPayloadIssues(payload.light, "light"));
+        issues.push(...lightPatchIssues(payload.light, "light"));
         return issues;
     }
 
     execute(ctx: DirectorContext): void {
-        ctx.scene.setLightParams(this.payload.id, normalizeLightParams(this.payload.light));
+        const merged = this.mergedLight(ctx);
+        if (merged) ctx.scene.setLightParams(this.payload.id, merged);
+    }
+
+    /** 合并语义:换灯型先 retype(color/intensity 随身,专属参数回新灯型默认),再叠给出的字段。 */
+    private mergedLight(ctx: DirectorContext): LightParams | null {
+        const current = ctx.scene.manager.getEntity(this.payload.id)?.light;
+        if (!current) return null;
+        const patch = this.payload.light;
+        const base = patch.type && patch.type !== current.type ? retypeLightParams(current, patch.type) : current;
+        const overrides = Object.fromEntries(
+            Object.entries(patch).filter(([, value]) => value !== undefined),
+        );
+        return normalizeLightParams({ ...base, ...overrides } as LightParams);
     }
 
     override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {

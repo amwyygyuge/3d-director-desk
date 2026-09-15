@@ -17,7 +17,7 @@ import type { TimelineDocJSON } from "@/timeline/TimelineDoc";
 import { TimelineMarker } from "@/timeline/TimelineMarker";
 import { TimelineTrack, TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import { keyframeCodecFor } from "@/timeline/keyframeCodecs";
-import type { TimelineTrackInit } from "@/timeline/TimelineTrack";
+import type { TimelineTrackInit, TimelineTrackKind } from "@/timeline/TimelineTrack";
 import {
     isExtrapolationMode,
     EXTRAPOLATION_MODE,
@@ -65,7 +65,8 @@ const ISSUE_CODE = {
 
 interface AddKeyPayload {
     readonly trackId: string;
-    readonly targetId: string;
+    /** 缺省 = 沿用既有轨道的归属对象;新建轨道时必须显式给出 */
+    readonly targetId?: string;
     readonly keyframe: TransformKeyframeInit;
 }
 
@@ -144,6 +145,8 @@ interface SetTrackPayload {
     readonly keyframes: readonly TransformKeyframeInit[];
     /** 缺省 = 沿用该对象既有策略(重画不重置作者调好的朝向/贴地/步幅) */
     readonly policies?: TrackPoliciesInit;
+    /** 读模型 list-tracks 回显的轨道种类;写入端只有 transform,回传原样数据不该被「未知字段即拒」挡下 */
+    readonly kind?: TimelineTrackKind;
 }
 interface RetimeTrackPayload {
     readonly trackId: string;
@@ -172,7 +175,8 @@ const AddTimelineKeyContract: PayloadContract = {
         targetId: { type: "string" },
         keyframe: KEYFRAME_SCHEMA,
     },
-    required: ["trackId", "targetId", "keyframe"],
+    // targetId 可缺省:已有轨道自带归属对象,强制回传是无谓的调用负担
+    required: ["trackId", "keyframe"],
 };
 
 const POLICIES_SCHEMA: PayloadFieldSchema = {
@@ -193,6 +197,8 @@ const SetTimelineTrackContract: PayloadContract = {
         keyframes: { type: "array", items: KEYFRAME_SCHEMA },
         // SetTrackPayload 一直支持策略入参,契约漏声明会把合法调用挡在门外(未知字段即拒)
         policies: POLICIES_SCHEMA,
+        // list-tracks 读模型带 kind,「读出再写回」的往返不该被未知字段拒绝;写入端仍只有 transform
+        kind: { type: "string", enum: Object.values(TIMELINE_TRACK_KIND) },
     },
     required: ["trackId", "targetId", "keyframes"],
 };
@@ -460,7 +466,7 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
         if (!isRecord(payload) || typeof payload.trackId !== "string" || payload.trackId.length === 0) {
             return [issue(ISSUE_CODE.PAYLOAD, "trackId", "轨道 id 格式无效")];
         }
-        if (typeof payload.targetId !== "string" || payload.targetId.length === 0) {
+        if (payload.targetId !== undefined && (typeof payload.targetId !== "string" || payload.targetId.length === 0)) {
             return [issue(ISSUE_CODE.PAYLOAD, "targetId", "目标对象 id 格式无效")];
         }
         const keyIssue = keyframePayloadIssue(payload.keyframe);
@@ -471,12 +477,16 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
                 ? issue(ISSUE_CODE.DURATION, "keyframe.time", "关键帧时间不能超过时间轴时长")
                 : null;
         if (durationIssue) return [durationIssue];
-        if (!ctx.scene.manager.getEntity(payload.targetId)) {
+        const targetId = this.resolvedTargetId(ctx);
+        if (targetId === null) {
+            return [issue(ISSUE_CODE.PAYLOAD, "targetId", "新建轨道必须提供 targetId")];
+        }
+        if (!ctx.scene.manager.getEntity(targetId)) {
             return [issue(ISSUE_CODE.TARGET, "targetId", "关键帧目标对象不存在")];
         }
         const track = ctx.timeline.document.track(payload.trackId);
         if (track) {
-            if (track.targetId !== payload.targetId) {
+            if (track.targetId !== targetId) {
                 return [issue(ISSUE_CODE.TRACK_CONFLICT, "targetId", "轨道已属于另一个对象")];
             }
             if (track.kind !== TIMELINE_TRACK_KIND.TRANSFORM) {
@@ -489,14 +499,21 @@ export class AddTimelineKeyCommand extends DirectorCommand<AddKeyPayload> {
             }
             return [];
         }
-        const targetTrack = ctx.timeline.document.trackForTarget(payload.targetId, TIMELINE_TRACK_KIND.TRANSFORM);
+        const targetTrack = ctx.timeline.document.trackForTarget(targetId, TIMELINE_TRACK_KIND.TRANSFORM);
         return targetTrack ? [issue(ISSUE_CODE.TRACK_CONFLICT, "trackId", "每个对象只能有一个 transform 轨道")] : [];
     }
 
+    /** 缺省 targetId 时沿用既有轨道的归属对象;新轨无处可沿用,返回 null 交由 validate 拒绝。 */
+    private resolvedTargetId(ctx: DirectorContext): string | null {
+        return this.payload.targetId ?? ctx.timeline.document.track(this.payload.trackId)?.targetId ?? null;
+    }
+
     execute(ctx: DirectorContext): void {
+        const targetId = this.resolvedTargetId(ctx);
+        if (targetId === null) return;
         ctx.timeline.addKey(
             this.payload.trackId,
-            this.payload.targetId,
+            targetId,
             new TransformKeyframe(quantizedKeyframe(ctx, this.payload.keyframe)),
         );
         reresolveAlignedActions(ctx);
