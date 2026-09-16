@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 import { ASSET_CATEGORY, ASSET_KIND } from "@/assets/catalog/AssetEntry";
 import type { AssetEntry } from "@/assets/catalog/AssetEntry";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { viewPlacement } from "@/ui/viewport/viewPlacement";
 
 /** 分类 → 图标/文案查表；资源库只展示可直接放置的模型。 */
 const CATEGORY_PRESENTATION: Record<string, { icon: ReactNode; label: string }> = {
@@ -40,7 +41,11 @@ export const AssetLibraryPanel = observer(function AssetLibraryPanel() {
     const entries = catalog.list({ kind: ASSET_KIND.MODEL });
 
     const place = (entry: AssetEntry) => {
-        const result = dispatcher.dispatch({ type: "assets.place", payload: { assetId: entry.id } }, stores);
+        // 视线中心落位(与模型导入同一解析器):目录放置含人偶,命中面高度即站立面
+        const result = dispatcher.dispatch(
+            { type: "assets.place", payload: { assetId: entry.id, transform: viewPlacement.resolve(stores) } },
+            stores,
+        );
         if (!result.ok) ui.setApplicationNotice(`放置被拒:${result.issues?.join(";") ?? result.error}`);
     };
 

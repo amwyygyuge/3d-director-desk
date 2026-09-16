@@ -2,7 +2,7 @@ import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject, ReactElement } from "react";
-import type { DirectionalLight, Mesh, Object3D, PointLight, Scene, SpotLight } from "three";
+import type { DirectionalLight, Mesh, MeshStandardMaterial, Object3D, PointLight, Scene, SpotLight } from "three";
 import {
     ArrowHelper,
     DirectionalLightHelper,
@@ -22,6 +22,23 @@ import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useCaptureHelperRegistration } from "@/ui/viewport/scene/useCaptureHelperRegistration";
 
 const LOADING_START_PROGRESS = 0;
+
+/** 半透明显示态的不透明度:看穿布景够用,又保留足够形体轮廓判断遮挡关系。 */
+const GHOST_OPACITY = 0.35;
+
+interface GhostMaterialSnapshot {
+    readonly transparent: boolean;
+    readonly opacity: number;
+    readonly depthWrite: boolean;
+}
+
+/**
+ * ghost 前的材质原值快照(模块级,按材质实例键控)。
+ * 只在首次进入 ghost 时记录:StrictMode 双跑或依赖重跑会重复应用,
+ * 若每次都记录就会把已被改写的 ghost 值当成"原值",恢复后永久半透明。
+ * WeakMap:材质由 ObjectMaterialRegistry 释放,快照随之被 GC,不留悬挂表项。
+ */
+const GHOST_MATERIAL_SNAPSHOTS = new WeakMap<MeshStandardMaterial, GhostMaterialSnapshot>();
 
 const TMP_HELPER_LIGHT_POSITION = new Vector3();
 const TMP_HELPER_TARGET_POSITION = new Vector3();
@@ -386,7 +403,7 @@ export function ModelContent({ entity }: { entity: SceneObject }) {
 }
 
 function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
-    const { actorRuntime, binder, models, playback, scene, ui, skeletons } = useDirectorDeskStores();
+    const { actorRuntime, binder, materials, models, playback, scene, ui, skeletons } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
     const sourceUrl = entity.sourceUrl;
@@ -398,6 +415,8 @@ function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
     // 渲染期直读量纲(observer 订阅):set-spatial-scale 重标定后落尺 effect 依它重跑;
     // 组件本不读实体字段,不包 observer 这条订阅就不存在,重标定会静默无效(实测)。
     const spatialScale = entity.spatialScale;
+    // 同理直读半透明显示态:observer 壳建立订阅,object.set-ghost 后下方材质 effect 才会重跑。
+    const ghost = entity.ghost;
 
     useEffect(() => {
         if (sourceUrl === null || format === null) {
@@ -493,6 +512,64 @@ function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
             skeletons.unregister(entity.id);
         };
     }, [actorRuntime, skeletons, entity.id, shell]);
+
+    /**
+     * 半透明显示态落到 Three:只改本实例克隆材质的透明三项 + 壳层投影投射标记。
+     *
+     * 只动 `materials.materialsOf` 返回的克隆材质:那是本实例独占的槽位。OBJ/FBX 的非标准
+     * 材质(Phong/Basic)在同 URL 的所有实例间共享(见 ObjectMaterialRegistry),
+     * 改它会让全场同资产模型一起变半透明,还会跨桌泄漏——故一律不动,宁可该实例不透明。
+     * 灯光实体没有克隆材质,materialsOf 返回空数组,循环自然空转,无需特判。
+     *
+     * 必须排在壳层挂载 effect 之后:克隆材质由 actorRuntime.attach 建立,顺序反了就取到空表。
+     */
+    useEffect(() => {
+        if (!shell) return;
+        const applyCastShadow = (cast: boolean): void => {
+            shell.traverse((node) => {
+                const mesh = node as { isMesh?: boolean; isSkinnedMesh?: boolean; castShadow?: boolean };
+                if (mesh.isMesh === true || mesh.isSkinnedMesh === true) mesh.castShadow = cast;
+            });
+        };
+        const restore = (): void => {
+            // 卸载路径上壳层材质可能已被 detach 回收,materialsOf 返回空表,此时循环空转即正确行为
+            for (const material of materials.materialsOf(entity.id)) {
+                const snapshot = GHOST_MATERIAL_SNAPSHOTS.get(material);
+                if (!snapshot) continue;
+                material.transparent = snapshot.transparent;
+                material.opacity = snapshot.opacity;
+                material.depthWrite = snapshot.depthWrite;
+                // transparent 改变会切换渲染队列与混合状态,着色器需重编译:不置 needsUpdate 则本帧仍按旧管线画
+                material.needsUpdate = true;
+                GHOST_MATERIAL_SNAPSHOTS.delete(material);
+            }
+            applyCastShadow(true);
+            invalidate();
+        };
+        if (!ghost) {
+            restore();
+            return;
+        }
+        for (const material of materials.materialsOf(entity.id)) {
+            // 快照只在首次记录:StrictMode 双跑(及依赖重跑)会重复应用,重复记录会把 ghost 值当原值
+            if (!GHOST_MATERIAL_SNAPSHOTS.has(material)) {
+                GHOST_MATERIAL_SNAPSHOTS.set(material, {
+                    transparent: material.transparent,
+                    opacity: material.opacity,
+                    depthWrite: material.depthWrite,
+                });
+            }
+            material.transparent = true;
+            material.opacity = GHOST_OPACITY;
+            // 关掉深度写入:同一实体的前后表面才不会互相剔除,看穿才是连续的
+            material.depthWrite = false;
+            material.needsUpdate = true;
+        }
+        // 半透明体的投影是噪声(shadow map 不含 alpha,阴影仍是实心的),看穿期间不投射
+        applyCastShadow(false);
+        invalidate();
+        return restore;
+    }, [materials, entity.id, ghost, shell, invalidate]);
 
     // 文档导入用同 id 的新实体整体替换并清空骨骼索引:此处补登记并把新画像重新落到运行时。
     // 依赖实体实例——同一次挂载内它不变,导入后才换新,不会造成重复工作。

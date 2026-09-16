@@ -294,6 +294,50 @@ export class SetLockedCommand extends DirectorCommand<SetLockedPayload> {
     }
 }
 
+interface SetGhostPayload {
+    id: string;
+    ghost: boolean;
+}
+
+const SET_GHOST_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" }, ghost: { type: "boolean" } },
+    required: ["id", "ghost"],
+};
+
+/**
+ * 半透明显示态(看穿布景):只改渲染呈现,领域数据一字不动。
+ * 与 SetLockedCommand 的关键差别:**不摘除选中态**——ghost 与选择正交,
+ * 半透明实体仍可被点选、被 gizmo 持有、被 Inspector 编辑。
+ */
+export class SetGhostCommand extends DirectorCommand<SetGhostPayload> {
+    static readonly TYPE = "object.set-ghost";
+    readonly type = SetGhostCommand.TYPE;
+
+    constructor(readonly payload: SetGhostPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+            return ["对象 id 格式无效"];
+        }
+        const issues: string[] = [];
+        if (!ctx.scene.manager.getEntity(this.payload.id)) issues.push(`对象 "${this.payload.id}" 不存在`);
+        if (typeof this.payload.ghost !== "boolean") issues.push("ghost 必须是布尔值");
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.scene.setGhost(this.payload.id, this.payload.ghost);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        // 与 SetLockedCommand 同一模式:invert 在 execute 之前取旧值快照(见 CommandDispatcher.dispatch)
+        const entity = ctx.scene.manager.getEntity(this.payload.id);
+        return entity ? [{ type: SetGhostCommand.TYPE, payload: { id: this.payload.id, ghost: entity.ghost } }] : null;
+    }
+}
+
 interface SetSpatialScalePayload {
     id: string;
     spatialScale: SceneSpatialScaleInit;
@@ -743,6 +787,11 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
         SetLockedCommand.TYPE,
         (payload) => new SetLockedCommand(payload),
         commandCapability(SetLockedCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, SET_LOCKED_CONTRACT),
+    );
+    dispatcher.register(
+        SetGhostCommand.TYPE,
+        (payload) => new SetGhostCommand(payload),
+        commandCapability(SetGhostCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, SET_GHOST_CONTRACT),
     );
     dispatcher.register(
         SetSpatialScaleCommand.TYPE,

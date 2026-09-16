@@ -3,6 +3,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
+import OpacityIcon from "@mui/icons-material/Opacity";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import Box from "@mui/material/Box";
@@ -83,7 +84,7 @@ const ShotOutlineRow = observer(function ShotOutlineRow({ shotId }: { readonly s
     );
 });
 
-/** 场景实体行:聚焦、锁定开关与删除。 */
+/** 场景实体行:聚焦、锁定开关、半透明开关与删除。 */
 const EntityOutlineRow = observer(function EntityOutlineRow({ objectId }: { readonly objectId: string }) {
     const stores = useDirectorDeskStores();
     const { dispatcher, scene, selection } = stores;
@@ -109,6 +110,19 @@ const EntityOutlineRow = observer(function EntityOutlineRow({ objectId }: { read
         reportCommandFailure(stores, result);
     };
 
+    /**
+     * 半透明开关(看穿布景)。锁定实体同样可切——显示态不是编辑,
+     * 交互锁只围栏视口点选/gizmo,和"这个实体怎么呈现"无关。
+     */
+    const toggleGhost = (event: MouseEvent<HTMLElement>): void => {
+        event.stopPropagation();
+        const result = dispatcher.dispatch(
+            { type: "object.set-ghost", payload: { id: objectId, ghost: !entity.ghost } },
+            stores,
+        );
+        reportCommandFailure(stores, result);
+    };
+
     const removeObject = (event: MouseEvent<HTMLElement>): void => {
         event.stopPropagation();
         dispatcher.dispatch({ type: RemoveObjectCommand.TYPE, payload: { id: objectId } }, stores);
@@ -116,6 +130,9 @@ const EntityOutlineRow = observer(function EntityOutlineRow({ objectId }: { read
 
     const locked = entity.locked;
     const lockLabel = locked ? `解锁 ${name}` : `锁定 ${name}`;
+    // ghost 不加 secondary 文案:行宽有限,已锁定那条已占满副文本位,状态由按钮 aria-pressed 承载
+    const ghost = entity.ghost;
+    const ghostLabel = ghost ? `恢复不透明 ${name}` : `半透明 ${name}`;
 
     return (
         <OutlineRow
@@ -140,6 +157,17 @@ const EntityOutlineRow = observer(function EntityOutlineRow({ objectId }: { read
                             onClick={toggleLocked}
                         >
                             {locked ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={ghostLabel}>
+                        <IconButton
+                            size="small"
+                            color={ghost ? "primary" : "default"}
+                            aria-label={ghostLabel}
+                            aria-pressed={ghost}
+                            onClick={toggleGhost}
+                        >
+                            <OpacityIcon fontSize="small" />
                         </IconButton>
                     </Tooltip>
                     <IconButton size="small" aria-label={`删除 ${name}`} onClick={removeObject}>

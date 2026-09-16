@@ -72,6 +72,13 @@ export class SceneStore {
         entity.applyLocked(locked);
     }
 
+    /** 半透明显示态;与 setLocked 同口径:实体不存在静默返回(命令层已校验存在性)。 */
+    setGhost(id: string, ghost: boolean): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyGhost(ghost);
+    }
+
     setObjectSpatialScale(id: string, scale: SceneSpatialScaleInit): void {
         const entity = this.manager.getEntity(id);
         if (!entity) return;

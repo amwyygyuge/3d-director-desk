@@ -13,6 +13,7 @@ export const AGENT_TOOL_DESCRIPTIONS: Record<string, string> = {
     "object.move": "更新对象 transform(位移/旋转/缩放,全字段覆盖式写入)",
     "object.remove": "删除对象;被运镜注视引用时会返回结构化选项",
     "object.set-locked": "锁定/解锁场景对象;锁定后视口点选与 gizmo 被围栏,命令层写入不受限(布景固定背景用)",
+    "object.set-ghost": "半透明显示/恢复场景对象(看穿布景用);显示态,不影响数据、选择与命令",
     "object.set-spatial-scale": "重标定模型量纲(reference-meters + 最大边实际米数);人偶实体锁死 actor-meters 不可改",
     "scene.clear": "一次清空场景全部对象:连带撤掉引用它们的运镜与 Program 排期,一步可撤销;场景已空时结构化拒绝",
     "object.place-relative": "语义摆位:以导演相机视线为参考系,把对象放到锚点的左/右/前/后(包围球表面间距)或面朝锚点",

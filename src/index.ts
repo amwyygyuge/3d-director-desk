@@ -343,6 +343,7 @@ export {
     RemoveObjectCommand,
     SetCameraLensCommand,
     SetCameraShotCommand,
+    SetGhostCommand,
     SetLockedCommand,
     SetSpatialScaleCommand,
 } from "@/command/commands";

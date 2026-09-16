@@ -3,6 +3,7 @@ import type { ModelAsset, ModelFormat } from "@/assets/ModelAsset";
 import { createId } from "@/core/createId";
 import { IDENTITY_TRANSFORM } from "@/core/SceneObject";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { viewPlacement } from "@/ui/viewport/viewPlacement";
 
 /** 文件 → 受支持的模型/动作来源:格式守卫 + objectURL(禁 base64) */
 function fileToSource(file: File, notify: (message: string) => void): { url: string; format: ModelFormat } | null {
@@ -66,7 +67,8 @@ export function importModelFile(stores: DirectorDeskStores, file: File, notify: 
                 sourceUrl: asset.url,
                 format: asset.format,
                 name: asset.name,
-                transform: { position: placementFor(stores.scene.objectCount), rotation: [0, 0, 0], scale: [1, 1, 1] },
+                // 视线中心落位:布景进场后螺旋固定点会埋进墙体,落位对齐「正在看哪里」
+                transform: viewPlacement.resolve(stores),
             },
         },
         stores,

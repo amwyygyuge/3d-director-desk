@@ -29,18 +29,6 @@
             "tags": ["scenery", "geometry", "block"]
         },
         {
-            "id": "builtin.scenery.platform",
-            "kind": "model",
-            "category": "scenery.geometry",
-            "name": "台阶平台",
-            "source": "builtin",
-            "url": "/builtin-assets/scenery/platform.gltf",
-            "format": "gltf",
-            "license": "项目自制基础几何体",
-            "skeletonFamily": null,
-            "tags": ["scenery", "geometry", "platform"]
-        },
-        {
             "id": "builtin.scenery.wall",
             "kind": "model",
             "category": "scenery.geometry",

@@ -6,7 +6,7 @@
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------ |
 | humanoid-generic.glb                                                   | Quaternius Universal Animation Library 的 Mannequin(65 骨含五指,13,744 triangles / 615KB) | CC0                |
 | actions.glb                                                            | 同源的 28 段动作(骨骼树无网格;1.4MB)                                                      | CC0                |
-| scenery/cube.gltf、platform.gltf、wall.gltf、column.gltf、pyramid.gltf | 项目自制、以 Three.js 基础几何导出；单模型至多 7KB                                        | 项目自制基础几何体 |
+| scenery/cube.gltf、wall.gltf、column.gltf、pyramid.gltf | 项目自制、以 Three.js 基础几何导出；单模型至多 7KB                                        | 项目自制基础几何体 |
 
 两份产物都由 `bun run bake:actor` 从 `assets-src/actor/UAL1_Standard.glb` 拆出,源文件不随包发布。
 
@@ -31,4 +31,4 @@ UE 标准人形词表(`root`/`pelvis`/`spine_01`/`clavicle_l`/`upperarm_l`/`thig
 改 `scripts/bake-actor-assets.ts` 的 `EXCLUDED_CLIP_PATTERN` 与本目录 `catalog.json` 的 `clipName`——两者是唯一的对接契约。
 姿势预设另由 `scripts/extract-pose-presets.ts` 从 `actions.glb` 取静止帧生成。
 
-设计取向:人物只保留**一个通用人形模型**；布景提供方块、平台、墙、立柱和四棱锥等低面数基础件；动作只保留旋转向量。模型面数与骨骼数都是交互预算的一部分：人形资源不得以视觉细节换取缩放、旋转和拖拽帧率回退。
+设计取向:人物只保留**一个通用人形模型**；布景提供方块、墙、立柱和四棱锥等低面数基础件；动作只保留旋转向量。模型面数与骨骼数都是交互预算的一部分：人形资源不得以视觉细节换取缩放、旋转和拖拽帧率回退。

@@ -38,7 +38,7 @@ import { CommandPalette } from "@/ui/shell/CommandPalette";
 import { HelpOverlay } from "@/ui/shell/HelpOverlay";
 import { Hotkeys } from "@/ui/shell/Hotkeys";
 import { FrameRateIndicator } from "@/ui/viewport/FrameRateIndicator";
-import { placementFor } from "@/ui/assets/importFiles";
+import { viewPlacement } from "@/ui/viewport/viewPlacement";
 import { LoadingChip } from "@/ui/viewport/LoadingChip";
 import { NativeChromeGuard } from "@/ui/shell/NativeChromeGuard";
 import {
@@ -210,11 +210,7 @@ export const DirectorDesk = observer(function DirectorDesk({
                         sourceUrl: url,
                         format: formatFromUrl(url) ?? undefined,
                         name,
-                        transform: {
-                            position: placementFor(stores.scene.objectCount),
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1],
-                        },
+                        transform: viewPlacement.resolve(stores),
                     },
                 },
                 stores,

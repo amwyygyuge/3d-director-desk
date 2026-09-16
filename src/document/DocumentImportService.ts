@@ -120,6 +120,10 @@ function entityIssues(value: unknown): readonly string[] {
     if (value.locked !== undefined && typeof value.locked !== "boolean") {
         return [`实体 "${value.id}" 的 locked 标记无效`];
     }
+    // ghost 同段同口径:缺失按不透明放行(免迁移),出现则必须布尔
+    if (value.ghost !== undefined && typeof value.ghost !== "boolean") {
+        return [`实体 "${value.id}" 的 ghost 标记无效`];
+    }
     return finiteTransform(value.transform) ? [] : [`实体 "${value.id}" 的 transform 含非法数值`];
 }
 

@@ -103,6 +103,8 @@ export interface SceneObjectInit {
     readonly spatialScale?: SceneSpatialScale | SceneSpatialScaleInit | null;
     /** 交互锁：true = 布景类固定背景；只挡视口点选/gizmo/Inspector 编辑，命令层写入不受限。 */
     readonly locked?: boolean;
+    /** 半透明显示态:true = 该实体降低不透明度以便看穿布景;纯显示,不影响数据、选择与命令。 */
+    readonly ghost?: boolean;
 }
 
 export class SceneObject {
@@ -124,6 +126,7 @@ export class SceneObject {
     private currentNarrativeIdentity: SceneNarrativeIdentity | null;
     private currentSpatialScale: SceneSpatialScale;
     private currentLocked: boolean;
+    private currentGhost: boolean;
 
     constructor(init: SceneObjectInit) {
         this.id = init.id;
@@ -150,6 +153,7 @@ export class SceneObject {
             throw new Error("SceneObject: 只有模型实体可以持有人偶画像");
         }
         this.currentLocked = init.locked ?? false;
+        this.currentGhost = init.ghost ?? false;
         makeAutoObservable<
             SceneObject,
             "currentLight" | "currentPose" | "currentActor" | "currentNarrativeIdentity" | "mountedActions"
@@ -217,6 +221,15 @@ export class SceneObject {
         this.currentLocked = next;
     }
 
+    /** 半透明显示态:与 locked 正交(可独立开关),渲染层据此调材质,领域数据不变。 */
+    get ghost(): boolean {
+        return this.currentGhost;
+    }
+
+    applyGhost(next: boolean): void {
+        this.currentGhost = next;
+    }
+
     /** 量纲重标定；人偶实体锁死 actor-meters（与构造期同一不变量），拒绝改走。 */
     applySpatialScale(next: SceneSpatialScale | SceneSpatialScaleInit): void {
         const resolved = spatialScaleFor(next, this.currentActor);
@@ -241,6 +254,7 @@ export class SceneObject {
             narrativeIdentity: this.currentNarrativeIdentity?.toJSON() ?? null,
             spatialScale: this.currentSpatialScale.toJSON(),
             locked: this.currentLocked,
+            ghost: this.currentGhost,
         };
     }
 
