@@ -13,6 +13,96 @@ description: 驱动 3D 导演台(布景/动作/时间轴/运镜/灯光/截图)�
 2. **读操作只走 query**:`dispatcher.query({ type, payload }, __directorDesk)` 返回结构化数据。AI 不直读 observable/store；先 `desk.inspect`，再按需调用专用查询。
 3. **失败是结构化的**:`dispatch` 返回 `{ ok: false, issues: [...] }`,issues 带原因,部分带 `suggestions`(下一步可选项,如 `wait-for-model`)。读到失败就按 issues 修正重试,**不要换 payload 格式乱试**。
 
+## 通讯架构与多客户端驱动 (RPC Bridge & Multi-Client Protocol)
+
+为了支持外部 AI、自动化脚本与多个浏览器窗口协同,导演台在**本地开发**提供标准化的 **多客户端 RPC 桥接服务 (`scripts/bridge.mjs`)**。
+
+### 为什么需要 RPC 桥接？
+1. **多浏览器实例与存储隔离**:不同浏览器进程维护各自独立的 JS 内存与 `localStorage`,直接向单个浏览器下发指令会导致其他窗口不同步。
+2. **桌面应用沙箱限制**:部分桌面客户端的内置浏览器运行在受限沙箱中,外部调试探针无法穿透读取宿主页面的 `window` 原型链或挂载对象。
+3. **多 Calling Client 并发**:支持多个 AI 会话、测试脚本同时并发调用 `http://127.0.0.1:4005/rpc`,内部通过基于 UUID 的 `reqId` 严格隔离响应,互不干扰、不会串号。
+
+### 安全边界(必须先读)
+
+桥接服务**默认只绑定 127.0.0.1**,不接受局域网访问,本机调用**免鉴权**——跨域浏览器请求由 Origin 白名单(默认仅 `localhost:4002`)拦截,本机脚本/curl 直接调:
+
+```bash
+curl -X POST http://127.0.0.1:4005/rpc \
+  -H "Content-Type: application/json" \
+  -d '{"method":"dispatch","action":{"type":"transport.play","payload":{}}}'
+```
+
+### 部署形态(本机 / 内网 / 公网)
+
+桥有两种角色:**本机**(默认,`bun run dev` 自动启动)与**集中式**(一台机器跑桥,多个远程展示端接入)。
+
+| 形态 | 启动方式 | 展示端如何接入 | 调用方如何接入 |
+| --- | --- | --- | --- |
+| 本机(默认) | `bun run dev` 或 `bun run bridge` | 打开 `http://localhost:4002/`,页面自动连 `ws://127.0.0.1:4005` | 同机任意进程 POST `http://127.0.0.1:4005/rpc` |
+| 内网共享 | `bun run bridge --host=0.0.0.0 --origins=http://<bridge机器IP>:4002` | 打开 `http://<bridge机器IP>:4002/?bridge=ws://<bridge机器IP>:4005` | 内网任意机器 POST `http://<bridge机器IP>:4005/rpc` |
+| 公网 | 自行用带鉴权的 Caddy/Nginx 终结 TLS,反代到桥的 4005;桥仍绑回环或内网地址 | 打开部署好的 `https://your.vercel.app/?bridge=wss://bridge.your-domain.com` | 公网 POST `https://bridge.your-domain.com/rpc`(鉴权由反代层负责) |
+
+要点:
+- **桥本身没有任何鉴权**。本机回环下这是安全的:浏览器的跨域请求带 Origin,白名单之外的直接 403;能发裸 HTTP 的本机进程本来就有本地执行权。一旦 `--host=0.0.0.0`,内网里任何人都能直接驱动你的导演台——只在可信网络这么干;公网必须由反代层补鉴权。
+- **`--origins` 必须与展示端页面的实际 Origin 完全一致**(协议+主机+端口),Vercel 部署就是 `https://your-app.vercel.app`,否则 WS 握手会被拒。
+- **`?bridge=` 参数控制页面连哪台桥**;不给时非 localhost 页面不连桥(纯观赏模式)。
+- **公网必须走 WSS/HTTPS 反代**;桥自身只讲明文 WS/HTTP。
+- 内网共享形态下,多个浏览器标签页连同一台桥,`dispatch` 广播镜像到全部页面;读操作由首个活跃端应答,指定 `targetClientId` 单播。
+
+### 接口与调用契约
+
+服务端口监听在 `http://127.0.0.1:4005`(启动命令:`bun run bridge`,或随 `bun run dev` 自动启动):
+
+#### 1. 状态查询 (`GET /status`)
+返回当前在线的所有浏览器展示端列表与元数据(`clientId`/`userAgent`/`viewport`/`readyState`),以及 `evalAllowed` 标记。
+
+#### 2. 技能文档 (`GET /skill` · `GET /skill.json`)
+把本手册经 HTTP 提供给 AI 端——**AI 不应依赖本地文件路径读 SKILL.md**(远程 agent、沙箱环境都读不到盘)。`/skill` 返回 Markdown 原文,`/skill.json` 返回 `{ name, filePath, sizeBytes, rawContent }` 结构化包装。均只读、免鉴权、禁缓存。
+
+#### 3. 命令调度 (`POST /rpc`)
+- **写操作 (dispatch)**:默认广播到当前所有已连接的浏览器标签页;要单播就传 `targetClientId`。
+  ```json
+  {
+    "method": "dispatch",
+    "action": {
+      "type": "assets.place",
+      "payload": { "id": "hero", "assetId": "builtin.humanoid-generic" }
+    }
+  }
+  ```
+- **读操作 (query)**:向首个活跃客户端(或指定 `targetClientId`)发起查询并返回结构化数据。
+
+**多端广播是镜像,不是强一致**:各标签页持有独立的导演台实例,广播只是把同一条命令分别发给各端执行。凡是命令内部生成 id 的(省略 `id` 的 `assets.place`、省略 `startTimeSeconds` 的 `assets.mount` 按播放头排期、`lighting.author` 依赖各端既有灯状态),各端结果会分叉。需要各端一致时,payload 里显式给全 id 与时刻;响应为多端汇总,任一端失败会以 HTTP 207 + `failures` 列表返回,不会静默吞掉。
+
+#### 4. 文件落盘 (`POST /save-file`)
+将浏览器端 `capture.frame`/`capture.video` 的产物以 base64 持久化到工程内的 `bridge-output/` 目录(目录自动创建,`filename` 只允许纯文件名,路径穿越会被拒):
+```json
+{
+  "filename": "cinematic_reference.mp4",
+  "dataBase64": "<base64 encoded binary data>"
+}
+```
+
+### 通用调用代码模板 (Node.js / Python)
+
+```js
+// Node.js / Bun 调用范例(本机免鉴权)
+async function deskRpc(method, action, options = {}) {
+  const res = await fetch("http://127.0.0.1:4005/rpc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ method, action, ...options })
+  });
+  return res.json();
+}
+
+// 调度命令 (广播镜像到各端)
+await deskRpc("dispatch", { type: "transport.play", payload: {} });
+
+// 查询数据 (由活跃端响应)
+const state = await deskRpc("query", { type: "transport.get-state", payload: {} });
+```
+
 ## 自检(拿到页面先做)
 
 ```js

@@ -1,5 +1,7 @@
 node_modules
 dist
+dist-playground
 storybook-static
+bridge-output
 *.log
 .DS_Store

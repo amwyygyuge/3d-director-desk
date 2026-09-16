@@ -48,7 +48,8 @@
         "mi": "bun pm version minor && bun publish",
         "ma": "bun pm version major && bun publish",
         "alpha": "bun pm version prepatch --preid alpha && bun publish",
-        "pre": "bun pm version prerelease --preid alpha && bun publish"
+        "pre": "bun pm version prerelease --preid alpha && bun publish",
+        "bridge": "bun scripts/bridge.mjs"
     },
     "peerDependencies": {
         "@react-three/drei": "^9.122.0",
@@ -93,7 +94,8 @@
         "three": "0.185.1",
         "typescript": "npm:@typescript/typescript6@6.0.2",
         "typescript-eslint": "8.68.0",
-        "vite": "8.2.2"
+        "vite": "8.2.2",
+        "ws": "^8.21.3"
     },
     "dependencies": {
         "mediabunny": "^1.55.5"

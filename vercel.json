@@ -1,5 +1,11 @@
 {
     "installCommand": "bun install --frozen-lockfile",
     "buildCommand": "bun run vercel-build",
-    "outputDirectory": "dist"
+    "outputDirectory": "dist-playground",
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
 }
