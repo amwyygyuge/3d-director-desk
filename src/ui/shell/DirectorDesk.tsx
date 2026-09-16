@@ -298,7 +298,10 @@ export const DirectorDesk = observer(function DirectorDesk({
                                     <ObjectMotionPathPreview />
                                     <WalkDraftController />
                                 </group>
-                                {/* 轨道启停统一由 OrbitAuthorityRig 执行:此处不再声明 enabled/阻尼开关 */}
+                                {/* 轨道启停统一由 OrbitAuthorityRig 执行:此处不再声明 enabled/阻尼开关。
+                                    阻尼保持开启(drei 默认 true)= 导演视角的惯性手感;它本身不会让角度失控
+                                    (实测同一段位移无论派 15/30/60 个事件,总转角恒为 72.7°)。
+                                    真正的「越拖越晃」来自两个写方同时吃一串指针事件,见 OrbitAuthorityRig。 */}
                                 <OrbitControls
                                     makeDefault
                                     minDistance={STUDIO_CAMERA_MIN_DISTANCE_METERS}

@@ -7,6 +7,8 @@ import { useThree } from "@react-three/fiber";
 export interface OrbitLike {
     target: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void };
     enabled: boolean;
+    /** 阻尼开关:唯一合法写方是 ViewportOrbitController(真正排空残量需临时关掉它) */
+    enableDamping: boolean;
     update: () => void;
     addEventListener: (type: string, listener: () => void) => void;
     removeEventListener: (type: string, listener: () => void) => void;

@@ -83,6 +83,9 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
         const controls = this.controls;
         const viewportOrbit = this.viewportOrbit;
         if (!this.saved || !camera || !controls || !viewportOrbit) return;
+        // 顺序铁律:先 drain 后写。drain 会把全部阻尼残量一次性施加到当前(即将丢弃的)
+        // 姿态上并归零;若先写后 drain,残量会转到刚恢复的导演姿态上——复原就不精确了。
+        viewportOrbit.drainDampingResidual();
         camera.position.set(this.positionX, this.positionY, this.positionZ);
         if (camera.fov !== this.fov) {
             camera.fov = this.fov;
@@ -90,7 +93,6 @@ class CameraMotionRuntimeSink implements CameraMotionSink, ViewportPoseSource {
         }
         controls.target.set(this.targetX, this.targetY, this.targetZ);
         camera.lookAt(this.targetX, this.targetY, this.targetZ);
-        viewportOrbit.drainDampingResidual();
         this.saved = false;
     }
 }

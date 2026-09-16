@@ -9,6 +9,7 @@ import { Matrix4, MeshBasicMaterial, SphereGeometry } from "three";
 import type { BoneKey } from "@/pose/PoseSnapshot";
 import type { BoneTreeNodeDto } from "@/pose/SkeletonRuntimeRegistry";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { useOrbitSuspension } from "@/ui/viewport/scene/useOrbitSuspension";
 import { isEditingText } from "@/shortcuts/ShortcutRegistry";
 
 const HIT_RADIUS = 0.055;
@@ -23,6 +24,11 @@ export const BonePicker = observer(function BonePicker() {
     const stores = useDirectorDeskStores();
     const { clock, dispatcher, playback, skeletons, ui } = stores;
     const invalidate = useThree((state) => state.invalidate);
+    // 骨骼旋转 gizmo 与主 gizmo 同纪律:拖拽期必须经所有权裁决让位轨道。
+    // 此前这里漏接,靠 drei 内部直写 defaultControls.enabled 兜底——那条越权写
+    // 已被 ViewportOrbitController 的访问器守卫物理无效化(它在掌镜/镜头视角下
+    // 是「拖着拖着晃动越来越大」的泄漏源),所以让位必须显式走这条链。
+    const orbitSuspension = useOrbitSuspension();
     const controlsRef = useRef<ComponentRef<typeof TransformControls> | null>(null);
     const meshRef = useRef<InstancedMesh | null>(null);
     const objectId = ui.posePickingObjectId;
@@ -109,6 +115,9 @@ export const BonePicker = observer(function BonePicker() {
     if (!objectId || !discovery?.ready) return null;
     const editing = !clock.isPlaying;
     const commitRotation = () => {
+        // 让位归还必须先于任何提前 return:suspend 在 onMouseDown 已发出,
+        // 这里一旦跳过 release,计数永久停在 1,轨道再也不会被启用(视口卡死)。
+        orbitSuspension.release();
         if (!editing || !selectedBone || !selectedBoneKey) return;
         ui.noteGizmoInteraction();
         dispatcher.dispatch(
@@ -154,7 +163,10 @@ export const BonePicker = observer(function BonePicker() {
                     showX
                     showY
                     showZ
-                    onMouseDown={() => ui.noteGizmoInteraction()}
+                    onMouseDown={() => {
+                        ui.noteGizmoInteraction();
+                        orbitSuspension.suspend();
+                    }}
                     onObjectChange={() => invalidate()}
                     onMouseUp={commitRotation}
                 />

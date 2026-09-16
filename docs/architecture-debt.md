@@ -64,9 +64,23 @@ flowchart LR
 
 `useViewportPoseGesture` 已统一为 `pointerdown` / `pointermove` / `pointerup` / `pointercancel`；仅主指针经 `isPrimaryDrag()` 进入摆位，按下后由 Canvas `setPointerCapture()` 持有到结束。原有 `window` mousemove/mouseup 常驻监听已删除。
 
-### D3 `controls.enabled` 是别人对象上的可变字段 —— 已修复(2026-09-02)
+### D3 `controls.enabled` 是别人对象上的可变字段 —— 已修复(2026-09-02),2026-09-16 补强为不可越权
 
-`ViewportOrbitController` 是每桌唯一的 OrbitControls 启停与阻尼刷新写方。`OrbitAuthorityRig` 只做 controls 挂接与所有权同步；`useOrbitSuspension` 在 gizmo/关键帧拖拽申请或归还轨道后，经控制器即时重申授权，抵消 TransformControls 的越权重设。
+`ViewportOrbitController` 是每桌唯一的 OrbitControls 启停与阻尼刷新写方。`OrbitAuthorityRig` 只做 controls 挂接与所有权同步；`useOrbitSuspension` 在 gizmo/关键帧拖拽申请或归还轨道后，经控制器即时重申授权。
+
+**2026-09-02 那版只是「约定 + 事后重申」,不足**:约定挡不住第三方直接写字段,而重申只在 `isOrbitEnabled` **跳变**时随 effect 重跑——授权值本来就是 `false` 的掌镜/镜头视角下,drei `TransformControls` 在 `dragging-changed` 里执行的 `defaultControls.enabled = !event.value`(见其源码)把轨道悄悄置回 `true` 后,没有任何 observable 变化,effect 不重跑,越权写因此长期存活。此后同一串指针事件被 `OrbitControls`(绕 target 公转)与摆位手势(绕相机 pan/tilt)各处理一次:实测一次 400px 单向拖拽转出 **243.3°** 而应为 121.1°(2.01×);来回拖时摆幅在 **0.1°~40°** 之间乱跳——用户报告的「拖着拖着晃动角度越来越大」。
+
+**现改为结构性不可越权**:`attach()` 用 `Object.defineProperty` 把 `enabled` 换成访问器,读回授权真值、写入被吞掉,`detach()` 复原普通字段。第三方的赋值语句照常执行且不报错,但物理上无效——**这类 bug 从此写不出来**,不再依赖「谁记得重申」。
+
+同批修正 `drainDampingResidual()`:它此前裸调 `update()`,而开阻尼时 `update()` 只消费 `dampingFactor` 那一份 `sphericalDelta`、余量乘 `(1 - dampingFactor)` 留到下一帧,所以它不是「清残量」而是「再转一点」——实测连调 20 次多转 **15.8°**,污染进入机位/镜头视角的首帧姿态与落帧(即上表债 5 的真正原因)。现在先临时关阻尼再 `update()`(走 `sphericalDelta.set(0,0,0)` 分支)、随后恢复原值:实测一次调用后再调 20 次角度不再变化,而导演视角的惯性手感不受影响。
+
+**阻尼本身不是缺陷,不要再去关它**:实测同一段 240px 位移无论派 15 / 30 / 60 个指针事件,总转角恒为 72.7°(= 理论值),阻尼只改变到达时间曲线,不改变总量。
+
+**同批清掉的三处同源缺陷**(都源于「残量没被真正归零」这一误解):
+
+1. `BonePicker` 的骨骼旋转 gizmo 从未接 `useOrbitSuspension`,一直靠 drei 那条越权写兜底。访问器守卫把越权写作废后,这条兜底随之消失,必须显式接上让位链——已接,且 `release()` 前移到 `commitRotation` 的所有提前 `return` 之前(否则让位计数泄漏 = 视口永久卡死)。
+2. `ShotCameraRig` 与 `CameraMotionRig` 的三处复原路径原本是「先写姿态、后 drain」。drain 会把残量一次性施加到当前姿态上,写在后面等于把残量转移到刚复原的姿态上。全部改为**先 drain 后写**;取景请求那条原先靠 drain 内部的 `update()` 顺带完成取向,drain 前移后已补显式 `camera.lookAt`。
+3. 导演姿态暂存记在 `controls` 的 `end` 事件上,而 `end` 在 `pointerup` 即触发、阻尼滑行还要再走约 1 秒——「存为机位」存到的是惯性中的姿态。实测松手瞬间记录值与最终画面差 `[-4.74,4,8.80]` vs `[-8.08,4,5.90]`。现在 `end` 先记一次保证非空,再用 rAF 轮询到两帧姿态不再变化时补记**落定姿态**;实测滑行结束后 `lastDirectorPose` 与相机姿态逐位相等。
 
 ```mermaid
 flowchart LR
@@ -75,10 +89,10 @@ flowchart LR
     T[TransformControls drag] --> S[useOrbitSuspension]
     S --> A[ViewportCameraAuthority]
     A --> O[ViewportOrbitController]
-    O --> C[OrbitControls]
+    O -->|enabled 访问器:第三方写入无效| C[OrbitControls]
 ```
 
-**验收不变量**：`controls.enabled` 与 `controls.update()` 的调用点仅保留在 `ViewportOrbitController`；掌镜、镜头视角与 gizmo 拖拽结束后均经同一控制器回收轨道授权。
+**验收不变量**：`controls.enabled` 的唯一真值是 `ViewportOrbitController.authorized`,第三方赋值必须无效(掌镜下执行 `controls.enabled = true` 后读回仍为 `false`);`controls.update()` 的调用点仅保留在 `ViewportOrbitController`,且排空后残量必须为零(连续 drain 角度不变)。
 
 ### D4 这些不变量没有自动验收 —— 已修复(2026-09-02)
 
