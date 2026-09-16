@@ -101,6 +101,8 @@ export interface SceneObjectInit {
     readonly narrativeIdentity?: SceneNarrativeIdentity | SceneNarrativeIdentityInit | null;
     /** 长度量纲：演员与标定资产可解释为米，未知来源保持相对单位。 */
     readonly spatialScale?: SceneSpatialScale | SceneSpatialScaleInit | null;
+    /** 交互锁：true = 布景类固定背景；只挡视口点选/gizmo/Inspector 编辑，命令层写入不受限。 */
+    readonly locked?: boolean;
 }
 
 export class SceneObject {
@@ -121,6 +123,7 @@ export class SceneObject {
     private currentActor: ActorProfile | null;
     private currentNarrativeIdentity: SceneNarrativeIdentity | null;
     private currentSpatialScale: SceneSpatialScale;
+    private currentLocked: boolean;
 
     constructor(init: SceneObjectInit) {
         this.id = init.id;
@@ -146,6 +149,7 @@ export class SceneObject {
         if (this.currentActor && init.kind !== "model") {
             throw new Error("SceneObject: 只有模型实体可以持有人偶画像");
         }
+        this.currentLocked = init.locked ?? false;
         makeAutoObservable<
             SceneObject,
             "currentLight" | "currentPose" | "currentActor" | "currentNarrativeIdentity" | "mountedActions"
@@ -205,6 +209,23 @@ export class SceneObject {
         return this.currentSpatialScale;
     }
 
+    get locked(): boolean {
+        return this.currentLocked;
+    }
+
+    applyLocked(next: boolean): void {
+        this.currentLocked = next;
+    }
+
+    /** 量纲重标定；人偶实体锁死 actor-meters（与构造期同一不变量），拒绝改走。 */
+    applySpatialScale(next: SceneSpatialScale | SceneSpatialScaleInit): void {
+        const resolved = spatialScaleFor(next, this.currentActor);
+        if (this.currentActor && resolved.kind !== SCENE_SPATIAL_SCALE_KIND.ACTOR_METERS) {
+            throw new Error("SceneObject: 人偶必须使用 actor-meters 量纲");
+        }
+        this.currentSpatialScale = resolved;
+    }
+
     /** JSON 往返保留领域值对象，且不泄露 Three 运行时。 */
     toJSON(): SceneObjectInit {
         return {
@@ -219,6 +240,7 @@ export class SceneObject {
             actor: this.currentActor?.toJSON() ?? null,
             narrativeIdentity: this.currentNarrativeIdentity?.toJSON() ?? null,
             spatialScale: this.currentSpatialScale.toJSON(),
+            locked: this.currentLocked,
         };
     }
 

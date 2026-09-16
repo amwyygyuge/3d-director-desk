@@ -1,5 +1,6 @@
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
@@ -47,6 +48,7 @@ import { invalidInputNotice } from "@/ui/shell/commandFeedback";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { CategorizedPresetButtonGrid } from "@/ui/inspector/PresetButtonGrid";
 import { ShotLensSection } from "@/ui/inspector/ShotLensControls";
+import { SpatialScaleSection } from "@/ui/inspector/SpatialScaleSection";
 import { INSPECTOR_FIELD_SX, TransformFields } from "@/ui/inspector/TransformFields";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { WalkPolicySection } from "@/ui/inspector/WalkPolicyControls";
@@ -705,17 +707,47 @@ const ObjectWalkPolicySection = observer(function ObjectWalkPolicySection({ obje
     return track ? <WalkPolicySection trackId={track.id} report={report} /> : null;
 });
 
-/** 变换 tab:数值变换 + 打关键帧(灯光/相机实体即单 tab 面板)。 */
+/**
+ * 锁定横幅:布景实体的解锁入口(变换字段此时整组置灰,横幅是它唯一的对照说明)。
+ * locked 经 objectId 自取(禁 props 下传布尔,红线 13),未锁定即整块不渲染,不占版面。
+ */
+const EntityLockBanner = observer(function EntityLockBanner({ objectId, report }: ObjectControlsProps) {
+    const stores = useDirectorDeskStores();
+    const entity = stores.scene.manager.getEntity(objectId);
+    if (!entity?.locked) return null;
+
+    const unlock = (): void =>
+        report(
+            stores.dispatcher.dispatch({ type: "object.set-locked", payload: { id: objectId, locked: false } }, stores),
+        );
+
+    return (
+        <Alert
+            severity="info"
+            action={
+                <Button color="inherit" size="small" onClick={unlock}>
+                    解锁
+                </Button>
+            }
+        >
+            已锁定 · 布景
+        </Alert>
+    );
+});
+
+/** 变换 tab:锁定横幅 + 数值变换 + 量纲 + 打关键帧(灯光/相机实体即单 tab 面板)。 */
 export const EntityTransformSection = observer(function EntityTransformSection({
     primaryId,
     report,
 }: InspectorSectionProps) {
     return (
         <>
+            <EntityLockBanner objectId={primaryId} report={report} />
             <Box sx={INSPECTOR_FIELD_SX}>
                 <Typography variant="overline">变换</Typography>
                 <TransformFields objectId={primaryId} />
             </Box>
+            <SpatialScaleSection primaryId={primaryId} report={report} />
             <TimelineKeyControls objectId={primaryId} report={report} />
             <ObjectWalkPolicySection objectId={primaryId} report={report} />
         </>

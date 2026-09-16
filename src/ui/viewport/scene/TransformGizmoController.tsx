@@ -82,13 +82,15 @@ const GizmoHandle = observer(function GizmoHandle({ targetId }: { readonly targe
  *   再乘距离系数是双重补偿(远景 gizmo 暴涨的回退教训)。
  */
 export const TransformGizmoController = observer(function TransformGizmoController() {
-    const { camera, selection, ui } = useDirectorDeskStores();
+    const { camera, scene, selection, ui } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
 
     const primaryId = selection.primaryId;
     const isShotSelected = primaryId !== null && camera.director.getShot(primaryId) !== undefined;
     const editingSelectedPose = primaryId !== null && ui.posePickingObjectId === primaryId;
     const armed = ui.isGizmoArmed(primaryId);
+    // 锁定实体自取实体判定(禁 props 下传):渲染期直读 locked,observer 自动订阅,解锁即恢复挂载
+    const isLocked = primaryId !== null && scene.manager.getEntity(primaryId)?.locked === true;
 
     // arm 绑定选中身份:主选变更(点选/取消/切对象)即解除,不残留到下一次选中
     useEffect(
@@ -108,6 +110,6 @@ export const TransformGizmoController = observer(function TransformGizmoControll
         invalidate();
     }, [selectionKey, armed, invalidate]);
 
-    if (!armed || isShotSelected || editingSelectedPose || primaryId === null) return null;
+    if (!armed || isShotSelected || editingSelectedPose || primaryId === null || isLocked) return null;
     return <GizmoHandle targetId={primaryId} />;
 });

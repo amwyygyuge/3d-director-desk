@@ -5,7 +5,7 @@ import type { ActionPerformance } from "@/animation/ActionPerformance";
 import { SceneManager } from "@/core/SceneManager";
 import { SceneObject } from "@/core/SceneObject";
 import type { LightParams } from "@/core/LightParams";
-import type { SceneNarrativeIdentity } from "@/core/SceneSemantics";
+import type { SceneNarrativeIdentity, SceneSpatialScaleInit } from "@/core/SceneSemantics";
 import type { PoseSnapshot } from "@/pose/PoseSnapshot";
 import type { SceneObjectInit, Transform } from "@/core/SceneObject";
 
@@ -64,6 +64,18 @@ export class SceneStore {
         const entity = this.manager.getEntity(id);
         if (!entity) return;
         entity.applyLight(light);
+    }
+
+    setLocked(id: string, locked: boolean): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applyLocked(locked);
+    }
+
+    setObjectSpatialScale(id: string, scale: SceneSpatialScaleInit): void {
+        const entity = this.manager.getEntity(id);
+        if (!entity) return;
+        entity.applySpatialScale(scale);
     }
 
     setLightingMode(mode: LightingMode): void {

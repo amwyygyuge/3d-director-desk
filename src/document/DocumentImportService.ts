@@ -116,6 +116,10 @@ function entityIssues(value: unknown): readonly string[] {
         return [`实体 "${value.id}" 的叙事身份无效`];
     }
     if (!isSceneSpatialScaleInit(value.spatialScale)) return [`实体 "${value.id}" 的量纲模式无效`];
+    // locked 缺失按未锁定放行(免迁移);出现则必须布尔,防脏数据混进文档
+    if (value.locked !== undefined && typeof value.locked !== "boolean") {
+        return [`实体 "${value.id}" 的 locked 标记无效`];
+    }
     return finiteTransform(value.transform) ? [] : [`实体 "${value.id}" 的 transform 含非法数值`];
 }
 

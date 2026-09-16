@@ -15,6 +15,8 @@ export interface SceneEntityInspection {
     readonly name: string;
     readonly narrativeIdentity: SceneNarrativeIdentityInit | null;
     readonly spatialScale: SceneSpatialScaleInit;
+    /** 交互锁:true = 布景类固定背景,视口点选与 gizmo 被围栏(命令层写入不受限)。 */
+    readonly locked: boolean;
     readonly transform: Transform;
     readonly loadState: EntityLoadState;
     readonly mountedActionId: string | null;
@@ -68,6 +70,7 @@ export class SceneInspectionService {
             name: entity.name,
             narrativeIdentity: serialized.narrativeIdentity ?? null,
             spatialScale: serialized.spatialScale ?? entity.spatialScale.toJSON(),
+            locked: serialized.locked ?? entity.locked,
             transform: serialized.transform ?? entity.transform,
             loadState: entityLoadState(ctx, entity),
             mountedActionId: entity.actionId,

@@ -385,7 +385,7 @@ export function ModelContent({ entity }: { entity: SceneObject }) {
     return <ModelRequestContent key={requestKey} entity={entity} />;
 }
 
-function ModelRequestContent({ entity }: { entity: SceneObject }) {
+function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
     const { actorRuntime, binder, models, playback, scene, ui, skeletons } = useDirectorDeskStores();
     const invalidate = useThree((state) => state.invalidate);
     // 配置缺失(无 url/格式)属静态错误,渲染期直接呈现失败占位,不进 effect
@@ -395,6 +395,9 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
     const [handle, setHandle] = useState<ModelHandle | null>(null);
     const [loadFailed, setLoadFailed] = useState(false);
     const failed = sourceUrl === null || format === null || loadFailed;
+    // 渲染期直读量纲(observer 订阅):set-spatial-scale 重标定后落尺 effect 依它重跑;
+    // 组件本不读实体字段,不包 observer 这条订阅就不存在,重标定会静默无效(实测)。
+    const spatialScale = entity.spatialScale;
 
     useEffect(() => {
         if (sourceUrl === null || format === null) {
@@ -454,11 +457,12 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
     const shellFramesRef = useRef(0);
     // 文档导入换新实体实例但 id/url/format 不变,壳层沿用旧的:落尺必须按新实体的量纲重跑一次。
     // 否则壳层保留上一份归一化结果,与新实体 transform 的配比错位(实测背景墙因此不可见)。
+    // spatialScale 同理:运行期量纲重标定(object.set-spatial-scale)后必须重新落尺。
     useEffect(() => {
         fittedRef.current = false;
         shellFramesRef.current = 0;
         invalidate();
-    }, [entity, shell, invalidate]);
+    }, [entity, shell, spatialScale, invalidate]);
     useFrame(() => {
         if (fittedRef.current || !shell) return;
         // useFrame 在渲染前触发;首帧渲染才初始化骨架矩阵 → 第二帧再测量
@@ -523,3 +527,6 @@ function ModelRequestContent({ entity }: { entity: SceneObject }) {
         </mesh>
     );
 }
+
+/** observer 壳:让实体字段(spatialScale 等)的渲染期直读真正建立 MobX 订阅。 */
+const ModelRequestContent = observer(ModelRequestContentInner);

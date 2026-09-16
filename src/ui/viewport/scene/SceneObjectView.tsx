@@ -1,4 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
+import type { ThreeEvent } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
@@ -110,7 +111,10 @@ const KIND_CONTENT: Record<SceneObjectKind, ComponentType<{ entity: SceneObject 
  * - 外层 group 承载 transform + 运行时绑定(ref 回调);
  * - ref 回调完成 three 运行时 ↔ SceneManager 的绑定/解绑(运行时永不进 observable);
  * - 渲染体内禁止写场景 store;点选写 SelectionStore(纯 UI 态,不走命令层);
- * - 选中模型一律显示包围框;包围框挂在 group 之下,位移随父级免费更新;
+ * - 锁定实体不挂 onClick:R3F 无 handler 即 eventCount 归零、退出交互列表,射线直接穿透,
+ *   点布景等同点空,由 Canvas onPointerMissed 的取消选中路径接管(handler 内早退不行,
+ *   那样实体仍在交互列表里、仍会命中并 stopPropagation,把背后的实体和"点空"一起吞掉);
+ * - 选中模型一律显示包围框:Outliner 选中锁定实体也要出包围框,故高亮与点选守卫互不相干;
  * - 帧内仅在内容签名变化时重算一次局部包围盒;
  * - 灯光的选中态由灯光 helper 表达,不叠包围框。
  */
@@ -174,17 +178,20 @@ export const SceneObjectView = observer(function SceneObjectView({ entity }: { e
 
     const Content = KIND_CONTENT[entity.kind];
     const { position, rotation, scale } = transform;
+    // 渲染期直读 locked(observer 自动订阅):锁定即整个 onClick 属性缺席,而非 handler 内早退。
+    // 走条件展开而非 onClick={undefined}:exactOptionalPropertyTypes 下显式 undefined 不合法;
+    // handler 与展开结果都 memo 住,渲染期零新增分配。
+    const locked = entity.locked;
+    const selectSelf = useCallback(
+        (event: ThreeEvent<MouseEvent>) => {
+            event.stopPropagation();
+            selection.select(entity.id, { additive: event.metaKey || event.ctrlKey });
+        },
+        [selection, entity],
+    );
+    const pickHandlers = useMemo(() => (locked ? {} : { onClick: selectSelf }), [locked, selectSelf]);
     return (
-        <group
-            ref={bindRuntime}
-            position={[...position]}
-            rotation={[...rotation]}
-            scale={[...scale]}
-            onClick={(e) => {
-                e.stopPropagation();
-                selection.select(entity.id, { additive: e.metaKey || e.ctrlKey });
-            }}
-        >
+        <group ref={bindRuntime} position={[...position]} rotation={[...rotation]} scale={[...scale]} {...pickHandlers}>
             <Content entity={entity} />
             {highlight ? <primitive object={highlight.object3d} ref={registerCaptureHelper} /> : null}
         </group>

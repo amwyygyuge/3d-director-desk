@@ -343,6 +343,8 @@ export {
     RemoveObjectCommand,
     SetCameraLensCommand,
     SetCameraShotCommand,
+    SetLockedCommand,
+    SetSpatialScaleCommand,
 } from "@/command/commands";
 export {
     AddTimelineKeyCommand,

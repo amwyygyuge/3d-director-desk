@@ -44,7 +44,7 @@ import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { ToolbarExtension } from "@/ui/shell/DeskShellPresentation";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { ColorField } from "@/ui/controls/ColorField";
-import { importModelFile } from "@/ui/assets/importFiles";
+import { importModelFile, importSceneryFile } from "@/ui/assets/importFiles";
 import { CHROME } from "@/ui/shell/theme";
 
 const COMMAND_TYPE = {
@@ -88,6 +88,7 @@ const TEXT = {
     FLOOR_COLOR: "地板颜色",
     IMPORT_DOCUMENT: "导入工程…",
     IMPORT_MODEL: "导入模型文件…",
+    IMPORT_SCENERY: "导入布景文件…",
     MENU: "项目菜单",
     FLOOR_SURFACE: "实心地面",
     FLOOR_SURFACE_HINT: "网格之外的实心地板，同时是投影的接收面",
@@ -146,6 +147,7 @@ export const TopPillBar = observer(function TopPillBar() {
 const ProjectMenuControl = observer(function ProjectMenuControl() {
     const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
     const modelInputRef = useRef<HTMLInputElement>(null);
+    const sceneryInputRef = useRef<HTMLInputElement>(null);
     const documentInputRef = useRef<HTMLInputElement>(null);
 
     return (
@@ -165,9 +167,14 @@ const ProjectMenuControl = observer(function ProjectMenuControl() {
                 documentInputRef={documentInputRef}
                 menuAnchor={menuAnchor}
                 modelInputRef={modelInputRef}
+                sceneryInputRef={sceneryInputRef}
                 onClose={() => setMenuAnchor(null)}
             />
-            <HiddenImportInputs documentInputRef={documentInputRef} modelInputRef={modelInputRef} />
+            <HiddenImportInputs
+                documentInputRef={documentInputRef}
+                modelInputRef={modelInputRef}
+                sceneryInputRef={sceneryInputRef}
+            />
         </>
     );
 });
@@ -176,6 +183,7 @@ interface ProjectMenuProps {
     readonly documentInputRef: RefObject<HTMLInputElement>;
     readonly menuAnchor: HTMLElement | null;
     readonly modelInputRef: RefObject<HTMLInputElement>;
+    readonly sceneryInputRef: RefObject<HTMLInputElement>;
     readonly onClose: () => void;
 }
 
@@ -184,6 +192,7 @@ const ProjectMenu = observer(function ProjectMenu({
     documentInputRef,
     menuAnchor,
     modelInputRef,
+    sceneryInputRef,
     onClose,
 }: ProjectMenuProps) {
     const stores = useDirectorDeskStores();
@@ -193,6 +202,9 @@ const ProjectMenu = observer(function ProjectMenu({
         <Menu anchorEl={menuAnchor} id={MENU_ID} onClose={onClose} open={menuAnchor !== null}>
             <MenuItem onClick={() => closeMenuThen({ action: () => modelInputRef.current?.click(), onClose })}>
                 {TEXT.IMPORT_MODEL}
+            </MenuItem>
+            <MenuItem onClick={() => closeMenuThen({ action: () => sceneryInputRef.current?.click(), onClose })}>
+                {TEXT.IMPORT_SCENERY}
             </MenuItem>
             <MenuItem onClick={() => closeMenuThen({ action: () => documentInputRef.current?.click(), onClose })}>
                 {TEXT.IMPORT_DOCUMENT}
@@ -425,11 +437,13 @@ function toggleFrameRateVisible(stores: DirectorDeskStores): void {
 interface HiddenImportInputsProps {
     readonly documentInputRef: RefObject<HTMLInputElement>;
     readonly modelInputRef: RefObject<HTMLInputElement>;
+    readonly sceneryInputRef: RefObject<HTMLInputElement>;
 }
 
 const HiddenImportInputs = observer(function HiddenImportInputs({
     documentInputRef,
     modelInputRef,
+    sceneryInputRef,
 }: HiddenImportInputsProps) {
     const stores = useDirectorDeskStores();
     return (
@@ -439,6 +453,14 @@ const HiddenImportInputs = observer(function HiddenImportInputs({
                 hidden
                 onChange={(event) => importModelFromInput({ event, stores })}
                 ref={modelInputRef}
+                type="file"
+            />
+            {/* 布景与模型收同一批扩展名(同是模型文件),差别只在落位与锁定语义,故 accept 复用 */}
+            <input
+                accept={FILE_ACCEPT.MODEL}
+                hidden
+                onChange={(event) => importSceneryFromInput({ event, stores })}
+                ref={sceneryInputRef}
                 type="file"
             />
             <input
@@ -462,6 +484,18 @@ function importModelFromInput({
     const file = event.target.files?.[FIRST_ITEM_INDEX];
     event.target.value = "";
     if (file) importModelFile(stores, file, (message) => stores.ui.setApplicationNotice(message));
+}
+
+function importSceneryFromInput({
+    event,
+    stores,
+}: {
+    readonly event: ChangeEvent<HTMLInputElement>;
+    readonly stores: DirectorDeskStores;
+}): void {
+    const file = event.target.files?.[FIRST_ITEM_INDEX];
+    event.target.value = "";
+    if (file) importSceneryFile(stores, file, (message) => stores.ui.setApplicationNotice(message));
 }
 
 async function importDocumentFromInput({

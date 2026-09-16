@@ -35,8 +35,9 @@ import type { StudioEnvironmentJSON } from "@/studio/StudioEnvironment";
  * v11 起一次性动作带回收时长,结束后回到常驻姿势;
  * v12 起动作排期带进入时长,从常驻姿势平滑进入动作;
  * v13 起动作资产持久化裁剪窗口,去除源文件静态参考帧。
+ * v24 起实体持久化 locked 交互锁(布景固定背景);旧档缺该字段构造期按未锁定放行,免迁移。
  */
-export const DESK_DOCUMENT_VERSION = 23;
+export const DESK_DOCUMENT_VERSION = 24;
 
 /** 走位轨对齐声明:排期时段由该轨的关键帧区间派生。 */
 export interface DeskDocumentActionAlignment {

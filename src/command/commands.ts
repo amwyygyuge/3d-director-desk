@@ -34,6 +34,7 @@ import { isLightParams, normalizeLightParams } from "@/core/LightParams";
 import type { LightParams } from "@/core/LightParams";
 import { finiteTransform, finiteVec3, SCENE_OBJECT_KINDS } from "@/core/SceneObject";
 import type { SceneObjectKind, Transform, Vec3 } from "@/core/SceneObject";
+import { isSceneSpatialScaleInit, SCENE_SPATIAL_SCALE_KIND } from "@/core/SceneSemantics";
 import type { SceneNarrativeIdentityInit, SceneSpatialScaleInit } from "@/core/SceneSemantics";
 import type { CommandDispatcher } from "@/command/CommandDispatcher";
 import { registerActorCommands } from "@/command/actorCommands";
@@ -107,6 +108,7 @@ interface PlaceObjectPayload {
     actor?: ActorProfileInit | null;
     narrativeIdentity?: SceneNarrativeIdentityInit | null;
     spatialScale?: SceneSpatialScaleInit | null;
+    locked?: boolean | null;
 }
 
 const PLACE_OBJECT_CONTRACT: PayloadContract = {
@@ -122,6 +124,7 @@ const PLACE_OBJECT_CONTRACT: PayloadContract = {
         actor: nullable({ type: "object" }),
         narrativeIdentity: nullable({ type: "object" }),
         spatialScale: nullable({ type: "object" }),
+        locked: nullable({ type: "boolean" }),
         light: nullable(LIGHT_PARAMS_SCHEMA),
     },
     required: ["id", "kind"],
@@ -187,7 +190,8 @@ export class PlaceObjectCommand extends DirectorCommand<PlaceObjectPayload> {
     execute(ctx: DirectorContext): void {
         const { light, ...object } = this.payload;
         // 格式解析与校验共用(Rule of Two):必须落解析结果,否则实体 format=null 被渲染层当静态失败(红框占位)
-        const resolved = { ...object, format: resolveModelFormat(this.payload) };
+        // locked 收敛成布尔:契约允许显式 null(撤销快照口径),实体侧只认 boolean
+        const resolved = { ...object, format: resolveModelFormat(this.payload), locked: object.locked ?? false };
         if (light) {
             ctx.scene.addObject({ ...resolved, light: normalizeLightParams(light) });
             return;
@@ -237,6 +241,107 @@ export class MoveObjectCommand extends DirectorCommand<MoveObjectPayload> {
         const prev = ctx.scene.manager.getEntity(this.payload.id)?.transform;
         return prev
             ? [{ type: MoveObjectCommand.TYPE, payload: { id: this.payload.id, transform: toJS(prev) } }]
+            : null;
+    }
+}
+
+interface SetLockedPayload {
+    id: string;
+    locked: boolean;
+}
+
+const SET_LOCKED_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" }, locked: { type: "boolean" } },
+    required: ["id", "locked"],
+};
+
+/**
+ * 交互锁(布景类固定背景):只围栏视口点选/gizmo,命令层写入不受限。
+ * 上锁即摘除该实体的选中态,否则 gizmo 仍挂在已锁实体上,围栏在 UI 侧留下失效引用。
+ */
+export class SetLockedCommand extends DirectorCommand<SetLockedPayload> {
+    static readonly TYPE = "object.set-locked";
+    readonly type = SetLockedCommand.TYPE;
+
+    constructor(readonly payload: SetLockedPayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+            return ["对象 id 格式无效"];
+        }
+        const issues: string[] = [];
+        if (!ctx.scene.manager.getEntity(this.payload.id)) issues.push(`对象 "${this.payload.id}" 不存在`);
+        if (typeof this.payload.locked !== "boolean") issues.push("locked 必须是布尔值");
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.scene.setLocked(this.payload.id, this.payload.locked);
+        // 锁上的实体不该继续被 gizmo 持有;解锁不自动恢复选中(选中态是纯 UI 意图)
+        if (this.payload.locked && ctx.selection.selectedIds.includes(this.payload.id)) {
+            ctx.selection.remove(this.payload.id);
+        }
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        // 与 MoveObjectCommand 同一模式:invert 在 execute 之前取旧值快照(见 CommandDispatcher.dispatch)
+        const entity = ctx.scene.manager.getEntity(this.payload.id);
+        return entity
+            ? [{ type: SetLockedCommand.TYPE, payload: { id: this.payload.id, locked: entity.locked } }]
+            : null;
+    }
+}
+
+interface SetSpatialScalePayload {
+    id: string;
+    spatialScale: SceneSpatialScaleInit;
+}
+
+const SET_SPATIAL_SCALE_CONTRACT: PayloadContract = {
+    properties: { id: { type: "string" }, spatialScale: { type: "object" } },
+    required: ["id", "spatialScale"],
+};
+
+/**
+ * 量纲重标定(reference-meters + 最大边实际米数):让未知来源的模型可以按米解释距离。
+ * 人偶实体锁死 actor-meters 的不变量由 SceneObject.applySpatialScale 兜底,此处提前给友好 issue。
+ */
+export class SetSpatialScaleCommand extends DirectorCommand<SetSpatialScalePayload> {
+    static readonly TYPE = "object.set-spatial-scale";
+    readonly type = SetSpatialScaleCommand.TYPE;
+
+    constructor(readonly payload: SetSpatialScalePayload) {
+        super();
+    }
+
+    validate(ctx: DirectorContext): string[] {
+        if (typeof this.payload.id !== "string" || this.payload.id.length === 0) {
+            return ["对象 id 格式无效"];
+        }
+        const issues: string[] = [];
+        const entity = ctx.scene.manager.getEntity(this.payload.id);
+        if (!entity) issues.push(`对象 "${this.payload.id}" 不存在`);
+        if (!isSceneSpatialScaleInit(this.payload.spatialScale)) {
+            issues.push(
+                "量纲参数无效(kind 取 actor-meters/reference-meters/relative,reference-meters 需正数最大边米数)",
+            );
+        } else if (entity?.actor && this.payload.spatialScale.kind !== SCENE_SPATIAL_SCALE_KIND.ACTOR_METERS) {
+            issues.push("人偶实体锁死 actor-meters 量纲,不可改走");
+        }
+        return issues;
+    }
+
+    execute(ctx: DirectorContext): void {
+        ctx.scene.setObjectSpatialScale(this.payload.id, this.payload.spatialScale);
+    }
+
+    override invert(ctx: DirectorContext): readonly SerializedCommand[] | null {
+        // 同 MoveObjectCommand 模式:execute 前取旧值,值对象走 toJSON 落纯数据
+        const prev = ctx.scene.manager.getEntity(this.payload.id)?.spatialScale;
+        return prev
+            ? [{ type: SetSpatialScaleCommand.TYPE, payload: { id: this.payload.id, spatialScale: prev.toJSON() } }]
             : null;
     }
 }
@@ -475,10 +580,7 @@ export class SetCameraShotCommand extends DirectorCommand<SetCameraShotPayload> 
      */
     execute(ctx: DirectorContext): void {
         const lens = this.payload.shot.lens ?? ctx.camera.director.getShot(this.payload.id)?.lens;
-        ctx.camera.addShot(
-            this.payload.id,
-            new CameraShot(lens ? { ...this.payload.shot, lens } : this.payload.shot),
-        );
+        ctx.camera.addShot(this.payload.id, new CameraShot(lens ? { ...this.payload.shot, lens } : this.payload.shot));
     }
 
     /** 覆盖已有机位 → 回滚旧参数;新建 → 撤销即删除 */
@@ -579,7 +681,6 @@ export class SetCameraLensCommand extends DirectorCommand<SetCameraLensPayload> 
     }
 }
 
-
 const SCENE_DESCRIBE_CAPABILITY: CommandCapability = {
     type: "scene.describe",
     version: "1",
@@ -637,6 +738,21 @@ export function registerBuiltinCommands(dispatcher: CommandDispatcher): void {
         RemoveObjectCommand.TYPE,
         (payload) => new RemoveObjectCommand(payload),
         commandCapability(RemoveObjectCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, REMOVE_OBJECT_CONTRACT),
+    );
+    dispatcher.register(
+        SetLockedCommand.TYPE,
+        (payload) => new SetLockedCommand(payload),
+        commandCapability(SetLockedCommand.TYPE, SCENE_EDIT_PERMISSION, SCENE_APPLIES_WHEN, SET_LOCKED_CONTRACT),
+    );
+    dispatcher.register(
+        SetSpatialScaleCommand.TYPE,
+        (payload) => new SetSpatialScaleCommand(payload),
+        commandCapability(
+            SetSpatialScaleCommand.TYPE,
+            SCENE_EDIT_PERMISSION,
+            SCENE_APPLIES_WHEN,
+            SET_SPATIAL_SCALE_CONTRACT,
+        ),
     );
     dispatcher.register(
         ClearSceneCommand.TYPE,

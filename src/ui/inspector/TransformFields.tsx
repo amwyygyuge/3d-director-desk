@@ -68,12 +68,20 @@ function replaceAxis(vector: Vec3, axis: AxisIndex, value: number): Vec3 {
     }
 }
 
-/** 数值变换编辑器:刮擦期只写 three 运行时预览,松手收敛为一条 object.move(与 gizmo 同模式)。 */
+/**
+ * 数值变换编辑器:刮擦期只写 three 运行时预览,松手收敛为一条 object.move(与 gizmo 同模式)。
+ *
+ * 锁定实体整组字段置灰:`ScrubNumberField` 原生支持 `disabled`(同时挡住输入、↑/↓ 步进与刮擦手柄),
+ * 故走逐字段 `disabled` 而非替换成只读 Typography——数值仍以同一栅格、同一格式呈现,
+ * 作者读坐标时不必在两套排版间来回适应,解锁后也不发生布局跳动。
+ */
 export const TransformFields = observer(function TransformFields({ objectId }: { objectId: string }) {
     const stores = useDirectorDeskStores();
     const { dispatcher, scene } = stores;
     const entity = scene.manager.getEntity(objectId);
     if (!entity) return null;
+    // locked 经 objectId 自取(禁 props 下传布尔,红线 13):锁定态变化只重渲本组件
+    const locked = entity.locked;
 
     const commitAxis = (key: TransformKey, axis: AxisIndex, displayedValue: number) => {
         const latestEntity = scene.manager.getEntity(objectId);
@@ -128,6 +136,7 @@ export const TransformFields = observer(function TransformFields({ objectId }: {
                                 ariaLabel={fieldLabel}
                                 kind={FIELD_KIND[group.key]}
                                 value={displayedValue}
+                                disabled={locked}
                                 onCommit={(nextValue) => commitAxis(group.key, axis.index, nextValue)}
                                 onPreview={(nextValue) => previewAxis(group.key, axis.index, nextValue)}
                                 onInvalid={() => stores.ui.setApplicationNotice(`${fieldLabel} 必须是有限数值`)}
