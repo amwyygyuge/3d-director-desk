@@ -4,14 +4,22 @@
 
 An embeddable React 3D director desk: place game models, mount actions, compose camera shots and camera moves, light the scene, and export stills and MP4 video — with every write operation funneled through a serializable command layer, so the same verbs drive UI clicks, host messages, and AI agents.
 
-<video src="https://raw.githubusercontent.com/amwyygyuge/3d-director-desk/master/docs/media/director-desk-demo.mp4" controls muted width="960"></video>
+![Director Desk demo](docs/media/director-desk-demo.gif)
 
-▶ [Download the demo video](docs/media/director-desk-demo.mp4) if your renderer does not show the player.
+▶ [Full-quality demo video (MP4, 10s)](docs/media/director-desk-demo.mp4)
 
 **Live demo (GitHub Pages):** https://amwyygyuge.github.io/3d-director-desk/
 The hosted page is standalone (no bridge). It persists your scene in `localStorage`; open the project menu to import/export documents.
 
 **Importable example:** [`examples/cinematic-scene.json`](examples/cinematic-scene.json) — the demo scene above (14 entities: two humanoids, scenery, five lights; one shot, custom lighting, 10s timeline). Download it, then in the live demo use the project menu → **导入工程…** and pick the file. Documents are version-gated: the desk accepts only documents matching its current `DESK_DOCUMENT_VERSION` and rejects the rest with a structured error.
+
+## UI at a glance
+
+| Camera viewfinder (lens optics, rule-of-thirds grid) | Timeline (multi-track keyframes, walk/action/camera segments) |
+| --- | --- |
+| ![Camera viewfinder](docs/media/screenshot-viewfinder.webp) | ![Timeline](docs/media/screenshot-timeline.webp) |
+| Asset catalog (built-in actors/scenery + local import) | Overview (resource outline, studio lighting, gizmo layout) |
+| ![Asset catalog](docs/media/screenshot-assets.webp) | ![Overview](docs/media/screenshot-overview.webp) |
 
 ## Features
 

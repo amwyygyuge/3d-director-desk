@@ -4,14 +4,22 @@
 
 可嵌入的 React 3D 导演台:摆放游戏模型、挂载动作、编排机位与运镜、布光,并导出静帧与 MP4 视频。一切写操作都收敛为可序列化的命令经统一分发——同一组动词同时驱动 UI 交互、宿主消息与 AI 代理。
 
-<video src="https://raw.githubusercontent.com/amwyygyuge/3d-director-desk/master/docs/media/director-desk-demo.mp4" controls muted width="960"></video>
+![导演台演示](docs/media/director-desk-demo.gif)
 
-▶ 若渲染器不显示播放器,[点此下载演示视频](docs/media/director-desk-demo.mp4)。
+▶ [全画质演示视频(MP4,10 秒)](docs/media/director-desk-demo.mp4)
 
 **在线体验(GitHub Pages):** https://amwyygyuge.github.io/3d-director-desk/
 线上页面为独立模式(不连桥),场景经 `localStorage` 持久化;项目菜单支持工程文档的导出/导入。
 
 **可直接导入的示例工程:** [`examples/cinematic-scene.json`](examples/cinematic-scene.json) —— 即上方演示场景(14 个实体:两具人形演员、布景、五盏灯;一条机位、自定义灯光、10 秒时间轴)。下载后打开在线 demo,点项目菜单 → **导入工程…** 选择该文件即可。文档有严格版本门:只接受与当前 `DESK_DOCUMENT_VERSION` 完全一致的文档,其余以结构化错误拒绝。
+
+## 界面速览
+
+| 机位取景(镜头光学参数 + 九宫格构图) | 时间线(多轨关键帧,走位/动作/运镜分段) |
+| --- | --- |
+| ![机位取景](docs/media/screenshot-viewfinder.webp) | ![时间线](docs/media/screenshot-timeline.webp) |
+| 资产目录(内置人形/布景 + 本地模型导入) | 总览(资源大纲、演播室灯光、gizmo 布景) |
+| ![资产目录](docs/media/screenshot-assets.webp) | ![总览](docs/media/screenshot-overview.webp) |
 
 ## 功能
 
