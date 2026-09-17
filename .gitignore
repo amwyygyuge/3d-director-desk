@@ -5,3 +5,5 @@ storybook-static
 bridge-output
 *.log
 .DS_Store
+.npmrc
+.env*

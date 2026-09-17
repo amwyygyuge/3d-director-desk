@@ -551,7 +551,7 @@ dispatch({
 - **有头浏览器观测**:`browser.open` 走 relay/`app.path` 都可能失败(relay 扩展未连、spawn 后无 page target)。可靠路径是自己起 Chrome 再 CDP 附着:`"/Applications/Google Chrome.app/.../Google Chrome" --remote-debugging-port=9333 --user-data-dir=/tmp/xxx <url> &`,然后 `browser.open({ app: { cdp_url: "http://127.0.0.1:9333" } })`。
 - **`tab.evaluate` 有 30s 硬上限**:每次 capture 约需 1s 沉降,多时间点/多实体的循环审计务必拆成一次一个探针的多次调用,否则整段超时且 VM 状态被重置。
 - **`tab.screenshot()` 拿不到 WebGL 画面**:返回的是页面截图文件路径(webp),画布内容可能全黑;同理在页面里 `createImageBitmap(canvas)` 读回可能全 0。要看渲染结果只信 `capture.frame` 的产物(`desk.ui.lastCaptureUrl`,blob URL,每次 capture 换新)。
-- **`capture.video` 在非安全上下文静默失败(必踩)**:远程 http 源(如 `http://10.226.102.153:4000`)下 `dispatch` 返回 `ok: true`,但 `videoExport.currentState` 一直停在 `"idle"`,`ui.lastVideoUrl` / `lastVideoMeta` 永远是 `null`,**页面上没有任何 toast**。真实原因只在 console 里:`[capture] MP4 export failed Error: VideoEncoder is not available in this environment; this may be because this page is running in an insecure context.` —— WebCodecs 的 `VideoEncoder` 是 secure-context-only API,`MediaRecorder` 存在也没用(它只报 webm,导出走的是 MP4/h264 编码路径)。
+- **`capture.video` 在非安全上下文静默失败(必踩)**:远程 http 源(如 `http://192.0.2.10:4000`)下 `dispatch` 返回 `ok: true`,但 `videoExport.currentState` 一直停在 `"idle"`,`ui.lastVideoUrl` / `lastVideoMeta` 永远是 `null`,**页面上没有任何 toast**。真实原因只在 console 里:`[capture] MP4 export failed Error: VideoEncoder is not available in this environment; this may be because this page is running in an insecure context.` —— WebCodecs 的 `VideoEncoder` 是 secure-context-only API,`MediaRecorder` 存在也没用(它只报 webm,导出走的是 MP4/h264 编码路径)。
     - **先诊断,别瞎试**:`dispatch` 的 ok 无意义。判定录制真的起来了要看 `desk.videoExport.currentState` 是否离开 `idle`。要拿到根因就在页面里 hook console(工具侧的 `page.on("console")` 抓不到这个 frame):
         ```js
         // 在 tab.evaluate 里装一次
@@ -567,10 +567,10 @@ dispatch({
         ```bash
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
           --remote-debugging-port=9444 --user-data-dir=/tmp/dd-chrome-secure --no-first-run \
-          --unsafely-treat-insecure-origin-as-secure=http://10.226.102.153:4000 \
-          "http://10.226.102.153:4000/" &
+          --unsafely-treat-insecure-origin-as-secure=http://192.0.2.10:4000 \
+          "http://192.0.2.10:4000/" &
         ```
-        `--user-data-dir` 必须给一个**新目录**(该 flag 只在全新 profile 的进程上生效);源串要精确到 `scheme://host:port`,不带路径、不带尾斜杠。附着后断言 `window.isSecureContext === true && typeof VideoEncoder !== "undefined"`,两者都为真才录。其它可行路径:把页面挂到 `localhost`(端口转发 `ssh -L 4000:10.226.102.153:4000`,localhost 天然是安全上下文)或给部署上 HTTPS。
+        `--user-data-dir` 必须给一个**新目录**(该 flag 只在全新 profile 的进程上生效);源串要精确到 `scheme://host:port`,不带路径、不带尾斜杠。附着后断言 `window.isSecureContext === true && typeof VideoEncoder !== "undefined"`,两者都为真才录。其它可行路径:把页面挂到 `localhost`(端口转发 `ssh -L 4000:192.0.2.10:4000`,localhost 天然是安全上下文)或给部署上 HTTPS。
     - **换窗口重录不要用 `desk.export-document` → `desk.import-document` 搬场景**:实测导入后动作恢复是异步流水线,会卡在「动作挂载等待运行时超时:hero / aide」,`scene.describe` 的 `actionSequence` 长期停在 0(只有部分实体恢复),而且 `actor.appearance` / `build` 不随文档往返。补挂 `assets.mount` 也不生效。可靠做法是在新窗口**按命令重放布景脚本**(place → identity → appearance/build → pose → timeline → mount → shots → motion → lights),重放是幂等且快的。
 
 ### 契约偏差(以实测为准)
