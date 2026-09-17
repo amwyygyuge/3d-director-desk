@@ -1,0 +1,39 @@
+name: Deploy playground to GitHub Pages
+
+on:
+    push:
+        branches: [master]
+    workflow_dispatch:
+
+permissions:
+    pages: write
+    id-token: write
+
+concurrency:
+    group: pages
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.14
+            - run: bun install --frozen-lockfile
+            - run: bun run build:playground
+            # test-assets 是 Storybook 播种/测试资产,线上 playground 不消费,剔除 ~7.7MB 死重量
+            - run: rm -rf dist-playground/test-assets
+            - uses: actions/upload-pages-artifact@v3
+              with:
+                  path: dist-playground
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - id: deployment
+              uses: actions/deploy-pages@v4

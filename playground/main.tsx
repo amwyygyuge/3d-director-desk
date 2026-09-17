@@ -154,7 +154,7 @@ class DirectorBridgeClient {
 
 /**
  * 默认桥地址:本地 dev 直连 127.0.0.1:4005(桥只绑 IPv4 回环;写 localhost 在 Windows 上
- * 可能解析到 ::1,撞上不相关的残留监听)。非 localhost 部署(如 Vercel)不主动连桥,
+ * 可能解析到 ::1,撞上不相关的残留监听)。非 localhost 部署(如 GitHub Pages)不主动连桥,
  * 除非显式给 ?bridge=ws://host:port。
  */
 function resolveBridgeUrl(): string | null {
@@ -183,7 +183,7 @@ export function Playground() {
             persistence.start();
             persistenceRef.current = persistence;
 
-            // 本地存储为空(初次打开或 Vercel 首次访问)时播种演示场景,停在 0 帧由作者决定播放
+            // 本地存储为空(初次打开或线上首次访问)时播种演示场景,停在 0 帧由作者决定播放
             if (stores.scene.objectCount === 0) {
                 void seedCinematicScene(stores);
             }
@@ -209,7 +209,8 @@ export function Playground() {
 
     return (
         <div style={{ width: "100vw", height: "100vh", margin: 0 }}>
-            <DirectorDesk onReady={handleReady} />
+            {/* 资产基址随 vite base 走:本地 dev 是 /builtin-assets,Pages 构建带仓库子路径前缀 */}
+            <DirectorDesk onReady={handleReady} builtinAssetBaseUrl={`${import.meta.env.BASE_URL}builtin-assets`} />
         </div>
     );
 }

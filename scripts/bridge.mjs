@@ -551,7 +551,7 @@ function resolveCliOptions(argv) {
             console.log(
                 "用法: bun scripts/bridge.mjs [--host=127.0.0.1] [--origins=https://a,https://b] [--allow-eval]\n" +
                     "  --host       绑定地址,默认 127.0.0.1;暴露内网用 0.0.0.0(公网需自行前置 TLS 反代)\n" +
-                    "  --origins    逗号分隔的额外放行 Origin(展示端页面的来源,如 https://your.vercel.app)\n" +
+                    "  --origins    逗号分隔的额外放行 Origin(展示端页面的来源,如 https://<user>.github.io)\n" +
                     "  --allow-eval 开启页面 eval 调试通道(默认关闭)",
             );
             process.exit(0);

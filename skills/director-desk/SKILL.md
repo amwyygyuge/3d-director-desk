@@ -41,12 +41,12 @@ curl -X POST http://127.0.0.1:4005/rpc \
 | ---------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | 本机(默认) | `bun run dev` 或 `bun run bridge`                                        | 打开 `http://localhost:4002/`,页面自动连 `ws://127.0.0.1:4005`              | 同机任意进程 POST `http://127.0.0.1:4005/rpc`                    |
 | 内网共享   | `bun run bridge --host=0.0.0.0 --origins=http://<bridge机器IP>:4002`     | 打开 `http://<bridge机器IP>:4002/?bridge=ws://<bridge机器IP>:4005`          | 内网任意机器 POST `http://<bridge机器IP>:4005/rpc`               |
-| 公网       | 自行用带鉴权的 Caddy/Nginx 终结 TLS,反代到桥的 4005;桥仍绑回环或内网地址 | 打开部署好的 `https://your.vercel.app/?bridge=wss://bridge.your-domain.com` | 公网 POST `https://bridge.your-domain.com/rpc`(鉴权由反代层负责) |
+| 公网       | 自行用带鉴权的 Caddy/Nginx 终结 TLS,反代到桥的 4005;桥仍绑回环或内网地址 | 打开部署好的 `https://amwyygyuge.github.io/3d-director-desk/?bridge=wss://bridge.your-domain.com` | 公网 POST `https://bridge.your-domain.com/rpc`(鉴权由反代层负责) |
 
 要点:
 
 - **桥本身没有任何鉴权**。本机回环下这是安全的:浏览器的跨域请求带 Origin,白名单之外的直接 403;能发裸 HTTP 的本机进程本来就有本地执行权。一旦 `--host=0.0.0.0`,内网里任何人都能直接驱动你的导演台——只在可信网络这么干;公网必须由反代层补鉴权。
-- **`--origins` 必须与展示端页面的实际 Origin 完全一致**(协议+主机+端口),Vercel 部署就是 `https://your-app.vercel.app`,否则 WS 握手会被拒。
+- **`--origins` 必须与展示端页面的实际 Origin 完全一致**(协议+主机+端口,不含路径),GitHub Pages 项目站点就是 `https://<user>.github.io`(仓库子路径不属于 Origin),否则 WS 握手会被拒。
 - **`?bridge=` 参数控制页面连哪台桥**;不给时非 localhost 页面不连桥(纯观赏模式)。
 - **公网必须走 WSS/HTTPS 反代**;桥自身只讲明文 WS/HTTP。
 - 内网共享形态下,多个浏览器标签页连同一台桥,`dispatch` 广播镜像到全部页面;读操作由首个活跃端应答,指定 `targetClientId` 单播。

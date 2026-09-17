@@ -31,7 +31,7 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build && tsc -p tsconfig.build.json",
-        "vercel-build": "vite build --mode playground",
+        "build:playground": "vite build --mode playground",
         "clean": "rm -rf dist",
         "typecheck": "tsc --noEmit",
         "lint": "eslint src playground",

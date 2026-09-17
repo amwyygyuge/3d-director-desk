@@ -58,6 +58,9 @@ export default defineConfig(({ mode }) => ({
     },
     ...(mode === PLAYGROUND_BUILD_MODE
         ? {
+              // GitHub Pages 项目站点挂在 /<repo>/ 子路径下,站点根不属于本包;
+              // 资产 URL 与 builtinAssetBaseUrl(经 import.meta.env.BASE_URL)都以此为前缀
+              base: "/3d-director-desk/",
               build: {
                   outDir: "dist-playground",
               },
