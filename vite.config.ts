@@ -48,6 +48,9 @@ function directorBridgeDevPlugin(): Plugin {
 export default defineConfig(({ mode }) => ({
     plugins: [react(), tailwindcss(), directorBridgeDevPlugin()],
     server: {
+        // 钉 IPv4 回环:Node 17+ 解析 localhost 优先 ::1,桥(4005)只绑 IPv4,
+        // 混栈下脚本探测 127.0.0.1:4002 会误判未起服,页面连桥也可能解析错地址
+        host: "127.0.0.1",
         port: 4002,
         strictPort: true,
     },

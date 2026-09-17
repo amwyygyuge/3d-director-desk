@@ -328,7 +328,7 @@ export class DirectorBridgeServer {
         <h2>📱 已连接展示端浏览器 <span class="badge">${clients.length} 个在线</span></h2>
         ${
             clients.length === 0
-                ? '<p style="color:#64748b;font-size:13px;">暂无浏览器连接,请打开 <code>http://localhost:4002/</code></p>'
+                ? '<p style="color:#64748b;font-size:13px;">暂无浏览器连接,请打开 <code>http://127.0.0.1:4002/</code></p>'
                 : `<table><thead><tr><th>Client ID</th><th>视口</th><th>User Agent</th></tr></thead><tbody>${clients
                       .map(
                           (c) =>
@@ -426,7 +426,7 @@ curl http://127.0.0.1:${DEFAULT_PORT}/skill</code></pre>
         }
         if (this.#clients.size === 0) {
             return sendJson(res, 503, {
-                error: "No Director Desk browser window is connected. Open http://localhost:4002/ first.",
+                error: "No Director Desk browser window is connected. Open http://127.0.0.1:4002/ first.",
             });
         }
 

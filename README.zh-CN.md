@@ -42,7 +42,10 @@ bun install
 bun run dev        # playground 起在 :4002,桥自动随 dev 起在 :4005
 ```
 
-打开 http://localhost:4002,页面自动连桥。要独立起桥(例如对接 Pages 线上 demo)用 `bun run bridge`,页面侧显式指定桥地址:`?bridge=ws://127.0.0.1:4005`。
+打开 http://127.0.0.1:4002,页面自动连桥(dev server 钉死 IPv4 回环,与桥一致)。要独立起桥(例如对接 Pages 线上 demo)用 `bun run bridge`,页面侧显式指定桥地址:`?bridge=ws://127.0.0.1:4005`。
+
+没有浏览器自动化工具的 headless AI:让一个一次性 profile 的无头 Chrome 常驻页面即可自动连桥,`GET /status` 应看到客户端上线:
+`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=0 --user-data-dir=$(mktemp -d) http://127.0.0.1:4002/`
 
 ### 端点(`http://127.0.0.1:4005`)
 

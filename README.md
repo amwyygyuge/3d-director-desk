@@ -42,7 +42,10 @@ bun install
 bun run dev        # playground on :4002, bridge auto-starts on :4005
 ```
 
-Open http://localhost:4002 — the page connects to the bridge automatically. To run the bridge standalone (e.g. against the hosted Pages demo), use `bun run bridge` and open the page with an explicit bridge URL: `?bridge=ws://127.0.0.1:4005`.
+Open http://127.0.0.1:4002 — the page connects to the bridge automatically (the dev server pins IPv4 loopback, matching the bridge). To run the bridge standalone (e.g. against the hosted Pages demo), use `bun run bridge` and open the page with an explicit bridge URL: `?bridge=ws://127.0.0.1:4005`.
+
+Headless agents without browser tooling: keep a throwaway headless Chrome resident on the page — it auto-connects, and `GET /status` shows it as a client:
+`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=0 --user-data-dir=$(mktemp -d) http://127.0.0.1:4002/`
 
 ### Endpoints (`http://127.0.0.1:4005`)
 
