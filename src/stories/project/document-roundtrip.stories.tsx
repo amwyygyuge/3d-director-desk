@@ -220,10 +220,7 @@ function assertStudioEnvironment(stores: DirectorDeskStores, stage: string): voi
     );
     assertAcceptance(studio.shadowsEnabled === STUDIO_SETTINGS.shadowsEnabled, `${stage}投影开关不符`);
     assertAcceptance(studio.floorColor === STUDIO_SETTINGS.floorColor, `${stage}地板颜色不符`);
-    assertAcceptance(
-        studio.floorSurfaceEnabled === STUDIO_SETTINGS.floorSurfaceEnabled,
-        `${stage}实心地面开关不符`,
-    );
+    assertAcceptance(studio.floorSurfaceEnabled === STUDIO_SETTINGS.floorSurfaceEnabled, `${stage}实心地面开关不符`);
 }
 
 /**

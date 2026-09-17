@@ -65,9 +65,21 @@ export const LIGHTING_MOOD_PRESETS: readonly LightingMoodPreset[] = [
         exposure: 1,
         shadowsEnabled: true,
         lights: [
-            { role: "key", offsetRadii: [2.2, 2.6, 2.2], light: { type: "directional", color: "#ffffff", intensity: 2.2 } },
-            { role: "fill", offsetRadii: [-2.4, 1.2, 2.0], light: { type: "directional", color: "#dce8ff", intensity: 1.1 } },
-            { role: "rim", offsetRadii: [0, 2.2, -2.8], light: { type: "directional", color: "#fff2e0", intensity: 1.2 } },
+            {
+                role: "key",
+                offsetRadii: [2.2, 2.6, 2.2],
+                light: { type: "directional", color: "#ffffff", intensity: 2.2 },
+            },
+            {
+                role: "fill",
+                offsetRadii: [-2.4, 1.2, 2.0],
+                light: { type: "directional", color: "#dce8ff", intensity: 1.1 },
+            },
+            {
+                role: "rim",
+                offsetRadii: [0, 2.2, -2.8],
+                light: { type: "directional", color: "#fff2e0", intensity: 1.2 },
+            },
         ],
     },
     {
@@ -76,9 +88,29 @@ export const LIGHTING_MOOD_PRESETS: readonly LightingMoodPreset[] = [
         exposure: 1.15,
         shadowsEnabled: true,
         lights: [
-            { role: "key", offsetRadii: [2.0, 2.4, 1.4], light: { type: "spot", color: "#fff4e2", intensity: 42, distance: 0, decay: 1.4, angleDegrees: 34, penumbra: 0.5 } },
-            { role: "fill", offsetRadii: [-2.6, 0.9, 1.8], light: { type: "directional", color: "#8ea6c8", intensity: 0.18 } },
-            { role: "rim", offsetRadii: [-1.2, 2.0, -2.6], light: { type: "directional", color: "#cfe0ff", intensity: 0.9 } },
+            {
+                role: "key",
+                offsetRadii: [2.0, 2.4, 1.4],
+                light: {
+                    type: "spot",
+                    color: "#fff4e2",
+                    intensity: 42,
+                    distance: 0,
+                    decay: 1.4,
+                    angleDegrees: 34,
+                    penumbra: 0.5,
+                },
+            },
+            {
+                role: "fill",
+                offsetRadii: [-2.6, 0.9, 1.8],
+                light: { type: "directional", color: "#8ea6c8", intensity: 0.18 },
+            },
+            {
+                role: "rim",
+                offsetRadii: [-1.2, 2.0, -2.6],
+                light: { type: "directional", color: "#cfe0ff", intensity: 0.9 },
+            },
         ],
     },
     {
@@ -87,9 +119,29 @@ export const LIGHTING_MOOD_PRESETS: readonly LightingMoodPreset[] = [
         exposure: 1,
         shadowsEnabled: false,
         lights: [
-            { role: "key", offsetRadii: [1.6, 1.4, 2.4], light: { type: "directional", color: "#ffffff", intensity: 0.12 } },
-            { role: "rim", offsetRadii: [0, 1.6, -3.0], light: { type: "spot", color: "#ffffff", intensity: 90, distance: 0, decay: 1, angleDegrees: 48, penumbra: 0.25 } },
-            { role: "fill", offsetRadii: [-1.8, 1.0, 1.6], light: { type: "directional", color: "#7f90a8", intensity: 0.1 } },
+            {
+                role: "key",
+                offsetRadii: [1.6, 1.4, 2.4],
+                light: { type: "directional", color: "#ffffff", intensity: 0.12 },
+            },
+            {
+                role: "rim",
+                offsetRadii: [0, 1.6, -3.0],
+                light: {
+                    type: "spot",
+                    color: "#ffffff",
+                    intensity: 90,
+                    distance: 0,
+                    decay: 1,
+                    angleDegrees: 48,
+                    penumbra: 0.25,
+                },
+            },
+            {
+                role: "fill",
+                offsetRadii: [-1.8, 1.0, 1.6],
+                light: { type: "directional", color: "#7f90a8", intensity: 0.1 },
+            },
         ],
     },
     {
@@ -98,9 +150,21 @@ export const LIGHTING_MOOD_PRESETS: readonly LightingMoodPreset[] = [
         exposure: 1.2,
         shadowsEnabled: true,
         lights: [
-            { role: "key", offsetRadii: [3.0, 0.7, 1.6], light: { type: "directional", color: "#ffb35c", intensity: 2.6 } },
-            { role: "fill", offsetRadii: [-2.2, 1.4, 1.8], light: { type: "directional", color: "#9dc4ff", intensity: 0.5 } },
-            { role: "rim", offsetRadii: [-1.0, 1.2, -2.6], light: { type: "directional", color: "#ffd9a0", intensity: 1.4 } },
+            {
+                role: "key",
+                offsetRadii: [3.0, 0.7, 1.6],
+                light: { type: "directional", color: "#ffb35c", intensity: 2.6 },
+            },
+            {
+                role: "fill",
+                offsetRadii: [-2.2, 1.4, 1.8],
+                light: { type: "directional", color: "#9dc4ff", intensity: 0.5 },
+            },
+            {
+                role: "rim",
+                offsetRadii: [-1.0, 1.2, -2.6],
+                light: { type: "directional", color: "#ffd9a0", intensity: 1.4 },
+            },
         ],
     },
     {
@@ -109,9 +173,21 @@ export const LIGHTING_MOOD_PRESETS: readonly LightingMoodPreset[] = [
         exposure: 1.25,
         shadowsEnabled: true,
         lights: [
-            { role: "key", offsetRadii: [2.0, 2.8, 1.2], light: { type: "directional", color: "#9fc6ff", intensity: 1.6 } },
-            { role: "fill", offsetRadii: [-2.4, 1.0, 1.6], light: { type: "directional", color: "#5c7196", intensity: 0.22 } },
-            { role: "practical", offsetRadii: [-1.6, 1.1, -1.8], light: { type: "point", color: "#ff8f5a", intensity: 26, distance: 0, decay: 1.6 } },
+            {
+                role: "key",
+                offsetRadii: [2.0, 2.8, 1.2],
+                light: { type: "directional", color: "#9fc6ff", intensity: 1.6 },
+            },
+            {
+                role: "fill",
+                offsetRadii: [-2.4, 1.0, 1.6],
+                light: { type: "directional", color: "#5c7196", intensity: 0.22 },
+            },
+            {
+                role: "practical",
+                offsetRadii: [-1.6, 1.1, -1.8],
+                light: { type: "point", color: "#ff8f5a", intensity: 26, distance: 0, decay: 1.6 },
+            },
         ],
     },
 ];

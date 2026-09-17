@@ -41,6 +41,8 @@ const THREE_ADAPTER_FILES = [
     "src/assets/AnimationLibrary.ts",
     "src/store/CameraStore.ts",
     "src/timeline/TimelineSampler.ts",
+    "src/timeline/PlaybackCoordinator.ts",
+    "src/core/surfaceSnap.ts",
 ];
 
 export default tseslint.config(

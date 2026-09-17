@@ -66,7 +66,11 @@ export class CinematicSceneSeeder {
     private seedScenery(): void {
         const column = (id: string, position: [number, number, number]): SerializedCommand => ({
             type: "assets.place",
-            payload: { id, assetId: "builtin.scenery.column", transform: { position, rotation: [0, 0, 0], scale: [1.3, 4.5, 1.3] } },
+            payload: {
+                id,
+                assetId: "builtin.scenery.column",
+                transform: { position, rotation: [0, 0, 0], scale: [1.3, 4.5, 1.3] },
+            },
         });
         this.dispatchChecked(column("fg-col-left", [-2.4, 3.0, 2.8]));
         this.dispatchChecked(column("fg-col-right", [3.2, 3.0, 1.5]));
@@ -137,10 +141,7 @@ export class CinematicSceneSeeder {
         const countdown = { remaining: LOAD_POLL_LIMIT };
         while (countdown.remaining > 0) {
             countdown.remaining -= 1;
-            const result = this.stores.dispatcher.query(
-                { type: "scene.describe", payload: {} },
-                this.stores,
-            );
+            const result = this.stores.dispatcher.query({ type: "scene.describe", payload: {} }, this.stores);
             if (!result.ok) throw new Error(`[seed] scene.describe 失败: ${result.error ?? "未知原因"}`);
             const actors = (result.value as readonly SeedEntityInspection[]).filter(
                 (entity) => entity.id === "actor-hero" || entity.id === "actor-rival",
@@ -201,11 +202,7 @@ export class CinematicSceneSeeder {
     }
 
     private seedHeroMovementTrack(): void {
-        const keyframe = (
-            id: string,
-            time: number,
-            position: [number, number, number],
-        ): Record<string, unknown> => ({
+        const keyframe = (id: string, time: number, position: [number, number, number]): Record<string, unknown> => ({
             id,
             time,
             value: { position, rotation: [0, 0, 0], scale: [1, 1, 1] },

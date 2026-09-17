@@ -75,6 +75,7 @@ const VIEWPORT_INTERACTION_HINT = {
         id: "gizmo-active",
         segments: [
             { keys: "X/Y/Z", label: "轴约束" },
+            { shortcutId: SHORTCUT_ID.SURFACE_SNAP_TOGGLE, label: "贴面吸附" },
             { shortcutId: SHORTCUT_ID.GIZMO_EXIT, label: "退出变换" },
         ],
     },

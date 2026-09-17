@@ -4,6 +4,7 @@ import type { Object3D } from "three";
 import type { Transform, Vec3 } from "@/core/SceneObject";
 import { HOME_DIRECTOR_POSE } from "@/store/CameraStore";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
+import { collectHitMeshes } from "@/core/surfaceSnap";
 
 /** 未命中任何表面时,落相机前方这段距离的地面上。 */
 const FALLBACK_DISTANCE_METERS = 4;
@@ -16,13 +17,6 @@ const RAYCASTER = new Raycaster();
 const ORIGIN = new Vector3();
 const FORWARD = new Vector3();
 
-/** 递归收集可命中网格;helper 子树(包围框/坐标轴等编辑辅助物)整体跳过。 */
-function collectHitMeshes(root: Object3D, sink: Object3D[]): void {
-    if (root.userData.helper === true) return;
-    const candidate = root as { isMesh?: boolean; isSkinnedMesh?: boolean };
-    if (candidate.isMesh === true || candidate.isSkinnedMesh === true) sink.push(root);
-    for (const child of root.children) collectHitMeshes(child, sink);
-}
 
 /**
  * 视角中心落位解析器(无状态领域服务):把「放到场景里」对齐到「我正在看哪里」。

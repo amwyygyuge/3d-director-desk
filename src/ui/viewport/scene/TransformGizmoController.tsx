@@ -4,9 +4,19 @@ import { reaction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef } from "react";
 import type { ComponentRef } from "react";
+import type { Object3D } from "three";
 
+import { GIZMO_MODE } from "@/store/UiStore";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { useOrbitSuspension } from "@/ui/viewport/scene/useOrbitSuspension";
+import { collectSurfaceSnapCandidates, snapDownToSurface } from "@/core/surfaceSnap";
+
+/**
+ * 贴面吸附让位的拖动轴(three TransformControls 的运行时轴名协议):
+ * 单 Y 轴与含 Y 的平面是明确的垂直意图;E 是 rotate 态的环手柄,防御性排除。
+ * XZ 平面、单 X/Z 轴与 XYZ 自由拖都算水平挪动,吸。
+ */
+const NO_SNAP_AXES: Record<string, true> = { Y: true, XY: true, YZ: true, E: true };
 
 /**
  * gizmo 手柄本体:轨道让位守卫与手柄同生命周期。
@@ -22,6 +32,8 @@ const GizmoHandle = observer(function GizmoHandle({ targetId }: { readonly targe
     const orbitSuspension = useOrbitSuspension();
     const invalidate = useThree((state) => state.invalidate);
     const controlsRef = useRef<ComponentRef<typeof TransformControls> | null>(null);
+    // 吸附候选在按下那一刻快照(拖动期间其他实体不动);常开采集,V 在拖动中途才开也有表可查
+    const snapCandidatesRef = useRef<readonly Object3D[]>([]);
     const target = scene.manager.getRuntime(targetId);
 
     // gizmo 整体打 helper 标记:截图时摘除(07 帧内取样)
@@ -30,6 +42,20 @@ const GizmoHandle = observer(function GizmoHandle({ targetId }: { readonly targe
     }, [target]);
 
     if (!target) return null;
+
+    /** 贴面吸附:只作用于水平拖动分量——拖动轴含 Y 是明确的高度意图,吸附不得打架。 */
+    const applySurfaceSnap = (): void => {
+        if (!ui.isSurfaceSnapEnabled || ui.gizmoMode !== GIZMO_MODE.TRANSLATE) return;
+        // drei 类型把 axis 标 private,但它是运行时公开可读的拖动轴名(three 官方示例同款读法)
+        const axis = (controlsRef.current as unknown as { axis: string | null } | null)?.axis;
+        if (!axis || NO_SNAP_AXES[axis] === true) return;
+        target.position.y = snapDownToSurface(
+            snapCandidatesRef.current,
+            target.position.x,
+            target.position.y,
+            target.position.z,
+        );
+    };
 
     const commitDrag = () => {
         ui.noteGizmoInteraction();
@@ -61,8 +87,12 @@ const GizmoHandle = observer(function GizmoHandle({ targetId }: { readonly targe
             onMouseDown={() => {
                 ui.noteGizmoInteraction();
                 orbitSuspension.suspend();
+                snapCandidatesRef.current = collectSurfaceSnapCandidates(scene.manager, targetId);
             }}
-            onObjectChange={() => invalidate()}
+            onObjectChange={() => {
+                applySurfaceSnap();
+                invalidate();
+            }}
             onMouseUp={commitDrag}
         />
     );

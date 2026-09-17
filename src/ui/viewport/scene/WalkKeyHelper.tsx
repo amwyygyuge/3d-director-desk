@@ -16,6 +16,7 @@ import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
 import { useOrbitSuspension } from "@/ui/viewport/scene/useOrbitSuspension";
+import { collectSurfaceSnapCandidates, pickUpwardSurfacePoint } from "@/core/surfaceSnap";
 
 const KEY_RADIUS_METERS = 0.13;
 /** 手柄比关键帧略小以示主次,但不能小到点不中——它是要被反复微调的目标。 */
@@ -100,6 +101,8 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
     const inRef = useRef<Mesh | null>(null);
     const outRef = useRef<Mesh | null>(null);
     const dragRef = useRef<DragState | null>(null);
+    // 贴面候选在拖动起点快照(排除走位对象自身),拖动期间复用
+    const snapCandidatesRef = useRef<readonly Object3D[]>([]);
     const [dragging, setDragging] = useState(false);
     const orbitSuspension = useOrbitSuspension();
 
@@ -138,8 +141,11 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
                 -((clientY - bounds.top) / bounds.height) * NDC_SPAN + 1,
             );
             TMP_RAYCASTER.setFromCamera(TMP_POINTER, camera);
-            if (!TMP_RAYCASTER.ray.intersectPlane(TMP_DRAG_PLANE, TMP_INTERSECTION)) return;
             const isKey = drag.kind === "key";
+            // 拖 key 指针直取站面:指着布景楼面/台面就落在那(消除隐形平面视差);
+            // 指空处退回拖动起点高度的水平面。切线手柄保持平面语义不吸附。
+            const hasSurface = isKey && pickUpwardSurfacePoint(TMP_RAYCASTER, snapCandidatesRef.current, TMP_INTERSECTION);
+            if (!hasSurface && !TMP_RAYCASTER.ray.intersectPlane(TMP_DRAG_PLANE, TMP_INTERSECTION)) return;
             drag.target.position.set(
                 TMP_INTERSECTION.x - (isKey ? 0 : root.position.x),
                 TMP_INTERSECTION.y - (isKey ? 0 : root.position.y),
@@ -180,15 +186,18 @@ export const WalkKeyHelper = observer(function WalkKeyHelper({ trackId, keyframe
 
     const startDrag = useCallback(
         (kind: DragKind, target: Object3D | null, event: ThreeEvent<PointerEvent>): void => {
-            if (!target || !rootRef.current) return;
+            // keyframe 存在蕴含 track 存在(keyframe 由 track 取出);显式守卫替代 ?? "" 的死防御——
+            // 空串 excludeId 会把走位对象自己收进候选,悄悄破坏「不站到自己身上」的不变量
+            if (!target || !rootRef.current || !track) return;
             event.stopPropagation();
             event.nativeEvent.stopPropagation();
             timelineSelection.select(TimelineSelection.walkKey(trackId, keyframeId));
             TMP_DRAG_PLANE.set(new Vector3(0, 1, 0), -rootRef.current.position.y);
+            snapCandidatesRef.current = collectSurfaceSnapCandidates(stores.scene.manager, track.targetId);
             dragRef.current = { kind, target };
             setDragging(true);
         },
-        [keyframeId, timelineSelection, trackId],
+        [keyframeId, stores, timelineSelection, track, trackId],
     );
 
     /** 右键 = 交还自动切线:重新变回系统平滑,不必逐轴把数值调回去。 */

@@ -3,7 +3,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { observer } from "mobx-react-lite";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BufferAttribute, BufferGeometry, Plane, Raycaster, Vector2, Vector3 } from "three";
-import type { Mesh } from "three";
+import type { Mesh, Object3D } from "three";
 
 import { WalkDraftCompiler } from "@/authoring/WalkDraftCompiler";
 import { SetTimelineTrackCommand } from "@/command/timelineCommands";
@@ -11,6 +11,7 @@ import type { Vec3 } from "@/core/SceneObject";
 import { useDirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import type { DirectorDeskStores } from "@/ui/shell/DirectorDeskContext";
 import { reportCommandFailure } from "@/ui/shell/commandFeedback";
+import { collectSurfaceSnapCandidates, pickUpwardSurfacePoint } from "@/core/surfaceSnap";
 
 /** 绘制平面尺寸:覆盖常见场景范围,超出即认为不是走位而是换场。 */
 const DRAFT_PLANE_SIZE_METERS = 200;
@@ -105,6 +106,8 @@ export const WalkDraftController = observer(function WalkDraftController() {
     const canvas = useThree((state) => state.gl.domElement);
     const invalidate = useThree((state) => state.invalidate);
     const pointsRef = useRef<Vec3[]>([]);
+    // 贴面候选在笔画起点快照(排除走位对象自身);绘制期沿指针射线取站面命中点,笔迹沿台阶/台面爬升
+    const snapCandidatesRef = useRef<readonly Object3D[]>([]);
     const strokeRef = useRef<Mesh | null>(null);
     const [drawing, setDrawing] = useState(false);
     const geometry = useMemo(createStrokeGeometry, []);
@@ -121,7 +124,10 @@ export const WalkDraftController = observer(function WalkDraftController() {
                 -((clientY - bounds.top) / bounds.height) * NDC_SPAN + 1,
             );
             TMP_RAYCASTER.setFromCamera(TMP_POINTER, camera);
-            if (!TMP_RAYCASTER.ray.intersectPlane(GROUND_PLANE, TMP_INTERSECTION)) return;
+            // 指针直取站面:笔尖指着哪块地板(含布景楼面/台面)就画在哪,消除隐形平面的视差错位;
+            // 指到没有布景的空处再退回 y=0 绘制平面
+            const hasSurface = pickUpwardSurfacePoint(TMP_RAYCASTER, snapCandidatesRef.current, TMP_INTERSECTION);
+            if (!hasSurface && !TMP_RAYCASTER.ray.intersectPlane(GROUND_PLANE, TMP_INTERSECTION)) return;
             const last = points[points.length - 1];
             const { x, y, z } = TMP_INTERSECTION;
             if (last && squaredDistance(last, x, y, z) < MIN_SAMPLE_DISTANCE_METERS * MIN_SAMPLE_DISTANCE_METERS) {
@@ -148,6 +154,7 @@ export const WalkDraftController = observer(function WalkDraftController() {
             }
             event.stopPropagation();
             pointsRef.current = [];
+            snapCandidatesRef.current = collectSurfaceSnapCandidates(stores.scene.manager, selection.primaryId);
             geometry.setDrawRange(0, 0);
             setDrawing(true);
             pushPoint(event.nativeEvent.clientX, event.nativeEvent.clientY);

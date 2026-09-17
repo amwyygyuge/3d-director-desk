@@ -181,9 +181,7 @@ export class AdjustLightCommand extends DirectorCommand<AdjustLightPayload> {
         if (!current) return null;
         const patch = this.payload.light;
         const base = patch.type && patch.type !== current.type ? retypeLightParams(current, patch.type) : current;
-        const overrides = Object.fromEntries(
-            Object.entries(patch).filter(([, value]) => value !== undefined),
-        );
+        const overrides = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
         return normalizeLightParams({ ...base, ...overrides } as LightParams);
     }
 

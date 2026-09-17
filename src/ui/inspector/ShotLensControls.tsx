@@ -5,12 +5,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { observer } from "mobx-react-lite";
 
-import {
-    APERTURE_F_STOP,
-    focalLengthFromFov,
-    focalLengthRangeMm,
-    FOCUS_DISTANCE_METERS,
-} from "@/camera/CameraLens";
+import { APERTURE_F_STOP, focalLengthFromFov, focalLengthRangeMm, FOCUS_DISTANCE_METERS } from "@/camera/CameraLens";
 import { ScrubNumberField } from "@/ui/controls/ScrubNumberField";
 import { INSPECTOR_FIELD_SX } from "@/ui/inspector/TransformFields";
 import { invalidInputNotice } from "@/ui/shell/commandFeedback";

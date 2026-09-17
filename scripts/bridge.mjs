@@ -9,10 +9,7 @@ const DEFAULT_PORT = 4005;
 /** 默认只绑 loopback:桥的调用方与展示端通常同机;暴露到内网/公网必须显式 opt-in。 */
 const LOOPBACK_HOST = "127.0.0.1";
 /** 展示端页面只从 localhost:4002 发出;其余 Origin 一律不服务(可用 allowedOrigins 追加)。 */
-const DEFAULT_ALLOWED_ORIGINS = [
-    "http://localhost:4002",
-    "http://127.0.0.1:4002",
-];
+const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:4002", "http://127.0.0.1:4002"];
 /** RPC 请求体上限(截断即断连,拒绝继续缓冲)。 */
 const RPC_BODY_LIMIT_BYTES = 256 * 1024;
 /** 落盘文件体上限:短视频参考帧量级,超过视为滥用。 */
@@ -203,12 +200,19 @@ export class DirectorBridgeServer {
             });
         });
         this.#wss = new WebSocketServer({ server: this.#httpServer });
+        // ws 会把 HTTP server 的 'error' 转发到自身;不接住的话,端口被占(EADDRINUSE)时
+        // listen() 的 reject 还没来得及走,进程就先死在 WebSocketServer 的未处理 'error' 上——
+        // vite 插件侧的 try/catch 形同虚设(实测拖垮整个 dev 进程)。启动期失败由 listen() reject 上报,
+        // 这里静默;listen 成功后的运行期错误不属于启动握手,吞掉会瞎调试,打日志。
+        this.#wss.on("error", (err) => {
+            if (this.#listening) console.error("[bridge] WebSocket 服务错误:", err);
+        });
         this.#wss.on("connection", (ws, req) => this.#handleConnection(ws, req));
         if (this.#host !== LOOPBACK_HOST) {
             console.warn(
                 `[bridge] ⚠ 桥接服务绑定到 ${this.#host}(非回环)。桥没有任何鉴权——` +
-                `Origin 白名单只能挡浏览器,挡不住裸 HTTP 调用。` +
-                `请确认该端口只对可信内网开放;公网部署必须前置带鉴权的 HTTPS/WSS 反代。`,
+                    `Origin 白名单只能挡浏览器,挡不住裸 HTTP 调用。` +
+                    `请确认该端口只对可信内网开放;公网部署必须前置带鉴权的 HTTPS/WSS 反代。`,
             );
         }
     }
@@ -241,9 +245,7 @@ export class DirectorBridgeServer {
         await new Promise((resolve) => this.#wss.close(resolve));
         // 从未 listen 成功的实例没有可关闭的 HTTP 服务,close 会以 "not running" 报错
         if (!wasListening) return;
-        await new Promise((resolve, reject) =>
-            this.#httpServer.close((err) => (err ? reject(err) : resolve())),
-        );
+        await new Promise((resolve, reject) => this.#httpServer.close((err) => (err ? reject(err) : resolve())));
     }
 
     #corsHeadersFor(req) {
@@ -278,8 +280,7 @@ export class DirectorBridgeServer {
             return this.#serveSkillMarkdown(res);
         if (req.method === "GET" && url.pathname === "/skill.json") return this.#serveSkillJson(res);
         if (req.method === "GET" && url.pathname === "/status") return this.#serveStatus(res);
-        if (req.method === "POST" && url.pathname === "/save-file")
-            return this.#serveSaveFile(req, res);
+        if (req.method === "POST" && url.pathname === "/save-file") return this.#serveSaveFile(req, res);
         if (req.method === "POST" && url.pathname === "/rpc") return this.#serveRpc(req, res);
 
         sendJson(res, 404, { error: "not found" });
@@ -532,20 +533,26 @@ function resolveCliOptions(argv) {
         host: process.env.DIRECTOR_BRIDGE_HOST,
         allowEval: process.env.DIRECTOR_BRIDGE_ALLOW_EVAL === "1",
         allowedOrigins: process.env.DIRECTOR_BRIDGE_ORIGINS
-            ? process.env.DIRECTOR_BRIDGE_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+            ? process.env.DIRECTOR_BRIDGE_ORIGINS.split(",")
+                  .map((origin) => origin.trim())
+                  .filter(Boolean)
             : undefined,
     };
     for (const arg of argv) {
         if (arg.startsWith("--host=")) options.host = arg.slice("--host=".length);
         else if (arg.startsWith("--origins="))
-            options.allowedOrigins = arg.slice("--origins=".length).split(",").map((o) => o.trim()).filter(Boolean);
+            options.allowedOrigins = arg
+                .slice("--origins=".length)
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean);
         else if (arg === "--allow-eval") options.allowEval = true;
         else if (arg === "--help" || arg === "-h") {
             console.log(
                 "用法: bun scripts/bridge.mjs [--host=127.0.0.1] [--origins=https://a,https://b] [--allow-eval]\n" +
-                "  --host       绑定地址,默认 127.0.0.1;暴露内网用 0.0.0.0(公网需自行前置 TLS 反代)\n" +
-                "  --origins    逗号分隔的额外放行 Origin(展示端页面的来源,如 https://your.vercel.app)\n" +
-                "  --allow-eval 开启页面 eval 调试通道(默认关闭)",
+                    "  --host       绑定地址,默认 127.0.0.1;暴露内网用 0.0.0.0(公网需自行前置 TLS 反代)\n" +
+                    "  --origins    逗号分隔的额外放行 Origin(展示端页面的来源,如 https://your.vercel.app)\n" +
+                    "  --allow-eval 开启页面 eval 调试通道(默认关闭)",
             );
             process.exit(0);
         }
@@ -562,8 +569,10 @@ function resolveCliOptions(argv) {
 const currentFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(currentFile)) {
     const options = resolveCliOptions(process.argv.slice(2));
-    startDirectorBridge({ ...options, port: DEFAULT_PORT }).listen(DEFAULT_PORT).catch((err) => {
-        console.error("[bridge] 启动失败:", err);
-        process.exitCode = 1;
-    });
+    startDirectorBridge({ ...options, port: DEFAULT_PORT })
+        .listen(DEFAULT_PORT)
+        .catch((err) => {
+            console.error("[bridge] 启动失败:", err);
+            process.exitCode = 1;
+        });
 }

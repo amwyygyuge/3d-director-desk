@@ -34,7 +34,7 @@ function filmHeightMm(aspect: number): number {
  * 自己实现而不调 three:本模块是纯领域计算,不该为一个三角函数持有相机实例。
  */
 export function focalLengthFromFov(fovDegrees: number, aspect: number): number {
-    return (0.5 * filmHeightMm(aspect)) / Math.tan(((fovDegrees * 0.5) * Math.PI) / 180);
+    return (0.5 * filmHeightMm(aspect)) / Math.tan((fovDegrees * 0.5 * Math.PI) / 180);
 }
 
 /** 焦距(毫米) → fov(垂直视场角,度);`focalLengthFromFov` 的逆。 */
@@ -138,9 +138,7 @@ export class CameraLens {
     }
 
     equals(other: CameraLens): boolean {
-        return (
-            this.apertureFStop === other.apertureFStop && this.focusDistanceMeters === other.focusDistanceMeters
-        );
+        return this.apertureFStop === other.apertureFStop && this.focusDistanceMeters === other.focusDistanceMeters;
     }
 
     toJSON(): CameraLensJSON {

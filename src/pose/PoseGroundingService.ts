@@ -6,7 +6,8 @@ import { measureModelBox } from "@/core/measureModelBox";
 import type { SceneManager } from "@/core/SceneManager";
 import type { Transform } from "@/core/SceneObject";
 
-const GROUND_Y = 0;
+/** 非人偶的贴地余量:归一化后模型底部即实体原点,余量为 0。 */
+const GROUND_OFFSET = 0;
 const GROUND_ALIGNMENT_EPSILON_METERS = 0.0001;
 
 /**
@@ -30,10 +31,12 @@ export class PoseGroundingService {
         const entity = this.scene.getEntity(objectId);
         const runtime = this.scene.getRuntime(objectId);
         if (!entity || !runtime) return null;
-        const actorTargetY = this.actors.groundTargetY(objectId);
-        const contactY = actorTargetY === null ? this.boundsContactY(runtime) : lowestBoneWorldY(runtime);
+        const actorClearanceY = this.actors.groundTargetY(objectId);
+        const contactY = actorClearanceY === null ? this.boundsContactY(runtime) : lowestBoneWorldY(runtime);
         if (contactY === null) return null;
-        const deltaY = (actorTargetY ?? GROUND_Y) - contactY;
+        // 站面基准取实体自身高度而非世界 0:站在布景楼面/台面上的对象,换姿势贴地不得被拽回地面
+        const baseY = entity.transform.position[1];
+        const deltaY = baseY + (actorClearanceY ?? GROUND_OFFSET) - contactY;
         if (Math.abs(deltaY) < GROUND_ALIGNMENT_EPSILON_METERS) return null;
         const transform = entity.transform;
         return {

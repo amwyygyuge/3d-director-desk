@@ -1,4 +1,5 @@
 import { reaction } from "mobx";
+import type { Object3D } from "three";
 
 import { ACTION_FILL_POLICY, defaultFillPolicyFor } from "@/animation/ActionFillPolicy";
 import type { ActionFillPolicy } from "@/animation/ActionFillPolicy";
@@ -14,6 +15,7 @@ import type { SkeletonRuntimeRegistry } from "@/pose/SkeletonRuntimeRegistry";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
 import type { SceneManager } from "@/core/SceneManager";
+import { collectHitMeshes } from "@/core/surfaceSnap";
 import type { SceneObject } from "@/core/SceneObject";
 import type { CameraStore } from "@/store/CameraStore";
 import type { CameraMotionStore } from "@/store/CameraMotionStore";
@@ -36,6 +38,28 @@ export class PlaybackCoordinator {
     private readonly stopTransportReaction: () => void;
     private readonly stopStoppedReaction: () => void;
     private sampleTimeSeconds = 0;
+    /** 播放贴地的站面候选池:失效驱动重建,常驻数组复用(帧级热路径零重分配、零遍历)。 */
+    private readonly groundCandidatePool: Object3D[] = [];
+    /** 候选池脏标记:初始为脏,首次采样即建池。 */
+    private groundPoolDirty = true;
+    private readonly stopGroundPoolWatch: () => void;
+    /**
+     * 刷新站面候选=锁定布景网格。只认 locked 实体:布景是静态站面;
+     * 道具/人偶在播放中自身会动,把它们当站面会让贴地互相追逐。
+     * 失效驱动而非逐帧重建:列表只在实体增删/锁切换(constructor 里的 reaction)与运行时
+     * 绑定/模型装载(sampleObject 漏斗)时变;播放期网格移动不影响列表,射线读的是实时 matrixWorld。
+     */
+    private readonly refreshGroundCandidates = (): void => {
+        if (!this.groundPoolDirty) return;
+        this.groundPoolDirty = false;
+        this.groundCandidatePool.length = 0;
+        this.scene.forEachEntity((entity) => {
+            if (!entity.locked) return;
+            const runtime = this.scene.getRuntime(entity.id);
+            if (runtime) collectHitMeshes(runtime, this.groundCandidatePool);
+        });
+        this.sampler.setGroundCandidates(this.groundCandidatePool);
+    };
     private readonly sampleTransformForEntity = (entity: SceneObject): void => {
         const runtime = this.scene.getRuntime(entity.id);
         if (!runtime) return;
@@ -102,6 +126,19 @@ export class PlaybackCoordinator {
             () => transport.stoppedAt,
             () => this.restoreAll(),
         );
+        // 站面候选失效监听:锁定实体集(实体增删/文档替换/锁切换)变化才重建,播放期不逐帧遍历场景树
+        this.stopGroundPoolWatch = reaction(
+            () => {
+                const lockedIds: string[] = [];
+                this.scene.forEachEntity((entity) => {
+                    if (entity.locked) lockedIds.push(entity.id);
+                });
+                return lockedIds.join("|");
+            },
+            () => {
+                this.groundPoolDirty = true;
+            },
+        );
     }
 
     bindInvalidator(invalidator: TimelineInvalidator): void {
@@ -160,6 +197,10 @@ export class PlaybackCoordinator {
         this.skeletons.restoreRotations(targetId);
         this.applyPose(targetId);
         this.binder.setTime(timeSeconds);
+        // sampleObject 是运行时绑定/模型装载的唯一漏斗:锁定布景的网格在此刻才可命中;
+        // 只有 locked 实体影响候选池,非锁定实体的装载不触发重建(装载风暴期免 O(N²))
+        if (entity.locked) this.groundPoolDirty = true;
+        this.refreshGroundCandidates();
         this.sampleTransformForEntity(entity);
         this.blendActionForEntity(entity);
         this.actionPreview.applyCurrentFrame();
@@ -191,6 +232,7 @@ export class PlaybackCoordinator {
     dispose(): void {
         this.stopTransportReaction();
         this.stopStoppedReaction();
+        this.stopGroundPoolWatch();
         this.restoreAll();
         this.invalidator = null;
     }
@@ -206,6 +248,7 @@ export class PlaybackCoordinator {
         this.sampleTimeSeconds = timeSeconds;
         this.scene.forEachEntity(this.applyPoseForEntity);
         this.binder.setTime(timeSeconds);
+        this.refreshGroundCandidates();
         this.scene.forEachEntity(this.sampleTransformForEntity);
         this.scene.forEachEntity(this.blendActionForEntity);
         this.actionPreview.applyCurrentFrame();

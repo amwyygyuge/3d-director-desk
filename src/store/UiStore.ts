@@ -43,6 +43,8 @@ export class UiStore {
     lastGizmoInteractionAt = 0;
     /** 轴约束:全 true = 自由;仅一轴 true = 锁定该轴(DCC 惯例 X/Y/Z 切换) */
     gizmoAxes: Record<GizmoAxis, boolean> = ALL_AXES_FREE;
+    /** 贴面吸附:水平拖动把实体 y 吸到下方站面(默认开,V 关;瞬时 UI 态,不序列化) */
+    isSurfaceSnapEnabled = true;
     /** 变换 gizmo 的挂载授权:绑定对象身份;点击选中不再直接出坐标轴,G 进入/退出(瞬时 UI 态,不序列化) */
     gizmoArmedId: string | null = null;
     /** ⌘K 视角/元素导航面板开关(瞬时 UI 态,不序列化) */
@@ -109,6 +111,11 @@ export class UiStore {
     toggleGizmoAxis(axis: GizmoAxis): void {
         const onlyThisActive = this.gizmoAxes[axis] && Object.values(this.gizmoAxes).filter(Boolean).length === 1;
         this.gizmoAxes = onlyThisActive ? ALL_AXES_FREE : { x: axis === "x", y: axis === "y", z: axis === "z" };
+    }
+    /** V 切换贴面吸附;返回新状态供调用方给提示。 */
+    toggleSurfaceSnap(): boolean {
+        this.isSurfaceSnapEnabled = !this.isSurfaceSnapEnabled;
+        return this.isSurfaceSnapEnabled;
     }
 
     setPosePicking(objectId: string | null, boneKey: string | null): void {

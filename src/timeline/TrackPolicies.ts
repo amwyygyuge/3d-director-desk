@@ -38,8 +38,6 @@ export const EXTRAPOLATION_MODE = {
 } as const;
 export type ExtrapolationMode = (typeof EXTRAPOLATION_MODE)[keyof typeof EXTRAPOLATION_MODE];
 
-/** 地面高度:多层场景是后续能力,当前全场统一 y=0。 */
-export const GROUND_HEIGHT_METERS = 0;
 /** 缺省步幅(米/循环):成年人行走一个动作循环大致推进的距离,作者可按动作改。 */
 export const DEFAULT_STRIDE_METERS = 1.6;
 /** 步幅下限:防止除零把相位炸到无穷。 */

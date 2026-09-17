@@ -1,11 +1,11 @@
 import type { Object3D } from "three";
 
 import type { Transform } from "@/core/SceneObject";
+import { snapDownToSurface } from "@/core/surfaceSnap";
 import { easedProgress } from "@/motion/EasingCurve";
 import { createPositionSample } from "@/motion/MotionTrajectory";
 import type { TimelineDoc } from "@/timeline/TimelineDoc";
 import type { TimelineTrack } from "@/timeline/TimelineTrack";
-import { GROUND_HEIGHT_METERS } from "@/timeline/TrackPolicies";
 import type { TransformKeyframe } from "@/timeline/TransformKeyframe";
 import { TIMELINE_TRACK_KIND } from "@/timeline/TimelineTrack";
 
@@ -95,9 +95,10 @@ function samplePosition(
 }
 
 /**
- * 策略后处理:贴地锁 Y、切线定朝向、并输出该时刻已走弧长(步频相位的唯一来源)。
+ * 策略后处理:切线定朝向、并输出该时刻已走弧长(步频相位的唯一来源)。
+ * (贴地已迁到运行时采样端 TimelineSampler.evaluateTrack,纯层不再压 Y——见 applyPolicies 内注释。)
  *
- * 三件事都依赖「当前落在哪一段的哪个位置」,故与位置采样共用同一组段内参数——
+ * 两件事都依赖「当前落在哪一段的哪个位置」,故与位置采样共用同一组段内参数——
  * 分开算过一次就会出现朝向与画面差半帧的错位。
  */
 function applyPolicies({
@@ -112,7 +113,9 @@ function applyPolicies({
     readonly output: TransformSample;
 }): void {
     const policies = track.policies;
-    if (policies.isGrounded) output.position[1] = GROUND_HEIGHT_METERS;
+    // isGrounded 不再在纯层压平 y=0:关键帧携带作者期贴面高度(起草/拖点已吸站面),
+    // 压平会把它全部丢掉(实测「轨迹吸附无效」的根因)。贴站面精修在运行时采样端做
+    // (TimelineSampler.evaluateTrack),纯层保持确定性直通,消费方(取景/路径预览)反而更准。
     const trajectory = track.trajectory;
     if (!trajectory) {
         output.arcLengthMeters = 0;
@@ -198,10 +201,16 @@ export function evaluateTimelineTransform(
 /** Three runtime sampler delegates interpolation to the shared pure evaluator. */
 export class TimelineSampler {
     private readonly sample: TransformSample = createTransformSample();
+    /** 播放期贴地的站面候选(锁定布景网格);由回放协调器每次采样前刷新,空表=回落 y=0。 */
+    private groundCandidates: readonly Object3D[] = [];
 
     /** 最近一次成功采样的已走弧长:回放协调器据此驱动动作步频,不必二次求值。 */
     get lastArcLengthMeters(): number {
         return this.sample.arcLengthMeters;
+    }
+
+    setGroundCandidates(meshes: readonly Object3D[]): void {
+        this.groundCandidates = meshes;
     }
 
     evaluate(document: TimelineDoc, timeSeconds: number, runtimeFor: (targetId: string) => Object3D | undefined): void {
@@ -219,6 +228,18 @@ export class TimelineSampler {
 
     evaluateTrack(track: TimelineTrack, timeSeconds: number, runtime: Object3D): boolean {
         if (!evaluateTransformTrack(track, timeSeconds, this.sample)) return false;
+        // 贴地策略在运行时落面:以作者期 y 为基准向下取站面(布景楼面/台面),无候选时回落 y=0(旧语义)。
+        // 排除 runtime 自身子树:候选池按 locked 收集,锁定的采样目标(锁定人偶/带轨平台)会混进池子,
+        // 不排除就是把自己当站面——逐帧向上错爬。
+        if (track.policies.isGrounded) {
+            this.sample.position[1] = snapDownToSurface(
+                this.groundCandidates,
+                this.sample.position[0],
+                this.sample.position[1],
+                this.sample.position[2],
+                runtime,
+            );
+        }
         runtime.position.set(this.sample.position[0], this.sample.position[1], this.sample.position[2]);
         runtime.rotation.set(this.sample.rotation[0], this.sample.rotation[1], this.sample.rotation[2]);
         runtime.scale.set(this.sample.scale[0], this.sample.scale[1], this.sample.scale[2]);
