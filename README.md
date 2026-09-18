@@ -2,7 +2,7 @@
 
 [中文](README.zh-CN.md) | English
 
-An embeddable React 3D director desk: place game models, mount actions, compose camera shots and camera moves, light the scene, and export stills and MP4 video — with every write operation funneled through a serializable command layer, so the same verbs drive UI clicks, host messages, and AI agents.
+An embeddable React 3D director desk — an **AI-agent-controllable scene editor** for placing game models, mounting actions, composing camera shots and moves, lighting scenes, and exporting stills and MP4 video. Every write operation is a serializable command through one dispatcher, so UI clicks, host-app messages, and **LLM agents** share the same verbs — a local HTTP + WebSocket bridge (`scripts/bridge.mjs`) exposes them to any agent or script, no SDK required.
 
 ![Director Desk demo](docs/media/director-desk-demo.gif)
 
