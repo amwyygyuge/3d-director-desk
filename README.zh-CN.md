@@ -95,6 +95,46 @@ await deskRpc("dispatch", { type: "assets.place", payload: { id: "hero", assetId
 
 命令 payload 是纯数据且可序列化,在命令边界做有限性/范围校验(坐标、fov 等的空间幻觉围栏)——AI 的畸形输出拿到的是带下一步可选项的结构化失败,而不是原始运行时异常。运行时发现当前动词表:`GET /skill`,或在页面 console 里 `window.__directorDesk.dispatcher.listCapabilities()`。
 
+### 一键起步提示词
+
+想直接看 AI 布景:把下面任一段贴进带终端的 AI 客户端(Codex CLI / Claude Code)。
+
+**A. 裸 RPC——零配置:**
+
+```text
+把 https://github.com/amwyygyuge/3d-director-desk 克隆到临时目录跑起来,然后替我布景,我要全程看着。
+
+1. git clone 后 bun install(需要 bun ≥1.3.14)。
+2. 按 README 的「AI 接入」一节启动:bun run dev 同时起 playground(127.0.0.1:4002)和桥(127.0.0.1:4005)。
+3. 开一个【有头可见】的 Chrome 窗口连桥(一次性 profile,别碰我现有浏览器,严禁 --headless):
+   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+     --user-data-dir=$(mktemp -d) --no-first-run --new-window http://127.0.0.1:4002/ &
+   (Windows/Linux 自行换 Chrome 路径)。curl http://127.0.0.1:4005/status 确认客户端上线。
+4. 先 curl http://127.0.0.1:4005/skill 读操作手册;写操作走 POST /rpc(dispatch),读操作用 query;动手前先查询场景当前状态。
+5. 布景任务:放一个通用人形演员(显式 id=hero)、一个布景物件、一盏灯,排一个基础机位。
+6. 汇报 clientId、场景实体清单、机位列表。【不要停服务、不要关窗口】——我要继续手动微调。
+
+任何一步失败,先回读仓库文档自查,再问我。
+```
+
+**B. MCP——先一次性注册,之后用原生工具。** 注册一次(Codex 写 `~/.codex/config.toml`;Claude Code 自动读仓库根的 `.mcp.json`):
+
+```toml
+[mcp_servers.3d-director-desk]
+command = "bun"
+args = ["run", "mcp"]
+cwd = "/path/to/3d-director-desk"
+```
+
+```text
+用 3d-director-desk 的 MCP 工具替我布景,我要全程看着:
+1. 在 /path/to/3d-director-desk 后台跑 bun run dev(playground :4002 + 桥 :4005)。
+2. 开一个有头可见的 Chrome 窗口(http://127.0.0.1:4002,一次性 profile,严禁 --headless,别碰我现有浏览器)。
+3. 调 desk_status 确认页面上线,再调 desk_refresh_tools 拉全量工具面。
+4. fetch http://127.0.0.1:4005/skill 读手册,然后布景:放 id=hero 的人形演员、一个布景物件、一盏灯,排一个机位。
+5. 汇报实体与机位清单;不要停服务、不要关窗口,我要继续手动微调。
+```
+
 ### 安全模型
 
 **桥本身没有任何鉴权。** 它只在默认绑定 `127.0.0.1` 且拒绝白名单外浏览器 Origin 的前提下是安全的。`--host=0.0.0.0` 会把导演台的完整控制权暴露给内网——只在可信网络这么做;公网必须由带鉴权的 TLS 反代终结。本地调试之外绝不开 `--allow-eval`。

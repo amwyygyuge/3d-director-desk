@@ -221,7 +221,7 @@ dispatch({
 
 - 原点槽(a)保持其当前位置,其余槽位向它收拢——先把主角放到位,再以它为锚 stage。
 - 撤销一步全组回原。
-- 装载闸门:涉及实体未 `loaded` 时 stage/place-relative 拒绝并带 `wait-for-model` 选项——先等 `scene.describe` 全 loaded,别硬试。
+- 装载闸门:涉及实体未 `loaded` 时 stage/place-relative 拒绝并带 `wait-for-model` 选项——先等 `scene.describe` 全 loaded,别硬试。`loaded` 语义 = 壳层归一化已落账,`camera.frame-subject`/`check-framing` 与包围盒测量**可立刻用**,不需要人为 sleep 等沉降。
 - **零截图验收协议**:stage → `camera.frame-subject { subjectIds: [...全体槽位实体] }` → `camera.check-framing { subjectIds }` 全部 `inFrame: true` → `scene.describe` 对账间距。`relative` 资产只验相对包围盒关系；参与物理距离约束的实体必须是米制。截图只留美学终审。
 
 ### 动作与播放
@@ -553,6 +553,8 @@ dispatch({
 ## 实测陷阱(环境/契约/验收)
 
 ### 页面环境
+
+- **Windows 下克隆目录落在 8.3 短路径下(`C:\Users\CAIJUN~1\...`),`bun run dev` 起服即崩**(libuv fs-event 断言):Vite 文件监听拿短路径与真实长路径对不上。修法:克隆到长路径目录(如 `C:\dev\`),或把 `TEMP` 显式设为长路径后再起服。macOS/Linux 无此问题。
 
 - **非安全上下文(http 非 localhost)**:旧部署里 `crypto.randomUUID` 不存在,`desk.animations.register`、文档导入的动作恢复、检查器动作置备全部抛 `crypto.randomUUID is not a function`(导入侧表现为 toast「动作 "X" 恢复失败」)。先用 `crypto.getRandomValues` 注入 UUIDv4 polyfill 再操作。源码已修(统一 `createId` 兜底,getRandomValues 优先),重新部署后不再需要 polyfill。
 - **浏览器驱动**:页面 JS 必须在 `tab.evaluate` 里执行(工具运行域没有 `window`);等句柄用 `wait(() => tab.evaluate(...))` 轮询,`tab.waitForFunction` 不存在。Chrome 已有实例在跑时 spawn 会 CDP 超时,加 `--user-data-dir` 隔离配置重试。

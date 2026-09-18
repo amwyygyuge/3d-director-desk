@@ -95,6 +95,46 @@ await deskRpc("dispatch", { type: "assets.place", payload: { id: "hero", assetId
 
 Command payloads are plain serializable data and are validated at the command boundary (finite ranges on coordinates/FOV/etc.) — malformed agent output gets a structured failure with actionable options, never a raw runtime exception. Discover the current verbs at runtime via `GET /skill`, or in the page console: `window.__directorDesk.dispatcher.listCapabilities()`.
 
+### Copy-paste bootstrap prompt
+
+Fastest way to watch an agent block out a scene: paste one of these into a shell-capable AI client (Codex CLI, Claude Code).
+
+**A. Raw RPC — zero setup:**
+
+```text
+Clone https://github.com/amwyygyuge/3d-director-desk into a temp dir and get it running, then block out a scene for me — I want to watch live.
+
+1. git clone, then bun install (bun >=1.3.14).
+2. Follow README "AI integration": bun run dev starts the playground on 127.0.0.1:4002 and the bridge on 127.0.0.1:4005.
+3. Open a VISIBLE Chrome window on the page (throwaway profile, do not touch my existing browser, never --headless):
+   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+     --user-data-dir=$(mktemp -d) --no-first-run --new-window http://127.0.0.1:4002/ &
+   (adapt the Chrome path on Windows/Linux). Confirm a client is online: curl http://127.0.0.1:4005/status
+4. curl http://127.0.0.1:4005/skill and follow that manual; writes go through POST /rpc (dispatch), reads via query; inspect current scene state first.
+5. Task: place a humanoid actor (explicit id=hero), one scenery prop, one light, and compose one basic shot.
+6. Report clientId, entity list, shot list. Do NOT stop the servers or close the window — I will keep tweaking manually.
+
+On any failure, re-read the repo docs before asking me.
+```
+
+**B. MCP — one-time client config, then native tools.** Register the server once (Codex: `~/.codex/config.toml`; Claude Code reads the repo-root `.mcp.json` automatically):
+
+```toml
+[mcp_servers.3d-director-desk]
+command = "bun"
+args = ["run", "mcp"]
+cwd = "/path/to/3d-director-desk"
+```
+
+```text
+Use the 3d-director-desk MCP tools to block out a scene — I want to watch live:
+1. In /path/to/3d-director-desk, run bun run dev in the background (playground :4002 + bridge :4005).
+2. Open a VISIBLE Chrome window at http://127.0.0.1:4002 (throwaway profile, never --headless, do not touch my existing browser).
+3. Call desk_status to confirm the page is online, then desk_refresh_tools to load the full tool surface.
+4. Fetch http://127.0.0.1:4005/skill and follow the manual, then: place a humanoid actor (id=hero), one scenery prop, one light, and compose one shot.
+5. Report the entity and shot lists; leave the servers and the window running — I will keep tweaking manually.
+```
+
 ### Security model
 
 **The bridge has no authentication.** This is safe only because it binds `127.0.0.1` and rejects browser origins outside its allowlist. `--host=0.0.0.0` exposes full control of your desk to the LAN — do it only on trusted networks, and put an authenticated TLS reverse proxy in front for anything public. Never enable `--allow-eval` outside local debugging.

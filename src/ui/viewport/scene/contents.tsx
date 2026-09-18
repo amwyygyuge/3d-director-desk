@@ -492,6 +492,9 @@ function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
         }
         fittedRef.current = true;
         normalizationFor(entity).normalize(shell);
+        // "loaded" 必须在落尺之后落账:此前包围盒是未归一化的本地盒,取景/同框命令
+        // (camera.frame-subject / camera.check-framing)会拿到错误几何——实测把相机摆进立柱内部
+        ui.reportModelOutcome(entity.id, "loaded");
         invalidate();
     });
 
@@ -574,13 +577,9 @@ function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
     // 文档导入用同 id 的新实体整体替换并清空骨骼索引:此处补登记并把新画像重新落到运行时。
     // 依赖实体实例——同一次挂载内它不变,导入后才换新,不会造成重复工作。
     //
-    // 装载结局也在这里落账/撤回,而非「壳层挂载」那个 effect:
-    //  - 必须晚于句柄到手。`ModelImporter.acquire` resolve 时内容还没提交到运行时组,
-    //    在那里报 loaded 会让结局表早于真实骨架转 loaded,动作恢复据此对空壳 root 预检,
-    //    得到匹配率 0% 并被判 bone-incompatible(实测路径:导入 → 清空 → 再导入)。
-    //  - 又必须跟随**实体实例**。`object.remove` + 撤销会换新实体实例,但 id/url/format 不变,
-    //    React 复用同一组件与壳层,只依赖 shell 的 effect 不会重跑;结局便永久停在缺失,
-    //    该对象卡在 "loading",间距语义闸门(place-relative/scene.stage)从此拒绝它。
+    // "loaded" 结局不在这里落账:归一化要等第二帧(useFrame 处),此处落账会让取景命令
+    // 读到未落尺的本地盒。本 effect 只管运行时同步与结局撤回——撤回必须在卸载/换实例时
+    // 发生,与新结局何时落账无关。
     useEffect(() => {
         if (!shell) return;
         if (!skeletons.discover(entity.id).ready) skeletons.register(entity.id, shell);
@@ -591,7 +590,6 @@ function ModelRequestContentInner({ entity }: { entity: SceneObject }) {
         const runtime = scene.manager.getRuntime(entity.id);
         if (runtime) binder.rebindRuntime(entity.id, runtime);
         playback.sampleObject(entity.id);
-        ui.reportModelOutcome(entity.id, "loaded");
         return () => {
             ui.forgetModelOutcome(entity.id);
         };
