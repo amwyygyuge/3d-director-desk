@@ -47,6 +47,20 @@ bun run dev        # playground 起在 :4002,桥自动随 dev 起在 :4005
 没有浏览器自动化工具的 headless AI:让一个一次性 profile 的无头 Chrome 常驻页面即可自动连桥,`GET /status` 应看到客户端上线:
 `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=0 --user-data-dir=$(mktemp -d) http://127.0.0.1:4002/`
 
+### MCP 客户端(推荐)
+
+支持 MCP 的客户端(Claude Code、Cursor、Codex)经 `scripts/mcp-server.mjs` 把导演台当原生工具面用——它只是薄适配层,工具 schema 从已连页面的能力契约现取,永不与校验漂移。仓库根自带 `.mcp.json` 模板:
+
+```json
+{
+    "mcpServers": {
+        "3d-director-desk": { "command": "bun", "args": ["run", "mcp"] }
+    }
+}
+```
+
+行为约定:命令 type 的点映射为下划线(`assets.place` → `assets_place`);页面未连桥时只暴露 `desk_status` / `desk_refresh_tools` 两个元工具,页面连上后调一次 refresh,全量动词表随 `list_changed` 通知到达。全量面实测约 128 个工具、54KB schema(一次装载,非每轮重复)。
+
 ### 端点(`http://127.0.0.1:4005`)
 
 | 端点              | 作用                                                                                                       |
@@ -84,6 +98,17 @@ await deskRpc("dispatch", { type: "assets.place", payload: { id: "hero", assetId
 ### 安全模型
 
 **桥本身没有任何鉴权。** 它只在默认绑定 `127.0.0.1` 且拒绝白名单外浏览器 Origin 的前提下是安全的。`--host=0.0.0.0` 会把导演台的完整控制权暴露给内网——只在可信网络这么做;公网必须由带鉴权的 TLS 反代终结。本地调试之外绝不开 `--allow-eval`。
+
+### 哪类 AI 走哪个口
+
+命令层(`CommandDispatcher` + 能力契约)是唯一真相源;下面每个适配器都很薄、零漂移:
+
+| 接口 | 受众 |
+| --- | --- |
+| MCP server(`bun run mcp`) | 外部 AI 客户端:Claude Code、Cursor、Codex |
+| 裸桥 RPC(`POST /rpc`) | 脚本、CI、自定义自动化 |
+| `AgentBridge`(进程内) | 嵌入导演台并自接 LLM 的宿主 App |
+| `skills/director-desk/SKILL.md` | 所有接口共用的操作手册(`GET /skill` 分发) |
 
 ## 作为 npm 包嵌入
 

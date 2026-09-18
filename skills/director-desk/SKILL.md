@@ -90,6 +90,14 @@ curl -X POST http://127.0.0.1:4005/rpc \
 }
 ```
 
+#### 5. MCP 接入(`bun run mcp`)
+
+MCP 客户端(Claude Code / Cursor / Codex)改走 `scripts/mcp-server.mjs`(仓库根有 `.mcp.json` 模板),不直接摸本节的 HTTP 端点。行为约定:
+
+- 工具面经桥 RPC 的 `list-tools` 方法从页面能力契约现取——与 `listCapabilities` 单一真相源,命令 type 的点映射为下划线(`assets.place` → `assets_place`)。
+- 页面未连桥时只有 `desk_status` / `desk_refresh_tools` 两个元工具;页面连上后调 `desk_refresh_tools`,全量工具随 `list_changed` 通知到达。
+- 写/读仍按 capability.kind 分流到 dispatch/query,本手册的命令契约、校验与错误语义原样适用。
+
 ### 通用调用代码模板 (Node.js / Python)
 
 ```js

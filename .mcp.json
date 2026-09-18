@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "3d-director-desk": {
+            "command": "bun",
+            "args": ["run", "mcp"]
+        }
+    }
+}

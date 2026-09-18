@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef } from "react";
 
-import { DirectorDesk } from "@/index";
+import { AgentBridge, DirectorDesk } from "@/index";
 import type { DirectorDeskStores, SerializedCommand } from "@/index";
 import "@/styles/index.css";
 import "./index.css";
@@ -23,7 +23,7 @@ declare global {
 /** 桥接 RPC 报文(桥接服务转发;eval 仅在桥显式开启时才会到达这里)。 */
 interface BridgeRequest {
     readonly id?: string;
-    readonly method?: "query" | "dispatch" | "eval";
+    readonly method?: "query" | "dispatch" | "eval" | "list-tools";
     readonly action?: SerializedCommand;
     readonly code?: string;
 }
@@ -49,8 +49,8 @@ const BRIDGE_RETRY_BACKOFF = 1.5;
  * playground ↔ 桥接服务的 WebSocket 客户端。
  *
  * 生命周期随 DirectorDesk 实例:onReady 建连,dispose() 断连且不再重试。
- * 只认桥接服务下发的三种方法;写操作一律经命令层(query/dispatch),
- * eval 是桥显式 opt-in 后才会到达的调试通道,不作为 AI 能力暴露。
+ * 只认桥接服务下发的四种方法;写操作一律经命令层(query/dispatch),
+ * list-tools 供 MCP 等外部宿主发现工具面,eval 是桥显式 opt-in 后才会到达的调试通道,不作为 AI 能力暴露。
  */
 class DirectorBridgeClient {
     private ws: WebSocket | null = null;
@@ -136,6 +136,10 @@ class DirectorBridgeClient {
             }
             if (req.method === "dispatch" && req.action) {
                 return this.stores.dispatcher.dispatch(req.action, this.stores);
+            }
+            if (req.method === "list-tools") {
+                // 工具面由能力契约现取现派生(构造无副作用),MCP 等外部宿主据此发现动词表
+                return { ok: true, value: new AgentBridge(this.stores).listToolSchemas() };
             }
             if (req.method === "eval" && typeof req.code === "string") {
                 // 调试通道:桥只在显式 allowEval 时才转发;到达即视为已获本机授权

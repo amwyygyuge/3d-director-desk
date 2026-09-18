@@ -3,6 +3,7 @@
     "version": "0.0.7",
     "packageManager": "bun@1.3.14",
     "description": "3D 导演台:游戏模型摆放、动作挂载、机位与预演输出(阶段一·基础实现)",
+    "license": "MIT",
     "type": "module",
     "main": "./dist/index.js",
     "module": "./dist/index.js",
@@ -45,7 +46,8 @@
         "ma": "bun pm version major && bun publish",
         "alpha": "bun pm version prepatch --preid alpha && bun publish",
         "pre": "bun pm version prerelease --preid alpha && bun publish",
-        "bridge": "bun scripts/bridge.mjs"
+        "bridge": "bun scripts/bridge.mjs",
+        "mcp": "bun scripts/mcp-server.mjs"
     },
     "peerDependencies": {
         "@react-three/drei": "^9.122.0",
@@ -64,6 +66,7 @@
         "@emotion/react": "^11.14.0",
         "@emotion/styled": "^11.14.1",
         "@eslint/js": "^10.0.1",
+        "@modelcontextprotocol/sdk": "^1.30.0",
         "@mui/icons-material": "^9.3.1",
         "@mui/material": "^9.3.1",
         "@react-three/drei": "9.122.0",

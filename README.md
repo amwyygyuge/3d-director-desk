@@ -47,6 +47,20 @@ Open http://127.0.0.1:4002 — the page connects to the bridge automatically (th
 Headless agents without browser tooling: keep a throwaway headless Chrome resident on the page — it auto-connects, and `GET /status` shows it as a client:
 `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=0 --user-data-dir=$(mktemp -d) http://127.0.0.1:4002/`
 
+### MCP clients (recommended)
+
+MCP-aware clients (Claude Code, Cursor, Codex) get the desk as a native tool surface via `scripts/mcp-server.mjs` — a thin adapter that asks the connected page for its capability-derived tool schemas, so tools never drift from validation. A repo-root `.mcp.json` template is included:
+
+```json
+{
+    "mcpServers": {
+        "3d-director-desk": { "command": "bun", "args": ["run", "mcp"] }
+    }
+}
+```
+
+Behavior: command types map to tool names with dots as underscores (`assets.place` → `assets_place`); when no page is connected, only the meta tools `desk_status` / `desk_refresh_tools` are exposed — connect the page, refresh, and the full verb set arrives with a `list_changed` notification. Measured context cost of the full surface: ~54KB of schema for ~128 tools (single load, not per-turn).
+
 ### Endpoints (`http://127.0.0.1:4005`)
 
 | Endpoint        | Purpose                                                                                          |
@@ -84,6 +98,17 @@ Command payloads are plain serializable data and are validated at the command bo
 ### Security model
 
 **The bridge has no authentication.** This is safe only because it binds `127.0.0.1` and rejects browser origins outside its allowlist. `--host=0.0.0.0` exposes full control of your desk to the LAN — do it only on trusted networks, and put an authenticated TLS reverse proxy in front for anything public. Never enable `--allow-eval` outside local debugging.
+
+### Which surface for which agent
+
+One command layer (`CommandDispatcher` + capability contracts) is the single source of truth; every adapter below is thin and drift-free:
+
+| Surface | Audience |
+| --- | --- |
+| MCP server (`bun run mcp`) | External AI clients — Claude Code, Cursor, Codex |
+| Raw bridge RPC (`POST /rpc`) | Scripts, CI, custom automation |
+| `AgentBridge` (in-process) | Host apps embedding the desk and driving their own LLM |
+| `skills/director-desk/SKILL.md` | The operation manual every surface shares (served at `GET /skill`) |
 
 ## Embedding as a package
 
